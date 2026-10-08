@@ -1,0 +1,33 @@
+{
+  "name": "@envoyhome/channel-telegram",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Bundled Telegram demo channel plugin (B7).",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "envoyhome": {
+    "kind": "channel",
+    "id": "telegram",
+    "entry": "./dist/index.js",
+    "apiVersion": 1,
+    "capabilities": ["text", "media", "edit", "react", "threads"]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && node --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@envoyhome/channel-api": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5"
+  }
+}

@@ -1,1 +1,40 @@
+# Design docs ARE versioned — they are the ground truth (Design §1, Plan §7).
+# Historically this file ignored `design_doc/`, which meant the ground truth was
+# untracked and Plan §7's "Design doc edits must add a changelog row" review step
+# could not run. Removed 2026-10-08. Do not re-add.
+# (Local scratch notes, if any, belong under design_doc/.scratch/ — not here.)
+
+# Node / pnpm
+node_modules/
+.pnpm-store/
+
+# Build artifacts
+dist/
+build/
+*.tsbuildinfo
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+*.pem
+secrets/
+
+# Logs
+*.log
+logs/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Test artifacts
+coverage/
+.nyc_output/
+
+# Tauri (apps/desktop, populated in B12)
+apps/desktop/target/
+apps/desktop/dist/
 /design_doc

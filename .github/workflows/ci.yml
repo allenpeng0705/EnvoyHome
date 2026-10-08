@@ -1,0 +1,81 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          # package.json engines: node >=22
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          # package.json packageManager: pnpm@10.33.0
+          version: 10
+
+      - name: Make scripts executable
+        run: chmod +x scripts/*.sh
+
+      # Design-doc cross-reference lint. Needs no siblings and no install, so it
+      # runs first and fails fast: dangling §-targets, unowned verification IDs,
+      # phantom ID ranges, broken local links, drifted counts.
+      - name: docs:lint (design-doc cross-references)
+        run: node scripts/docs-lint.mjs
+
+      # EnvoyHome links @envoymesh/* and @envoymesh/envoy-harness with pnpm
+      # `link:` + `overrides` (pnpm-workspace.yaml). They are not workspace
+      # members and not on the npm registry, so `pnpm install` cannot run until
+      # the siblings exist on disk. This step is FAIL-CLOSED on purpose — set
+      # the repo variable ENVOYHOME_PEERS_GIT_BASE and the PEERS_TOKEN secret
+      # (or use a self-hosted runner with the siblings in the parent dir).
+      - name: Fetch sibling repos (required)
+        env:
+          ENVOYHOME_PEERS_GIT_BASE: ${{ vars.ENVOYHOME_PEERS_GIT_BASE }}
+          PEERS_TOKEN: ${{ secrets.PEERS_TOKEN }}
+        run: |
+          if [ -z "${ENVOYHOME_PEERS_GIT_BASE:-}" ] && [ -n "${PEERS_TOKEN:-}" ]; then
+            echo "PEERS_TOKEN is set but ENVOYHOME_PEERS_GIT_BASE is not."
+            echo "Set the repository variable ENVOYHOME_PEERS_GIT_BASE, e.g."
+            echo '  https://x-access-token:$TOKEN@github.com/<owner>'
+            exit 1
+          fi
+          ./scripts/fetch-peers.sh
+
+      # The merge gate. NOT masked: a missing or mis-branched sibling fails the
+      # job (Plan §3 B0, §5.7). Do not add `|| echo ...` here.
+      - name: peers:check (fail-closed merge gate)
+        run: ./scripts/peers-check.sh
+
+      # GitHub Actions exports CI=true for every step. pnpm reads it as strict
+      # mode, so it must be UNSET for install (conventions R9) — not merely
+      # "not exported".
+      - name: Install (CI unset — R9 strict-mode trap)
+        run: |
+          unset CI
+          pnpm install
+
+      - name: Build (CI still unset)
+        run: |
+          unset CI
+          pnpm -r build
+
+      - name: Test (CI still unset)
+        run: |
+          unset CI
+          pnpm -r test
+
+      - name: Lint (CI=true from here on)
+        env:
+          CI: "true"
+        run: pnpm -r lint

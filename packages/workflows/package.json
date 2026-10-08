@@ -1,0 +1,26 @@
+{
+  "name": "@envoyhome/workflows",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Static workflow executor + loader. B9.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "yaml": "^2.8.1"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && node --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5"
+  }
+}

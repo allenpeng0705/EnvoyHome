@@ -1,0 +1,24 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "plugins/*"
+
+# Sibling repos are NOT workspace members of EnvoyHome, so `workspace:*` cannot
+# resolve `@envoymesh/*` (pnpm: ERR_PNPM_WORKSPACE_PKG_NOT_FOUND). They are also
+# not on the public npm registry (registry 404 for @envoymesh/protocol and
+# @envoymesh/reuse-host), so a version range cannot resolve either.
+#
+# Direct deps therefore use `link:` in each package.json, and these overrides
+# exist for the same reason envoy-harness documents: transitive resolution of
+# @envoymesh/* (declared by @envoymesh/* packages themselves) would otherwise
+# hit the registry and 404.
+#
+# Paths are relative to THIS file (EnvoyHome/), sibling of EnvoyMesh/.
+# See Design §1.4 (sibling reuse boundary) and Plan §2.
+overrides:
+  "@envoymesh/protocol": "link:../EnvoyMesh/packages/protocol"
+  "@envoymesh/host-connect": "link:../EnvoyMesh/packages/host-connect"
+  "@envoymesh/reuse-host": "link:../EnvoyMesh/packages/reuse-host"
+  "@envoymesh/network": "link:../EnvoyMesh/packages/network"
+  "@envoymesh/identity": "link:../EnvoyMesh/packages/identity"
+  "@envoymesh/envoy-harness": "link:../envoy-harness/packages/envoy-harness"

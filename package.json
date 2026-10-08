@@ -1,0 +1,23 @@
+{
+  "name": "envoyhome",
+  "version": "0.0.0",
+  "private": true,
+  "description": "EnvoyHome \u2014 self-hosted home agent control plane. Workspace root (B0).",
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "peers:check": "./scripts/peers-check.sh",
+    "docs:lint": "node scripts/docs-lint.mjs",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "dev:daemon": "pnpm --filter @envoyhome/daemon run dev",
+    "ci": "./scripts/ci.sh"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "@envoyhome/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Tauri thin UI; hosts/supervises the EnvoyHome daemon. Populated in B12.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm build && node --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "@envoyhome/test-utils": "workspace:*"
+  }
+}

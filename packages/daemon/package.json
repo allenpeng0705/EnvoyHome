@@ -1,0 +1,46 @@
+{
+  "name": "@envoyhome/daemon",
+  "version": "0.0.0",
+  "private": true,
+  "description": "EnvoyHome control plane. Filled in B2–B13.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "envoyhome-daemon": "./dist/bin/envoyhome-daemon.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "dev": "node ./dist/bin/envoyhome-daemon.js",
+    "test": "tsc -p tsconfig.json && node --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@envoyhome/channel-api": "workspace:*",
+    "@envoyhome/channel-telegram": "workspace:*",
+    "@envoyhome/harness-host": "workspace:*",
+    "@envoyhome/memory": "workspace:*",
+    "@envoyhome/providers": "workspace:*",
+    "@envoyhome/test-utils": "workspace:*",
+    "@envoyhome/protocol": "workspace:*",
+    "@envoyhome/smarthome": "workspace:*",
+    "@envoyhome/workflows": "workspace:*",
+    "@envoymesh/protocol": "link:../../../EnvoyMesh/packages/protocol",
+    "@envoymesh/reuse-host": "link:../../../EnvoyMesh/packages/reuse-host"
+  },
+  "devDependencies": {
+    "@envoyhome/test-utils": "workspace:*",
+    "@types/node": "^22.20.5",
+    "@types/ws": "^8.18.2",
+    "ws": "^8.22.0"
+  }
+}

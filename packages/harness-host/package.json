@@ -1,0 +1,29 @@
+{
+  "name": "@envoyhome/harness-host",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Harness plugin loader + TurnContext + durable approvals. B6.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && node --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@envoyhome/protocol": "workspace:*",
+    "@envoyhome/providers": "workspace:*",
+    "@envoyhome/test-utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@envoyhome/test-utils": "workspace:*",
+    "@types/node": "^22.20.5"
+  }
+}

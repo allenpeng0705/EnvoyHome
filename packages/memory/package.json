@@ -1,0 +1,30 @@
+{
+  "name": "@envoyhome/memory",
+  "version": "0.0.0",
+  "private": true,
+  "description": "MemoryFacade + StandingStore (L1–L3). L4 FTS + LearnQueue + flush + consolidate land in B8.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && node --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@envoyhome/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@envoyhome/test-utils": "workspace:*",
+    "@types/node": "^22.20.5"
+  }
+}
