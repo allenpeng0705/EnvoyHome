@@ -2,9 +2,11 @@
 
 import {
   createReuseHost,
+  type HostNodeService,
   type HostRpcDispatcher,
   type ReuseHost,
   type SessionIdentityResolver,
+  type EventDisposition,
 } from "@envoymesh/reuse-host";
 import {
   createDispatcher,
@@ -17,6 +19,7 @@ import {
   type HomeSession,
 } from "./auth.js";
 import { RPC_TIMEOUT_MS, RPC_TIMEOUT_LONG_MS } from "./timeouts.js";
+import { homeEventDispositions } from "./product-events.js";
 
 export interface HostHandle {
   host: ReuseHost;
@@ -36,6 +39,9 @@ export async function startWsHost(input: {
   routerDeps: Omit<RouterDeps, "connections" | "activeTurns"> & {
     activeTurns?: () => number;
   };
+  /** Product event surface — required for home:* delivery. */
+  nodeService: HostNodeService;
+  eventDispositions?: Readonly<Record<string, EventDisposition>>;
 }): Promise<HostHandle> {
   let connections = 0;
   const sessionIdentity = createSessionIdentity(input.devices);
@@ -54,12 +60,13 @@ export async function startWsHost(input: {
     displayName: "EnvoyHome",
     sessionIdentity: sessionIdentity as SessionIdentityResolver,
     dispatch,
+    eventDispositions: input.eventDispositions ?? homeEventDispositions(),
     onConnectionChange: (n) => {
       connections = n;
     },
   });
 
-  await host.serve();
+  await host.serve(input.nodeService);
 
   return {
     host,

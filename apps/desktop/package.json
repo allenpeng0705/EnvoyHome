@@ -2,14 +2,25 @@
   "name": "@envoyhome/desktop",
   "version": "0.0.0",
   "private": true,
-  "description": "Tauri thin UI; hosts/supervises the EnvoyHome daemon. Populated in B12.",
+  "description": "Tauri thin UI; hosts/supervises the EnvoyHome daemon (B12 / §21 bar 7).",
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && pnpm run frontend:bundle",
+    "frontend:bundle": "node ./scripts/bundle-frontend.mjs",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm build && node --test test/*.test.ts"
+    "test": "pnpm build && node --test test/*.test.ts test/*.test.mjs",
+    "test:ux": "pnpm run frontend:bundle && node --test test/v-ux.test.mjs",
+    "tauri": "tauri",
+    "tauri:dev": "pnpm run frontend:bundle && tauri dev",
+    "tauri:build": "pnpm run frontend:bundle && tauri build"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
-    "@envoyhome/test-utils": "workspace:*"
+    "@envoyhome/test-utils": "workspace:*",
+    "@tauri-apps/cli": "^2.1.0",
+    "esbuild": "^0.25.0",
+    "playwright": "^1.51.0"
   }
 }

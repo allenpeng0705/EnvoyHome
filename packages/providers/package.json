@@ -2,7 +2,7 @@
   "name": "@envoyhome/providers",
   "version": "0.0.0",
   "private": true,
-  "description": "Model-provider interface + llama.cpp + OpenAI-compat local servers + mix routing. Owned by B6.",
+  "description": "Model-provider interface + llama.cpp + OpenAI-compat + Anthropic Messages + mix routing. Owned by B6.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

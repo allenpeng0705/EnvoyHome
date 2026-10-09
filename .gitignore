@@ -34,7 +34,20 @@ logs/
 coverage/
 .nyc_output/
 
-# Tauri (apps/desktop, populated in B12)
+# Dart / Flutter
+.dart_tool/
+packages/mobile-client/.dart_tool/
+packages/mobile-client/.packages
+apps/mobile/.dart_tool/
+apps/mobile/.flutter-plugins-dependencies
+apps/mobile/android/app/google-services.json
+apps/mobile/android/local.properties
+apps/mobile/ios/Pods/
+apps/mobile/ios/.symlinks/
+apps/mobile/build/
+
+# Tauri (apps/desktop)
 apps/desktop/target/
+apps/desktop/src-tauri/target/
 apps/desktop/dist/
-/design_doc
+apps/desktop/ui-dist/

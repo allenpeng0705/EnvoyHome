@@ -15,7 +15,16 @@
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",
     "dev:daemon": "pnpm --filter @envoyhome/daemon run dev",
-    "ci": "./scripts/ci.sh"
+    "ci": "./scripts/ci.sh",
+    "ha:c4-diff": "./scripts/ha-c4-diff.sh",
+    "doctor:fresh": "./scripts/doctor-fresh.sh",
+    "doctor:homeclaw": "./scripts/doctor-homeclaw-dryrun.sh",
+    "smoke:rpc": "./scripts/smoke-rpc.sh",
+    "smoke:v1": "node ./scripts/smoke-v1.mjs",
+    "desktop:tauri:build": "pnpm --filter @envoyhome/desktop tauri:build",
+    "mobile:test": "./scripts/mobile-test.sh",
+    "mobile:live": "./scripts/mobile-live-smoke.sh",
+    "mobile:flutter": "cd apps/mobile && flutter pub get && flutter test"
   },
   "devDependencies": {
     "typescript": "5.6.3"

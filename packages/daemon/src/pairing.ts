@@ -477,6 +477,8 @@ export const ZERO_BINDING_ALLOW_LIST = new Set([
   "home.health",
   "home.meshStatus",
   "home.subscribe",
+  "home.registerPushToken",
+  "home.unregisterPushToken",
 ]);
 
 /**

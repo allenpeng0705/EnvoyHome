@@ -12,6 +12,8 @@ import type { BindingStore } from "../bindings.js";
 import type { DaemonLogger } from "../logger.js";
 import { ObjectRegistry } from "../object-registry.js";
 import { ChannelStateStore } from "./state.js";
+import type { TurnCompleteInfo, TurnService, TurnWireResult } from "../turn-service.js";
+import type { PrivacyModeStore } from "../policy-store.js";
 
 export class ChannelError extends Error {
   override readonly name = "ChannelError";
@@ -36,6 +38,8 @@ export class ChannelService {
   readonly objects: ObjectRegistry;
   readonly state: ChannelStateStore;
   private readonly secrets = new Map<string, Record<string, string>>();
+  private turns: TurnService | undefined;
+  private privacyMode: PrivacyModeStore | undefined;
 
   constructor(private readonly deps: ChannelServiceDeps) {
     this.objects = new ObjectRegistry(deps.stateDir);
@@ -52,6 +56,13 @@ export class ChannelService {
     for (const p of deps.bundledPlugins ?? []) {
       this.loader.registerPlugin(p);
     }
+  }
+
+  /** Wire after TurnService is constructed (breaks init cycle). */
+  attachTurns(turns: TurnService, privacyMode: PrivacyModeStore): void {
+    this.turns = turns;
+    this.privacyMode = privacyMode;
+    turns.setOnComplete((info) => this.onTurnComplete(info));
   }
 
   async loadPersisted(): Promise<void> {
@@ -83,6 +94,8 @@ export class ChannelService {
     secrets: Record<string, string> = {},
   ): Promise<{ id: string; enabled: boolean; healthy: boolean }> {
     await mkdir(this.state.paths.secretsDir, { recursive: true });
+    const prev = await this.state.get(id);
+    const wasEnabled = prev?.enabled === true || this.loader.getChannelStatus(id).enabled;
     try {
       await this.loader.setChannelConfig(id, config, secrets);
     } catch (err) {
@@ -92,24 +105,47 @@ export class ChannelService {
       }
       throw err;
     }
-    const prev = await this.state.get(id);
     const status = this.loader.getChannelStatus(id);
     const secretKeys = new Set(prev?.secretKeys ?? []);
     for (const [field, value] of Object.entries(secrets)) {
       const path = this.state.secretPath(id, field);
-      await writeFile(path, value, { mode: 0o600 });
-      secretKeys.add(field);
-      const bag = { ...(this.secrets.get(id) ?? {}), [field]: value };
-      this.secrets.set(id, bag);
-      void path;
+      if (value === "") {
+        secretKeys.delete(field);
+        const bag = { ...(this.secrets.get(id) ?? {}) };
+        delete bag[field];
+        this.secrets.set(id, bag);
+        try {
+          await writeFile(path, "", { mode: 0o600 });
+        } catch {
+          // best-effort clear
+        }
+      } else {
+        await writeFile(path, value, { mode: 0o600 });
+        secretKeys.add(field);
+        const bag = { ...(this.secrets.get(id) ?? {}), [field]: value };
+        this.secrets.set(id, bag);
+      }
     }
     await this.state.upsert({
       id,
       channelAccount: status.channelAccount,
-      enabled: status.enabled,
+      enabled: wasEnabled,
       config: status.config,
       secretKeys: [...secretKeys],
     });
+    // Restart so a new botToken / apiBase takes effect without a daemon reboot.
+    if (wasEnabled) {
+      await this.loader.disableChannel(id);
+      await this.loader.enableChannel(id, status.channelAccount);
+      await this.syncRegistryFromLoader(id);
+      await this.state.upsert({
+        id,
+        channelAccount: status.channelAccount,
+        enabled: true,
+        config: this.loader.getChannelStatus(id).config,
+        secretKeys: [...secretKeys],
+      });
+    }
     const st = this.loader.getChannelStatus(id);
     return { id, enabled: st.enabled, healthy: st.healthy };
   }
@@ -146,10 +182,29 @@ export class ChannelService {
   }
 
   async deliverOutbound(channelId: string, msg: OutboundMessage): Promise<void> {
+    if (this.privacyMode) {
+      const privacy = await this.privacyMode.get(msg.accountId);
+      if (privacy.enabled && privacy.blockSmartHomeEgress) {
+        const st = this.loader.getChannelStatus(channelId);
+        // Chat replies still allowed; event-source notify blocked under Privacy Mode.
+        if (st && (await this.isEventSource(channelId))) {
+          this.deps.logger.warn(
+            `privacy mode: blocked event-source outbound channel=${channelId}`,
+          );
+          return;
+        }
+      }
+    }
     await this.loader.deliverOutbound(channelId, msg);
   }
 
-  /** Hatch + sidecar path (V-CH-1 / V-CH-6) — shares binding rules with plugins. */
+  private async isEventSource(channelId: string): Promise<boolean> {
+    const list = this.loader.listChannels();
+    const row = list.find((c) => c.id === channelId);
+    return row?.channelKind === "event-source";
+  }
+
+  /** Hatch + sidecar path (V-CH-1 / V-CH-6) — opens a real turn. */
   async handleHatchText(input: {
     accountId: string;
     text: string;
@@ -160,10 +215,16 @@ export class ChannelService {
     accepted: boolean;
     accountId: string;
   }> {
-    const turnId = `turn-hatch-${Date.now()}`;
     this.deps.logger.info(`hatch inbound account=${input.accountId} chars=${input.text.length}`);
+    const result = await this.startTurnForAccount({
+      accountId: input.accountId,
+      text: input.text,
+      callerKind: "hatch",
+      origin: "attended",
+      channel: "hatch",
+    });
     return {
-      turnId,
+      turnId: result.turnId,
       text: "",
       format: "markdown",
       accepted: true,
@@ -174,6 +235,33 @@ export class ChannelService {
   private async syncRegistryFromLoader(channelId: string): Promise<void> {
     const st = this.loader.getChannelStatus(channelId);
     await this.objects.registerSources(channelId, st.channelAccount, st.unboundSources);
+  }
+
+  private async startTurnForAccount(input: {
+    accountId: string;
+    text: string;
+    callerKind: string;
+    origin: "attended" | "unattended";
+    channel: string;
+    rawRef?: string;
+  }): Promise<TurnWireResult> {
+    if (!this.turns) {
+      // Pre-attach (tests that only exercise binding gates).
+      return {
+        turnId: `turn-deferred-${Date.now()}`,
+        sessionId: `sess-${input.accountId}`,
+        status: "started",
+        route: "direct",
+      };
+    }
+    return this.turns.startFromInbound({
+      accountId: input.accountId,
+      text: input.text || "(empty)",
+      callerKind: input.callerKind,
+      origin: input.origin,
+      channel: input.channel,
+      ...(input.rawRef !== undefined ? { rawRef: input.rawRef } : {}),
+    });
   }
 
   private async handleInbound(event: InboundEvent): Promise<InboundAck> {
@@ -202,7 +290,15 @@ export class ChannelService {
       this.deps.logger.info(
         `channel inbound ${event.channel}/${event.channelAccount} account=${binding.accountId}`,
       );
-      return { accepted: true, sessionId: `sess-${binding.accountId}-${Date.now()}` };
+      const turn = await this.startTurnForAccount({
+        accountId: binding.accountId,
+        text: event.text ?? "",
+        callerKind: "channel",
+        origin: "attended",
+        channel: event.channel,
+        ...(event.rawRef !== undefined ? { rawRef: event.rawRef } : {}),
+      });
+      return { accepted: true, sessionId: turn.sessionId };
     }
 
     if (event.sourceId) {
@@ -214,10 +310,37 @@ export class ChannelService {
         await this.objects.touchUnbound(event.channel, event.channelAccount, event.sourceId);
         return { accepted: true, reason: "unbound_no_turn" };
       }
-      return { accepted: true, sessionId: `sess-${obj.accountId}-${Date.now()}` };
+      const text =
+        event.text ??
+        `event source=${event.sourceId} channel=${event.channel} at=${event.receivedAt}`;
+      const turn = await this.startTurnForAccount({
+        accountId: obj.accountId,
+        text,
+        callerKind: "event-source",
+        origin: "unattended",
+        channel: event.channel,
+        ...(event.rawRef !== undefined ? { rawRef: event.rawRef } : {}),
+      });
+      return { accepted: true, sessionId: turn.sessionId };
     }
 
     return { accepted: false, reason: "missing_sender_or_source" };
+  }
+
+  private async onTurnComplete(info: TurnCompleteInfo): Promise<void> {
+    if (!info.channel || info.channel === "hatch") return;
+    if (!info.replyText || info.status !== "ok") return;
+    const st = this.loader.listChannels().find((c) => c.id === info.channel);
+    if (!st || st.channelKind === "event-source") {
+      // Event-source: notification-only outbound optional later; never reply as actuation.
+      return;
+    }
+    await this.deliverOutbound(info.channel, {
+      accountId: info.accountId,
+      text: info.replyText,
+      kind: "reply",
+      ...(info.rawRef !== undefined ? { rawRef: info.rawRef } : {}),
+    });
   }
 
   private async handlePluginOutbound(msg: OutboundMessage): Promise<void> {

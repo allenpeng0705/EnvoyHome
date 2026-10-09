@@ -1,19 +1,32 @@
 # @envoyhome/desktop
 
-Thin Settings shell for EnvoyHome (B12). Hosts or supervises the daemon; views call `home.*` RPCs over loopback WebSocket (`ws://127.0.0.1:4780/ws` by default).
+Thin Settings shell for EnvoyHome (B12 / Design §10). Loopback WebSocket to the daemon (`ws://127.0.0.1:4780/ws` by default).
+
+**Focus now:** desktop Settings depth + mobile thin client. Demo IM parked. **Models** = preset → API key → Save (OpenAI/Anthropic/DeepSeek/GLM/MiniMax/Ollama/llama.cpp). **Chat** = loopback turns; **Pairing** = mint/QR/revoke; **Approvals** = pending + grants.
 
 ## Scripts
 
 ```bash
-pnpm --filter @envoyhome/desktop build
-pnpm --filter @envoyhome/desktop test
-pnpm --filter @envoyhome/desktop lint
+pnpm --filter @envoyhome/desktop build          # tsc + frontend bundle (esbuild + qrcode)
+pnpm --filter @envoyhome/desktop test           # unit + Playwright V-UX smoke
+pnpm exec playwright install chromium           # once, for V-UX tests
+pnpm --filter @envoyhome/desktop tauri:dev
+pnpm --filter @envoyhome/desktop tauri:build    # macOS .app / .dmg
 ```
 
-## Run (dev)
+## Run
 
-1. Start the daemon: `pnpm dev:daemon` from the repo root (or `pnpm --filter @envoyhome/daemon dev`).
-2. Open a WS client to the resolved port from **Advanced** (`home.getServiceStatus`, `home.hello`).
-3. Settings views in `src/views/` map to verification IDs V-UX-1..5 and V-UX-MEM-1; smart-home body is `src/views/smarthome.tsx` (V-UX-6/7 owned by B14).
+1. Build daemon: `pnpm --filter @envoyhome/daemon build`
+2. Either:
+   - **Tauri** (`tauri:dev` / built `.app`) — supervises `envoyhome-daemon.js` when found, or
+   - **Manual:** `pnpm --filter @envoyhome/daemon dev` then open `apps/desktop/ui-dist/`
+3. Nav: Chat, Accounts, Pairing (QR), Approvals, Models, Memory (caps/toggles), Smart home, Doctor, Advanced (listen + OS service)
 
-Full Tauri packaging is optional; this package compiles TypeScript views and config helpers for CI (R7 resolved-config test).
+Override WS: Advanced → WS URL, or `localStorage.setItem('envoyhome.wsUrl', 'ws://127.0.0.1:PORT/ws')`.
+
+## Notes
+
+- Persistent WS subscribes to `home:turn-*` / `home:approval-*` / `home:learn-proposed`.
+- Advanced shows `wsPort` / `httpPort` / `publicBaseUrl` from `home.health`, plus Install/Restart/Uninstall for OS service units (`ENVOYHOME_SERVICE_DRY_RUN=1` skips launchctl/systemctl).
+- Pairing mints render a QR of the `envoy://pair?…` URI.
+- Product icons: `apps/branding/` (mark `envoyhome-simple-b`); store pack in `apps/branding/store/`. See root [`QuickStart.md`](../../QuickStart.md).

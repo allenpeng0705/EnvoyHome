@@ -19,6 +19,7 @@ import {
   hashDeviceToken,
   homePaths,
   PairingStore,
+  PushTokenStore,
   resolveSandboxPath,
   safeJoin,
   type HomeSession,
@@ -30,6 +31,7 @@ import { ActuationService } from "../dist/actuation-service.js";
 import { MemoryFacade } from "@envoyhome/memory";
 import { ChannelService } from "../dist/channels/service.js";
 import { WorkflowStore } from "../dist/workflows.js";
+import { ScheduleService } from "../dist/schedule/service.js";
 import { SkillService } from "../dist/skills.js";
 import { ArtifactService } from "../dist/artifacts.js";
 
@@ -85,9 +87,47 @@ function routerDeps(stateDir: string, devices = new DeviceCredentialStore()): Ro
     providers: {} as RouterDeps["providers"],
     harnesses: {} as RouterDeps["harnesses"],
     workflows: new WorkflowStore(paths),
+    schedules: new ScheduleService({ paths }),
     skills: new SkillService(paths),
     artifacts: new ArtifactService(paths, () => "http://127.0.0.1:1"),
     actuations: new ActuationService(paths),
+    pushTokens: new PushTokenStore(paths),
+    push: {
+      init: async () => undefined,
+      onProductEvent: async () => undefined,
+      notifyAccount: async () => ({ sent: 0 }),
+      sendTest: async () => ({ sent: 0 }),
+    } as RouterDeps["push"],
+    localEngine: {
+      status: async () => ({
+        enabled: false,
+        mode: "off" as const,
+        baseUrl: "",
+        providerId: "",
+        healthy: false,
+        modelIds: [],
+        meshAttachAvailable: false,
+        runtimeInstalled: false,
+        modelsOnDisk: [],
+      }),
+      enableLocal: async () => ({
+        enabled: false,
+        mode: "off" as const,
+        healthy: false,
+        baseUrl: "",
+      }),
+      enableOllama: async () => ({
+        enabled: false,
+        mode: "off" as const,
+        healthy: false,
+        baseUrl: "",
+      }),
+      disable: async () => ({
+        enabled: false,
+        mode: "off" as const,
+        healthy: false,
+      }),
+    } as unknown as RouterDeps["localEngine"],
     meshStatus: () => ({ kind: "no-node" as const }),
   };
 }
@@ -374,9 +414,13 @@ test("B3 RPC: create/list/update/delete accounts + sender/device bindings", asyn
     providers: daemon.providers,
     harnesses: daemon.harnesses,
     workflows: daemon.workflows,
+    schedules: daemon.schedules,
     skills: daemon.skills,
     artifacts: daemon.artifacts,
     actuations: daemon.actuations,
+    pushTokens: daemon.pushTokens,
+    push: daemon.push,
+    localEngine: daemon.localEngine,
     meshStatus: () => ({ kind: "no-node" as const }),
   };
 

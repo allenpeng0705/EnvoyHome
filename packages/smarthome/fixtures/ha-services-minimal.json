@@ -1,0 +1,97 @@
+[
+  {
+    "domain": "lock",
+    "services": {
+      "lock": {},
+      "unlock": {},
+      "open": {}
+    }
+  },
+  {
+    "domain": "cover",
+    "services": {
+      "open_cover": {},
+      "close_cover": {},
+      "set_cover_position": {},
+      "set_cover_tilt_position": {},
+      "toggle_cover_tilt": {},
+      "stop_cover": {}
+    }
+  },
+  {
+    "domain": "valve",
+    "services": {
+      "open_valve": {},
+      "close_valve": {}
+    }
+  },
+  {
+    "domain": "alarm_control_panel",
+    "services": {
+      "alarm_disarm": {},
+      "alarm_arm_home": {},
+      "alarm_arm_away": {},
+      "alarm_arm_night": {}
+    }
+  },
+  {
+    "domain": "light",
+    "services": {
+      "turn_on": {},
+      "turn_off": {},
+      "toggle": {}
+    }
+  },
+  {
+    "domain": "script",
+    "services": {
+      "turn_on": {},
+      "turn_off": {}
+    }
+  },
+  {
+    "domain": "scene",
+    "services": {
+      "turn_on": {}
+    }
+  },
+  {
+    "domain": "button",
+    "services": {
+      "press": {}
+    }
+  },
+  {
+    "domain": "input_button",
+    "services": {
+      "press": {}
+    }
+  },
+  {
+    "domain": "automation",
+    "services": {
+      "trigger": {},
+      "turn_on": {},
+      "turn_off": {}
+    }
+  },
+  {
+    "domain": "camera",
+    "services": {
+      "turn_off": {},
+      "turn_on": {}
+    }
+  },
+  {
+    "domain": "update",
+    "services": {
+      "install": {}
+    }
+  },
+  {
+    "domain": "esphome",
+    "services": {
+      "turn_on": {}
+    }
+  }
+]

@@ -27,6 +27,8 @@
   "dependencies": {
     "@envoyhome/channel-api": "workspace:*",
     "@envoyhome/channel-telegram": "workspace:*",
+    "@envoyhome/channel-mqtt": "workspace:*",
+    "@envoyhome/channel-homeassistant": "workspace:*",
     "@envoyhome/harness-host": "workspace:*",
     "@envoyhome/memory": "workspace:*",
     "@envoyhome/providers": "workspace:*",

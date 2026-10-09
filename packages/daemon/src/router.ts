@@ -43,6 +43,9 @@ import type { HarnessStore } from "./harness-store.js";
 import { SkillsError, type SkillService } from "./skills.js";
 import type { WorkflowStore } from "./workflows.js";
 import type { ArtifactService } from "./artifacts.js";
+import type { PushTokenStore, PushPlatform } from "./push-tokens.js";
+import type { PushDispatcher } from "./push-dispatch.js";
+import type { ScheduleService } from "./schedule/service.js";
 
 export interface RouterDeps {
   config: DaemonConfig;
@@ -67,10 +70,17 @@ export interface RouterDeps {
   providers: ProviderStore;
   harnesses: HarnessStore;
   workflows: WorkflowStore;
+  schedules: ScheduleService;
   skills: SkillService;
   artifacts: ArtifactService;
   /** B14 actuation journal (owner-scope reads). */
   actuations: ActuationService;
+  /** Mobile APNs/FCM token registry. */
+  pushTokens: PushTokenStore;
+  /** APNs/FCM sender (approval wake-ups). */
+  push: PushDispatcher;
+  /** EnvoyHome Local / Ollama engine (Design §8.5). */
+  localEngine: import("./local-engine/service.js").LocalEngineService;
 }
 
 function scopeOf(method: string): "loopback-owner" | "owner-scope" | "account-scoped" | undefined {
@@ -175,6 +185,27 @@ function mapStoreError(err: unknown): never {
   throw err;
 }
 
+/** Design §8.5 — local engine / Ollama enable failures are bad_params, not 500s. */
+function mapLocalEngineError(err: unknown): void {
+  if (
+    err instanceof Error &&
+    /envoyhome\.(local_engine_|ollama_)/.test(err.message)
+  ) {
+    throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", err.message);
+  }
+}
+
+function optionalBoundAccountId(
+  method: string,
+  caller: HomeCaller,
+  params: Record<string, unknown>,
+): string | undefined {
+  if (typeof params.accountId !== "string" || params.accountId.length === 0) {
+    return undefined;
+  }
+  return requireBoundAccount(method, caller, params);
+}
+
 /**
  * Enforce device→account binding for methods that take `accountId` (V-SEC-7).
  * Loopback owner is unbounded. Call before any account-scoped side effect.
@@ -265,7 +296,7 @@ export function createDispatcher(deps: RouterDeps) {
 
     switch (method) {
       case "home.hello": {
-        return {
+        const hello: Record<string, unknown> = {
           product: PRODUCT_NAME,
           version: deps.packageVersion,
           protocolApiVersion: PROTOCOL_API_VERSION,
@@ -275,7 +306,10 @@ export function createDispatcher(deps: RouterDeps) {
           methods: methodNames(),
           mesh,
           notes: [] as string[],
+          accountIds: [...caller.accountIds],
         };
+        if (caller.deviceId) hello.deviceId = caller.deviceId;
+        return hello;
       }
       case "home.health": {
         const uptimeSec = Math.floor((Date.now() - deps.startedAt.getTime()) / 1000);
@@ -284,6 +318,9 @@ export function createDispatcher(deps: RouterDeps) {
           uptimeSec,
           connections: deps.connections(),
           activeTurns: deps.activeTurns(),
+          wsPort: deps.config.wsPort,
+          httpPort: deps.config.httpPort,
+          publicBaseUrl: deps.config.publicBaseUrl,
         };
       }
       case "home.subscribe": {
@@ -326,8 +363,46 @@ export function createDispatcher(deps: RouterDeps) {
             : "info";
         return { lines: deps.logger.tail(tailLines, level) };
       }
-      case "home.getServiceStatus":
-        return { installed: false, running: false, manager: "none" as const };
+      case "home.getServiceStatus": {
+        const { readClaim, isProcessAlive } = await import("./claim.js");
+        const { readServiceStatus } = await import("./os-service.js");
+        const claim = await readClaim(deps.config.stateDir);
+        const running = claim ? isProcessAlive(claim.pid) : false;
+        const svc = await readServiceStatus(running);
+        return {
+          installed: svc.installed,
+          running: svc.running,
+          manager: svc.manager,
+          ...(svc.unitPath !== undefined || claim
+            ? {
+                execPath: [
+                  svc.unitPath ? `unit=${svc.unitPath}` : null,
+                  claim
+                    ? `pid=${claim.pid} ws=${claim.port} managedBy=${claim.managedBy ?? "unknown"}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" "),
+              }
+            : {}),
+          ...(!running && claim ? { lastError: "claim file present but process not alive" } : {}),
+        };
+      }
+      case "home.installService": {
+        const { installService } = await import("./os-service.js");
+        return await installService({
+          stateDir: deps.config.stateDir,
+          ...(typeof params.manager === "string" ? { manager: params.manager } : {}),
+        });
+      }
+      case "home.uninstallService": {
+        const { uninstallService } = await import("./os-service.js");
+        return await uninstallService(params.confirm === true);
+      }
+      case "home.restartService": {
+        const { restartService } = await import("./os-service.js");
+        return await restartService();
+      }
 
       /* ---- B3 accounts & bindings (Design A.3) ---- */
       case "home.listAccounts": {
@@ -494,6 +569,79 @@ export function createDispatcher(deps: RouterDeps) {
           mapStoreError(err);
         }
       }
+      case "home.registerPushToken": {
+        const deviceId =
+          caller.kind === "device"
+            ? caller.deviceId
+            : typeof params.deviceId === "string"
+              ? params.deviceId
+              : undefined;
+        if (!deviceId) {
+          throwRpc(
+            TRANSPORT_CODE_UNAUTHORIZED,
+            "auth",
+            "home.registerPushToken requires a paired device session",
+          );
+        }
+        const platform = params.platform as PushPlatform;
+        if (platform !== "ios" && platform !== "android") {
+          throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "platform must be ios|android");
+        }
+        const token = String(params.token ?? "");
+        if (!token) {
+          throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "token required");
+        }
+        let accountIds = caller.accountIds;
+        if (typeof params.accountId === "string" && params.accountId) {
+          const bound = assertDeviceAccountBound(caller, params.accountId, method);
+          if ("error" in bound) {
+            throwRpc(TRANSPORT_CODE_UNAUTHORIZED, "account_not_bound", bound.detail);
+          }
+          accountIds = [bound.accountId];
+        }
+        const row = await deps.pushTokens.register({
+          deviceId,
+          platform,
+          token,
+          tokenType: "alert",
+          accountIds,
+        });
+        return { ok: true, deviceId: row.deviceId, platform: row.platform };
+      }
+      case "home.unregisterPushToken": {
+        const deviceId = caller.kind === "device" ? caller.deviceId : undefined;
+        if (!deviceId) {
+          throwRpc(
+            TRANSPORT_CODE_UNAUTHORIZED,
+            "auth",
+            "home.unregisterPushToken requires a paired device session",
+          );
+        }
+        await deps.pushTokens.unregister(deviceId);
+        return { ok: true };
+      }
+      case "home.sendTestPush": {
+        if (caller.kind !== "loopback-owner") {
+          throwRpc(
+            TRANSPORT_CODE_UNAUTHORIZED,
+            "auth",
+            "home.sendTestPush requires loopback-owner",
+          );
+        }
+        const title =
+          typeof params.title === "string" && params.title ? params.title : "EnvoyHome";
+        const body =
+          typeof params.body === "string" && params.body
+            ? params.body
+            : "Test push from Settings / loopback";
+        const deviceId = typeof params.deviceId === "string" ? params.deviceId : undefined;
+        const result = await deps.push.sendTest(deviceId, {
+          title,
+          body,
+          data: { type: "test" },
+        });
+        return { ok: true, sent: result.sent };
+      }
 
       /* ---- B5 memory (L1–L3 StandingStore) ---- */
       case "home.getProfile": {
@@ -543,6 +691,12 @@ export function createDispatcher(deps: RouterDeps) {
       case "home.listMemory": {
         try {
           const accountId = requireBoundAccount(method, caller, params);
+          const policy = await deps.turns.policy.get(accountId);
+          deps.memory.setAccountMemorySettings(accountId, {
+            flushEnabled: policy.flushEnabled,
+            reviewEnabled: policy.reviewEnabled,
+            sessionRetentionDays: policy.sessionRetentionDays,
+          });
           const listed = await deps.memory.listMemory(accountId, {
             includeContent: params.includeContent === true,
           });
@@ -565,6 +719,35 @@ export function createDispatcher(deps: RouterDeps) {
             pendingLearnCount: listed.pendingLearnCount,
             pendingLearnCap: listed.pendingLearnCap,
             backendId: listed.backendId,
+          };
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.setMemorySettings": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          const patch: {
+            flushEnabled?: boolean;
+            reviewEnabled?: boolean;
+            sessionRetentionDays?: number;
+          } = {};
+          if (typeof params.flushEnabled === "boolean") patch.flushEnabled = params.flushEnabled;
+          if (typeof params.reviewEnabled === "boolean") patch.reviewEnabled = params.reviewEnabled;
+          if (typeof params.sessionRetentionDays === "number") {
+            patch.sessionRetentionDays = params.sessionRetentionDays;
+          }
+          const next = await deps.turns.policy.write(accountId, patch);
+          deps.memory.setAccountMemorySettings(accountId, {
+            flushEnabled: next.flushEnabled,
+            reviewEnabled: next.reviewEnabled,
+            sessionRetentionDays: next.sessionRetentionDays,
+          });
+          return {
+            ok: true,
+            flushEnabled: next.flushEnabled,
+            reviewEnabled: next.reviewEnabled,
+            sessionRetentionDays: next.sessionRetentionDays,
           };
         } catch (err) {
           mapStoreError(err);
@@ -846,10 +1029,43 @@ export function createDispatcher(deps: RouterDeps) {
           }
           const rec = await deps.providers.setProvider({
             id: params.id as string,
-            kind: params.kind as "local_llama_cpp" | "local_openai_compat" | "cloud_openai_compat",
+            kind: params.kind as
+              | "local_llama_cpp"
+              | "local_openai_compat"
+              | "cloud_openai_compat"
+              | "cloud_anthropic_compat",
             ...(typeof params.baseUrl === "string" ? { baseUrl: params.baseUrl } : {}),
             ...(typeof params.model === "string" ? { model: params.model } : {}),
             ...(typeof params.enabled === "boolean" ? { enabled: params.enabled } : {}),
+            ...(typeof params.label === "string" ? { label: params.label } : {}),
+            ...(params.placement === "local" || params.placement === "cloud"
+              ? { placement: params.placement }
+              : {}),
+            ...(params.cost && typeof params.cost === "object"
+              ? { cost: params.cost as { inputPerMTok?: number; outputPerMTok?: number; currency?: string } }
+              : {}),
+            ...(typeof params.costRank === "number" ? { costRank: params.costRank } : {}),
+            ...(typeof params.paramCountB === "number" ? { paramCountB: params.paramCountB } : {}),
+            ...(typeof params.capabilityRank === "number"
+              ? { capabilityRank: params.capabilityRank }
+              : {}),
+            ...(typeof params.contextTokens === "number"
+              ? { contextTokens: params.contextTokens }
+              : {}),
+            ...(typeof params.supportsTools === "boolean"
+              ? { supportsTools: params.supportsTools }
+              : {}),
+            ...(typeof params.supportsVision === "boolean"
+              ? { supportsVision: params.supportsVision }
+              : {}),
+            ...(typeof params.supportsLogprobs === "boolean"
+              ? { supportsLogprobs: params.supportsLogprobs }
+              : {}),
+            ...(params.latencyClass === "fast" ||
+            params.latencyClass === "standard" ||
+            params.latencyClass === "slow"
+              ? { latencyClass: params.latencyClass }
+              : {}),
           });
           return { provider: { id: rec.id, kind: rec.kind, healthy: rec.enabled } };
         } catch (err) {
@@ -890,12 +1106,105 @@ export function createDispatcher(deps: RouterDeps) {
           mapStoreError(err);
         }
       }
+      case "home.testProvider": {
+        try {
+          if (caller.kind !== "loopback-owner" && !caller.ownerTrusted) {
+            throw Object.assign(new Error("home.testProvider requires owner-scope"), {
+              rpcError: makeError(
+                TRANSPORT_CODE_UNAUTHORIZED,
+                "auth",
+                "home.testProvider requires owner-scope",
+              ),
+            });
+          }
+          return await deps.providers.testProvider(params.id as string);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
       case "home.setModelMode": {
         try {
           const accountId = requireBoundAccount(method, caller, params);
           await deps.providers.setMode(accountId, params.mode as "local" | "cloud" | "mix");
           return { ok: true };
         } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.setDefaultProvider": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          await deps.providers.setDefaultProvider(accountId, params.providerId as string);
+          return { ok: true };
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.setPlacementFilter": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          await deps.providers.setPlacementFilter(
+            accountId,
+            params.filter as "any" | "local" | "cloud",
+          );
+          return { ok: true };
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.setAutoModelSwitch": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          await deps.providers.setAutoModelSwitch(accountId, params.enabled === true);
+          return { ok: true };
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.getLocalEngineStatus": {
+        // owner-scope enforced by assertScope / METHODS.scope
+        return await deps.localEngine.status();
+      }
+      case "home.enableLocalEngine": {
+        try {
+          const prefer =
+            params.prefer === "attach" || params.prefer === "spawn" || params.prefer === "auto"
+              ? params.prefer
+              : "auto";
+          const accountId = optionalBoundAccountId(method, caller, params);
+          return await deps.localEngine.enableLocal({
+            prefer,
+            ...(accountId ? { accountId } : {}),
+            ...(typeof params.modelPath === "string" ? { modelPath: params.modelPath } : {}),
+            ...(typeof params.binaryPath === "string" ? { binaryPath: params.binaryPath } : {}),
+            ...(typeof params.modelAlias === "string" ? { modelAlias: params.modelAlias } : {}),
+            ...(typeof params.downloadRuntime === "boolean"
+              ? { downloadRuntime: params.downloadRuntime }
+              : {}),
+          });
+        } catch (err) {
+          mapLocalEngineError(err);
+          mapStoreError(err);
+        }
+      }
+      case "home.enableOllama": {
+        try {
+          const accountId = optionalBoundAccountId(method, caller, params);
+          return await deps.localEngine.enableOllama({
+            ...(accountId ? { accountId } : {}),
+            ...(typeof params.baseUrl === "string" ? { baseUrl: params.baseUrl } : {}),
+            ...(typeof params.model === "string" ? { model: params.model } : {}),
+          });
+        } catch (err) {
+          mapLocalEngineError(err);
+          mapStoreError(err);
+        }
+      }
+      case "home.disableLocalEngine": {
+        try {
+          return await deps.localEngine.disable();
+        } catch (err) {
+          mapLocalEngineError(err);
           mapStoreError(err);
         }
       }
@@ -1148,7 +1457,112 @@ export function createDispatcher(deps: RouterDeps) {
       }
       case "home.reloadWorkflows": {
         const count = await deps.workflows.reload();
+        for (const a of await deps.accounts.list()) {
+          await deps.schedules.watchAccount(a.accountId);
+          const defs = deps.workflows.mergedForAccount(a.accountId);
+          await deps.schedules.syncWorkflowSchedules(
+            a.accountId,
+            defs
+              .filter((w) => typeof w.match.schedule === "string")
+              .map((w) => ({
+                id: w.id,
+                schedule: w.match.schedule as string,
+                canActuate: w.steps.some(
+                  (s) =>
+                    s.type === "tool" &&
+                    (s["name"] === "ha_call_service" || s["name"] === "mqtt_publish"),
+                ),
+              })),
+          );
+        }
         return { ok: true, count };
+      }
+
+      /* ---- B9.1 schedules ---- */
+      case "home.listSchedules": {
+        const accountId = requireBoundAccount(method, caller, params);
+        await deps.schedules.watchAccount(accountId);
+        const jobs = await deps.schedules.store.listJobs(accountId);
+        return {
+          jobs: jobs.map((j) => ({
+            id: j.id,
+            name: j.name,
+            enabled: j.enabled,
+            kind: j.spec.kind,
+            source: j.source,
+            ...(j.nextRunAt ? { nextRunAt: j.nextRunAt } : {}),
+            ...(j.lastStatus ? { lastStatus: j.lastStatus } : {}),
+          })),
+        };
+      }
+      case "home.proposeSchedule": {
+        const accountId = requireBoundAccount(method, caller, params);
+        const text = String(params.text ?? "");
+        const timeZone =
+          typeof params.timeZone === "string" && params.timeZone.length > 0
+            ? params.timeZone
+            : undefined;
+        const proposal = await deps.schedules.proposeFromText(accountId, text, timeZone);
+        if ("error" in proposal) {
+          throw Object.assign(new Error(`envoyhome.bad_params: ${proposal.reason}`), {
+            rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", proposal.reason),
+          });
+        }
+        return {
+          proposalId: proposal.proposalId,
+          resolvedLocal: proposal.resolvedLocal,
+          kind: proposal.spec.kind,
+          timeZone: proposal.spec.timeZone,
+          ...(proposal.spec.whenInstant ? { whenInstant: proposal.spec.whenInstant } : {}),
+          ...(proposal.spec.cronExpr ? { cronExpr: proposal.spec.cronExpr } : {}),
+          ...(proposal.spec.everyMs !== undefined ? { everyMs: proposal.spec.everyMs } : {}),
+          ...(proposal.payload.message ? { message: proposal.payload.message } : {}),
+        };
+      }
+      case "home.confirmSchedule": {
+        const accountId = requireBoundAccount(method, caller, params);
+        const job = await deps.schedules.confirmProposal(String(params.proposalId));
+        if (job.accountId !== accountId) {
+          throw Object.assign(new Error("envoyhome.bad_params: proposal account mismatch"), {
+            rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "proposal account mismatch"),
+          });
+        }
+        return {
+          job: {
+            id: job.id,
+            enabled: job.enabled,
+            ...(job.nextRunAt ? { nextRunAt: job.nextRunAt } : {}),
+          },
+        };
+      }
+      case "home.updateSchedule": {
+        const accountId = requireBoundAccount(method, caller, params);
+        const job = await deps.schedules.updateJob(accountId, String(params.jobId), {
+          ...(typeof params.enabled === "boolean" ? { enabled: params.enabled } : {}),
+        });
+        return {
+          job: {
+            id: job.id,
+            enabled: job.enabled,
+            ...(job.nextRunAt ? { nextRunAt: job.nextRunAt } : {}),
+          },
+        };
+      }
+      case "home.removeSchedule": {
+        const accountId = requireBoundAccount(method, caller, params);
+        await deps.schedules.removeJob(accountId, String(params.jobId));
+        return { ok: true };
+      }
+      case "home.runSchedule": {
+        const accountId = requireBoundAccount(method, caller, params);
+        const receipt = await deps.schedules.runNow(accountId, String(params.jobId));
+        return {
+          receipt: {
+            execStatus: receipt.execStatus,
+            deliveryStatus: receipt.deliveryStatus,
+            ...(receipt.error !== undefined ? { error: receipt.error } : {}),
+          },
+        };
       }
 
       /* ---- B10 skills ---- */

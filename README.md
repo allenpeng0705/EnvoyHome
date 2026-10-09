@@ -1,35 +1,63 @@
 # EnvoyHome
 
-A modern home agent built around an **EnvoyMesh** super channel.
+Self-hosted **home agent** control plane — desktop Settings shell, Flutter phone client, and daemon — built around an **EnvoyMesh** super channel (`home.*`).
+
+**Hands-on:** start with [`QuickStart.md`](QuickStart.md).
+
+## What you get
+
+| Surface | Path | Role |
+|---------|------|------|
+| Daemon | `packages/daemon` | Control plane — WS `:4780/ws`, HTTP `:4781` |
+| Desktop | `apps/desktop` | Tauri Settings shell (Chat, Pairing, Approvals, Models, Local, …) |
+| Mobile | `apps/mobile` | Flutter thin client — QR / direct / SSH hop into the same `home.*` channel |
+| Branding | `apps/branding` | Product mark + store icon pack (`store/` for App Store & Play) |
+
+Product order: **desktop → EnvoyMesh mobile → demo IM last**. Smart home (HA + MQTT) is v1 Core via hubs — EnvoyHome is not a hub itself.
 
 ## Design docs
 
 | Doc | Role |
 |-----|------|
-| [`design_doc/EnvoyHome-Design.md`](design_doc/EnvoyHome-Design.md) | **Ground truth** — living all-in-one design for implementation and verification. Refine this file as decisions harden. |
-| [`design_doc/EnvoyHome-Memory-Design.md`](design_doc/EnvoyHome-Memory-Design.md) | **Normative memory + learning depth** (companion to Design §9). |
-| [`design_doc/EnvoyHome-Implementation-Plan.md`](design_doc/EnvoyHome-Implementation-Plan.md) | **Build plan** (subordinate) — Build Stages **B0–B14**, verification-ID ownership, soft-risk mitigations, first-day onboarding, v1 release bar. |
-| [`tests/min/conventions.md`](tests/min/conventions.md) | **13 must-follow rules (R1–R13)**. Read before editing any package code. |
-| [`AGENTS.md`](AGENTS.md) | Project-local instructions for AI coding agents. |
-
-Supporting peer analysis and short agreed notes live under [`design_doc/`](design_doc/). This is not a HomeClaw port.
+| [`design_doc/EnvoyHome-Design.md`](design_doc/EnvoyHome-Design.md) | **Ground truth** — Normative product + security |
+| [`design_doc/EnvoyHome-Memory-Design.md`](design_doc/EnvoyHome-Memory-Design.md) | Memory layers L0–L7, flush, LearnQueue |
+| [`design_doc/EnvoyHome-Implementation-Plan.md`](design_doc/EnvoyHome-Implementation-Plan.md) | Build Stages **B0–B14**, verification IDs |
+| [`tests/min/conventions.md`](tests/min/conventions.md) | Rules **R1–R13** (read before package edits) |
+| [`AGENTS.md`](AGENTS.md) | Instructions for AI coding agents |
+| [`design_doc/`](design_doc/) | Peer analysis, agreed notes, reviews |
 
 ## Status
 
-**Build Stage B0 (workspace bootstrap) is complete** — `pnpm install`, `pnpm -r build`, `pnpm -r lint`, `pnpm test` and `./scripts/peers-check.sh` all pass. Design gate **G1** and plan gate **G6** are accepted (Design §16); B1 is next.
+v1 is **B0–B14**. Desktop + mobile thin clients are the active product path. Design gate **G1** and plan gate **G6** are accepted.
 
-**v1 is B0–B14.** Smart home is **v1 Core**, not an add-on: MQTT + Home Assistant through the Channel API and a `ha_*`/`mqtt_*` tool bundle, with automation expressed as static workflows (Design §5.7, Plan §3 B14). There is deliberately **no core device model** — EnvoyHome integrates with hubs, it is not one.
+⚠️ Actuation (`ha_call_service`, `mqtt_publish`) is **`admin`** tier; unattended actuation needs a grant. The safety class (unlock, garage, valve, gate, disarm, …) is never grant-covered (Design §5.7.2, conventions R13).
 
-⚠️ Actuation (`ha_call_service`, `mqtt_publish`) is **`admin`** tier and unattended actuation needs a grant; the safety list (unlock, garage, valve, gate, disarm) can never be grant-covered (Design §5.7.2, conventions R13).
+## Quick commands
 
 ```bash
-# Siblings are required: they are linked with `link:` (not workspace members, not on npm).
-./scripts/peers-check.sh          # fail-closed: presence, linked packages, branch
-./scripts/fetch-peers.sh          # clone them when ENVOYHOME_PEERS_GIT_BASE is set
-pnpm install                      # never with CI=true (conventions R9)
-./scripts/ci.sh                   # peers -> install -> build -> test -> lint
+./scripts/peers-check.sh          # fail-closed sibling check
+./scripts/fetch-peers.sh          # clone siblings when ENVOYHOME_PEERS_GIT_BASE is set
+env -u CI pnpm install            # never install with CI=true (R9)
+./scripts/ci.sh                   # docs-lint → peers → install → build → test → lint
 ```
 
-Ports: WS `4780` at `/ws`, HTTP `4781` (health at `GET /health`) — Design §2.4.
+Ports (Design §2.4): WebSocket `4780` at `/ws`, HTTP `4781` (`GET /health`).
 
-`design_doc/` is versioned (the historical `.gitignore` entry that hid the ground truth was removed on 2026-10-08).
+Sibling layout (linked with `link:`, not npm):
+
+```text
+parent/
+  EnvoyHome/       ← this repo
+  EnvoyMesh/       ← @envoymesh/*
+  envoy-harness/   ← default harness
+  EnvoyCoder/      ← reference patterns only
+```
+
+## Branding & store assets
+
+Product mark (simple house + Mesh halo): `apps/branding/envoyhome-simple-b.jpg`  
+Release pack (desktop / iOS / Android / App Store / Play): [`apps/branding/store/README.md`](apps/branding/store/README.md)
+
+## License
+
+See repository license file when present; otherwise all rights reserved by the project owner until published.

@@ -15,6 +15,8 @@ import { PairingStore } from "./pairing.js";
 import { createMeshHost, type MeshHostHandle } from "./mesh-host.js";
 import { MemoryFacade } from "@envoyhome/memory";
 import telegramPlugin from "@envoyhome/channel-telegram";
+import mqttPlugin from "@envoyhome/channel-mqtt";
+import haPlugin from "@envoyhome/channel-homeassistant";
 import { ChannelService } from "./channels/service.js";
 import { SessionStore } from "./sessions.js";
 import { ProviderStore } from "./providers-store.js";
@@ -22,9 +24,14 @@ import { HarnessStore } from "./harness-store.js";
 import { TurnService } from "./turn-service.js";
 import { homePaths } from "./home-paths.js";
 import { ActuationService } from "./actuation-service.js";
+import { PushTokenStore } from "./push-tokens.js";
+import { PushDispatcher } from "./push-dispatch.js";
 import { WorkflowStore } from "./workflows.js";
 import { SkillService } from "./skills.js";
 import { ArtifactService } from "./artifacts.js";
+import { ProductEventBus, homeEventDispositions } from "./product-events.js";
+import { ScheduleService } from "./schedule/service.js";
+import { LocalEngineService } from "./local-engine/service.js";
 
 export interface RunningDaemon {
   config: DaemonConfig;
@@ -39,11 +46,16 @@ export interface RunningDaemon {
   providers: ProviderStore;
   harnesses: HarnessStore;
   workflows: WorkflowStore;
+  schedules: ScheduleService;
   skills: SkillService;
   artifacts: ArtifactService;
   actuations: ActuationService;
+  pushTokens: PushTokenStore;
+  push: PushDispatcher;
+  localEngine: LocalEngineService;
   mesh: MeshHostHandle;
   subscriptions: SubscriptionRegistry;
+  events: ProductEventBus;
   ws: HostHandle;
   http: Server;
   startedAt: Date;
@@ -72,13 +84,15 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     stateDir: config.stateDir,
     bindings,
     logger,
-    bundledPlugins: [telegramPlugin],
+    bundledPlugins: [telegramPlugin, mqttPlugin, haPlugin],
   });
   await channels.loadPersisted();
   const paths = homePaths(config.stateDir);
   const sessions = new SessionStore(paths);
   const providers = new ProviderStore(paths);
   await providers.load();
+  const localEngine = new LocalEngineService(paths, providers, logger);
+  await localEngine.load();
   const harnesses = new HarnessStore(paths);
   await harnesses.load();
   const workflows = new WorkflowStore(paths);
@@ -86,6 +100,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   const skills = new SkillService(paths);
   const artifacts = new ArtifactService(paths, () => config.publicBaseUrl);
   const actuations = new ActuationService(paths);
+  const pushTokens = new PushTokenStore(paths);
   const turns = new TurnService(
     paths,
     sessions,
@@ -95,6 +110,90 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     memory,
     workflows,
   );
+  const events = new ProductEventBus();
+  const schedules = new ScheduleService({
+    paths,
+    defaultTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    emit: (event, data) => events.emit(event, data),
+  });
+  const push = new PushDispatcher(pushTokens, config.stateDir, logger);
+  await push.init();
+  // Notify → EnvoyMesh super channel: live WS (`home:schedule-fired`) + APNs/FCM wake.
+  schedules.setFireHandler(async (job) => {
+    if (job.payload.kind === "notify") {
+      const body = String(job.payload.message ?? job.name ?? "Reminder");
+      const { sent } = await push.notifyAccount(job.accountId, {
+        title: "EnvoyHome",
+        body,
+        data: {
+          type: "schedule",
+          jobId: job.id,
+          accountId: job.accountId,
+        },
+      });
+      const live = events.hasListeners("home:schedule-fired");
+      return {
+        execStatus: "ok",
+        deliveryStatus: sent > 0 || live ? "delivered" : "not-delivered",
+      };
+    }
+    if (job.payload.kind === "workflow" && job.payload.workflowId) {
+      await turns.runScheduledWorkflow(job.accountId, job.payload.workflowId);
+      return { execStatus: "ok", deliveryStatus: "none" };
+    }
+    if (job.payload.kind === "system") {
+      const sys = job.payload.systemJob ?? "consolidate";
+      if (sys === "consolidate") {
+        await memory.compactMemory(job.accountId, { trust: "agent" });
+      }
+      // flush/review stay turn-bound until a dedicated clock path is Normative.
+      return { execStatus: "ok", deliveryStatus: "none" };
+    }
+    if (job.payload.kind === "tool" && job.payload.toolName) {
+      await turns.runScheduledTool(
+        job.accountId,
+        job.payload.toolName,
+        job.payload.toolArgs ?? {},
+      );
+      return { execStatus: "ok", deliveryStatus: "none" };
+    }
+    if (job.payload.kind === "tool") {
+      return {
+        execStatus: "error",
+        deliveryStatus: "none",
+        error: "tool payload missing toolName",
+      };
+    }
+    return {
+      execStatus: "error",
+      deliveryStatus: "none",
+      error: `unsupported payload kind ${job.payload.kind}`,
+    };
+  });
+  events.addSideEffect((event, data) => {
+    void push.onProductEvent(event, data);
+  });
+  turns.setEmit(events.emit);
+  channels.attachTurns(turns, turns.privacyMode);
+  // Sync workflow schedules for known accounts
+  for (const a of await accounts.list()) {
+    await schedules.watchAccount(a.accountId);
+    const defs = workflows.mergedForAccount(a.accountId);
+    await schedules.syncWorkflowSchedules(
+      a.accountId,
+      defs
+        .filter((w) => typeof w.match.schedule === "string")
+        .map((w) => ({
+          id: w.id,
+          schedule: w.match.schedule as string,
+          canActuate: w.steps.some(
+            (s) =>
+              s.type === "tool" &&
+              (s["name"] === "ha_call_service" || s["name"] === "mqtt_publish"),
+          ),
+        })),
+    );
+  }
   const mesh = createMeshHost({
     config: {
       hostingEnabled: config.meshHostingEnabled,
@@ -141,6 +240,8 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   const ws = await startWsHost({
     port: config.wsPort,
     devices,
+    nodeService: events.asNodeService(),
+    eventDispositions: homeEventDispositions(),
     routerDeps: {
       config,
       startedAt,
@@ -156,9 +257,13 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       providers,
       harnesses,
       workflows,
+      schedules,
       skills,
       artifacts,
       actuations,
+      pushTokens,
+      push,
+      localEngine,
       activeTurns: () => turns.activeTurnCount(),
       meshStatus: () => mesh.status(),
       meshDualModeNotes: () => mesh.dualModeNotes(),
@@ -170,6 +275,8 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     },
   });
   wsRef = ws;
+  await localEngine.restoreOnBoot();
+  stoppers.push(() => localEngine.stop());
   // Reflect the OS-assigned port (port: 0 in tests) into config so mintPairing
   // appends the resolved WS port (Design A.2).
   config.wsPort = ws.host.port;
@@ -177,6 +284,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     mesh.stop();
     ws.stop();
   });
+  stoppers.push(() => schedules.stop());
 
   const http = await startHttpHatch({
     port: config.httpPort,
@@ -228,11 +336,16 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     providers,
     harnesses,
     workflows,
+    schedules,
     skills,
     artifacts,
     actuations,
+    pushTokens,
+    push,
+    localEngine,
     mesh,
     subscriptions,
+    events,
     ws,
     http,
     startedAt,

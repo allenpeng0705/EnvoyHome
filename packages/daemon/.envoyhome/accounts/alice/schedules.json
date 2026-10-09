@@ -1,0 +1,29 @@
+{
+  "jobs": [
+    {
+      "id": "system:consolidate:alice",
+      "accountId": "alice",
+      "enabled": true,
+      "name": "Nightly consolidate",
+      "spec": {
+        "kind": "cron",
+        "cronExpr": "30 3 * * *",
+        "timeZone": "Asia/Shanghai"
+      },
+      "payload": {
+        "kind": "system",
+        "systemJob": "consolidate"
+      },
+      "missPolicy": "skip",
+      "nextRunAt": "2026-10-09T19:30:00.000Z",
+      "lastRunAt": null,
+      "lastStatus": null,
+      "lastError": null,
+      "consecutiveErrors": 0,
+      "createdAt": "2026-10-09T09:40:03.203Z",
+      "updatedAt": "2026-10-09T09:40:03.203Z",
+      "source": "user"
+    }
+  ],
+  "receipts": []
+}

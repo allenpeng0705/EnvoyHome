@@ -35,6 +35,7 @@ const EXTRA = [
   "AGENTS.md",
   "tests/min/conventions.md",
   "README.md",
+  "QuickStart.md",
   "design_doc/reviews/2026-10-08f-acceptance.md",
 ];
 

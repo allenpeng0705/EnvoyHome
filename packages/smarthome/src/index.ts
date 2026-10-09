@@ -18,6 +18,13 @@ export {
 } from "./required-deny-corpus.js";
 
 export { createHaClient, type HaClient, type HaClientConfig } from "./ha-client.js";
+export {
+  diffHaServiceRegistry,
+  parseHaServicesApi,
+  denyListAsDomainServices,
+  type HaServiceDomain,
+  type RegistryDiffReport,
+} from "./ha-registry-diff.js";
 export { createMqttClient, type MqttClient, type MqttClientConfig } from "./mqtt-client.js";
 
 export {

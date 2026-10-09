@@ -36,6 +36,7 @@ export type MethodGroup =
   | "approvals"
   | "channels"
   | "workflows"
+  | "schedules"
   | "skills"
   | "artifacts"
   | "memory"
@@ -268,14 +269,44 @@ const channelSummary = obj(
   ["id", "kind", "channelKind", "enabled", "status"],
 );
 
+const providerKind = enumOf(
+  "local_llama_cpp",
+  "local_openai_compat",
+  "cloud_openai_compat",
+  "cloud_anthropic_compat",
+);
+
+const placementFilter = enumOf("any", "local", "cloud");
+
+const providerCost = obj(
+  {
+    inputPerMTok: num(),
+    outputPerMTok: num(),
+    currency: str(),
+  },
+  [],
+);
+
 const providerSummary = obj(
   {
     id: str({ minLength: 1 }),
-    kind: enumOf("local_llama_cpp", "local_openai_compat", "cloud_openai_compat"),
+    kind: providerKind,
     healthy: bool(),
     baseUrl: str(),
     model: str(),
     enabled: bool(),
+    hasSecret: bool(),
+    label: str(),
+    placement: enumOf("local", "cloud"),
+    cost: providerCost,
+    costRank: num(),
+    paramCountB: num(),
+    capabilityRank: num(),
+    contextTokens: int({ minimum: 0 }),
+    supportsTools: bool(),
+    supportsVision: bool(),
+    supportsLogprobs: bool(),
+    latencyClass: enumOf("fast", "standard", "slow"),
   },
   ["id", "kind", "healthy", "enabled"],
 );
@@ -315,6 +346,9 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         methods: arr(str()),
         mesh: meshInfo,
         notes: arr(str()),
+        // Additive: bound accounts for the authenticated caller (phone thin client).
+        accountIds: arr(str()),
+        deviceId: str(),
       },
       [
         "product",
@@ -341,6 +375,9 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         uptimeSec: int({ minimum: 0 }),
         connections: int({ minimum: 0 }),
         activeTurns: int({ minimum: 0 }),
+        wsPort: int({ minimum: 0 }),
+        httpPort: int({ minimum: 0 }),
+        publicBaseUrl: str(),
       },
       ["ok", "uptimeSec", "connections", "activeTurns"],
     ),
@@ -520,6 +557,49 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
       },
       ["ok", "device"],
     ),
+  },
+  "home.registerPushToken": {
+    group: "pairing",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Register APNs (iOS) or FCM (Android) alert token for this paired device",
+    params: obj(
+      {
+        platform: enumOf("ios", "android"),
+        token: str({ minLength: 1 }),
+        tokenType: enumOf("alert"),
+        accountId: str({ minLength: 1 }),
+      },
+      ["platform", "token"],
+    ),
+    result: obj(
+      {
+        ok: bool(),
+        deviceId: str({ minLength: 1 }),
+        platform: enumOf("ios", "android"),
+      },
+      ["ok", "deviceId", "platform"],
+    ),
+  },
+  "home.unregisterPushToken": {
+    group: "pairing",
+    scope: "account-scoped",
+    paramsOptional: true,
+    summary: "Remove the push token for this paired device",
+    params: emptyParams,
+    result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.sendTestPush": {
+    group: "pairing",
+    scope: "loopback-owner",
+    paramsOptional: true,
+    summary: "Send a test APNs/FCM alert to registered device(s) (operator check)",
+    params: obj({
+      deviceId: str({ minLength: 1 }),
+      title: str(),
+      body: str(),
+    }),
+    result: obj({ ok: bool(), sent: int({ minimum: 0 }) }, ["ok", "sent"]),
   },
 
   /* A.3 accounts & bindings ------------------------------------------------ */
@@ -888,9 +968,18 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     group: "channels",
     scope: "account-scoped",
     paramsOptional: true,
-    summary: "List model providers and the current mode",
+    summary: "List model providers, default, placement filter, and auto-switch",
     params: emptyParams,
-    result: obj({ providers: arr(providerSummary), mode: modelMode }, ["providers", "mode"]),
+    result: obj(
+      {
+        providers: arr(providerSummary),
+        mode: modelMode,
+        defaultProviderId: str(),
+        placementFilter: placementFilter,
+        autoModelSwitch: obj({ enabled: bool() }, ["enabled"]),
+      },
+      ["providers", "mode", "placementFilter", "autoModelSwitch"],
+    ),
   },
   "home.setProvider": {
     group: "channels",
@@ -900,10 +989,21 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     params: obj(
       {
         id: str({ minLength: 1 }),
-        kind: enumOf("local_llama_cpp", "local_openai_compat", "cloud_openai_compat"),
+        kind: providerKind,
         baseUrl: str(),
         model: str(),
         enabled: bool(),
+        label: str(),
+        placement: enumOf("local", "cloud"),
+        cost: providerCost,
+        costRank: num(),
+        paramCountB: num(),
+        capabilityRank: num(),
+        contextTokens: int({ minimum: 0 }),
+        supportsTools: bool(),
+        supportsVision: bool(),
+        supportsLogprobs: bool(),
+        latencyClass: enumOf("fast", "standard", "slow"),
       },
       ["id", "kind"],
     ),
@@ -932,17 +1032,154 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     summary: "Write a provider secret (write-only, never echoed)",
     params: obj(
       { id: str({ minLength: 1 }), field: str({ minLength: 1 }), value: str() },
-      ["id", "field", "value"],
+      ["id", "value"],
     ),
     result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.testProvider": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Run a tiny completion against a configured provider (secrets never echoed)",
+    params: obj({ id: str({ minLength: 1 }) }, ["id"]),
+    result: obj(
+      { ok: bool(), latencyMs: int({ minimum: 0 }), error: str(), model: str() },
+      ["ok"],
+    ),
   },
   "home.setModelMode": {
     group: "channels",
     scope: "account-scoped",
     paramsOptional: false,
-    summary: "Set local/cloud/mix",
+    summary: "Compat: set placement filter via local/cloud/mix (auto-switch stays off)",
     params: obj({ mode: modelMode, accountId: str() }, ["mode"]),
     result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.setDefaultProvider": {
+    group: "channels",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Set the account default model provider",
+    params: obj(
+      { accountId: str(), providerId: str({ minLength: 1 }) },
+      ["providerId"],
+    ),
+    result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.setPlacementFilter": {
+    group: "channels",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Restrict the provider pool to any / local / cloud",
+    params: obj(
+      { accountId: str(), filter: placementFilter },
+      ["filter"],
+    ),
+    result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.setAutoModelSwitch": {
+    group: "channels",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Enable or disable smart multi-model switching (default off)",
+    params: obj(
+      { accountId: str(), enabled: bool() },
+      ["enabled"],
+    ),
+    result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.getLocalEngineStatus": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary: "EnvoyHome Local / Ollama engine status (Design §8.5)",
+    params: obj({}),
+    result: obj(
+      {
+        enabled: bool(),
+        mode: enumOf("off", "attach", "spawn", "ollama"),
+        baseUrl: str(),
+        providerId: str(),
+        healthy: bool(),
+        modelIds: arr(str()),
+        meshAttachAvailable: bool(),
+        runtimeInstalled: bool(),
+        modelsOnDisk: arr(str()),
+        pid: int({ minimum: 0 }),
+        hint: str(),
+        error: str(),
+      },
+      [
+        "enabled",
+        "mode",
+        "baseUrl",
+        "providerId",
+        "healthy",
+        "modelIds",
+        "meshAttachAvailable",
+        "runtimeInstalled",
+        "modelsOnDisk",
+      ],
+    ),
+  },
+  "home.enableLocalEngine": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary:
+      "Enable EnvoyHome Local: attach Mesh Envoy Local (:18790) or spawn llama-server (:18792)",
+    params: obj({
+      accountId: str(),
+      prefer: enumOf("auto", "attach", "spawn"),
+      modelPath: str(),
+      binaryPath: str(),
+      modelAlias: str(),
+      downloadRuntime: bool(),
+    }),
+    result: obj(
+      {
+        enabled: bool(),
+        mode: enumOf("off", "attach", "spawn", "ollama"),
+        healthy: bool(),
+        baseUrl: str(),
+      },
+      ["enabled", "mode", "healthy", "baseUrl"],
+    ),
+  },
+  "home.enableOllama": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary: "Use a running Ollama server as the local provider (default :11434)",
+    params: obj({
+      accountId: str(),
+      baseUrl: str(),
+      model: str(),
+    }),
+    result: obj(
+      {
+        enabled: bool(),
+        mode: enumOf("off", "attach", "spawn", "ollama"),
+        healthy: bool(),
+        baseUrl: str(),
+      },
+      ["enabled", "mode", "healthy", "baseUrl"],
+    ),
+  },
+  "home.disableLocalEngine": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary: "Stop EnvoyHome-spawned llama-server and clear local-engine enable flag",
+    params: obj({}),
+    result: obj(
+      {
+        enabled: bool(),
+        mode: enumOf("off", "attach", "spawn", "ollama"),
+        healthy: bool(),
+      },
+      ["enabled", "mode", "healthy"],
+    ),
   },
   "home.getUsage": {
     group: "channels",
@@ -994,6 +1231,143 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     summary: "Reload workflow definitions",
     params: emptyParams,
     result: obj({ ok: bool(), count: int({ minimum: 0 }) }, ["ok", "count"]),
+  },
+  "home.listSchedules": {
+    group: "schedules",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "List schedule jobs for an account (Design §7.4)",
+    params: obj({ accountId: str({ minLength: 1 }) }, ["accountId"]),
+    result: obj(
+      {
+        jobs: arr(
+          obj(
+            {
+              id: str({ minLength: 1 }),
+              name: str(),
+              enabled: bool(),
+              kind: enumOf("at", "every", "cron"),
+              nextRunAt: iso(),
+              lastStatus: enumOf("ok", "error", "skipped"),
+              source: enumOf("user", "workflow"),
+            },
+            ["id", "name", "enabled", "kind", "source"],
+          ),
+        ),
+      },
+      ["jobs"],
+    ),
+  },
+  "home.proposeSchedule": {
+    group: "schedules",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Resolve NL to a schedule proposal (does not arm; Design §7.4)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        text: str({ minLength: 1 }),
+        timeZone: str({ minLength: 1 }),
+      },
+      ["accountId", "text"],
+    ),
+    result: obj(
+      {
+        proposalId: str({ minLength: 1 }),
+        resolvedLocal: str({ minLength: 1 }),
+        kind: enumOf("at", "every", "cron"),
+        whenInstant: iso(),
+        cronExpr: str(),
+        everyMs: int({ minimum: 1 }),
+        message: str(),
+        timeZone: str({ minLength: 1 }),
+      },
+      ["proposalId", "resolvedLocal", "kind", "timeZone"],
+    ),
+  },
+  "home.confirmSchedule": {
+    group: "schedules",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Confirm a proposal and arm the schedule timer",
+    params: obj(
+      { accountId: str({ minLength: 1 }), proposalId: str({ minLength: 1 }) },
+      ["accountId", "proposalId"],
+    ),
+    result: obj(
+      {
+        job: obj(
+          {
+            id: str({ minLength: 1 }),
+            enabled: bool(),
+            nextRunAt: iso(),
+          },
+          ["id", "enabled"],
+        ),
+      },
+      ["job"],
+    ),
+  },
+  "home.updateSchedule": {
+    group: "schedules",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Enable/disable a schedule job",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        jobId: str({ minLength: 1 }),
+        enabled: bool(),
+      },
+      ["accountId", "jobId"],
+    ),
+    result: obj(
+      {
+        job: obj(
+          {
+            id: str({ minLength: 1 }),
+            enabled: bool(),
+            nextRunAt: iso(),
+          },
+          ["id", "enabled"],
+        ),
+      },
+      ["job"],
+    ),
+  },
+  "home.removeSchedule": {
+    group: "schedules",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Delete a schedule job",
+    params: obj(
+      { accountId: str({ minLength: 1 }), jobId: str({ minLength: 1 }) },
+      ["accountId", "jobId"],
+    ),
+    result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.runSchedule": {
+    group: "schedules",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Force-run a schedule job now",
+    params: obj(
+      { accountId: str({ minLength: 1 }), jobId: str({ minLength: 1 }) },
+      ["accountId", "jobId"],
+    ),
+    result: obj(
+      {
+        receipt: obj(
+          {
+            execStatus: enumOf("ok", "error", "skipped"),
+            deliveryStatus: enumOf("delivered", "not-delivered", "none", "unknown"),
+            error: str(),
+          },
+          ["execStatus", "deliveryStatus"],
+        ),
+      },
+      ["receipt"],
+    ),
   },
   "home.listSkills": {
     group: "skills",
@@ -1163,6 +1537,30 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         "pendingLearnCap",
         "backendId",
       ],
+    ),
+  },
+  "home.setMemorySettings": {
+    group: "memory",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Toggle flush/review and session retention (Settings Memory screen)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        flushEnabled: bool(),
+        reviewEnabled: bool(),
+        sessionRetentionDays: int({ minimum: 0 }),
+      },
+      ["accountId"],
+    ),
+    result: obj(
+      {
+        ok: bool(),
+        flushEnabled: bool(),
+        reviewEnabled: bool(),
+        sessionRetentionDays: int({ minimum: 0 }),
+      },
+      ["ok", "flushEnabled", "reviewEnabled", "sessionRetentionDays"],
     ),
   },
   "home.recall": {

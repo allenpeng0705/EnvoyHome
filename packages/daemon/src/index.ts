@@ -45,7 +45,29 @@ export {
 
 export { SubscriptionRegistry } from "./events.js";
 
+export {
+  ProductEventBus,
+  homeEventDispositions,
+  type ProductEmit,
+} from "./product-events.js";
+
+export {
+  PolicyStore,
+  PrivacyModeStore,
+  type AccountPolicy,
+  type PrivacyModeState,
+} from "./policy-store.js";
+
 export { createDispatcher, dispatchForTest, type RouterDeps } from "./router.js";
+
+export {
+  PushTokenStore,
+  type PushPlatform,
+  type PushTokenRecord,
+  type PushTokenType,
+} from "./push-tokens.js";
+
+export { PushDispatcher, type PushPayload, type PushConfigFile } from "./push-dispatch.js";
 
 export { startWsHost, type HostHandle } from "./host.js";
 
@@ -54,6 +76,27 @@ export { resolveHatchAccount, startHttpHatch, type HatchDeps } from "./http.js";
 export { startDaemon, type RunningDaemon, type StartDaemonOptions } from "./daemon.js";
 
 export { homePaths, type HomePaths } from "./home-paths.js";
+
+export {
+  LocalEngineService,
+  buildHomeLlamaServerArgs,
+  probeOpenAiModels,
+  HOME_LOCAL_ENGINE_PORT,
+  MESH_ENVOY_LOCAL_PORT,
+  OLLAMA_DEFAULT_PORT,
+  HOME_LOCAL_PROVIDER_ID,
+  OLLAMA_PROVIDER_ID,
+  assertLocalEngineBaseUrl,
+  resolveLocalModelPath,
+  resolveLocalBinaryPath,
+  assertSafeArchiveEntry,
+  type LocalEngineStatus,
+  type LocalEngineMode,
+  type LocalEngineEnableResult,
+  type LocalEngineDisableResult,
+} from "./local-engine/index.js";
+
+export { ProviderStore, type ProviderRecord } from "./providers-store.js";
 
 export {
   PathJailError,
@@ -132,3 +175,19 @@ export {
   type DoctorIssue,
   type DoctorSeverity,
 } from "./doctor-mesh.js";
+
+export {
+  collectDoctorIssues,
+  applyDoctorFixes,
+  planHomeClawMigrate,
+  DOCTOR_MIGRATE_HOMECLAW_PLAN_ID,
+} from "./doctor/index.js";
+
+export {
+  ScheduleService,
+  resolveScheduleFromText,
+  parseCron,
+  nextCronExprAfter,
+  type ScheduleJob,
+  type ScheduleProposal,
+} from "./schedule/index.js";

@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "EnvoyHome",
+  "version": "0.0.0",
+  "identifier": "sh.envoymesh.envoyhome",
+  "build": {
+    "beforeBuildCommand": "pnpm run frontend:bundle",
+    "frontendDist": "../ui-dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "EnvoyHome",
+        "width": 1100,
+        "height": 720,
+        "minWidth": 800,
+        "minHeight": 520,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost ws: wss: http://127.0.0.1:* http://localhost:*",
+      "dangerousDisableAssetCspModification": false
+    },
+    "withGlobalTauri": true
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/64x64.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Lifestyle",
+    "shortDescription": "Self-hosted home agent",
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
+  }
+}

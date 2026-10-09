@@ -143,6 +143,9 @@ function daemonRouter(daemon: Awaited<ReturnType<typeof startDaemon>>) {
     skills: daemon.skills,
     artifacts: daemon.artifacts,
     actuations: daemon.actuations,
+    pushTokens: daemon.pushTokens,
+    push: daemon.push,
+    localEngine: daemon.localEngine,
     meshStatus: () => ({ kind: "no-node" as const }),
   };
 }

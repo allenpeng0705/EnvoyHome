@@ -168,6 +168,42 @@ export const EVENTS: Readonly<Record<string, EventSpec>> = {
       ["mesh"],
     ),
   },
+  "home:route-decided": {
+    summary: "Which model provider was chosen for a turn (Design §8.3)",
+    data: obj(
+      {
+        turnId: str({ minLength: 1 }),
+        accountId: str({ minLength: 1 }),
+        sessionId: str(),
+        providerId: str({ minLength: 1 }),
+        reason: enumOf(
+          "privacy",
+          "default",
+          "config",
+          "auto_switch",
+          "mode",
+        ),
+        placementFilter: enumOf("any", "local", "cloud"),
+        autoSwitch: bool(),
+        needClass: enumOf("cheap", "standard", "hard"),
+      },
+      ["turnId", "accountId", "providerId", "reason"],
+    ),
+  },
+  "home:schedule-fired": {
+    summary: "A schedule job ran or was skipped (Design §7.4)",
+    data: obj(
+      {
+        jobId: str({ minLength: 1 }),
+        accountId: str({ minLength: 1 }),
+        status: enumOf("ok", "error", "skipped"),
+        deliveryStatus: enumOf("delivered", "not-delivered", "none", "unknown"),
+        error: str(),
+        reason: str(),
+      },
+      ["jobId", "accountId", "status"],
+    ),
+  },
 };
 
 /** Every event name, sorted — the subscribable set. */

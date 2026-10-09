@@ -6,6 +6,7 @@ import type {
   ModelProvider,
   ProviderSecretStore,
 } from "./provider.js";
+import { joinProviderUrl } from "./url.js";
 
 export interface OpenAICompatOptions {
   id: string;
@@ -48,9 +49,12 @@ export function createOpenAICompatProvider(opts: OpenAICompatOptions): ModelProv
         }),
       };
       if (req.signal !== undefined) init.signal = req.signal;
-      const res = await fetchImpl(new URL("/v1/chat/completions", opts.baseUrl), init);
+      const res = await fetchImpl(joinProviderUrl(opts.baseUrl, "/v1/chat/completions"), init);
       if (!res.ok) {
-        throw new Error(`provider ${opts.id} HTTP ${res.status}`);
+        const detail = await res.text().catch(() => "");
+        throw new Error(
+          `provider ${opts.id} HTTP ${res.status}${detail ? `: ${detail.slice(0, 200)}` : ""}`,
+        );
       }
       const body = (await res.json()) as {
         choices?: Array<{ message?: { content?: string } }>;

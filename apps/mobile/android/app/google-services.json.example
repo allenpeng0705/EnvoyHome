@@ -1,0 +1,19 @@
+{
+  "_comment": "Copy to google-services.json from Firebase console for package com.envoymesh.envoyhome. Builds succeed without it; FCM init is then a no-op.",
+  "project_info": {
+    "project_number": "0",
+    "project_id": "envoyhome-placeholder"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:0:android:0",
+        "android_client_info": {
+          "package_name": "com.envoymesh.envoyhome"
+        }
+      },
+      "api_key": [{ "current_key": "REPLACE" }]
+    }
+  ],
+  "configuration_version": "1"
+}

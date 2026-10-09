@@ -1,0 +1,13 @@
+{
+  "apns": {
+    "keyId": "ABC1234567",
+    "teamId": "1A2B3C4D5E",
+    "keyPath": "/secure/AuthKey_ABC1234567.p8",
+    "topic": "com.envoymesh.envoyhome",
+    "sandbox": true
+  },
+  "fcm": {
+    "projectId": "your-firebase-project-id",
+    "serviceAccountJsonPath": "/secure/firebase-service-account.json"
+  }
+}

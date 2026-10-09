@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "bindings": [
+    {
+      "kind": "sender",
+      "bindingId": "bind_50ea3bb21162ccac",
+      "channel": "fake",
+      "channelAccount": "default",
+      "senderId": "sender_8df2e5f1",
+      "accountId": "alice",
+      "agentId": "default",
+      "machine": false,
+      "trustedChannel": false,
+      "createdAt": "2026-10-09T01:40:23.076Z",
+      "updatedAt": "2026-10-09T01:40:23.076Z"
+    }
+  ]
+}

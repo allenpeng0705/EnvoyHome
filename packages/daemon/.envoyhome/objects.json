@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "objects": [
+    {
+      "channel": "fake-events",
+      "channelAccount": "default",
+      "sourceId": "sensor.1",
+      "displayName": "Sensor 1",
+      "class": "sensor",
+      "accountId": null,
+      "bound": false,
+      "shared": false,
+      "neverUnattended": false,
+      "actuationAllowList": [],
+      "indirectionAllowList": [],
+      "firstSeen": "2026-10-09T01:40:23.242Z",
+      "lastSeen": "2026-10-09T10:38:33.525Z"
+    },
+    {
+      "channel": "fake-events",
+      "channelAccount": "default",
+      "sourceId": "sensor.x",
+      "displayName": "X",
+      "class": "binary_sensor",
+      "accountId": null,
+      "bound": false,
+      "shared": false,
+      "neverUnattended": false,
+      "actuationAllowList": [],
+      "indirectionAllowList": [],
+      "firstSeen": "2026-10-09T01:40:23.243Z",
+      "lastSeen": "2026-10-09T01:41:11.096Z"
+    }
+  ]
+}

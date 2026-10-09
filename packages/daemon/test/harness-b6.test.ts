@@ -136,7 +136,114 @@ test("V-LLM-2/4: setProvider swap + secret not listed", async () => {
   await daemon.providers.setProviderSecret("cloud", "sk-test-secret");
   const listed = daemon.providers.listProviders("alice");
   assert.equal(JSON.stringify(listed).includes("sk-test-secret"), false);
+  const cloud = listed.providers.find((p) => p.id === "cloud") as { hasSecret?: boolean };
+  assert.equal(cloud?.hasSecret, true);
+  const tested = await daemon.providers.testProvider("cloud");
+  assert.equal(tested.ok, false);
+  assert.ok(tested.error);
+  assert.equal(JSON.stringify(tested).includes("sk-test-secret"), false);
   await rpc(daemon.config.wsPort, "home.setModelMode", { accountId: "alice", mode: "cloud" });
+  await cleanup();
+});
+
+test("V-LLM-5: default provider + auto-switch off", async () => {
+  const { daemon, cleanup } = await boot();
+  await daemon.providers.setProvider({
+    id: "local-a",
+    kind: "local_openai_compat",
+    baseUrl: "http://127.0.0.1:9",
+    enabled: true,
+    paramCountB: 8,
+  });
+  await daemon.providers.setProvider({
+    id: "cloud-b",
+    kind: "cloud_openai_compat",
+    baseUrl: "http://127.0.0.1:9",
+    enabled: true,
+  });
+  await daemon.providers.setDefaultProvider("alice", "local-a");
+  await daemon.providers.setAutoModelSwitch("alice", false);
+  const listed = daemon.providers.listProviders("alice");
+  assert.equal(listed.defaultProviderId, "local-a");
+  assert.equal(listed.autoModelSwitch.enabled, false);
+  assert.equal(listed.placementFilter, "any");
+  const picked = daemon.providers.getRouter().pick({
+    mode: listed.mode,
+    placementFilter: listed.placementFilter,
+    defaultProviderId: listed.defaultProviderId,
+    autoModelSwitch: listed.autoModelSwitch.enabled,
+  });
+  assert.equal(picked.id, "local-a");
+  await cleanup();
+});
+
+test("V-LLM-6: auto-switch emits home:route-decided with needClass", async () => {
+  const { daemon, cleanup } = await boot();
+  await daemon.providers.setProvider({
+    id: "local-a",
+    kind: "local_openai_compat",
+    baseUrl: "http://127.0.0.1:9",
+    enabled: true,
+    paramCountB: 8,
+    costRank: 0,
+  });
+  await daemon.providers.setProvider({
+    id: "cloud-b",
+    kind: "cloud_openai_compat",
+    baseUrl: "http://127.0.0.1:9",
+    enabled: true,
+    paramCountB: 70,
+    costRank: 100,
+  });
+  await daemon.providers.setDefaultProvider("alice", "local-a");
+  await daemon.providers.setAutoModelSwitch("alice", true);
+  const events: Array<Record<string, unknown>> = [];
+  daemon.events.asNodeService().on("home:route-decided", (data) => {
+    events.push(data as Record<string, unknown>);
+  });
+  await rpc(daemon.config.wsPort, "home.createAccount", {
+    accountId: "alice",
+    displayName: "Alice",
+  });
+  const opened = await rpc(daemon.config.wsPort, "home.openSession", {
+    accountId: "alice",
+  });
+  const sessionId = (opened["result"] as { sessionId: string }).sessionId;
+  await daemon.turns.sendMessage({
+    accountId: "alice",
+    sessionId,
+    text: "Please architect and implement a distributed lock",
+    callerKind: "test",
+    completionText: "ok",
+  });
+  await flushLoop(40);
+  assert.ok(events.length >= 1, "expected home:route-decided");
+  const last = events[events.length - 1]!;
+  assert.equal(last["reason"], "auto_switch");
+  assert.equal(last["needClass"], "hard");
+  assert.equal(last["providerId"], "cloud-b");
+  await cleanup();
+});
+
+test("setDefaultProvider refuses provider outside placementFilter", async () => {
+  const { daemon, cleanup } = await boot();
+  await daemon.providers.setProvider({
+    id: "local-a",
+    kind: "local_openai_compat",
+    baseUrl: "http://127.0.0.1:9",
+    enabled: true,
+  });
+  await daemon.providers.setProvider({
+    id: "cloud-b",
+    kind: "cloud_openai_compat",
+    baseUrl: "http://127.0.0.1:9",
+    enabled: true,
+  });
+  await daemon.providers.setPlacementFilter("alice", "local");
+  await assert.rejects(
+    () => daemon.providers.setDefaultProvider("alice", "cloud-b"),
+    /outside filter/,
+  );
   await cleanup();
 });
 

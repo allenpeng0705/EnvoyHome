@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "channels": [
+    {
+      "id": "fake",
+      "channelAccount": "default",
+      "enabled": true,
+      "config": {},
+      "secretKeys": []
+    },
+    {
+      "id": "fake-events",
+      "channelAccount": "default",
+      "enabled": true,
+      "config": {},
+      "secretKeys": []
+    }
+  ]
+}

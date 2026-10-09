@@ -13,9 +13,16 @@ export interface HomePaths {
   readonly providersDir: string;
   readonly secretsDir: string;
   readonly pairedDevicesDir: string;
+  /** APNs/FCM tokens for paired devices — `paired-devices/push-tokens.json`. */
+  readonly pushTokensJson: string;
   readonly objectsJson: string;
   readonly bindingsJson: string;
   readonly channelsJson: string;
+  /** Local llama.cpp / engine assets (Design §8.5) — never in the app bundle. */
+  readonly localEngineDir: string;
+  readonly localEngineRuntimeDir: string;
+  readonly localEngineModelsDir: string;
+  readonly localEngineConfigJson: string;
   /** `accounts/<accountId>/` */
   accountRoot(accountId: string): string;
   /** Sandbox root: `accounts/<accountId>/files/` */
@@ -40,9 +47,14 @@ export function homePaths(stateDir: string): HomePaths {
     providersDir: join(stateDir, "providers"),
     secretsDir: join(stateDir, "secrets"),
     pairedDevicesDir: join(stateDir, "paired-devices"),
+    pushTokensJson: join(stateDir, "paired-devices", "push-tokens.json"),
     objectsJson: join(stateDir, "objects.json"),
     bindingsJson: join(stateDir, "paired-devices", "bindings.json"),
     channelsJson: join(stateDir, "channels.json"),
+    localEngineDir: join(stateDir, "local-engine"),
+    localEngineRuntimeDir: join(stateDir, "local-engine", "runtime"),
+    localEngineModelsDir: join(stateDir, "local-engine", "models"),
+    localEngineConfigJson: join(stateDir, "local-engine", "config.json"),
     accountRoot(accountId: string): string {
       return join(accountsDir, accountId);
     },
