@@ -81,11 +81,14 @@ Defaults (Design §2.4):
 
 ## 5. Run the desktop app
 
-In a second terminal (daemon already running **or** let Tauri supervise it):
+One line (builds the daemon if needed, then starts Tauri):
 
 ```bash
-pnpm --filter @envoyhome/desktop tauri:dev
+pnpm desktop:dev
+# or: ./scripts/desktop-dev.sh
 ```
+
+Tauri supervises the daemon when `packages/daemon/dist/bin/envoyhome-daemon.js` is present.
 
 Or bundle UI only and open the shell:
 
@@ -129,7 +132,8 @@ pnpm run mobile:flutter
 
 Typical first path after connect:
 
-1. **Accounts** — create / select owner account  
+1. **Profiles** — first launch asks for a display name (modal); later opens use your last-used profile  
+
 2. **Models** — provider preset + key, or **Local** / Ollama  
 3. **Chat** — loopback turn against the daemon  
 4. **Pairing** — mint QR for the phone  

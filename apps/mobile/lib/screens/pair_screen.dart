@@ -2,12 +2,19 @@ import 'package:envoyhome_mobile_client/envoyhome_mobile_client.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../l10n/app_localizations.dart';
+import '../l10n/locale_controller.dart';
 import '../state/session_controller.dart';
 
 class PairScreen extends StatefulWidget {
-  const PairScreen({super.key, required this.session});
+  const PairScreen({
+    super.key,
+    required this.session,
+    required this.locales,
+  });
 
   final SessionController session;
+  final LocaleController locales;
 
   @override
   State<PairScreen> createState() => _PairScreenState();
@@ -122,7 +129,7 @@ class _PairScreenState extends State<PairScreen>
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'EnvoyHome',
+                      AppLocalizations.of(context).appName,
                       style: theme.textTheme.displaySmall?.copyWith(
                         fontWeight: FontWeight.w800,
                         letterSpacing: -0.8,
@@ -132,7 +139,7 @@ class _PairScreenState extends State<PairScreen>
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'Join the home desktop over EnvoyMesh — scan a QR, enter host:port, or hop via SSH.',
+                      AppLocalizations.of(context).pairLede,
                       style: theme.textTheme.bodyLarge?.copyWith(
                         color: const Color(0xFF5B5678),
                         height: 1.35,
@@ -147,10 +154,10 @@ class _PairScreenState extends State<PairScreen>
                 labelColor: const Color(0xFF1A1430),
                 unselectedLabelColor: const Color(0xFF7A7494),
                 indicatorColor: theme.colorScheme.primary,
-                tabs: const [
-                  Tab(text: 'Link'),
-                  Tab(text: 'Host:port'),
-                  Tab(text: 'SSH'),
+                tabs: [
+                  Tab(text: AppLocalizations.of(context).pairTabLink),
+                  Tab(text: AppLocalizations.of(context).pairTabHost),
+                  Tab(text: AppLocalizations.of(context).pairTabSsh),
                 ],
               ),
               Expanded(
@@ -173,11 +180,47 @@ class _PairScreenState extends State<PairScreen>
                 ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-                child: Text(
-                  'com.envoymesh.envoyhome · push after pair',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: const Color(0xFF5B5678),
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Builder(
+                      builder: (context) {
+                        final code = widget.locales.override?.languageCode ??
+                            Localizations.localeOf(context).languageCode;
+                        final selected = supportedLocaleIds.contains(code)
+                            ? code
+                            : 'en';
+                        return InputDecorator(
+                          decoration: InputDecoration(
+                            labelText: AppLocalizations.of(context).appLanguage,
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              isExpanded: true,
+                              value: selected,
+                              items: [
+                                for (final id in supportedLocaleIds)
+                                  DropdownMenuItem(
+                                    value: id,
+                                    child: Text(localeLabels[id] ?? id),
+                                  ),
+                              ],
+                              onChanged: (id) {
+                                if (id != null) widget.locales.setLocaleId(id);
+                              },
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      AppLocalizations.of(context).pairFooter,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: const Color(0xFF5B5678),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -216,14 +259,14 @@ class _PairScreenState extends State<PairScreen>
           const SizedBox(height: 12),
           TextButton(
             onPressed: () => setState(() => _scanning = false),
-            child: const Text('Close scanner'),
+            child: Text(AppLocalizations.of(context).pairCloseScanner),
           ),
         ] else ...[
           FilledButton.icon(
             onPressed:
                 session.busy ? null : () => setState(() => _scanning = true),
             icon: const Icon(Icons.qr_code_scanner),
-            label: const Text('Scan pairing QR'),
+            label: Text(AppLocalizations.of(context).pairScanQr),
           ),
         ],
         const SizedBox(height: 20),
@@ -231,9 +274,9 @@ class _PairScreenState extends State<PairScreen>
           controller: _uriCtrl,
           minLines: 3,
           maxLines: 5,
-          decoration: const InputDecoration(
-            labelText: 'Pairing URI',
-            hintText: 'envoy://pair?…&app=EnvoyHome',
+          decoration: InputDecoration(
+            labelText: AppLocalizations.of(context).pairUriLabel,
+            hintText: AppLocalizations.of(context).pairUriHint,
           ),
         ),
         const SizedBox(height: 12),
@@ -245,7 +288,7 @@ class _PairScreenState extends State<PairScreen>
                   height: 22,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Connect'),
+              : Text(AppLocalizations.of(context).pairConnect),
         ),
       ],
     );
@@ -256,7 +299,7 @@ class _PairScreenState extends State<PairScreen>
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
       children: [
         Text(
-          'Reach the desktop on this network (LAN / Tailscale). Token is required.',
+          AppLocalizations.of(context).pairDirectHint,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: const Color(0xFF5B5678),
               ),
@@ -264,18 +307,18 @@ class _PairScreenState extends State<PairScreen>
         const SizedBox(height: 16),
         TextField(
           controller: _endpointCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Host:port',
-            hintText: '192.168.1.10:4780',
+          decoration: InputDecoration(
+            labelText: AppLocalizations.of(context).pairHostPort,
+            hintText: AppLocalizations.of(context).pairHostPortHint,
           ),
         ),
         const SizedBox(height: 12),
         TextField(
           controller: _tokenCtrl,
           obscureText: true,
-          decoration: const InputDecoration(
-            labelText: 'Pairing token',
-            helperText: 'From desktop Settings → Pair devices',
+          decoration: InputDecoration(
+            labelText: AppLocalizations.of(context).pairToken,
+            helperText: AppLocalizations.of(context).pairTokenHelper,
           ),
         ),
         const SizedBox(height: 16),
@@ -287,7 +330,7 @@ class _PairScreenState extends State<PairScreen>
                   height: 22,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Connect'),
+              : Text(AppLocalizations.of(context).pairConnect),
         ),
       ],
     );
@@ -298,7 +341,7 @@ class _PairScreenState extends State<PairScreen>
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
       children: [
         Text(
-          'Tunnel through an SSH hop. The daemon sees loopback — token is optional.',
+          AppLocalizations.of(context).pairSshHint,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: const Color(0xFF5B5678),
               ),
@@ -306,7 +349,7 @@ class _PairScreenState extends State<PairScreen>
         const SizedBox(height: 16),
         TextField(
           controller: _sshHostCtrl,
-          decoration: const InputDecoration(labelText: 'SSH host'),
+          decoration: InputDecoration(labelText: AppLocalizations.of(context).pairSshHost),
         ),
         const SizedBox(height: 12),
         Row(
@@ -314,9 +357,9 @@ class _PairScreenState extends State<PairScreen>
             Expanded(
               child: TextField(
                 controller: _sshUserCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'User',
-                  hintText: 'root',
+                decoration: InputDecoration(
+                  labelText: AppLocalizations.of(context).pairSshUser,
+                  hintText: AppLocalizations.of(context).pairSshUserHint,
                 ),
               ),
             ),
@@ -326,7 +369,7 @@ class _PairScreenState extends State<PairScreen>
               child: TextField(
                 controller: _sshPortCtrl,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Port'),
+                decoration: InputDecoration(labelText: AppLocalizations.of(context).pairSshPort),
               ),
             ),
           ],
@@ -335,22 +378,22 @@ class _PairScreenState extends State<PairScreen>
         TextField(
           controller: _sshPasswordCtrl,
           obscureText: true,
-          decoration: const InputDecoration(labelText: 'SSH password'),
+          decoration: InputDecoration(labelText: AppLocalizations.of(context).pairSshPassword),
         ),
         const SizedBox(height: 12),
         TextField(
           controller: _daemonCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Daemon on far side',
-            hintText: '127.0.0.1:4780',
+          decoration: InputDecoration(
+            labelText: AppLocalizations.of(context).pairDaemon,
+            hintText: AppLocalizations.of(context).pairDaemonHint,
           ),
         ),
         const SizedBox(height: 12),
         TextField(
           controller: _sshTokenCtrl,
           obscureText: true,
-          decoration: const InputDecoration(
-            labelText: 'Token (optional)',
+          decoration: InputDecoration(
+            labelText: AppLocalizations.of(context).pairTokenOptional,
           ),
         ),
         const SizedBox(height: 16),
@@ -362,7 +405,7 @@ class _PairScreenState extends State<PairScreen>
                   height: 22,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Connect'),
+              : Text(AppLocalizations.of(context).pairConnect),
         ),
       ],
     );

@@ -22,9 +22,14 @@
 
 | Date | Change |
 |------|--------|
+| 2026-10-09u | **Product (Pairing codes):** Unused QR rows no longer stack — mint prunes prior unused QR; list keeps at most one unused QR; Settings session reuses the last QR URI. SSH route is guidance-only (phone configures the hop). No wire break. |
+| 2026-10-09t | **Product (Pairing UX = EnvoyDev):** Settings Pairing matches EnvoyCoder three routes — QR (auto-mint, Recommended), typed host:port + 8–10 char token, SSH hop guidance; issued codes list with Revoke/Forget. `home.mintPairing` `host`/`lanHost` optional (daemon fills LAN then `127.0.0.1`). No `protocolApiVersion` bump. |
 | 2026-10-09r | **§8.5 EnvoyHome Local + Ollama (Adapt EnvoyMesh Envoy Local):** prefer attach Mesh Envoy Local `:18790`; else spawn Home-owned `llama-server` on `:18792` (download runtime + GGUF under `state/local-engine/`); BYO Ollama on `:11434`. Additive RPCs `home.getLocalEngineStatus` / `enableLocalEngine` / `enableOllama` / `disableLocalEngine` (owner-scope). Registers pool providers `envoyhome-local` / `ollama`. No `protocolApiVersion` bump. |
+| 2026-10-09s | **Product (Settings nav):** Group **Household → Connections** (Pairing / Channels / Links). **Profiles** removed from nav — switch/add via sidebar profile control → Manage profiles. Bindings UI labelled **Links**. No wire break. |
+| 2026-10-09r | **Product (mobile UX):** Pending approvals merge into **Chat** (Allow/Deny inline); Approvals tab removed. Push tap for approval opens Chat. Aligns with desktop Chat inbox. No wire break. |
 | 2026-10-09q | **Schedule miss + routing harden:** past-grace jobs never catch-up-fire (`missed_grace_expired` / `missed_expired`); workflow sync preserves run metadata; proposals durable in `schedules.json`; tool payload fires via `runScheduledTool`; MixRouter `healthy` filter; `setDefaultProvider` respects `placementFilter`; `needClassRules` + `forceLocalForMedia` wired. No `protocolApiVersion` bump. |
 | 2026-10-09p | **EnvoyMesh join channels (Adapt EnvoyDev):** phone reaches EnvoyHomeDesktop via **link** (QR/`envoy://pair`), **direct** (`host:port` + token), or **SSH hop** — dial paths into the §5.1 super channel, not IM plugins. §2.3 / §5.1 / §19.2. Schedule **notify** delivers over live WS (`home:schedule-fired`) + APNs/FCM; Settings **Jobs** UI; nightly `consolidateAt` hung on ScheduleService. No `protocolApiVersion` bump. |
+| 2026-10-09p | **Product (Settings UX):** Pending approvals surface **in Chat** (Allow/Deny inline); durable **grants** list/revoke moves to Advanced. Nav item `approvals` removed (deep-link → Chat). V-UX-2 / V-UX-7 still green. No wire break. |
 | 2026-10-09o | **§7.4 ScheduleService (B9.1):** OpenClaw/HomeClaw-class jobs (`at`/`every`/`cron`), NL propose→confirm, IANA/DST, miss grace/skip-admin, workflow sync, run history. RPCs `home.listSchedules` / `proposeSchedule` / `confirmSchedule` / `updateSchedule` / `removeSchedule` / `runSchedule`; event `home:schedule-fired`. Peer note `analysis/model-scheduling-peers.md`. No `protocolApiVersion` bump. |
 | 2026-10-09n | **§8 Slice B:** needClass rules (EN+ZH) + weighted capability/cost/latency scorer when `autoModelSwitch` on; `home:route-decided.reason=auto_switch` + optional `needClass`. Probe/triage remain default **off**. No `protocolApiVersion` bump. |
 | 2026-10-09m | **§8 routing:** multi-provider pool + `defaultProviderId` + `placementFilter` + opt-in `autoModelSwitch` (default **off**). Local = low-cost properties, not a special branch. Quality-first then cost when switch on (scorer Slice B). Additive RPCs `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`; event `home:route-decided`. Provider property fields on `setProvider`/`listProviders`. Peer note `analysis/model-routing-peers.md`. No `protocolApiVersion` bump. |
@@ -1575,7 +1580,7 @@ YAML/JSON export is secondary. Desktop Settings is a **single window** with a le
 | `bindings` | Channel bindings | List sender→account; add/remove; show “unbound recent senders” **and unbound smart-home objects** (§5.7.3) |
 | `pairing` | Devices | QR / mint link; list paired; revoke |
 | `channels` | Channel plugins | Enable Telegram demo **and MQTT / Home Assistant**; add-from-folder; status/health; config + secrets form from `configSchema` (written via `home.setChannelConfig`) |
-| `approvals` | Inbox | Pending tool approvals **and actuation requests**; allow once/session/always; deny; grants list + revoke |
+| `chat` | Chat + approval inbox | Loopback turns; **pending tool/actuation approvals** Allow/Deny inline (V-UX-7); toast + auto-focus Chat on `home:approval-needed` |
 | `models` | Providers & mode | EnvoyHome Local / Ollama one-click (§8.5); provider pool; placement + auto-switch; privacy tags (§8.3) |
 | `harness` | Harness list | Default envoy-harness; enable others with trust confirm |
 | `skills` | Skills | Install path/ClawHub; verify; enable/disable |
@@ -1584,17 +1589,17 @@ YAML/JSON export is secondary. Desktop Settings is a **single window** with a le
 | `smarthome` | Smart home | **Object registry**: bind an object to an account, set `class`, `shared` (refused for presence classes), `neverUnattended`, and the MQTT actuation allow-list; view **unbound objects** (own account) and **integration health**; **actuation journal** with outcome + `stateChanged`; credential warning if a write-capable credential is configured on an event-source plugin |
 | `artifacts` | Recent outputs | Open signed link (debug) |
 | `doctor` | Health | Issues list; Fix; migrate dry-run |
-| `advanced` | Export/import | Config export; `publicBaseUrl`; ports (4780/4781); OS service state |
+| `advanced` | Export/import | Config export; `publicBaseUrl`; ports (4780/4781); OS service state; **grants** list + revoke |
 
 ### 10.2 Critical flows (must work without YAML)
 
 1. **Add household member:** Accounts → Create → Bindings → bind Telegram sender (or wait for pairing prompt).  
 2. **Pair phone:** Pairing → Mint → scan QR → phone `home.hello` succeeds.  
-3. **Approve exec:** Approvals → Allow once → turn resumes.  
+3. **Approve exec:** Chat shows the pending approval → Allow once → turn resumes.  
 4. **Enable Telegram demo:** Channels → Enable → paste bot token (`home.setChannelConfig`) → health green.  
 5. **Local-only:** Models → mode `local` → chat still works.  
 6. **Accept a learn:** Memory → Pending → Accept skill/memory diff → file updates.  
-7. **Connect the home:** Channels → enable MQTT (broker URL + credentials) → Smart home → bind `living_room_lamp` to Alice → ask the agent to turn it on → Approvals shows an **actuation** request → Allow once → device changes.  
+7. **Connect the home:** Channels → enable MQTT (broker URL + credentials) → Smart home → bind `living_room_lamp` to Alice → ask the agent to turn it on → Chat shows an **actuation** approval → Allow once → device changes.  
 8. **Refuse unattended actuation:** mark `front_door` `neverUnattended` → a workflow tries to unlock it unattended → blocked, and creating a grant that would cover it is refused (§5.7.2).
 
 ### 10.3 Verification
@@ -1602,12 +1607,12 @@ YAML/JSON export is secondary. Desktop Settings is a **single window** with a le
 | ID | Criterion |
 |----|-----------|
 | V-UX-1 | New account + channel bind without raw config edit |
-| V-UX-2 | View/revoke pairings and pending approvals in UI |
+| V-UX-2 | View/revoke pairings; answer pending approvals in Chat; revoke grants in Advanced |
 | V-UX-3 | Telegram enable + token via Settings only |
 | V-UX-4 | Advanced shows ports 4780/4781, publicBaseUrl and OS service state |
 | V-UX-5 | Memory screen shows pending learns, exact caps, flush/review toggles and compact now |
 | V-UX-6 | Smart-home screen binds an unbound object to an account, marks it shared/read-only, and toggles `neverUnattended` — without editing files |
-| V-UX-7 | An actuation request appears in Approvals labelled as actuation (not as a generic tool call), and can be denied |
+| V-UX-7 | An actuation request appears **in Chat** labelled as actuation (not as a generic tool call), and can be denied |
 
 ---
 
@@ -2128,10 +2133,10 @@ Conventions:
 // params
 {
   "deviceLabel": "Alice iPhone",
-  "host": "192.168.1.10",
-  "lanHost": "192.168.1.10",
+  "host?": "192.168.1.10",
+  "lanHost?": "192.168.1.10",
   "accountIds?": ["alice"],
-  "token?": "optional-typed-for-repair",
+  "token?": "short8to10",
   "fresh?": false
 }
 // result
@@ -2142,7 +2147,8 @@ Conventions:
 ```
 
 - `accountIds` (optional, §4.1) binds the new device to those accounts **at mint time** — the normal household flow, "pair Alice's phone for Alice". Omit it to mint an unbound device, then bind later with `home.setBinding {deviceId}`.
-- `host` / `lanHost` are the addresses the client should dial. The daemon owns its bound port: it appends the **resolved** WS port (never a client-supplied one) and normalises `host:port` and bracketed IPv6 before building the URI. Precedent + edge cases: `../EnvoyCoder/apps/desktop/src/daemon/pairing.ts:119-192`.
+- `host` / `lanHost` are optional. Omit both for the QR route — the daemon picks the first non-loopback IPv4, else `127.0.0.1`. When supplied (typed host:port route), `host` wins as reach; `lanHost` is an optional second dial hint. The daemon owns its bound port: it appends the **resolved** WS port (never a client-supplied one) and normalises `host:port` and bracketed IPv6 before building the URI. Precedent: `../EnvoyCoder/apps/desktop/src/daemon/pairing.ts`.
+- User-supplied `token` (typed route) must be **8–10** letters/digits; QR mint uses a long random secret and omits `token`.
 - **Mint is loopback-only and rate-limited** (§4.4): repeated mints must back off, and a mint never returns a previously issued credential.
 
 **`home.listPairedDevices`** → `{ "devices": [{ "deviceId", "label", "createdAt", "lastSeenAt?", "revoked": false, "accountIds": ["alice"] }] }`

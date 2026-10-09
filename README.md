@@ -39,6 +39,7 @@ v1 is **B0–B14**. Desktop + mobile thin clients are the active product path. D
 ./scripts/fetch-peers.sh          # clone siblings when ENVOYHOME_PEERS_GIT_BASE is set
 env -u CI pnpm install            # never install with CI=true (R9)
 ./scripts/ci.sh                   # docs-lint → peers → install → build → test → lint
+pnpm desktop:dev                  # one-shot desktop (build daemon if needed → Tauri)
 ```
 
 Ports (Design §2.4): WebSocket `4780` at `/ws`, HTTP `4781` (`GET /health`).

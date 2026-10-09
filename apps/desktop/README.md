@@ -16,11 +16,19 @@ pnpm --filter @envoyhome/desktop tauri:build    # macOS .app / .dmg
 
 ## Run
 
+From the repo root (preferred):
+
+```bash
+pnpm desktop:dev                  # ./scripts/desktop-dev.sh — daemon build if needed → tauri:dev
+```
+
+Or manually:
+
 1. Build daemon: `pnpm --filter @envoyhome/daemon build`
 2. Either:
    - **Tauri** (`tauri:dev` / built `.app`) — supervises `envoyhome-daemon.js` when found, or
    - **Manual:** `pnpm --filter @envoyhome/daemon dev` then open `apps/desktop/ui-dist/`
-3. Nav: Chat, Accounts, Pairing (QR), Approvals, Models, Memory (caps/toggles), Smart home, Doctor, Advanced (listen + OS service)
+3. Nav: Chat, Profiles (display name only), Pairing (QR), Approvals, Models, Memory, Smart home, Doctor, Advanced
 
 Override WS: Advanced → WS URL, or `localStorage.setItem('envoyhome.wsUrl', 'ws://127.0.0.1:PORT/ws')`.
 

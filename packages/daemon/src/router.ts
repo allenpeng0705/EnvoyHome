@@ -492,18 +492,20 @@ export function createDispatcher(deps: RouterDeps) {
         try {
           const input: {
             deviceLabel: string;
-            host: string;
-            lanHost: string;
+            host?: string;
+            lanHost?: string;
             wsPort: number;
             accountIds?: string[];
             token?: string;
             fresh?: boolean;
           } = {
-            deviceLabel: params.deviceLabel as string,
-            host: params.host as string,
-            lanHost: params.lanHost as string,
+            deviceLabel: (params.deviceLabel as string) || "Phone",
             wsPort: deps.config.wsPort,
           };
+          if (typeof params.host === "string" && params.host.trim()) input.host = params.host;
+          if (typeof params.lanHost === "string" && params.lanHost.trim()) {
+            input.lanHost = params.lanHost;
+          }
           if (Array.isArray(params.accountIds)) {
             input.accountIds = (params.accountIds as unknown[]).filter(
               (x): x is string => typeof x === "string",

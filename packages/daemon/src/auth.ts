@@ -59,6 +59,12 @@ export interface DeviceRecord {
   label: string;
   createdAt: string;
   lastSeenAt?: string;
+  /**
+   * How the credential was minted. Unused `"qr"` rows may be pruned when Pairing
+   * re-opens (EnvoyCoder paired-devices pruneUnusedQrCodes). User-chosen short
+   * tokens are never auto-pruned.
+   */
+  mintKind?: "qr" | "user";
 }
 
 export class DeviceCredentialStore {

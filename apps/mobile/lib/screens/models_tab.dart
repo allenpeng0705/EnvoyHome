@@ -1,6 +1,7 @@
 import 'package:envoyhome_mobile_client/envoyhome_mobile_client.dart';
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../state/session_controller.dart';
 
 /// Models status + owner Local/Ollama controls (Design §8.5 / §10.1).
@@ -28,7 +29,9 @@ class _ModelsTabState extends State<ModelsTab> {
   void initState() {
     super.initState();
     widget.session.addListener(_onSession);
-    _reload();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _reload();
+    });
   }
 
   @override
@@ -50,7 +53,7 @@ class _ModelsTabState extends State<ModelsTab> {
       setState(() {
         _providers = null;
         _local = null;
-        _error = 'Not connected';
+        _error = AppLocalizations.of(context).modelsNotConnected;
         _ownerScope = false;
       });
       return;
@@ -81,7 +84,7 @@ class _ModelsTabState extends State<ModelsTab> {
         _ownerScope = owner;
         _loading = false;
         if (accountId == null || accountId.isEmpty) {
-          _note = 'Set accountId to see default model and pool.';
+          _note = AppLocalizations.of(context).modelsSetAccount;
         }
       });
     } catch (e) {
@@ -107,7 +110,7 @@ class _ModelsTabState extends State<ModelsTab> {
     try {
       await op(home);
       if (!mounted) return;
-      setState(() => _note = okNote ?? 'Updated');
+      setState(() => _note = okNote ?? AppLocalizations.of(context).modelsUpdated);
       await _reload();
     } catch (e) {
       if (!mounted) return;
@@ -117,21 +120,22 @@ class _ModelsTabState extends State<ModelsTab> {
     }
   }
 
-  String _modeLabel(String? mode) {
+  String _modeLabel(AppLocalizations l10n, String? mode) {
     switch (mode) {
       case 'attach':
-        return 'Mesh Local';
+        return l10n.modelsModeMesh;
       case 'spawn':
-        return 'Home llama-server';
+        return l10n.modelsModeSpawn;
       case 'ollama':
-        return 'Ollama';
+        return l10n.modelsModeOllama;
       default:
-        return 'Off';
+        return l10n.modelsModeOff;
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     final accountId = widget.session.accountId;
     final theme = Theme.of(context);
     final local = _local;
@@ -150,12 +154,12 @@ class _ModelsTabState extends State<ModelsTab> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Models', style: theme.textTheme.titleLarge),
+          Text(l10n.modelsTitle, style: theme.textTheme.titleLarge),
           const SizedBox(height: 4),
           Text(
             _ownerScope
-                ? 'Enable Local or Ollama on the home machine. Prefer Desktop for first setup.'
-                : 'Read-only on this device. Use Desktop Settings → Models (or an owner-trusted phone) to enable Local.',
+                ? l10n.modelsOwnerHint
+                : l10n.modelsReadonlyHint,
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 16),
@@ -174,11 +178,11 @@ class _ModelsTabState extends State<ModelsTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Local model', style: theme.textTheme.titleMedium),
+                  Text(l10n.modelsLocal, style: theme.textTheme.titleMedium),
                   const SizedBox(height: 8),
                   if (!_ownerScope)
                     Text(
-                      'Local engine status needs an owner-trusted device.',
+                      l10n.modelsOwnerTrusted,
                       style: theme.textTheme.bodySmall,
                     )
                   else ...[
@@ -187,14 +191,14 @@ class _ModelsTabState extends State<ModelsTab> {
                       runSpacing: 8,
                       children: [
                         Chip(
-                          label: Text(_modeLabel(mode)),
+                          label: Text(_modeLabel(l10n, mode)),
                           visualDensity: VisualDensity.compact,
                         ),
                         Chip(
                           label: Text(
                             enabled
-                                ? (healthy ? 'responding' : 'not responding')
-                                : 'disabled',
+                                ? (healthy ? l10n.modelsResponding : l10n.modelsNotResponding)
+                                : l10n.modelsDisabled,
                           ),
                           visualDensity: VisualDensity.compact,
                         ),
@@ -210,7 +214,7 @@ class _ModelsTabState extends State<ModelsTab> {
                       ),
                     if (ggufs.isNotEmpty) ...[
                       const SizedBox(height: 8),
-                      Text('GGUF on disk', style: theme.textTheme.labelLarge),
+                      Text(l10n.modelsGguf, style: theme.textTheme.labelLarge),
                       ...ggufs.map(
                         (n) => Text('· $n', style: theme.textTheme.bodySmall),
                       ),
@@ -228,27 +232,27 @@ class _ModelsTabState extends State<ModelsTab> {
                                       accountId: accountId,
                                       prefer: 'auto',
                                     ),
-                                    okNote: 'Local enabled',
+                                    okNote: l10n.modelsLocalEnabled,
                                   ),
-                          child: const Text('Enable Local'),
+                          child: Text(l10n.modelsEnableLocal),
                         ),
                         FilledButton.tonal(
                           onPressed: _busy
                               ? null
                               : () => _run(
                                     (h) => h.enableOllama(accountId: accountId),
-                                    okNote: 'Ollama enabled',
+                                    okNote: l10n.modelsOllamaEnabled,
                                   ),
-                          child: const Text('Use Ollama'),
+                          child: Text(l10n.modelsUseOllama),
                         ),
                         OutlinedButton(
                           onPressed: !_busy && enabled
                               ? () => _run(
                                     (h) => h.disableLocalEngine(),
-                                    okNote: 'Local disabled',
+                                    okNote: l10n.modelsLocalDisabled,
                                   )
                               : null,
-                          child: const Text('Disable'),
+                          child: Text(l10n.modelsDisable),
                         ),
                         if (accountId != null &&
                             accountId.isNotEmpty &&
@@ -269,8 +273,8 @@ class _ModelsTabState extends State<ModelsTab> {
                                         providerId: pid,
                                       );
                                       return {'ok': true};
-                                    }, okNote: 'Local-only routing set'),
-                            child: const Text('Local-only for account'),
+                                    }, okNote: l10n.modelsLocalOnlySet),
+                            child: Text(l10n.modelsLocalOnly),
                           ),
                       ],
                     ),
@@ -286,19 +290,19 @@ class _ModelsTabState extends State<ModelsTab> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('This account', style: theme.textTheme.titleMedium),
+                  Text(l10n.modelsThisAccount, style: theme.textTheme.titleMedium),
                   const SizedBox(height: 8),
                   if (accountId == null || accountId.isEmpty)
                     Text(
-                      'Set accountId above.',
+                      l10n.modelsNeedAccount,
                       style: theme.textTheme.bodySmall,
                     )
                   else ...[
                     Text(
-                      'Default: ${defaultId ?? '—'}',
+                      l10n.modelsDefault(defaultId ?? '—'),
                       style: theme.textTheme.bodyMedium,
                     ),
-                    Text('Pool: $filter', style: theme.textTheme.bodyMedium),
+                    Text(l10n.modelsPool(filter), style: theme.textTheme.bodyMedium),
                     const SizedBox(height: 8),
                     ...providerRows.whereType<Map>().map((raw) {
                       final p = Map<String, dynamic>.from(raw);
@@ -315,8 +319,8 @@ class _ModelsTabState extends State<ModelsTab> {
                         ),
                         trailing: Text(
                           [
-                            if (isDefault) 'default',
-                            if (!on) 'off',
+                            if (isDefault) l10n.modelsDefaultLabel,
+                            if (!on) l10n.modelsOffLabel,
                           ].join(' · '),
                           style: theme.textTheme.labelSmall,
                         ),

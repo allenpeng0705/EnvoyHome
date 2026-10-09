@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/app_localizations.dart';
 import '../state/session_controller.dart';
 
 class ArtifactsTab extends StatefulWidget {
@@ -22,7 +23,9 @@ class _ArtifactsTabState extends State<ArtifactsTab> {
   void initState() {
     super.initState();
     widget.session.addListener(_onSession);
-    _reload();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _reload();
+    });
   }
 
   @override
@@ -41,7 +44,7 @@ class _ArtifactsTabState extends State<ArtifactsTab> {
     if (home == null || accountId == null) {
       setState(() {
         _items = [];
-        _error = accountId == null ? 'Set an account to list artifacts.' : null;
+        _error = accountId == null ? AppLocalizations.of(context).artifactsNeedAccount : null;
       });
       return;
     }
@@ -98,13 +101,13 @@ class _ArtifactsTabState extends State<ArtifactsTab> {
         await Clipboard.setData(ClipboardData(text: url));
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open — URL copied')),
+          SnackBar(content: Text(AppLocalizations.of(context).artifactsUrlCopied)),
         );
       }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Open failed: $e')),
+        SnackBar(content: Text(AppLocalizations.of(context).artifactsOpenFailed('$e'))),
       );
     }
   }
@@ -120,10 +123,10 @@ class _ArtifactsTabState extends State<ArtifactsTab> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Artifacts', style: theme.textTheme.titleLarge),
+          Text(AppLocalizations.of(context).artifactsTitle, style: theme.textTheme.titleLarge),
           const SizedBox(height: 4),
           Text(
-            'Signed links from the home daemon. Tap to open.',
+            AppLocalizations.of(context).artifactsHint,
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
@@ -146,10 +149,10 @@ class _ArtifactsTabState extends State<ArtifactsTab> {
                     color: theme.colorScheme.primary.withValues(alpha: 0.4),
                   ),
                   const SizedBox(height: 12),
-                  Text('No artifacts yet', style: theme.textTheme.titleMedium),
+                  Text(AppLocalizations.of(context).artifactsEmptyTitle, style: theme.textTheme.titleMedium),
                   const SizedBox(height: 4),
                   Text(
-                    'Pull to refresh after the agent produces a file.',
+                    AppLocalizations.of(context).artifactsEmptyHint,
                     style: theme.textTheme.bodySmall,
                   ),
                 ],

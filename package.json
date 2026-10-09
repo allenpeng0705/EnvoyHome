@@ -21,6 +21,7 @@
     "doctor:homeclaw": "./scripts/doctor-homeclaw-dryrun.sh",
     "smoke:rpc": "./scripts/smoke-rpc.sh",
     "smoke:v1": "node ./scripts/smoke-v1.mjs",
+    "desktop:dev": "./scripts/desktop-dev.sh",
     "desktop:tauri:build": "pnpm --filter @envoyhome/desktop tauri:build",
     "mobile:test": "./scripts/mobile-test.sh",
     "mobile:live": "./scripts/mobile-live-smoke.sh",

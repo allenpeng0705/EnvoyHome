@@ -495,6 +495,63 @@ test("artifact-signer: HMAC over canonical JSON (Design §4.1b / §4.4)", () => 
   if (!expiredCheck.ok) assert.equal(expiredCheck.reason, "expired");
 });
 
+test("home.mintPairing: unused QR codes are pruned (no stack on re-mint)", async () => {
+  const { daemon } = await boot();
+  daemon.pairing.__resetMintRateForTests();
+
+  const first = await rpc("127.0.0.1", daemon.config.wsPort, "home.mintPairing", {
+    deviceLabel: "Phone",
+  });
+  assert.equal(first["error"], undefined);
+  const firstId = (first["result"] as { device: { deviceId: string } }).device.deviceId;
+
+  daemon.pairing.__resetMintRateForTests();
+  const second = await rpc("127.0.0.1", daemon.config.wsPort, "home.mintPairing", {
+    deviceLabel: "Phone",
+  });
+  assert.equal(second["error"], undefined);
+  const secondId = (second["result"] as { device: { deviceId: string } }).device.deviceId;
+  assert.notEqual(firstId, secondId);
+
+  const listed = await rpc("127.0.0.1", daemon.config.wsPort, "home.listPairedDevices", {});
+  const devices = (listed["result"] as { devices: Array<{ deviceId: string; lastSeenAt?: string; revoked: boolean }> })
+    .devices;
+  const unused = devices.filter((d) => !d.revoked && !d.lastSeenAt);
+  assert.equal(unused.length, 1);
+  assert.equal(unused[0]?.deviceId, secondId);
+});
+
+test("home.mintPairing: omit host (LAN/loopback fill) + short user token", async () => {
+  const { daemon } = await boot();
+  daemon.pairing.__resetMintRateForTests();
+
+  const qr = await rpc("127.0.0.1", daemon.config.wsPort, "home.mintPairing", {
+    deviceLabel: "Phone",
+  });
+  assert.equal(qr["error"], undefined);
+  const qrUri = (qr["result"] as { uri: string }).uri;
+  assert.match(qrUri, /^envoy:\/\/pair\?/);
+
+  daemon.pairing.__resetMintRateForTests();
+  const badLen = await rpc("127.0.0.1", daemon.config.wsPort, "home.mintPairing", {
+    deviceLabel: "Phone",
+    host: "203.0.113.7",
+    token: "short",
+  });
+  assert.ok(badLen["error"]);
+
+  daemon.pairing.__resetMintRateForTests();
+  const typed = await rpc("127.0.0.1", daemon.config.wsPort, "home.mintPairing", {
+    deviceLabel: "Phone",
+    host: "203.0.113.7:4780",
+    token: "abcd1234",
+  });
+  assert.equal(typed["error"], undefined);
+  const typedUri = (typed["result"] as { uri: string }).uri;
+  assert.match(typedUri, /203\.0\.113\.7/);
+  assert.match(typedUri, /token=abcd1234/);
+});
+
 test("cleanup b4 state dirs", async () => {
   for (const d of daemons) {
     await rm(d.config.stateDir, { recursive: true, force: true }).catch(() => undefined);

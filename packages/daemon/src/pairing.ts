@@ -3,6 +3,7 @@
 
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
 import { pairingAppMismatch } from "@envoymesh/protocol";
 import { buildPairingUri, parsePairingUri } from "@envoymesh/reuse-host";
@@ -14,6 +15,40 @@ import {
 } from "./auth.js";
 import type { BindingStore } from "./bindings.js";
 import { homePaths, type HomePaths } from "./home-paths.js";
+
+/** Inclusive length band for a user-chosen host:port token (EnvoyCoder pairing-token.ts). */
+export const USER_PAIRING_TOKEN_MIN_LEN = 8;
+export const USER_PAIRING_TOKEN_MAX_LEN = 10;
+const USER_PAIRING_TOKEN_RE = /^[A-Za-z0-9]+$/;
+
+export type UserPairingTokenResult =
+  | { ok: true; token: string }
+  | { ok: false; reason: "length" | "charset" };
+
+/** Normalize and validate a user-chosen host:port token. QR mint never calls this. */
+export function normalizeUserPairingToken(raw: string): UserPairingTokenResult {
+  const token = raw.trim();
+  if (token.length < USER_PAIRING_TOKEN_MIN_LEN || token.length > USER_PAIRING_TOKEN_MAX_LEN) {
+    return { ok: false, reason: "length" };
+  }
+  if (!USER_PAIRING_TOKEN_RE.test(token)) {
+    return { ok: false, reason: "charset" };
+  }
+  return { ok: true, token };
+}
+
+/**
+ * First non-internal IPv4 address — QR mint reach when the client omits `host`.
+ * Precedent: EnvoyCoder `apps/desktop/src/daemon/pairing.ts` firstLanAddress.
+ */
+export function firstLanAddress(): string | undefined {
+  for (const entries of Object.values(networkInterfaces())) {
+    for (const entry of entries ?? []) {
+      if (entry.family === "IPv4" && !entry.internal) return entry.address;
+    }
+  }
+  return undefined;
+}
 
 /** Minimum gap between successful mints (rate-limit, Design §4.4). */
 export const MINT_MIN_INTERVAL_MS = 500;
@@ -53,8 +88,10 @@ export interface PublicPairedDevice {
 
 export interface MintPairingInput {
   deviceLabel: string;
-  host: string;
-  lanHost: string;
+  /** Reach host; omit for QR — daemon picks LAN then `127.0.0.1`. */
+  host?: string;
+  /** Optional LAN hint when reach is a public host. */
+  lanHost?: string;
   accountIds?: string[];
   token?: string;
   fresh?: boolean;
@@ -279,19 +316,36 @@ export class PairingStore {
     }
 
     const accountIds = [...new Set((input.accountIds ?? []).filter((id) => id.length > 0))];
-    const reach = hostnameOfReach(input.host) || "127.0.0.1";
-    const lanHint = hostnameOfReach(input.lanHost);
+    // User-supplied host wins (typed route). Else LAN, else loopback — EnvoyCoder mint reach.
+    const lan = firstLanAddress();
+    const reach = hostnameOfReach(input.host?.trim() || "") || lan || "127.0.0.1";
+    const lanHint = hostnameOfReach(input.lanHost?.trim() || "") || lan || undefined;
     const path = input.wsPath ?? "/ws";
     const identity = await this.loadOrCreateIdentity();
 
     let token: string;
+    let mintKind: "qr" | "user";
     if (typeof input.token === "string" && input.token.length > 0) {
-      token = input.token;
+      const normalized = normalizeUserPairingToken(input.token);
+      if (!normalized.ok) {
+        throw new PairingError(
+          "bad_params",
+          normalized.reason === "length"
+            ? "The token must be 8–10 characters."
+            : "The token must be letters and digits only (8–10 characters).",
+        );
+      }
+      token = normalized.token;
+      mintKind = "user";
       if (this.devices.getByToken(token) && !input.fresh) {
         throw new PairingError("bad_params", "that token is already in use by another pairing");
       }
     } else {
+      // New QR secret: drop unused QR rows first so opening Pairing / "Show a new code"
+      // does not stack "Phone" rows nobody scanned (EnvoyCoder paired-devices.ts).
+      await this.pruneUnusedQrCodes();
       token = randomBytes(24).toString("base64url");
+      mintKind = "qr";
     }
 
     const tokenHash = hashDeviceToken(token);
@@ -305,6 +359,7 @@ export class PairingStore {
       revoked: false,
       label,
       createdAt: now,
+      mintKind,
     };
     this.devices.put(record);
     await this.persist();
@@ -349,6 +404,8 @@ export class PairingStore {
 
   async list(): Promise<PublicPairedDevice[]> {
     await this.ensureLoaded();
+    // Keep at most one unused QR in the owner's list (graveyard cleanup).
+    await this.pruneUnusedQrCodes({ keepNewest: true });
     return this.devices.list().map((d) => {
       const row: PublicPairedDevice = {
         deviceId: d.deviceId,
@@ -361,6 +418,33 @@ export class PairingStore {
       if (d.lastSeenAt !== undefined) row.lastSeenAt = d.lastSeenAt;
       return row;
     });
+  }
+
+  /**
+   * Drop unused QR pairing codes that never authenticated a phone.
+   * Precedent: EnvoyCoder `paired-devices.ts` pruneUnusedQrCodes.
+   * User-chosen short tokens and used/revoked rows are kept.
+   */
+  private async pruneUnusedQrCodes(
+    options: { keepNewest?: boolean } = {},
+  ): Promise<void> {
+    const unused = this.devices
+      .list()
+      .filter((d) => isUnusedQr(d))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    if (unused.length === 0) return;
+    const keepId = options.keepNewest === true ? unused[0]?.deviceId : undefined;
+    let changed = false;
+    for (const d of unused) {
+      if (keepId && d.deviceId === keepId) continue;
+      const bindings = await this.bindings.list({ deviceId: d.deviceId });
+      for (const b of bindings) {
+        await this.bindings.remove(b.bindingId);
+      }
+      this.devices.remove(d.deviceId);
+      changed = true;
+    }
+    if (changed) await this.persist();
   }
 
   async revoke(deviceId: string): Promise<void> {
@@ -444,6 +528,13 @@ export class PairingStore {
   }
 }
 
+/** Unused QR: never seen by a phone, not revoked. Legacy rows without mintKind count as QR. */
+function isUnusedQr(record: DeviceRecord): boolean {
+  if (record.revoked || record.lastSeenAt) return false;
+  if (record.mintKind === "user") return false;
+  return record.mintKind === "qr" || record.mintKind === undefined;
+}
+
 function normalizeRecord(raw: Partial<DeviceRecord>): DeviceRecord {
   if (
     typeof raw.deviceId !== "string" ||
@@ -465,6 +556,7 @@ function normalizeRecord(raw: Partial<DeviceRecord>): DeviceRecord {
     createdAt: raw.createdAt,
   };
   if (typeof raw.lastSeenAt === "string") rec.lastSeenAt = raw.lastSeenAt;
+  if (raw.mintKind === "qr" || raw.mintKind === "user") rec.mintKind = raw.mintKind;
   return rec;
 }
 

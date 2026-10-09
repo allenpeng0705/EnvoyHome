@@ -1,0 +1,168 @@
+{
+  "@@locale": "en",
+  "appName": "EnvoyHome",
+  "appLanguage": "Language",
+  "pairLede": "Join the home desktop over EnvoyMesh — scan a QR, enter host:port, or hop via SSH.",
+  "pairTabLink": "Link",
+  "pairTabHost": "Host:port",
+  "pairTabSsh": "SSH",
+  "pairFooter": "com.envoymesh.envoyhome · push after pair",
+  "pairCloseScanner": "Close scanner",
+  "pairScanQr": "Scan pairing QR",
+  "pairUriLabel": "Pairing URI",
+  "pairUriHint": "envoy://pair?…&app=EnvoyHome",
+  "pairConnect": "Connect",
+  "pairDirectHint": "Reach the desktop on this network (LAN / Tailscale). Token is required.",
+  "pairHostPort": "Host:port",
+  "pairHostPortHint": "192.168.1.10:4780",
+  "pairToken": "Pairing token",
+  "pairTokenHelper": "From desktop Settings → Pair devices",
+  "pairSshHint": "Tunnel through an SSH hop. The daemon sees loopback — token is optional.",
+  "pairSshHost": "SSH host",
+  "pairSshUser": "User",
+  "pairSshUserHint": "root",
+  "pairSshPort": "Port",
+  "pairSshPassword": "SSH password",
+  "pairDaemon": "Daemon on far side",
+  "pairDaemonHint": "127.0.0.1:4780",
+  "pairTokenOptional": "Token (optional)",
+  "shellOnline": "online",
+  "shellDegraded": "degraded",
+  "shellDisconnect": "Disconnect",
+  "shellProfilePending": "Profile will be chosen from this device’s pairing.",
+  "shellProfileOne": "Profile · {id}",
+  "@shellProfileOne": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "shellProfile": "Profile",
+  "shellMeshHint": "mesh {mesh} · pull tabs to refresh",
+  "@shellMeshHint": {
+    "placeholders": {
+      "mesh": {
+        "type": "String"
+      }
+    }
+  },
+  "navChat": "Chat",
+  "navApprovals": "Approvals",
+  "navModels": "Models",
+  "navArtifacts": "Artifacts",
+  "chatNeedAccount": "Set an account above before chatting.",
+  "chatEmptyMessage": "Empty message.",
+  "chatSessionTitle": "Phone chat",
+  "chatEmptyTitle": "Message your home agent",
+  "chatEmptyHint": "Turns run on the home daemon. When the agent needs permission, Allow/Deny appears here.",
+  "chatHint": "Message…",
+  "chatSubscribeFailed": "subscribe failed: {error}",
+  "@chatSubscribeFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatStatus": "status: {status}",
+  "@chatStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
+  "chatError": "error: {error}",
+  "@chatError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "approvalsTitle": "Approvals",
+  "approvalsHint": "Tool and actuation requests waiting for a decision.",
+  "approvalsNeedAccount": "Set an account to load approvals.",
+  "approvalsEmptyTitle": "Inbox clear",
+  "approvalsEmptyHint": "Nothing pending right now.",
+  "approvalsActuation": "Actuation",
+  "approvalsAllow": "Allow",
+  "approvalsDeny": "Deny",
+  "approvalsAllowed": "Allowed",
+  "approvalsDenied": "Denied",
+  "approvalsFailed": "Failed: {error}",
+  "@approvalsFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "modelsTitle": "Models",
+  "modelsOwnerHint": "Enable Local or Ollama on the home machine. Prefer Desktop for first setup.",
+  "modelsReadonlyHint": "Read-only on this device. Use Desktop Settings → Models (or an owner-trusted phone) to enable Local.",
+  "modelsLocal": "Local model",
+  "modelsOwnerTrusted": "Local engine status needs an owner-trusted device.",
+  "modelsResponding": "responding",
+  "modelsNotResponding": "not responding",
+  "modelsDisabled": "disabled",
+  "modelsGguf": "GGUF on disk",
+  "modelsEnableLocal": "Enable Local",
+  "modelsUseOllama": "Use Ollama",
+  "modelsDisable": "Disable",
+  "modelsLocalOnly": "Local-only for account",
+  "modelsThisAccount": "This account",
+  "modelsNeedAccount": "Set accountId above.",
+  "modelsDefault": "Default: {id}",
+  "@modelsDefault": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "modelsPool": "Pool: {filter}",
+  "@modelsPool": {
+    "placeholders": {
+      "filter": {
+        "type": "String"
+      }
+    }
+  },
+  "modelsModeMesh": "Mesh Local",
+  "modelsModeSpawn": "Home llama-server",
+  "modelsModeOllama": "Ollama",
+  "modelsModeOff": "Off",
+  "modelsNotConnected": "Not connected",
+  "modelsSetAccount": "Set accountId to see default model and pool.",
+  "modelsUpdated": "Updated",
+  "modelsLocalEnabled": "Local enabled",
+  "modelsOllamaEnabled": "Ollama enabled",
+  "modelsLocalDisabled": "Local disabled",
+  "modelsLocalOnlySet": "Local-only routing set",
+  "modelsDefaultLabel": "default",
+  "modelsOffLabel": "off",
+  "artifactsTitle": "Artifacts",
+  "artifactsHint": "Signed links from the home daemon. Tap to open.",
+  "artifactsNeedAccount": "Set an account to list artifacts.",
+  "artifactsEmptyTitle": "No artifacts yet",
+  "artifactsEmptyHint": "Pull to refresh after the agent produces a file.",
+  "artifactsUrlCopied": "Could not open — URL copied",
+  "artifactsOpenFailed": "Open failed: {error}",
+  "@artifactsOpenFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatPendingApprovals": "{count} waiting for your approval",
+  "@chatPendingApprovals": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
+}

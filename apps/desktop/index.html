@@ -15,24 +15,24 @@
   </head>
   <body>
     <div id="app">
-      <aside id="nav" aria-label="Settings"></aside>
+      <aside id="nav" data-i18n-aria="app.settings" aria-label="Settings"></aside>
       <main id="main">
         <header class="topbar">
           <div class="brand">
             <img class="brand-mark" src="/logo.png" width="40" height="40" alt="" />
             <div class="brand-copy">
-              <h1>EnvoyHome</h1>
-              <p class="lede">Home agent control plane</p>
+              <h1 data-i18n="app.name">EnvoyHome</h1>
+              <p class="lede" data-i18n="app.lede">Home agent control plane</p>
             </div>
           </div>
           <div id="conn-chrome" class="conn-chrome" aria-live="polite">
             <span class="conn-dot" data-state="connecting"></span>
             <div class="conn-meta">
-              <strong id="conn-title">Connecting…</strong>
-              <span id="conn-sub" class="muted">loopback WebSocket</span>
+              <strong id="conn-title" data-i18n="conn.connecting">Connecting…</strong>
+              <span id="conn-sub" class="muted" data-i18n="conn.loopback">loopback WebSocket</span>
             </div>
             <details class="conn-details">
-              <summary>Details</summary>
+              <summary data-i18n="app.connDetails">Details</summary>
               <pre id="status-out">Connecting…</pre>
             </details>
           </div>
@@ -40,6 +40,36 @@
         <div id="toast" class="toast" hidden></div>
         <section id="view" class="panel view-panel"></section>
       </main>
+    </div>
+    <div id="profile-gate" class="modal-backdrop" hidden>
+      <div
+        class="modal-card profile-gate-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-gate-title"
+      >
+        <img class="profile-gate-mark" src="/logo.png" width="48" height="48" alt="" />
+        <h2 id="profile-gate-title" data-i18n="profile.gateTitle">Create your profile</h2>
+        <p class="muted profile-gate-lede" data-i18n="profile.gateLede">
+          Pick a display name for this machine. You can add more household profiles later.
+        </p>
+        <form id="profile-gate-form" class="profile-gate-form">
+          <label class="profile-gate-field">
+            <span data-i18n="profile.displayName">Display name</span>
+            <input
+              name="displayName"
+              required
+              data-i18n-placeholder="profile.displayNamePlaceholder"
+              placeholder="e.g. Alice"
+              autocomplete="nickname"
+              autofocus
+            />
+          </label>
+          <div class="profile-gate-actions">
+            <button type="submit" data-i18n="profile.continue">Continue</button>
+          </div>
+        </form>
+      </div>
     </div>
     <script type="module" src="/app.js"></script>
   </body>

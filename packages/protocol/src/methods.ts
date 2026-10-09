@@ -472,13 +472,14 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     params: obj(
       {
         deviceLabel: str({ minLength: 1 }),
+        // Omit for QR — daemon fills LAN then 127.0.0.1 (EnvoyDev Adapt).
         host: str({ minLength: 1 }),
         lanHost: str({ minLength: 1 }),
         accountIds: arr(str({ minLength: 1 })),
-        token: str(),
+        token: str({ minLength: 8, maxLength: 10 }),
         fresh: bool(),
       },
-      ["deviceLabel", "host", "lanHost"],
+      ["deviceLabel"],
     ),
     result: obj(
       {

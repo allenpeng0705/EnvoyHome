@@ -99,31 +99,33 @@ test("V-UX-1..5 smoke: nav + account + memory + advanced + pairing QR", async (t
       );
     }, undefined, { timeout: 15000 });
 
-    // V-UX-1: create account without raw config
-    await page.getByRole("button", { name: "Accounts" }).click();
-    await page.waitForSelector("#create-acct");
-    await page.fill('input[name="displayName"]', "UX Alice");
-    await page.fill('input[name="accountId"]', "ux-alice");
-    await page.click('#create-acct button[type="submit"]');
+    // V-UX-1: first-run profile gate (display name only; daemon slugs accountId)
+    await page.waitForSelector("#profile-gate:not([hidden])", { timeout: 15000 });
+    await page.fill('#profile-gate-form input[name="displayName"]', "UX Alice");
+    await page.click('#profile-gate-form button[type="submit"]');
+    await page.waitForSelector("#profile-gate[hidden]", { timeout: 10000 });
     await page.waitForFunction(() => localStorage.getItem("envoyhome.accountId") === "ux-alice", undefined, {
       timeout: 10000,
     });
 
-    // V-UX-2: pairing QR
-    await page.getByRole("button", { name: "Pairing" }).click();
-    await page.waitForSelector("#mint-form");
-    await page.click('#mint-form button[type="submit"]');
+    // V-UX-2: pairing QR (EnvoyDev three-route — auto-mint on open + copy URI)
+    await page.getByRole("button", { name: "Pair devices" }).click();
     await page.waitForSelector("#pairing-qr", { timeout: 10000 });
     const qrSrc = await page.getAttribute("#pairing-qr", "src");
     assert.ok(qrSrc?.startsWith("data:image/"));
+    assert.ok(await page.locator("#pairing-uri").inputValue());
+    assert.ok(await page.locator("#pairing-copy").isVisible());
+    assert.ok(await page.getByText("Scan a QR code").isVisible());
+    assert.ok(await page.getByText("Connect with hostname").isVisible());
+    assert.ok(await page.getByText("Reach it through an SSH hop").isVisible());
+    assert.ok(await page.getByText("Pairing codes").isVisible());
 
-    await page.getByRole("button", { name: "Approvals" }).click();
-    await page.waitForSelector("text=pending");
-    assert.ok(await page.getByText("Grants").isVisible());
+    await page.getByRole("button", { name: "Chat" }).click();
+    await page.waitForSelector("#chat-form", { timeout: 10000 });
 
-    await page.getByRole("button", { name: "Pairing" }).click();
-    await page.waitForSelector("#mint-form");
-    assert.ok(await page.getByText("Paired devices").isVisible());
+    await page.getByRole("button", { name: "Pair devices" }).click();
+    await page.waitForSelector("#pairing-qr-fresh");
+    assert.ok(await page.getByText("Pairing codes").isVisible());
 
     // V-UX-3: Channels — Telegram config form in Settings
     await page.getByRole("button", { name: "Channels" }).click();
@@ -155,7 +157,7 @@ test("V-UX-1..5 smoke: nav + account + memory + advanced + pairing QR", async (t
     assert.ok(await page.getByText("Actuation journal").isVisible());
 
     // §10.1 nav slices
-    await page.getByRole("button", { name: "Bindings" }).click();
+    await page.getByRole("button", { name: "Links" }).click();
     await page.waitForSelector("#bind-sender");
     await page.getByRole("button", { name: "Skills" }).click();
     await page.waitForSelector("#install-skill");
