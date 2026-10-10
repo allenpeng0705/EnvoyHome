@@ -21,10 +21,10 @@ const VIEWS = [
   { id: "models", labelKey: "nav.models", groupKey: "navGroup.intelligence" },
   { id: "harness", labelKey: "nav.harness", groupKey: "navGroup.intelligence" },
   { id: "memory", labelKey: "nav.memory", groupKey: "navGroup.intelligence" },
-  // Connections — how phones/IM/devices attach (Profiles managed from sidebar popup)
+  // Connections — Mesh phones first; IM optional (Profiles via sidebar popup)
   { id: "pairing", labelKey: "nav.pairing", groupKey: "navGroup.connections" },
-  { id: "channels", labelKey: "nav.channels", groupKey: "navGroup.connections" },
   { id: "bindings", labelKey: "nav.bindings", groupKey: "navGroup.connections" },
+  { id: "channels", labelKey: "nav.channels", groupKey: "navGroup.connections" },
   // Automation — skills, schedules, smart home
   { id: "skills", labelKey: "nav.skills", groupKey: "navGroup.automation" },
   { id: "workflows", labelKey: "nav.workflows", groupKey: "navGroup.automation" },
@@ -129,9 +129,11 @@ let cachedAccounts = [];
 /**
  * Last QR mint in this Settings session — reopen Pair devices without stacking
  * another unused code (daemon also prunes unused QR rows).
- * @type {{ uri: string, deviceId?: string } | null}
+ * @type {{ uri: string, deviceId?: string, accountId?: string } | null}
  */
 let cachedPairingMint = null;
+/** Profile the next Mesh invite binds to (Pair devices). */
+let inviteAccountId = "";
 
 function wsUrl() {
   return localStorage.getItem("envoyhome.wsUrl") || DEFAULT_WS;
@@ -249,6 +251,10 @@ async function renderPairingQrHtml(uri) {
   }
 }
 
+function pairingInviteAccountId() {
+  return inviteAccountId || accountId() || "";
+}
+
 async function mintPairingCode(input = {}) {
   const params = {
     deviceLabel: input.deviceLabel || "Phone",
@@ -256,8 +262,11 @@ async function mintPairingCode(input = {}) {
   if (input.host) params.host = input.host;
   if (input.token) params.token = input.token;
   if (input.fresh === true) params.fresh = true;
-  const aid = accountId();
-  if (aid) params.accountIds = [aid];
+  const bindId =
+    typeof input.accountId === "string" && input.accountId
+      ? input.accountId
+      : pairingInviteAccountId();
+  if (bindId) params.accountIds = [bindId];
   try {
     const ans = await rpc("home.mintPairing", params);
     if (ans.error || !ans.result?.uri) {
@@ -267,10 +276,22 @@ async function mintPairingCode(input = {}) {
       ok: true,
       uri: String(ans.result.uri),
       deviceId: ans.result.device?.deviceId ? String(ans.result.device.deviceId) : undefined,
+      accountId: bindId || undefined,
     };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : String(err) };
   }
+}
+
+function profileOptionsHtml(selectedId, accounts) {
+  return accounts
+    .map(
+      (a) =>
+        `<option value="${escapeHtml(a.accountId)}"${
+          a.accountId === selectedId ? " selected" : ""
+        }>${escapeHtml(a.displayName || a.accountId)}</option>`,
+    )
+    .join("");
 }
 
 function connect() {
@@ -792,8 +813,11 @@ async function showView(id) {
     }
 
     if (id === "pairing") {
-      // EnvoyDev Settings → Pair devices: three routes (QR / manual / SSH) + issued codes list.
-      // Precedent: ../EnvoyCoder/apps/desktop/src/components/settings/PairingSection.tsx
+      // Mesh-first family invite: choose profile → QR/hostname/SSH → phones list.
+      // Precedent: ../EnvoyCoder PairingSection + Design §2.3 EnvoyMesh join channels.
+      if (!inviteAccountId || !accounts.some((a) => a.accountId === inviteAccountId)) {
+        inviteAccountId = aid || accounts[0]?.accountId || "";
+      }
       const [body, health, mesh] = await Promise.all([
         rpc("home.listPairedDevices"),
         rpc("home.health").catch(() => null),
@@ -806,6 +830,7 @@ async function showView(id) {
       const lanHintAddress = wsPort != null ? `192.168.x.x:${wsPort}` : undefined;
       const daemonLoopback =
         wsPort != null ? `127.0.0.1:${wsPort}` : undefined;
+      const inviteOptions = profileOptionsHtml(inviteAccountId, accounts);
 
       const deviceRows = devices
         .map((d) => {
@@ -820,20 +845,25 @@ async function showView(id) {
               : state === "active"
                 ? t("pairing.stateActive")
                 : t("pairing.stateUnused");
-          const profiles =
-            (d.accountIds || [])
-              .map((id) => {
-                const row = accounts.find((a) => a.accountId === id);
-                return row?.displayName || id;
-              })
-              .join(", ") || t("app.none");
+          const boundId = (d.accountIds || [])[0] || "";
+          const assign =
+            d.revoked || accounts.length === 0
+              ? ""
+              : `<label class="pairing-assign">
+                  <span class="muted">${escapeHtml(t("pairing.assignProfile"))}</span>
+                  <select data-assign="${escapeHtml(d.deviceId)}" aria-label="${escapeHtml(t("pairing.assignProfile"))}">
+                    <option value="">${escapeHtml(t("app.none"))}</option>
+                    ${profileOptionsHtml(boundId, accounts)}
+                  </select>
+                </label>`;
           const action = d.revoked
             ? `<button type="button" class="secondary" data-forget="${escapeHtml(d.deviceId)}">${escapeHtml(t("pairing.forget"))}</button>`
             : `<button type="button" data-revoke="${escapeHtml(d.deviceId)}">${escapeHtml(t("pairing.revoke"))}</button>`;
           return `<li class="pairing-code-row" data-device-state="${state}" data-device="${escapeHtml(d.deviceId)}">
-            <div>
+            <div class="pairing-code-main">
               <strong>${escapeHtml(d.label || d.deviceId)}</strong>
-              <div class="muted">${escapeHtml(stateLabel)} · ${escapeHtml(t("pairing.profiles", { list: profiles }))}</div>
+              <div class="muted">${escapeHtml(stateLabel)}</div>
+              ${assign}
             </div>
             ${action}
           </li>`;
@@ -841,7 +871,16 @@ async function showView(id) {
         .join("");
 
       el.innerHTML = `<h2>${escapeHtml(t("pairing.title"))}</h2>
-        <p class="muted pairing-note">${escapeHtml(t("pairing.note"))}</p>
+        <p class="muted pairing-note">${escapeHtml(t("pairing.meshIntro"))}</p>
+        <div class="card pairing-invite">
+          <label class="pairing-field">
+            <span>${escapeHtml(t("pairing.inviteProfile"))}</span>
+            <select id="pairing-invite-profile" ${accounts.length ? "" : "disabled"}>
+              ${inviteOptions || `<option value="">${escapeHtml(t("profile.noneSelected"))}</option>`}
+            </select>
+            <span class="muted">${escapeHtml(t("pairing.inviteProfileDetail"))}</span>
+          </label>
+        </div>
 
         <section class="pairing-route" data-route="qr" aria-labelledby="pairing-qr-heading">
           <div class="pairing-route-head">
@@ -901,8 +940,8 @@ async function showView(id) {
           <p class="muted">${escapeHtml(t("pairing.sshNotInCode"))}</p>
         </section>
 
-        <section class="pairing-route" data-route="codes" aria-labelledby="pairing-codes-heading">
-          <h3 id="pairing-codes-heading">${escapeHtml(t("pairing.codesTitle"))}</h3>
+        <section class="pairing-route" data-route="phones" aria-labelledby="pairing-phones-heading">
+          <h3 id="pairing-phones-heading">${escapeHtml(t("pairing.phonesTitle"))}</h3>
           <p class="muted">${escapeHtml(t("pairing.manage"))}</p>
           ${
             deviceRows
@@ -913,7 +952,6 @@ async function showView(id) {
 
       const qrPanel = document.getElementById("pairing-qr-panel");
       const freshBtn = document.getElementById("pairing-qr-fresh");
-      /** Keep the last minted URI so Copy still works after re-renders of the panel. */
       let pairingUri = "";
 
       const showQrOutcome = async (outcome) => {
@@ -930,6 +968,7 @@ async function showView(id) {
         cachedPairingMint = {
           uri: outcome.uri,
           ...(outcome.deviceId ? { deviceId: outcome.deviceId } : {}),
+          ...(outcome.accountId ? { accountId: outcome.accountId } : { accountId: pairingInviteAccountId() }),
         };
         const qrHtml = await renderPairingQrHtml(pairingUri);
         qrPanel.innerHTML = `<div class="pairing-mint" data-testid="pairing-panel">
@@ -958,14 +997,20 @@ async function showView(id) {
       let qrBusy = false;
       const mintQr = async (fresh) => {
         if (qrBusy) return;
-        // Reuse this session's code when reopening Pair devices (no new list row).
+        const inviteId = pairingInviteAccountId();
         if (!fresh && cachedPairingMint?.uri) {
-          const stillListed = !cachedPairingMint.deviceId
-            || devices.some(
-              (d) => d.deviceId === cachedPairingMint.deviceId && !d.revoked,
-            );
-          if (stillListed) {
-            await showQrOutcome({ ok: true, uri: cachedPairingMint.uri, deviceId: cachedPairingMint.deviceId });
+          const sameProfile =
+            !cachedPairingMint.accountId || cachedPairingMint.accountId === inviteId;
+          const stillListed =
+            !cachedPairingMint.deviceId ||
+            devices.some((d) => d.deviceId === cachedPairingMint.deviceId && !d.revoked);
+          if (sameProfile && stillListed) {
+            await showQrOutcome({
+              ok: true,
+              uri: cachedPairingMint.uri,
+              deviceId: cachedPairingMint.deviceId,
+              accountId: cachedPairingMint.accountId,
+            });
             return;
           }
           cachedPairingMint = null;
@@ -979,13 +1024,16 @@ async function showView(id) {
           qrPanel.innerHTML = `<p class="muted" role="status">${escapeHtml(t("pairing.qrBusy"))}</p>`;
         }
         try {
-          const outcome = await mintPairingCode(fresh ? { fresh: true } : {});
+          const outcome = await mintPairingCode({
+            ...(fresh ? { fresh: true } : {}),
+            accountId: inviteId,
+          });
           if (outcome.ok) {
             cachedPairingMint = {
               uri: outcome.uri,
               ...(outcome.deviceId ? { deviceId: outcome.deviceId } : {}),
+              accountId: inviteId,
             };
-            // Reload the page so Pairing codes reflects prune; session cache avoids a second mint.
             qrBusy = false;
             await showView("pairing");
             return;
@@ -1004,10 +1052,15 @@ async function showView(id) {
         }
       };
 
+      document.getElementById("pairing-invite-profile")?.addEventListener("change", (ev) => {
+        inviteAccountId = String(ev.target.value || "");
+        cachedPairingMint = null;
+        void mintQr(true);
+      });
+
       freshBtn?.addEventListener("click", () => {
         void mintQr(true);
       });
-      // Auto-show QR: reuse session cache, else mint once (daemon drops prior unused QR).
       void mintQr(false);
 
       document.getElementById("pairing-manual-mint")?.addEventListener("click", async () => {
@@ -1046,6 +1099,7 @@ async function showView(id) {
           host: address,
           token: normalized.token,
           deviceLabel: "Phone",
+          accountId: pairingInviteAccountId(),
         });
         if (btn) {
           btn.disabled = false;
@@ -1085,6 +1139,25 @@ async function showView(id) {
             });
           });
         }
+        await showView("pairing");
+      });
+
+      el.querySelectorAll("[data-assign]").forEach((sel) => {
+        sel.addEventListener("change", async () => {
+          const deviceId = sel.getAttribute("data-assign");
+          if (!deviceId) return;
+          const next = String(sel.value || "");
+          const ans = await rpc("home.setDeviceAccounts", {
+            deviceId,
+            accountIds: next ? [next] : [],
+          });
+          if (ans.error) {
+            showToast(errMsg(ans) || t("pairing.assignFailed"), "err");
+            await showView("pairing");
+            return;
+          }
+          showToast(t("pairing.assignOk"), "ok");
+        });
       });
 
       el.querySelectorAll("[data-revoke]").forEach((btn) => {
@@ -1136,6 +1209,7 @@ async function showView(id) {
         )
         .join("");
       el.innerHTML = `<h2>${escapeHtml(t("channels.title"))}</h2>
+        <p class="muted">${escapeHtml(t("channels.hint"))}</p>
         <p class="muted">${escapeHtml(t("channels.enableTelegram"))} <code>docs/telegram-demo-setup.md</code></p>
         <table class="card" style="width:100%;border-collapse:collapse">
           <thead><tr><th>${escapeHtml(t("channels.channel"))}</th><th>${escapeHtml(t("channels.kind"))}</th><th>${escapeHtml(t("channels.status"))}</th></tr></thead>
@@ -1829,26 +1903,26 @@ async function showView(id) {
     }
 
     if (id === "bindings") {
+      // IM channel-sender → profile only. Mesh phones are managed under Pair devices.
       const bindings = await rpc("home.listBindings", aid ? { accountId: aid } : {});
-      // Owner list without accountId so unbound (accountId=null) are visible.
-      const sources = await rpc("home.listSources", { bound: false });
-      const rows = bindings.result?.bindings || [];
+      const sources = await rpc("home.listSources", { bound: false }).catch(() => ({
+        result: { sources: [] },
+      }));
+      const rows = (bindings.result?.bindings || []).filter((b) => b.kind === "sender");
       const unbound = (sources.result?.sources || []).filter((s) => !s.bound || !s.accountId);
+      const profileOpts = profileOptionsHtml(aid, accounts);
       const bindCards = rows
-        .map((b) => {
-          if (b.kind === "sender") {
-            return `<div class="card">
-              <strong>${escapeHtml(t("bindings.sender"))}</strong> <code>${escapeHtml(b.channel)}/${escapeHtml(b.channelAccount)}</code>
-              <code>${escapeHtml(b.senderId)}</code> → <code>${escapeHtml(b.accountId)}</code>
+        .map(
+          (b) => `<div class="card">
+              <strong>${escapeHtml(t("bindings.sender"))}</strong>
+              <code>${escapeHtml(b.channel)}/${escapeHtml(b.channelAccount)}</code>
+              <code>${escapeHtml(b.senderId)}</code> →
+              <code>${escapeHtml(
+                accounts.find((a) => a.accountId === b.accountId)?.displayName || b.accountId,
+              )}</code>
               <button type="button" data-unbind="${escapeHtml(b.bindingId)}">${escapeHtml(t("bindings.remove"))}</button>
-            </div>`;
-          }
-          return `<div class="card">
-            <strong>${escapeHtml(t("bindings.device"))}</strong> <code>${escapeHtml(b.deviceId)}</code> → <code>${escapeHtml(b.accountId)}</code>
-            ${b.ownerTrusted ? " · ownerTrusted" : ""}
-            <button type="button" data-unbind="${escapeHtml(b.bindingId)}">${escapeHtml(t("bindings.remove"))}</button>
-          </div>`;
-        })
+            </div>`,
+        )
         .join("");
       const unboundList = unbound
         .map(
@@ -1859,28 +1933,40 @@ async function showView(id) {
         .join("");
       el.innerHTML = `<h2>${escapeHtml(t("bindings.title"))}</h2>
         <p class="muted">${escapeHtml(t("bindings.hint"))}</p>
+        <p class="muted">${escapeHtml(t("bindings.meshHint"))}</p>
         <form id="bind-sender" class="card">
           <h3>${escapeHtml(t("bindings.bindSender"))}</h3>
           <label>${escapeHtml(t("bindings.channel"))} <input name="channel" value="telegram" required /></label>
           <label>${escapeHtml(t("channels.channelAccount"))} <input name="channelAccount" value="default" required /></label>
           <label>${escapeHtml(t("channels.senderId"))} <input name="senderId" required /></label>
+          <label>${escapeHtml(t("bindings.bindProfile"))}
+            <select name="accountId" required>${profileOpts}</select>
+          </label>
           <button type="submit">${escapeHtml(t("channels.bind"))}</button>
         </form>
         ${bindCards || `<p class='muted'>${escapeHtml(t("bindings.noBindings"))}</p>`}
         <h3>${escapeHtml(t("bindings.unboundObjects"))}</h3>
-        <ul>${unboundList || `<li class='muted'>${escapeHtml(t("bindings.noneUnbound"))}</li>`}</ul>
-        ${pre(bindings)}`;
+        <p class="muted">${escapeHtml(t("bindings.unboundHint"))}</p>
+        <ul>${unboundList || `<li class='muted'>${escapeHtml(t("bindings.noneUnbound"))}</li>`}</ul>`;
       document.getElementById("bind-sender")?.addEventListener("submit", async (ev) => {
         ev.preventDefault();
-        if (!aid) return;
         const fd = new FormData(ev.target);
+        const accountIdParam = String(fd.get("accountId") || aid || "");
+        if (!accountIdParam) {
+          showToast(t("profile.noneSelected"), "err");
+          return;
+        }
         const ans = await rpc("home.setBinding", {
           channel: fd.get("channel"),
           channelAccount: fd.get("channelAccount"),
           senderId: fd.get("senderId"),
-          accountId: aid,
+          accountId: accountIdParam,
         });
-        el.insertAdjacentHTML("beforeend", pre(ans));
+        if (ans.error) {
+          showToast(errMsg(ans) || t("channels.bindFailed"), "err");
+          return;
+        }
+        showToast(t("channels.bound"), "ok");
         await showView("bindings");
       });
       el.querySelectorAll("[data-unbind]").forEach((btn) => {
@@ -1888,7 +1974,7 @@ async function showView(id) {
           const bindingId = btn.getAttribute("data-unbind");
           if (!bindingId) return;
           const ans = await rpc("home.removeBinding", { bindingId });
-          el.insertAdjacentHTML("beforeend", pre(ans));
+          if (ans.error) showToast(errMsg(ans) || t("bindings.removeFailed"), "err");
           await showView("bindings");
         });
       });

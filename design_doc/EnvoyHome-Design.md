@@ -22,6 +22,7 @@
 
 | Date | Change |
 |------|--------|
+| 2026-10-09v | **Product (Mesh-first Connections):** Pair devices = invite profile → QR/hostname → Phones list with assign/revoke. **Channel links** = IM sender→profile only. **IM channels** labeled optional. Nav order Pair → Channel links → IM. No wire break. |
 | 2026-10-09u | **Product (Pairing codes):** Unused QR rows no longer stack — mint prunes prior unused QR; list keeps at most one unused QR; Settings session reuses the last QR URI. SSH route is guidance-only (phone configures the hop). No wire break. |
 | 2026-10-09t | **Product (Pairing UX = EnvoyDev):** Settings Pairing matches EnvoyCoder three routes — QR (auto-mint, Recommended), typed host:port + 8–10 char token, SSH hop guidance; issued codes list with Revoke/Forget. `home.mintPairing` `host`/`lanHost` optional (daemon fills LAN then `127.0.0.1`). No `protocolApiVersion` bump. |
 | 2026-10-09r | **§8.5 EnvoyHome Local + Ollama (Adapt EnvoyMesh Envoy Local):** prefer attach Mesh Envoy Local `:18790`; else spawn Home-owned `llama-server` on `:18792` (download runtime + GGUF under `state/local-engine/`); BYO Ollama on `:11434`. Additive RPCs `home.getLocalEngineStatus` / `enableLocalEngine` / `enableOllama` / `disableLocalEngine` (owner-scope). Registers pool providers `envoyhome-local` / `ollama`. No `protocolApiVersion` bump. |

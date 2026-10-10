@@ -108,8 +108,9 @@ test("V-UX-1..5 smoke: nav + account + memory + advanced + pairing QR", async (t
       timeout: 10000,
     });
 
-    // V-UX-2: pairing QR (EnvoyDev three-route — auto-mint on open + copy URI)
+    // V-UX-2: Mesh-first Pair devices (profile invite + auto QR + copy URI)
     await page.getByRole("button", { name: "Pair devices" }).click();
+    await page.waitForSelector("#pairing-invite-profile", { timeout: 10000 });
     await page.waitForSelector("#pairing-qr", { timeout: 10000 });
     const qrSrc = await page.getAttribute("#pairing-qr", "src");
     assert.ok(qrSrc?.startsWith("data:image/"));
@@ -118,17 +119,17 @@ test("V-UX-1..5 smoke: nav + account + memory + advanced + pairing QR", async (t
     assert.ok(await page.getByText("Scan a QR code").isVisible());
     assert.ok(await page.getByText("Connect with hostname").isVisible());
     assert.ok(await page.getByText("Reach it through an SSH hop").isVisible());
-    assert.ok(await page.getByText("Pairing codes").isVisible());
+    assert.ok(await page.getByRole("heading", { name: "Phones" }).isVisible());
 
     await page.getByRole("button", { name: "Chat" }).click();
     await page.waitForSelector("#chat-form", { timeout: 10000 });
 
     await page.getByRole("button", { name: "Pair devices" }).click();
     await page.waitForSelector("#pairing-qr-fresh");
-    assert.ok(await page.getByText("Pairing codes").isVisible());
+    assert.ok(await page.getByRole("heading", { name: "Phones" }).isVisible());
 
-    // V-UX-3: Channels — Telegram config form in Settings
-    await page.getByRole("button", { name: "Channels" }).click();
+    // V-UX-3: optional IM channels — Telegram config form in Settings
+    await page.getByRole("button", { name: "IM channels" }).click();
     await page.waitForSelector("text=Telegram");
     assert.ok(await page.locator("#tg-config").isVisible());
     assert.ok(await page.locator("#tg-enable").isVisible());
@@ -157,7 +158,7 @@ test("V-UX-1..5 smoke: nav + account + memory + advanced + pairing QR", async (t
     assert.ok(await page.getByText("Actuation journal").isVisible());
 
     // §10.1 nav slices
-    await page.getByRole("button", { name: "Links" }).click();
+    await page.getByRole("button", { name: "Channel links" }).click();
     await page.waitForSelector("#bind-sender");
     await page.getByRole("button", { name: "Skills" }).click();
     await page.waitForSelector("#install-skill");

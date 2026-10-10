@@ -962,15 +962,39 @@ body[data-view="chat"] .chat-composer {
   gap: 0.5rem;
 }
 
+.pairing-invite {
+  margin-bottom: 1rem;
+}
+
 .pairing-code-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.75rem;
   padding: 0.65rem 0.85rem;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel-2);
+}
+
+.pairing-code-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.pairing-assign {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+}
+
+.pairing-assign select {
+  max-width: 16rem;
 }
 
 .pairing-code-row[data-device-state="revoked"] {
