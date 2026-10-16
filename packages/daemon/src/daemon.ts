@@ -15,6 +15,11 @@ import { PairingStore } from "./pairing.js";
 import { createMeshHost, type MeshHostHandle } from "./mesh-host.js";
 import { MemoryFacade } from "@envoyhome/memory";
 import telegramPlugin from "@envoyhome/channel-telegram";
+import discordPlugin from "@envoyhome/channel-discord";
+import slackPlugin from "@envoyhome/channel-slack";
+import feishuPlugin from "@envoyhome/channel-feishu";
+import dingtalkPlugin from "@envoyhome/channel-dingtalk";
+import wecomPlugin from "@envoyhome/channel-wecom";
 import mqttPlugin from "@envoyhome/channel-mqtt";
 import haPlugin from "@envoyhome/channel-homeassistant";
 import { ChannelService } from "./channels/service.js";
@@ -27,11 +32,15 @@ import { ActuationService } from "./actuation-service.js";
 import { PushTokenStore } from "./push-tokens.js";
 import { PushDispatcher } from "./push-dispatch.js";
 import { WorkflowStore } from "./workflows.js";
+import { WorkflowStepTemplateStore } from "./workflow-step-templates.js";
 import { SkillService } from "./skills.js";
 import { ArtifactService } from "./artifacts.js";
 import { ProductEventBus, homeEventDispositions } from "./product-events.js";
 import { ScheduleService } from "./schedule/service.js";
 import { LocalEngineService } from "./local-engine/service.js";
+import { ensureSmarthomeToolSpecsRegistered } from "./workflow-tools.js";
+import { DemoHaService } from "./demo-ha.js";
+import { DemoMqttService } from "./demo-mqtt.js";
 
 export interface RunningDaemon {
   config: DaemonConfig;
@@ -46,6 +55,7 @@ export interface RunningDaemon {
   providers: ProviderStore;
   harnesses: HarnessStore;
   workflows: WorkflowStore;
+  workflowStepTemplates: WorkflowStepTemplateStore;
   schedules: ScheduleService;
   skills: SkillService;
   artifacts: ArtifactService;
@@ -84,7 +94,16 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     stateDir: config.stateDir,
     bindings,
     logger,
-    bundledPlugins: [telegramPlugin, mqttPlugin, haPlugin],
+    bundledPlugins: [
+      telegramPlugin,
+      discordPlugin,
+      slackPlugin,
+      feishuPlugin,
+      dingtalkPlugin,
+      wecomPlugin,
+      mqttPlugin,
+      haPlugin,
+    ],
   });
   await channels.loadPersisted();
   const paths = homePaths(config.stateDir);
@@ -97,10 +116,14 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   await harnesses.load();
   const workflows = new WorkflowStore(paths);
   await workflows.reload();
+  const workflowStepTemplates = new WorkflowStepTemplateStore(paths);
   const skills = new SkillService(paths);
   const artifacts = new ArtifactService(paths, () => config.publicBaseUrl);
   const actuations = new ActuationService(paths);
   const pushTokens = new PushTokenStore(paths);
+  ensureSmarthomeToolSpecsRegistered();
+  const demoHa = new DemoHaService();
+  const demoMqtt = new DemoMqttService();
   const turns = new TurnService(
     paths,
     sessions,
@@ -109,8 +132,12 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     accounts,
     memory,
     workflows,
+    skills,
+    channels,
+    actuations,
   );
   const events = new ProductEventBus();
+  localEngine.setEmit((event, data) => events.emit(event, data));
   const schedules = new ScheduleService({
     paths,
     defaultTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -181,17 +208,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     const defs = workflows.mergedForAccount(a.accountId);
     await schedules.syncWorkflowSchedules(
       a.accountId,
-      defs
-        .filter((w) => typeof w.match.schedule === "string")
-        .map((w) => ({
-          id: w.id,
-          schedule: w.match.schedule as string,
-          canActuate: w.steps.some(
-            (s) =>
-              s.type === "tool" &&
-              (s["name"] === "ha_call_service" || s["name"] === "mqtt_publish"),
-          ),
-        })),
+      workflows.scheduleSyncRows(defs),
     );
   }
   const mesh = createMeshHost({
@@ -257,6 +274,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       providers,
       harnesses,
       workflows,
+      workflowStepTemplates,
       schedules,
       skills,
       artifacts,
@@ -264,6 +282,8 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       pushTokens,
       push,
       localEngine,
+      demoHa,
+      demoMqtt,
       activeTurns: () => turns.activeTurnCount(),
       meshStatus: () => mesh.status(),
       meshDualModeNotes: () => mesh.dualModeNotes(),
@@ -277,6 +297,8 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   wsRef = ws;
   await localEngine.restoreOnBoot();
   stoppers.push(() => localEngine.stop());
+  stoppers.push(() => demoHa.stop(channels).catch(() => undefined));
+  stoppers.push(() => demoMqtt.stop(channels).catch(() => undefined));
   // Reflect the OS-assigned port (port: 0 in tests) into config so mintPairing
   // appends the resolved WS port (Design A.2).
   config.wsPort = ws.host.port;
@@ -336,6 +358,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     providers,
     harnesses,
     workflows,
+    workflowStepTemplates,
     schedules,
     skills,
     artifacts,

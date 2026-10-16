@@ -32,6 +32,8 @@ v1 is **B0–B14**. Desktop + mobile thin clients are the active product path. D
 
 ⚠️ Actuation (`ha_call_service`, `mqtt_publish`) is **`admin`** tier; unattended actuation needs a grant. The safety class (unlock, garage, valve, gate, disarm, …) is never grant-covered (Design §5.7.2, conventions R13).
 
+**Smart home guides:** [`docs/smart-home.md`](docs/smart-home.md) · [`docs/homeassistant-setup.md`](docs/homeassistant-setup.md) · [`docs/mqtt-setup.md`](docs/mqtt-setup.md)
+
 ## Quick commands
 
 ```bash

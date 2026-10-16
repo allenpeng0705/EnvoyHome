@@ -16,8 +16,8 @@
 //      changelog row, and add an Appendix A entry.
 //   3. Never add a protocol-level `apiVersion` alongside `methods[]`.
 
-/** The wire compatibility axis. Currently `1` (Design §3.7). */
-export const PROTOCOL_API_VERSION = 1 as const;
+/** The wire compatibility axis. Currently `2` (Design §3.7). */
+export const PROTOCOL_API_VERSION = 2 as const;
 
 /** Product name carried in the pairing URI `app=` parameter and `home.hello`. */
 export const PRODUCT_NAME = "EnvoyHome" as const;

@@ -46,6 +46,52 @@ import type { ArtifactService } from "./artifacts.js";
 import type { PushTokenStore, PushPlatform } from "./push-tokens.js";
 import type { PushDispatcher } from "./push-dispatch.js";
 import type { ScheduleService } from "./schedule/service.js";
+import type { SchedulePayload } from "./schedule/types.js";
+import {
+  normalizeScheduleSpec,
+  normalizeUserSchedulePayload,
+} from "./schedule/validate-payload.js";
+import { listWorkflowTools, workflowToolNameSet } from "./workflow-tools.js";
+import {
+  draftWorkflowFromText,
+  draftWorkflowNodePrompt,
+} from "./workflow-draft.js";
+import { isHomeAssistantReady, isMqttReady } from "./home-intent.js";
+
+async function resolveUserSchedulePayload(
+  deps: RouterDeps,
+  accountId: string,
+  raw: unknown,
+): Promise<SchedulePayload> {
+  const parsed = normalizeUserSchedulePayload(raw);
+  if (!parsed.ok) {
+    throw Object.assign(new Error(`envoyhome.bad_params: ${parsed.reason}`), {
+      rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", parsed.reason),
+    });
+  }
+  const payload = parsed.payload;
+  if (payload.kind === "workflow") {
+    await deps.workflows.ensureLoaded();
+    const wf = deps.workflows.getWorkflow(payload.workflowId!, accountId);
+    if (!wf) {
+      throw Object.assign(new Error("envoyhome.bad_params: unknown workflow"), {
+        rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "unknown workflow"),
+      });
+    }
+  }
+  if (payload.kind === "tool") {
+    const known = await workflowToolNameSet({
+      skills: deps.skills,
+      channels: deps.channels,
+    });
+    if (!known.has(payload.toolName!)) {
+      throw Object.assign(new Error("envoyhome.bad_params: unknown tool"), {
+        rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "unknown tool"),
+      });
+    }
+  }
+  return payload;
+}
 
 export interface RouterDeps {
   config: DaemonConfig;
@@ -70,6 +116,7 @@ export interface RouterDeps {
   providers: ProviderStore;
   harnesses: HarnessStore;
   workflows: WorkflowStore;
+  workflowStepTemplates: import("./workflow-step-templates.js").WorkflowStepTemplateStore;
   schedules: ScheduleService;
   skills: SkillService;
   artifacts: ArtifactService;
@@ -81,6 +128,10 @@ export interface RouterDeps {
   push: PushDispatcher;
   /** EnvoyHome Local / Ollama engine (Design §8.5). */
   localEngine: import("./local-engine/service.js").LocalEngineService;
+  /** Local fake-ha demo (optional — tests may omit). */
+  demoHa?: import("./demo-ha.js").DemoHaService;
+  /** Local fake-mqtt demo (optional — tests may omit; can run alongside demoHa). */
+  demoMqtt?: import("./demo-mqtt.js").DemoMqttService;
 }
 
 function scopeOf(method: string): "loopback-owner" | "owner-scope" | "account-scoped" | undefined {
@@ -157,6 +208,50 @@ function mapChannelError(err: unknown): never {
   throw err;
 }
 
+/** Merge Settings inject caps into policy.json caps (Memory Design §4.2.1). */
+function mergeInjectCaps(
+  prev: Record<string, unknown>,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...prev };
+  for (const asset of ["l1", "l2", "l3"] as const) {
+    const row = patch[asset];
+    if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+    const src = row as Record<string, unknown>;
+    const prior =
+      out[asset] && typeof out[asset] === "object" && !Array.isArray(out[asset])
+        ? { ...(out[asset] as Record<string, unknown>) }
+        : {};
+    if (typeof src.injectBudget === "number" && Number.isFinite(src.injectBudget)) {
+      prior.injectBudget = Math.max(0, Math.floor(src.injectBudget));
+    }
+    if (typeof src.rawSoftCap === "number" && Number.isFinite(src.rawSoftCap)) {
+      prior.rawSoftCap = Math.max(0, Math.floor(src.rawSoftCap));
+    }
+    if (Object.keys(prior).length) out[asset] = prior;
+  }
+  return out;
+}
+
+/** Strip unknown keys so listMemory/setMemorySettings caps stay schema-clean. */
+function wireInjectCaps(raw: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const asset of ["l1", "l2", "l3"] as const) {
+    const row = raw[asset];
+    if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+    const src = row as Record<string, unknown>;
+    const clean: Record<string, number> = {};
+    if (typeof src.injectBudget === "number" && Number.isFinite(src.injectBudget)) {
+      clean.injectBudget = Math.max(0, Math.floor(src.injectBudget));
+    }
+    if (typeof src.rawSoftCap === "number" && Number.isFinite(src.rawSoftCap)) {
+      clean.rawSoftCap = Math.max(0, Math.floor(src.rawSoftCap));
+    }
+    if (Object.keys(clean).length) out[asset] = clean;
+  }
+  return out;
+}
+
 function mapStoreError(err: unknown): never {
   if (err instanceof MemoryError) {
     if (err.code === "cross_account") {
@@ -180,6 +275,9 @@ function mapStoreError(err: unknown): never {
     if (err.kind === "rate_limited") {
       throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", err.message);
     }
+    throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", err.message);
+  }
+  if (err instanceof Error && /envoyhome\.tool_unavailable/.test(err.message)) {
     throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", err.message);
   }
   throw err;
@@ -699,10 +797,13 @@ export function createDispatcher(deps: RouterDeps) {
             reviewEnabled: policy.reviewEnabled,
             sessionRetentionDays: policy.sessionRetentionDays,
           });
+          const active = deps.turns.injectPreviewActive(accountId);
+          const resolved = await deps.turns.resolveInjectForAccount(accountId, active);
           const listed = await deps.memory.listMemory(accountId, {
             includeContent: params.includeContent === true,
+            caps: resolved.caps,
           });
-          // Wire schema (A.9) — strip non-schema extras.
+          // Wire schema (A.9) — strip non-schema extras; injectProfiles/caps additive §4.2.1.
           return {
             accountId: listed.accountId,
             profileSummary: listed.profileSummary,
@@ -715,6 +816,9 @@ export function createDispatcher(deps: RouterDeps) {
               rawSoftCap: n.rawSoftCap,
               sectionsOmitted: n.sectionsOmitted,
             })),
+            injectBudgetMode: resolved.injectBudgetMode,
+            injectProfiles: resolved.injectProfiles,
+            caps: wireInjectCaps(policy.caps),
             reviewEnabled: listed.reviewEnabled,
             flushEnabled: listed.flushEnabled,
             sessionRetentionDays: listed.sessionRetentionDays,
@@ -733,11 +837,24 @@ export function createDispatcher(deps: RouterDeps) {
             flushEnabled?: boolean;
             reviewEnabled?: boolean;
             sessionRetentionDays?: number;
+            injectBudgetMode?: "auto" | "baseline" | "custom";
+            caps?: Record<string, unknown>;
           } = {};
           if (typeof params.flushEnabled === "boolean") patch.flushEnabled = params.flushEnabled;
           if (typeof params.reviewEnabled === "boolean") patch.reviewEnabled = params.reviewEnabled;
           if (typeof params.sessionRetentionDays === "number") {
             patch.sessionRetentionDays = params.sessionRetentionDays;
+          }
+          if (
+            params.injectBudgetMode === "auto" ||
+            params.injectBudgetMode === "baseline" ||
+            params.injectBudgetMode === "custom"
+          ) {
+            patch.injectBudgetMode = params.injectBudgetMode;
+          }
+          if (params.caps && typeof params.caps === "object" && !Array.isArray(params.caps)) {
+            const prev = await deps.turns.policy.get(accountId);
+            patch.caps = mergeInjectCaps(prev.caps, params.caps as Record<string, unknown>);
           }
           const next = await deps.turns.policy.write(accountId, patch);
           deps.memory.setAccountMemorySettings(accountId, {
@@ -750,6 +867,12 @@ export function createDispatcher(deps: RouterDeps) {
             flushEnabled: next.flushEnabled,
             reviewEnabled: next.reviewEnabled,
             sessionRetentionDays: next.sessionRetentionDays,
+            injectBudgetMode: next.injectBudgetMode,
+            caps: wireInjectCaps(
+              next.caps && typeof next.caps === "object" && !Array.isArray(next.caps)
+                ? (next.caps as Record<string, unknown>)
+                : {},
+            ),
           };
         } catch (err) {
           mapStoreError(err);
@@ -859,7 +982,63 @@ export function createDispatcher(deps: RouterDeps) {
           caller.kind === "device" && caller.accountIds.length === 1
             ? caller.accountIds[0]
             : undefined;
-        return deps.channels.getChannelStatus(id, callerAccount, params.all === true);
+        const status = deps.channels.getChannelStatus(id, callerAccount, params.all === true);
+        // Additive ready flag for Home chat visibility (Design §5.7.8 / V-UX-8).
+        if (id === "homeassistant") {
+          return { ...status, ready: await isHomeAssistantReady(deps.channels) };
+        }
+        if (id === "mqtt") {
+          return { ...status, ready: await isMqttReady(deps.channels) };
+        }
+        return status;
+      }
+      case "home.startDemoHa": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          if (!deps.demoHa) {
+            throw Object.assign(new Error("envoyhome.tool_unavailable: demo HA not available"), {
+              code: "bad_params",
+            });
+          }
+          return await deps.demoHa.useDemoHa({ channels: deps.channels, accountId });
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.getDemoHaStatus": {
+        return deps.demoHa?.status() ?? { running: false };
+      }
+      case "home.stopDemoHa": {
+        try {
+          await deps.demoHa?.stop(deps.channels);
+          return { ok: true };
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.startDemoMqtt": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          if (!deps.demoMqtt) {
+            throw Object.assign(new Error("envoyhome.tool_unavailable: demo MQTT not available"), {
+              code: "bad_params",
+            });
+          }
+          return await deps.demoMqtt.useDemoMqtt({ channels: deps.channels, accountId });
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.getDemoMqttStatus": {
+        return deps.demoMqtt?.status() ?? { running: false };
+      }
+      case "home.stopDemoMqtt": {
+        try {
+          await deps.demoMqtt?.stop(deps.channels);
+          return { ok: true };
+        } catch (err) {
+          mapStoreError(err);
+        }
       }
       case "home.setChannelConfig": {
         try {
@@ -891,7 +1070,33 @@ export function createDispatcher(deps: RouterDeps) {
             ...(typeof params.agentId === "string" ? { agentId: params.agentId } : {}),
             ...(typeof params.title === "string" ? { title: params.title } : {}),
             ...(typeof params.channel === "string" ? { channel: params.channel } : {}),
+            ...(params.purpose === "home" || params.purpose === "general"
+              ? { purpose: params.purpose }
+              : {}),
           });
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.uploadChatMedia": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          const { homePaths } = await import("./home-paths.js");
+          const { storeChatMedia, ChatMediaError } = await import("./chat-media.js");
+          try {
+            return await storeChatMedia({
+              paths: homePaths(deps.config.stateDir),
+              accountId,
+              fileName: params.fileName as string,
+              contentBase64: params.contentBase64 as string,
+              ...(typeof params.mimeType === "string" ? { mimeType: params.mimeType } : {}),
+            });
+          } catch (err) {
+            if (err instanceof ChatMediaError) {
+              throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", err.message);
+            }
+            throw err;
+          }
         } catch (err) {
           mapStoreError(err);
         }
@@ -899,11 +1104,22 @@ export function createDispatcher(deps: RouterDeps) {
       case "home.sendMessage": {
         try {
           const accountId = requireBoundAccount(method, caller, params);
+          const { normalizeMediaList, ChatMediaError } = await import("./chat-media.js");
+          let media;
+          try {
+            media = normalizeMediaList(params.media);
+          } catch (err) {
+            if (err instanceof ChatMediaError) {
+              throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", err.message);
+            }
+            throw err;
+          }
           return await deps.turns.sendMessage({
             accountId,
             sessionId: params.sessionId as string,
             text: params.text as string,
             callerKind: caller.kind,
+            ...(media.length ? { media } : {}),
             ...(typeof params.clientTurnId === "string"
               ? { clientTurnId: params.clientTurnId }
               : {}),
@@ -1046,13 +1262,17 @@ export function createDispatcher(deps: RouterDeps) {
             ...(params.cost && typeof params.cost === "object"
               ? { cost: params.cost as { inputPerMTok?: number; outputPerMTok?: number; currency?: string } }
               : {}),
-            ...(typeof params.costRank === "number" ? { costRank: params.costRank } : {}),
-            ...(typeof params.paramCountB === "number" ? { paramCountB: params.paramCountB } : {}),
+            ...(params.costRank === null || typeof params.costRank === "number"
+              ? { costRank: params.costRank as number | null }
+              : {}),
+            ...(params.paramCountB === null || typeof params.paramCountB === "number"
+              ? { paramCountB: params.paramCountB as number | null }
+              : {}),
             ...(typeof params.capabilityRank === "number"
               ? { capabilityRank: params.capabilityRank }
               : {}),
-            ...(typeof params.contextTokens === "number"
-              ? { contextTokens: params.contextTokens }
+            ...(params.contextTokens === null || typeof params.contextTokens === "number"
+              ? { contextTokens: params.contextTokens as number | null }
               : {}),
             ...(typeof params.supportsTools === "boolean"
               ? { supportsTools: params.supportsTools }
@@ -1063,10 +1283,11 @@ export function createDispatcher(deps: RouterDeps) {
             ...(typeof params.supportsLogprobs === "boolean"
               ? { supportsLogprobs: params.supportsLogprobs }
               : {}),
-            ...(params.latencyClass === "fast" ||
+            ...(params.latencyClass === null ||
+            params.latencyClass === "fast" ||
             params.latencyClass === "standard" ||
             params.latencyClass === "slow"
-              ? { latencyClass: params.latencyClass }
+              ? { latencyClass: params.latencyClass as "fast" | "standard" | "slow" | null }
               : {}),
           });
           return { provider: { id: rec.id, kind: rec.kind, healthy: rec.enabled } };
@@ -1145,10 +1366,16 @@ export function createDispatcher(deps: RouterDeps) {
       case "home.setPlacementFilter": {
         try {
           const accountId = requireBoundAccount(method, caller, params);
-          await deps.providers.setPlacementFilter(
-            accountId,
-            params.filter as "any" | "local" | "cloud",
-          );
+          const filter = params.filter as "any" | "local" | "cloud";
+          // shared:true = enter/leave Local only for every profile (daemon-wide).
+          // Callers MUST NOT pass shared on ordinary per-profile Cloud / Smart saves.
+          if (params.shared === true) {
+            const ids = (await deps.accounts.list()).map((a) => a.accountId);
+            if (!ids.includes(accountId)) ids.push(accountId);
+            await deps.providers.setSharedLocalOnly(filter === "local", ids);
+            return { ok: true };
+          }
+          await deps.providers.setPlacementFilter(accountId, filter);
           return { ok: true };
         } catch (err) {
           mapStoreError(err);
@@ -1167,12 +1394,74 @@ export function createDispatcher(deps: RouterDeps) {
         // owner-scope enforced by assertScope / METHODS.scope
         return await deps.localEngine.status();
       }
+      case "home.downloadLocalModel": {
+        try {
+          const modelId = typeof params.modelId === "string" ? params.modelId : "";
+          return deps.localEngine.downloadModel({ modelId });
+        } catch (err) {
+          mapLocalEngineError(err);
+          mapStoreError(err);
+        }
+      }
+      case "home.searchHuggingFaceModels": {
+        try {
+          const query = typeof params.query === "string" ? params.query : "";
+          const limit =
+            typeof params.limit === "number" && Number.isFinite(params.limit)
+              ? Math.trunc(params.limit)
+              : undefined;
+          return await deps.localEngine.searchHuggingFaceModels({
+            query,
+            ...(limit !== undefined ? { limit } : {}),
+          });
+        } catch (err) {
+          mapLocalEngineError(err);
+          mapStoreError(err);
+        }
+      }
+      case "home.listHuggingFaceGgufFiles": {
+        try {
+          const repoId = typeof params.repoId === "string" ? params.repoId : "";
+          return await deps.localEngine.listHuggingFaceGgufFiles({ repoId });
+        } catch (err) {
+          mapLocalEngineError(err);
+          mapStoreError(err);
+        }
+      }
+      case "home.downloadLocalModelUrl": {
+        try {
+          const url = typeof params.url === "string" ? params.url : "";
+          return deps.localEngine.downloadModelUrl({ url });
+        } catch (err) {
+          mapLocalEngineError(err);
+          mapStoreError(err);
+        }
+      }
+      case "home.cancelLocalModelDownload": {
+        try {
+          const fileName = typeof params.fileName === "string" ? params.fileName : "";
+          return await deps.localEngine.cancelModelDownload({ fileName });
+        } catch (err) {
+          mapLocalEngineError(err);
+          mapStoreError(err);
+        }
+      }
+      case "home.resumeLocalModelDownload": {
+        try {
+          const fileName = typeof params.fileName === "string" ? params.fileName : "";
+          return deps.localEngine.resumeModelDownload({ fileName });
+        } catch (err) {
+          mapLocalEngineError(err);
+          mapStoreError(err);
+        }
+      }
       case "home.enableLocalEngine": {
         try {
           const prefer =
             params.prefer === "attach" || params.prefer === "spawn" || params.prefer === "auto"
               ? params.prefer
               : "auto";
+          // prefer=attach is refused in LocalEngineService (Home never reuses Mesh :18790).
           const accountId = optionalBoundAccountId(method, caller, params);
           return await deps.localEngine.enableLocal({
             prefer,
@@ -1290,35 +1579,21 @@ export function createDispatcher(deps: RouterDeps) {
       }
 
       case "home.listSources": {
-        const filterAccount =
-          caller.kind === "loopback-owner" || caller.ownerTrusted
-            ? typeof params.accountId === "string"
-              ? params.accountId
-              : undefined
-            : requireBoundAccount(method, caller, params);
-        const all = await deps.channels.objects.list({
+        // Still require a bound account for device callers (auth), but do not filter by binder —
+        // household registry is shared (Design 2026-10-16l).
+        if (caller.kind !== "loopback-owner" && !caller.ownerTrusted) {
+          requireBoundAccount(method, caller, params);
+        }
+        // pruneUnbound runs inside list(); re-run for an accurate capped flag.
+        const prune = await deps.channels.objects.pruneUnbound();
+        const sources = await deps.channels.objects.list({
           ...(typeof params.channel === "string" ? { channel: params.channel } : {}),
           ...(params.bound === true ? { bound: true } : {}),
           ...(params.bound === false ? { bound: false } : {}),
         });
-        let sources = all;
-        if (filterAccount) {
-          sources = all.filter(
-            (o) =>
-              o.accountId === filterAccount ||
-              (o.shared && o.accountId !== null && o.accountId !== filterAccount),
-          );
-        } else if (caller.kind === "device") {
-          sources = all.filter(
-            (o) =>
-              (o.accountId !== null && caller.accountIds.includes(o.accountId)) ||
-              (o.shared && o.accountId !== null),
-          );
-        }
-        const unboundCapped = sources.filter((o) => !o.bound).length > 50;
         return {
           sources: sources.map(wireSourceRecord),
-          unboundCapped,
+          unboundCapped: prune.capped || prune.pruned > 0,
         };
       }
       case "home.setSourceBinding": {
@@ -1439,6 +1714,7 @@ export function createDispatcher(deps: RouterDeps) {
           workflows: workflows.map((w) => ({
             id: w.id,
             source: w.source,
+            enabled: w.enabled,
             ...(w.accountId !== undefined ? { accountId: w.accountId } : {}),
           })),
         };
@@ -1459,25 +1735,291 @@ export function createDispatcher(deps: RouterDeps) {
       }
       case "home.reloadWorkflows": {
         const count = await deps.workflows.reload();
-        for (const a of await deps.accounts.list()) {
-          await deps.schedules.watchAccount(a.accountId);
-          const defs = deps.workflows.mergedForAccount(a.accountId);
-          await deps.schedules.syncWorkflowSchedules(
-            a.accountId,
-            defs
-              .filter((w) => typeof w.match.schedule === "string")
-              .map((w) => ({
-                id: w.id,
-                schedule: w.match.schedule as string,
-                canActuate: w.steps.some(
-                  (s) =>
-                    s.type === "tool" &&
-                    (s["name"] === "ha_call_service" || s["name"] === "mqtt_publish"),
-                ),
-              })),
+        await syncWorkflowSchedules(deps);
+        return { ok: true, count };
+      }
+      case "home.listWorkflowTools": {
+        const tools = await listWorkflowTools({
+          skills: deps.skills,
+          channels: deps.channels,
+        });
+        return {
+          tools: tools.map((row) => ({
+            name: row.name,
+            risk: row.risk,
+            source: row.source,
+            summary: row.summary,
+            available: row.available,
+            ...(row.sampleArgs !== undefined ? { sampleArgs: row.sampleArgs } : {}),
+            ...(row.argChoices !== undefined ? { argChoices: row.argChoices } : {}),
+            ...(row.argChoiceGroups !== undefined
+              ? { argChoiceGroups: row.argChoiceGroups }
+              : {}),
+            ...(row.argChoiceDependsOn !== undefined
+              ? { argChoiceDependsOn: row.argChoiceDependsOn }
+              : {}),
+            ...(row.unavailableReason !== undefined
+              ? { unavailableReason: row.unavailableReason }
+              : {}),
+          })),
+        };
+      }
+      case "home.draftWorkflow": {
+        const accountId = String(params.accountId ?? "");
+        if (!accountId) {
+          throw Object.assign(new Error("envoyhome.bad_params: accountId required"), {
+            rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "accountId required"),
+          });
+        }
+        try {
+          const tools = await listWorkflowTools({
+            skills: deps.skills,
+            channels: deps.channels,
+          });
+          const hintRaw = Array.isArray(params.hintTools) ? params.hintTools : [];
+          const hintTools = hintRaw.filter((x): x is string => typeof x === "string" && x.length > 0);
+          const readyNames = tools.filter((t) => t.available !== false).map((t) => t.name);
+          const toolNames = hintTools.length > 0 ? hintTools : readyNames;
+          const known = await workflowToolNameSet({
+            skills: deps.skills,
+            channels: deps.channels,
+          });
+          const drafted = await draftWorkflowFromText({
+            text: String(params.text ?? ""),
+            toolNames,
+            knownTools: known,
+            complete: (messages) => deps.turns.completeForAccount(accountId, messages),
+            ...(typeof params.currentYaml === "string" && params.currentYaml.trim()
+              ? { currentYaml: params.currentYaml }
+              : {}),
+          });
+          return { yaml: drafted.yaml };
+        } catch (err) {
+          throw Object.assign(
+            new Error(err instanceof Error ? err.message : String(err)),
+            {
+              rpcError: makeError(
+                TRANSPORT_CODE_BAD_PARAMS,
+                "bad_params",
+                err instanceof Error ? err.message : String(err),
+              ),
+            },
           );
         }
-        return { ok: true, count };
+      }
+      case "home.draftWorkflowPrompt": {
+        const accountId = String(params.accountId ?? "");
+        if (!accountId) {
+          throw Object.assign(new Error("envoyhome.bad_params: accountId required"), {
+            rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "accountId required"),
+          });
+        }
+        const nodeType = params.nodeType === "llm_summarize" ? "llm_summarize" : "llm_fill";
+        try {
+          const drafted = await draftWorkflowNodePrompt({
+            nodeType,
+            ...(typeof params.goal === "string" ? { goal: params.goal } : {}),
+            ...(typeof params.currentPrompt === "string"
+              ? { currentPrompt: params.currentPrompt }
+              : {}),
+            complete: (messages) => deps.turns.completeForAccount(accountId, messages),
+          });
+          return { prompt: drafted.prompt };
+        } catch (err) {
+          throw Object.assign(
+            new Error(err instanceof Error ? err.message : String(err)),
+            {
+              rpcError: makeError(
+                TRANSPORT_CODE_BAD_PARAMS,
+                "bad_params",
+                err instanceof Error ? err.message : String(err),
+              ),
+            },
+          );
+        }
+      }
+      case "home.listWorkflowStepTemplates": {
+        const accountId =
+          typeof params.accountId === "string" && params.accountId.length > 0
+            ? (params.accountId as string)
+            : undefined;
+        const templates = await deps.workflowStepTemplates.list(accountId);
+        return {
+          templates: templates.map((t) => ({
+            id: t.id,
+            label: t.label,
+            nodeType: t.nodeType,
+            prompt: t.prompt,
+            source: t.source,
+            ...(t.out !== undefined ? { out: t.out } : {}),
+            ...(t.accountId !== undefined ? { accountId: t.accountId } : {}),
+          })),
+        };
+      }
+      case "home.putWorkflowStepTemplate": {
+        const accountId =
+          typeof params.accountId === "string" && params.accountId.length > 0
+            ? (params.accountId as string)
+            : undefined;
+        try {
+          const saved = await deps.workflowStepTemplates.put({
+            label: String(params.label ?? ""),
+            nodeType: params.nodeType === "llm_summarize" ? "llm_summarize" : "llm_fill",
+            prompt: String(params.prompt ?? ""),
+            ...(typeof params.id === "string" ? { id: params.id } : {}),
+            ...(typeof params.out === "string" ? { out: params.out } : {}),
+            ...(accountId ? { accountId } : {}),
+          });
+          return {
+            ok: true,
+            id: saved.id,
+            label: saved.label,
+            nodeType: saved.nodeType,
+            source: saved.source,
+          };
+        } catch (err) {
+          throw Object.assign(
+            new Error(err instanceof Error ? err.message : String(err)),
+            {
+              rpcError: makeError(
+                TRANSPORT_CODE_BAD_PARAMS,
+                "bad_params",
+                err instanceof Error ? err.message : String(err),
+              ),
+            },
+          );
+        }
+      }
+      case "home.removeWorkflowStepTemplate": {
+        const accountId =
+          typeof params.accountId === "string" && params.accountId.length > 0
+            ? (params.accountId as string)
+            : undefined;
+        const ok = await deps.workflowStepTemplates.remove(
+          String(params.id ?? ""),
+          accountId,
+        );
+        return { ok };
+      }
+      case "home.validateWorkflow": {
+        const known = await workflowToolNameSet({
+          skills: deps.skills,
+          channels: deps.channels,
+        });
+        const result = deps.workflows.validate(String(params.yaml ?? ""), known);
+        if (result.ok) return { ok: true, id: result.id };
+        return { ok: false, error: result.error };
+      }
+      case "home.putWorkflow": {
+        const accountId =
+          typeof params.accountId === "string" && params.accountId.length > 0
+            ? (params.accountId as string)
+            : undefined;
+        try {
+          const known = await workflowToolNameSet({
+            skills: deps.skills,
+            channels: deps.channels,
+          });
+          const { id } = await deps.workflows.put(
+            String(params.yaml ?? ""),
+            accountId,
+            known,
+          );
+          await syncWorkflowSchedules(deps);
+          return { ok: true, id };
+        } catch (err) {
+          throw Object.assign(
+            new Error(err instanceof Error ? err.message : String(err)),
+            {
+              rpcError: makeError(
+                TRANSPORT_CODE_BAD_PARAMS,
+                "bad_params",
+                err instanceof Error ? err.message : String(err),
+              ),
+            },
+          );
+        }
+      }
+      case "home.removeWorkflow": {
+        const accountId =
+          typeof params.accountId === "string" && params.accountId.length > 0
+            ? (params.accountId as string)
+            : undefined;
+        try {
+          await deps.workflows.remove(params.id as string, accountId);
+          await syncWorkflowSchedules(deps);
+          return { ok: true };
+        } catch (err) {
+          throw Object.assign(
+            new Error(err instanceof Error ? err.message : String(err)),
+            {
+              rpcError: makeError(
+                TRANSPORT_CODE_BAD_PARAMS,
+                "bad_params",
+                err instanceof Error ? err.message : String(err),
+              ),
+            },
+          );
+        }
+      }
+      case "home.setWorkflowEnabled": {
+        const accountId =
+          typeof params.accountId === "string" && params.accountId.length > 0
+            ? (params.accountId as string)
+            : undefined;
+        try {
+          const next = await deps.workflows.setEnabled(
+            params.id as string,
+            Boolean(params.enabled),
+            accountId,
+          );
+          await syncWorkflowSchedules(deps);
+          return { ok: true, id: next.id, enabled: next.enabled !== false };
+        } catch (err) {
+          throw Object.assign(
+            new Error(err instanceof Error ? err.message : String(err)),
+            {
+              rpcError: makeError(
+                TRANSPORT_CODE_BAD_PARAMS,
+                "bad_params",
+                err instanceof Error ? err.message : String(err),
+              ),
+            },
+          );
+        }
+      }
+      case "home.runWorkflow": {
+        const accountId = requireBoundAccount(method, caller, params);
+        await deps.workflows.ensureLoaded();
+        try {
+          const { runId, results } = await deps.turns.runWorkflowTest({
+            accountId,
+            workflowId: params.id as string,
+            ...(typeof params.text === "string" ? { text: params.text } : {}),
+          });
+          return {
+            ok: results.every((r) => r.ok),
+            runId,
+            results: results.map((r) => ({
+              nodeId: r.nodeId,
+              type: r.type,
+              ok: r.ok,
+              ...(r.detail !== undefined ? { detail: r.detail } : {}),
+              ...(r.output !== undefined ? { output: r.output } : {}),
+            })),
+          };
+        } catch (err) {
+          throw Object.assign(
+            new Error(err instanceof Error ? err.message : String(err)),
+            {
+              rpcError: makeError(
+                TRANSPORT_CODE_BAD_PARAMS,
+                "bad_params",
+                err instanceof Error ? err.message : String(err),
+              ),
+            },
+          );
+        }
       }
 
       /* ---- B9.1 schedules ---- */
@@ -1492,8 +2034,12 @@ export function createDispatcher(deps: RouterDeps) {
             enabled: j.enabled,
             kind: j.spec.kind,
             source: j.source,
+            payloadKind: j.payload.kind,
             ...(j.nextRunAt ? { nextRunAt: j.nextRunAt } : {}),
             ...(j.lastStatus ? { lastStatus: j.lastStatus } : {}),
+            ...(j.payload.message ? { message: j.payload.message } : {}),
+            ...(j.payload.workflowId ? { workflowId: j.payload.workflowId } : {}),
+            ...(j.payload.toolName ? { toolName: j.payload.toolName } : {}),
           })),
         };
       }
@@ -1523,12 +2069,53 @@ export function createDispatcher(deps: RouterDeps) {
       }
       case "home.confirmSchedule": {
         const accountId = requireBoundAccount(method, caller, params);
-        const job = await deps.schedules.confirmProposal(String(params.proposalId));
+        const overrides: {
+          name?: string;
+          payload?: SchedulePayload;
+        } = {};
+        if (typeof params.name === "string" && params.name.trim().length > 0) {
+          overrides.name = params.name.trim();
+        }
+        if (params.payload !== undefined) {
+          overrides.payload = await resolveUserSchedulePayload(deps, accountId, params.payload);
+        }
+        const job = await deps.schedules.confirmProposal(String(params.proposalId), overrides);
         if (job.accountId !== accountId) {
           throw Object.assign(new Error("envoyhome.bad_params: proposal account mismatch"), {
             rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "proposal account mismatch"),
           });
         }
+        return {
+          job: {
+            id: job.id,
+            enabled: job.enabled,
+            ...(job.nextRunAt ? { nextRunAt: job.nextRunAt } : {}),
+          },
+        };
+      }
+      case "home.putSchedule": {
+        const accountId = requireBoundAccount(method, caller, params);
+        const name = String(params.name ?? "").trim();
+        if (!name) {
+          throw Object.assign(new Error("envoyhome.bad_params: name required"), {
+            rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "name required"),
+          });
+        }
+        const specParsed = normalizeScheduleSpec(params.spec);
+        if (!specParsed.ok) {
+          throw Object.assign(new Error(`envoyhome.bad_params: ${specParsed.reason}`), {
+            rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", specParsed.reason),
+          });
+        }
+        const payload = await resolveUserSchedulePayload(deps, accountId, params.payload);
+        await deps.schedules.watchAccount(accountId);
+        const job = await deps.schedules.createJob({
+          accountId,
+          name,
+          spec: specParsed.spec,
+          payload,
+          source: "user",
+        });
         return {
           job: {
             id: job.id,
@@ -1578,6 +2165,20 @@ export function createDispatcher(deps: RouterDeps) {
             verified: s.verified,
           })),
         };
+      }
+      case "home.searchClawHubSkills": {
+        try {
+          const skills = await deps.skills.searchClawHub(
+            params.query as string,
+            typeof params.limit === "number" ? params.limit : undefined,
+          );
+          return { skills };
+        } catch (err) {
+          if (err instanceof SkillsError) {
+            throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", err.message);
+          }
+          throw err;
+        }
       }
       case "home.installSkill": {
         try {
@@ -1652,6 +2253,17 @@ export function createDispatcher(deps: RouterDeps) {
         });
     }
   };
+}
+
+async function syncWorkflowSchedules(deps: RouterDeps): Promise<void> {
+  for (const a of await deps.accounts.list()) {
+    await deps.schedules.watchAccount(a.accountId);
+    const defs = deps.workflows.mergedForAccount(a.accountId);
+    await deps.schedules.syncWorkflowSchedules(
+      a.accountId,
+      deps.workflows.scheduleSyncRows(defs),
+    );
+  }
 }
 
 /** Test helper: run a method as if over RPC and return a HomeResponse-shaped object. */

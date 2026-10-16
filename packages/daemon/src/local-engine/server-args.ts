@@ -4,13 +4,25 @@ export function buildHomeLlamaServerArgs(opts: {
   modelPath: string;
   modelAlias: string;
   port: number;
-  /** -1 = all GPU layers (Metal/CUDA), 0 = CPU. */
+  /** -1 = all GPU layers (Metal/CUDA/Vulkan), 0 = CPU. */
   nGpuLayers?: number;
+  /** When set and `nGpuLayers` omitted: GPU → -1, else 0. */
+  gpuOffload?: boolean;
   ctxSize?: number;
   parallel?: number;
+  /** e.g. `gemma` for Gemma 4 catalog entries. */
+  chatTemplate?: string;
 }): string[] {
-  const ngl = opts.nGpuLayers ?? (process.platform === "darwin" ? -1 : 0);
-  return [
+  const ngl =
+    opts.nGpuLayers ??
+    (opts.gpuOffload === true
+      ? -1
+      : opts.gpuOffload === false
+        ? 0
+        : process.platform === "darwin"
+          ? -1
+          : 0);
+  const args = [
     "-m",
     opts.modelPath,
     "-a",
@@ -26,4 +38,8 @@ export function buildHomeLlamaServerArgs(opts: {
     "--parallel",
     String(opts.parallel ?? 1),
   ];
+  if (opts.chatTemplate?.trim()) {
+    args.push("--chat-template", opts.chatTemplate.trim());
+  }
+  return args;
 }

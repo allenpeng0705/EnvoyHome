@@ -10,6 +10,11 @@ export function joinProviderUrl(baseUrl: string, apiPath: string): string {
     const basePath = u.pathname.replace(/\/+$/, "") || "";
     if (basePath === "" || basePath === "/") {
       u.pathname = path;
+    } else if (/\/openai$/i.test(basePath)) {
+      // Gemini OpenAI-compat mount: …/v1beta/openai + /v1/chat/completions
+      // → …/v1beta/openai/chat/completions (no extra /v1 after /openai).
+      const suffix = path.replace(/^\/v\d+/, "");
+      u.pathname = `${basePath}${suffix.startsWith("/") ? suffix : `/${suffix}`}`;
     } else if (basePath.endsWith("/v1") || /\/v\d+$/.test(basePath)) {
       // https://api.openai.com/v1 + /v1/chat/completions → …/v1/chat/completions
       const suffix = path.replace(/^\/v\d+/, "");

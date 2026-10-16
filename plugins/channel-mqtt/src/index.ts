@@ -3,6 +3,7 @@
  */
 
 import type { ChannelPlugin, OutboundMessage } from "@envoyhome/channel-api";
+import { probeMqttBroker } from "./probe.js";
 
 export const mqttManifest = {
   id: "mqtt",
@@ -14,18 +15,26 @@ export const mqttManifest = {
     brokerUrl: { required: true },
     username: { secret: true, credentialScope: "read" as const },
     password: { secret: true, credentialScope: "read" as const },
+    /** When true, this instance points at EnvoyHome's local fake-mqtt demo. */
+    demo: { required: false },
   },
 };
 
 export function createMqttChannel(): ChannelPlugin {
+  let brokerUrl = "";
   return {
     manifest: mqttManifest,
     async start(ctx) {
+      brokerUrl = typeof ctx.config.brokerUrl === "string" ? ctx.config.brokerUrl.trim() : "";
       ctx.registerSources([]);
-      ctx.log.info(`mqtt: read-only stub for ${ctx.channelAccount}`);
+      ctx.log.info(`mqtt: event-source for ${ctx.channelAccount} (${brokerUrl || "no brokerUrl"})`);
     },
     async health() {
-      return { ok: true, detail: "mqtt stub (no live broker in B14 slice)" };
+      if (!brokerUrl) {
+        return { ok: false, detail: "brokerUrl not configured" };
+      }
+      // Live pub/sub I/O is still a stub; health probes TCP/TLS reachability only.
+      return probeMqttBroker(brokerUrl);
     },
     async send(msg: OutboundMessage) {
       if (msg.kind !== "notify" && msg.kind !== undefined) {

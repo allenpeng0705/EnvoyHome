@@ -35,35 +35,26 @@ export class ObjectRegistry {
     return this.bySource.get(sourceId);
   }
 
-  listForAccount(accountId: string): ObjectRecord[] {
-    return [...this.bySource.values()].filter(
-      (r) => r.accountId === accountId || (r.shared && r.accountId !== null),
-    );
+  /** Household scope: every bound object is visible to every profile (Design 2026-10-16l). */
+  listForAccount(_accountId: string): ObjectRecord[] {
+    return [...this.bySource.values()].filter((r) => r.accountId !== null);
   }
 }
 
 /**
  * Resolve a source to a handle for the calling account.
- * Foreign / unbound / unregistered ⇒ envoyhome.object_not_bound.
+ * Unbound / unregistered ⇒ envoyhome.object_not_bound.
+ * Bound ⇒ any household profile may resolve (Design 2026-10-16l).
  */
 export function resolveObject(
   registry: ObjectRegistry,
   sourceId: string,
-  callerAccountId: string,
+  _callerAccountId: string,
 ): ResolvedObjectHandle {
   const rec = registry.get(sourceId);
   if (!rec || rec.accountId === null) {
     throw Object.assign(
       new Error(`envoyhome.object_not_bound: ${sourceId} unbound or unknown`),
-      { code: "object_not_bound" },
-    );
-  }
-  const allowed =
-    rec.accountId === callerAccountId ||
-    (rec.shared && !["lock", "alarm", "camera", "presence"].includes(rec.class));
-  if (!allowed) {
-    throw Object.assign(
-      new Error(`envoyhome.object_not_bound: ${sourceId} not bound to ${callerAccountId}`),
       { code: "object_not_bound" },
     );
   }

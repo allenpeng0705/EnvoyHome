@@ -279,17 +279,21 @@ export class MemoryFacade {
     });
   }
 
-  /** home.listMemory — echoes the caps contract (V-MEM-18). */
+  /** home.listMemory — echoes the caps contract (V-MEM-18 / V-MEM-22). */
   async listMemory(
     accountId: string,
-    opts?: { includeContent?: boolean; now?: Date },
+    opts?: {
+      includeContent?: boolean;
+      now?: Date;
+      caps?: Parameters<typeof buildStandingInject>[0]["caps"];
+    },
   ) {
     const id = this.assertAccount(accountId);
     const loaded = await this.store.load(id);
-    const inject = this.injectFromLoaded(
-      loaded,
-      opts?.now !== undefined ? { now: opts.now } : {},
-    );
+    const inject = this.injectFromLoaded(loaded, {
+      ...(opts?.now !== undefined ? { now: opts.now } : {}),
+      ...(opts?.caps !== undefined ? { caps: opts.caps } : {}),
+    });
     const days = this.store.todayYesterday(loaded, opts?.now);
 
     const notes = [

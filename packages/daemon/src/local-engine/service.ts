@@ -1,4 +1,4 @@
-// EnvoyHome Local engine + Ollama (Design §8.5) — Adapt EnvoyMesh Envoy Local.
+// EnvoyHome Local engine + Ollama (Design §8.5) — Home-owned; never Mesh Envoy Local.
 
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, readdir, readFile, writeFile, access } from "node:fs/promises";
@@ -10,7 +10,6 @@ import {
   HOME_LOCAL_ENGINE_BASE,
   HOME_LOCAL_ENGINE_PORT,
   HOME_LOCAL_PROVIDER_ID,
-  MESH_ENVOY_LOCAL_BASE,
   OLLAMA_DEFAULT_BASE,
   OLLAMA_PROVIDER_ID,
 } from "./ports.js";
@@ -19,11 +18,30 @@ import { buildHomeLlamaServerArgs } from "./server-args.js";
 import {
   downloadAndExtractLlamaServer,
   findLlamaServerBinary,
+  readRuntimeAccelMarker,
+  runtimeAccelMismatch,
 } from "./download-runtime.js";
 import { resolveLocalBinaryPath, resolveLocalModelPath } from "./path-jail.js";
 import { assertLocalEngineBaseUrl } from "./url-allow.js";
+import {
+  getHomeLocalCatalogModel,
+  getHomeLocalCatalogModelByFileName,
+} from "./catalog.js";
+import { buildHomeLocalRecommendation, type HomeLocalModelPick } from "./hw.js";
+import {
+  assertHuggingFaceGgufUrl,
+  listHuggingFaceGgufFiles,
+  searchHuggingFaceGgufRepos,
+  type HfGgufFile,
+  type HfGgufRepoHit,
+} from "./hf.js";
+import {
+  ModelDownloadManager,
+  type LocalModelDownloadJob,
+} from "./download-manager.js";
+import { detectLocalPlatform, resolveLlamaCppReleaseAssets } from "./platform.js";
 
-export type LocalEngineMode = "off" | "attach" | "spawn" | "ollama";
+export type LocalEngineMode = "off" | "spawn" | "ollama";
 
 export interface LocalEngineConfig {
   enabled: boolean;
@@ -33,8 +51,13 @@ export interface LocalEngineConfig {
   model?: string;
   binaryPath?: string;
   modelPath?: string;
-  /** Last account that enabled (for default provider). */
-  accountId?: string;
+}
+
+export interface LocalEngineRecommendationWire {
+  hardwareSummary: string;
+  reason: string;
+  primary: HomeLocalModelPick;
+  also: HomeLocalModelPick[];
 }
 
 export interface LocalEngineStatus {
@@ -44,12 +67,19 @@ export interface LocalEngineStatus {
   providerId: string;
   healthy: boolean;
   modelIds: string[];
-  meshAttachAvailable: boolean;
   runtimeInstalled: boolean;
   modelsOnDisk: string[];
+  /** Basename of the selected GGUF (config modelPath) when still on disk. */
+  activeModelFile?: string;
   pid?: number;
   hint?: string;
   error?: string;
+  /** Hardware probe summary (Metal/CUDA/CPU + memory). */
+  hardwareSummary?: string;
+  /** Hardware-based curated GGUF recommendation (Adapt EnvoyMesh Envoy Local). */
+  recommendation?: LocalEngineRecommendationWire;
+  /** In-flight / paused / recent GGUF downloads. */
+  downloads?: LocalModelDownloadJob[];
 }
 
 /** Wire shape for enable/disable RPCs (Design A.6 / protocol schemas). */
@@ -75,29 +105,118 @@ const DEFAULT_CFG: LocalEngineConfig = {
 
 const STOP_CHILD_GRACE_MS = 2_000;
 
+function normalizeMode(raw: unknown): LocalEngineMode {
+  if (raw === "spawn" || raw === "ollama" || raw === "off") return raw;
+  // Legacy "attach" (Mesh :18790) is withdrawn — never reuse Mesh Envoy Local.
+  return "off";
+}
+
 export class LocalEngineService {
   private cfg: LocalEngineConfig = { ...DEFAULT_CFG };
   private child: ChildProcess | null = null;
   private stopping = false;
   private opChain: Promise<unknown> = Promise.resolve();
+  private readonly downloads: ModelDownloadManager;
+  private emitEvent: ((event: string, data: unknown) => void) | undefined;
 
   constructor(
     private readonly paths: HomePaths,
     private readonly providers: ProviderStore,
     private readonly logger: DaemonLogger,
-  ) {}
+  ) {
+    this.downloads = new ModelDownloadManager(paths.localEngineModelsDir);
+    this.downloads.setProgressEmit((job) => {
+      this.emitEvent?.("home:local-model-download", job);
+    });
+  }
+
+  setEmit(emit: (event: string, data: unknown) => void): void {
+    this.emitEvent = emit;
+  }
 
   async load(): Promise<void> {
     await mkdir(this.paths.localEngineDir, { recursive: true });
     await mkdir(this.paths.localEngineRuntimeDir, { recursive: true });
     await mkdir(this.paths.localEngineModelsDir, { recursive: true });
+    await this.downloads.hydratePartials({
+      resolveMeta: (fileName) => {
+        const entry = getHomeLocalCatalogModelByFileName(fileName);
+        if (!entry) return {};
+        return { url: entry.url, modelId: entry.id, approxBytes: entry.approxBytes };
+      },
+    });
     try {
       const raw = JSON.parse(
         await readFile(this.paths.localEngineConfigJson, "utf8"),
-      ) as LocalEngineConfig;
-      this.cfg = { ...DEFAULT_CFG, ...raw };
+      ) as Record<string, unknown>;
+      const modeRaw = typeof raw.mode === "string" ? raw.mode : undefined;
+      const mode = normalizeMode(modeRaw);
+      const baseUrlRaw = typeof raw.baseUrl === "string" ? raw.baseUrl : "";
+      const clearedAttach = modeRaw === "attach" || baseUrlRaw.includes(":18790");
+      this.cfg = {
+        ...DEFAULT_CFG,
+        ...raw,
+        mode,
+        ...(clearedAttach
+          ? {
+              enabled: false,
+              mode: "off" as const,
+              baseUrl: HOME_LOCAL_ENGINE_BASE,
+              providerId: HOME_LOCAL_PROVIDER_ID,
+            }
+          : {}),
+      };
+      // Selected GGUF / Ollama model is daemon-wide — drop a legacy per-account owner.
+      if ("accountId" in this.cfg) {
+        delete (this.cfg as { accountId?: string }).accountId;
+      }
+      // mode off must not keep a prior Ollama/spawn model id — Enable rebuilds it.
+      const strippedStaleModel =
+        (!this.cfg.enabled || this.cfg.mode === "off") && typeof raw.model === "string";
+      if (strippedStaleModel) {
+        delete (this.cfg as { model?: string }).model;
+      }
+      if (clearedAttach || "accountId" in raw || strippedStaleModel) {
+        if (clearedAttach) {
+          this.logger.warn(
+            "local-engine: cleared legacy Mesh attach config — EnvoyHome Local is independent",
+          );
+        }
+        await this.persist();
+        if (clearedAttach) {
+          // Provider pool may still point at Mesh :18790 from a prior attach — disable + retarget.
+          await this.scrubMeshAttachProvider();
+        }
+      }
     } catch {
       this.cfg = { ...DEFAULT_CFG };
+    }
+  }
+
+  /** After withdrawing attach, never leave `envoyhome-local` enabled on Mesh :18790. */
+  private async scrubMeshAttachProvider(): Promise<void> {
+    const existing = this.providers.getRecord(HOME_LOCAL_PROVIDER_ID);
+    if (!existing) return;
+    const url = existing.baseUrl ?? "";
+    if (!url.includes(":18790") && existing.enabled !== true) return;
+    try {
+      await this.providers.setProvider({
+        id: HOME_LOCAL_PROVIDER_ID,
+        kind: "local_llama_cpp",
+        enabled: false,
+        baseUrl: HOME_LOCAL_ENGINE_BASE,
+        ...(existing.model ? { model: existing.model } : {}),
+        label: "EnvoyHome Local",
+        placement: "local",
+        costRank: 0,
+        latencyClass: "fast",
+      });
+    } catch (err) {
+      this.logger.warn(
+        `local-engine: failed to scrub Mesh attach provider: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
     }
   }
 
@@ -132,8 +251,37 @@ export class LocalEngineService {
     }
   }
 
+  /**
+   * Pick a GGUF for spawn: explicit path wins upstream; else modelAlias match,
+   * else last selected modelPath if still on disk, else hardware-recommended
+   * primary if installed, else first sorted name.
+   */
+  async pickGgufForSpawn(opts?: { modelAlias?: string }): Promise<string | undefined> {
+    const models = await this.listGgufModels();
+    if (models.length === 0) return undefined;
+    const alias = opts?.modelAlias?.trim();
+    if (alias) {
+      const byAlias = models.find((p) => {
+        const base = basename(p);
+        return base === alias || base.replace(/\.gguf$/i, "") === alias;
+      });
+      if (byAlias) return byAlias;
+    }
+    const saved = this.cfg.modelPath?.trim();
+    if (saved) {
+      const savedBase = basename(saved);
+      const bySaved = models.find((p) => basename(p) === savedBase);
+      if (bySaved) return bySaved;
+    }
+    const rec = buildHomeLocalRecommendation(models.map((p) => basename(p)));
+    if (rec.primary.installed) {
+      const byRec = models.find((p) => basename(p) === rec.primary.fileName);
+      if (byRec) return byRec;
+    }
+    return models[0];
+  }
+
   async status(): Promise<LocalEngineStatus> {
-    const mesh = await probeOpenAiModels(MESH_ENVOY_LOCAL_BASE);
     const runtimeBin =
       this.cfg.binaryPath ||
       (await findLlamaServerBinary(this.paths.localEngineRuntimeDir));
@@ -148,12 +296,24 @@ export class LocalEngineService {
       if (!probe.ok) error = probe.error;
     }
     let hint: string | undefined;
+    // Guide toward built-in llama.cpp by default — Ollama is opt-in only (Design §8.5).
     if (!this.cfg.enabled) {
       hint =
-        "Enable EnvoyHome Local (attach Mesh engine, spawn llama-server, or use Ollama).";
+        "Default path: download a GGUF below, then Enable llama.cpp (Home-owned llama-server on :18792).";
     } else if (!healthy) {
-      hint = "Local endpoint not responding — check llama-server / Ollama is up.";
+      hint =
+        this.cfg.mode === "ollama"
+          ? "Ollama endpoint not responding — start Ollama (ollama serve) or switch back to llama.cpp."
+          : "llama-server not responding — try Enable again, or check local-engine/runtime.";
     }
+    const onDiskNames = modelsOnDisk.map((p) => basename(p));
+    const rec = buildHomeLocalRecommendation(onDiskNames);
+    if (!this.cfg.enabled && onDiskNames.length === 0) {
+      hint = `${rec.reason} Download the recommended GGUF, then Enable llama.cpp.`;
+    }
+    const activeModelFile = this.cfg.modelPath?.trim()
+      ? basename(this.cfg.modelPath.trim())
+      : undefined;
     return {
       enabled: this.cfg.enabled,
       mode: this.cfg.mode,
@@ -161,12 +321,170 @@ export class LocalEngineService {
       providerId: this.cfg.providerId,
       healthy,
       modelIds,
-      meshAttachAvailable: mesh.ok,
       runtimeInstalled: Boolean(runtimeBin),
-      modelsOnDisk: modelsOnDisk.map((p) => basename(p)),
+      modelsOnDisk: onDiskNames,
+      hardwareSummary: rec.hardware.summary,
+      recommendation: {
+        hardwareSummary: rec.hardware.summary,
+        reason: rec.reason,
+        primary: rec.primary,
+        also: rec.also,
+      },
+      ...(activeModelFile && onDiskNames.includes(activeModelFile)
+        ? { activeModelFile }
+        : {}),
+      downloads: this.downloads.list(),
       ...(this.child?.pid ? { pid: this.child.pid } : {}),
       ...(hint ? { hint } : {}),
       ...(error ? { error } : {}),
+    };
+  }
+
+  /**
+   * Start / resume a curated GGUF download (async). Progress via `home:local-model-download`.
+   */
+  downloadModel(opts: { modelId: string }): {
+    ok: true;
+    fileName: string;
+    status: LocalModelDownloadJob["status"];
+    bytesReceived: number;
+    bytesTotal?: number;
+    path?: string;
+    bytes?: number;
+  } {
+    const id = opts.modelId?.trim();
+    if (!id) {
+      throw Object.assign(new Error("envoyhome.local_engine_unknown_model: missing modelId"), {
+        code: "local_engine_unknown_model",
+      });
+    }
+    const entry = getHomeLocalCatalogModel(id);
+    if (!entry) {
+      throw Object.assign(new Error(`envoyhome.local_engine_unknown_model: ${id}`), {
+        code: "local_engine_unknown_model",
+      });
+    }
+    this.logger.info(`local-engine download start curated ${id}`);
+    const job = this.downloads.start({
+      url: entry.url,
+      fileName: entry.fileName,
+      modelId: entry.id,
+      approxBytes: entry.approxBytes,
+    });
+    return {
+      ok: true as const,
+      fileName: job.fileName,
+      status: job.status,
+      bytesReceived: job.bytesReceived,
+      ...(job.bytesTotal !== undefined ? { bytesTotal: job.bytesTotal } : {}),
+      ...(job.path ? { path: job.path, bytes: job.bytesReceived } : {}),
+    };
+  }
+
+  /** Search Hugging Face Hub for GGUF-tagged model repos (read-only Hub API). */
+  async searchHuggingFaceModels(opts: {
+    query: string;
+    limit?: number;
+  }): Promise<{ models: HfGgufRepoHit[] }> {
+    const models = await searchHuggingFaceGgufRepos(opts.query, {
+      ...(opts.limit !== undefined ? { limit: opts.limit } : {}),
+    });
+    return { models };
+  }
+
+  /** List `.gguf` files in a Hugging Face model repo. */
+  async listHuggingFaceGgufFiles(opts: {
+    repoId: string;
+  }): Promise<{ files: HfGgufFile[] }> {
+    const files = await listHuggingFaceGgufFiles(opts.repoId);
+    return { files };
+  }
+
+  /**
+   * Start / resume a Hugging Face `.gguf` URL download (async).
+   * Progress via `home:local-model-download`.
+   */
+  downloadModelUrl(opts: { url: string }): {
+    ok: true;
+    fileName: string;
+    status: LocalModelDownloadJob["status"];
+    bytesReceived: number;
+    bytesTotal?: number;
+    path?: string;
+    bytes?: number;
+  } {
+    const url = opts.url?.trim();
+    if (!url) {
+      throw Object.assign(new Error("envoyhome.local_engine_bad_url: missing url"), {
+        code: "local_engine_bad_url",
+      });
+    }
+    const { url: normalized, fileName } = assertHuggingFaceGgufUrl(url);
+    this.logger.info(`local-engine download start URL ${fileName}`);
+    const job = this.downloads.start({
+      url: normalized.toString(),
+      fileName,
+    });
+    return {
+      ok: true as const,
+      fileName: job.fileName,
+      status: job.status,
+      bytesReceived: job.bytesReceived,
+      ...(job.bytesTotal !== undefined ? { bytesTotal: job.bytesTotal } : {}),
+      ...(job.path ? { path: job.path, bytes: job.bytesReceived } : {}),
+    };
+  }
+
+  /** Stop an in-flight download; keeps `.partial` for Continue. */
+  async cancelModelDownload(opts: { fileName: string }): Promise<LocalModelDownloadJob> {
+    const fileName = opts.fileName?.trim();
+    if (!fileName) {
+      throw Object.assign(new Error("envoyhome.local_engine_download_unknown: missing fileName"), {
+        code: "local_engine_download_unknown",
+      });
+    }
+    return this.downloads.cancel(fileName);
+  }
+
+  /** Resume a paused download (same as start with stored URL / catalog). */
+  resumeModelDownload(opts: { fileName: string }): {
+    ok: true;
+    fileName: string;
+    status: LocalModelDownloadJob["status"];
+    bytesReceived: number;
+    bytesTotal?: number;
+  } {
+    const fileName = opts.fileName?.trim();
+    if (!fileName) {
+      throw Object.assign(new Error("envoyhome.local_engine_download_unknown: missing fileName"), {
+        code: "local_engine_download_unknown",
+      });
+    }
+    const job = this.downloads.get(fileName);
+    const catalog = getHomeLocalCatalogModelByFileName(fileName);
+    const url = job?.url || catalog?.url;
+    if (!url) {
+      throw Object.assign(
+        new Error(
+          `envoyhome.local_engine_download_unknown: no URL to resume ${fileName}`,
+        ),
+        { code: "local_engine_download_unknown" },
+      );
+    }
+    const modelId = job?.modelId ?? catalog?.id;
+    const approxBytes = job?.bytesTotal ?? catalog?.approxBytes;
+    const started = this.downloads.start({
+      url,
+      fileName,
+      ...(modelId !== undefined ? { modelId } : {}),
+      ...(approxBytes !== undefined ? { approxBytes } : {}),
+    });
+    return {
+      ok: true as const,
+      fileName: started.fileName,
+      status: started.status,
+      bytesReceived: started.bytesReceived,
+      ...(started.bytesTotal !== undefined ? { bytesTotal: started.bytesTotal } : {}),
     };
   }
 
@@ -186,12 +504,15 @@ export class LocalEngineService {
   }
 
   /**
-   * Boot hook: if previously enabled in spawn mode, try to restart sidecar
-   * (assets already on disk — never download silently).
+   * Boot hook:
+   * - spawn: restart Home llama-server from on-disk assets (never silent download).
+   * - ollama: re-register only if the operator previously Connect'd (persisted enable).
+   *   Installing/running Ollama alone never writes this config — llama.cpp stays default
+   *   until the user selects an engine.
    */
   async restoreOnBoot(): Promise<void> {
     if (!this.cfg.enabled) return;
-    if (this.cfg.mode === "attach" || this.cfg.mode === "ollama") {
+    if (this.cfg.mode === "ollama") {
       await this.registerProviderFromConfig({ setDefault: false });
       return;
     }
@@ -213,8 +534,8 @@ export class LocalEngineService {
 
   async enableLocal(opts: {
     accountId?: string;
-    /** auto = prefer Mesh attach, else spawn */
-    prefer?: "auto" | "attach" | "spawn";
+    /** `auto` ≡ spawn. `attach` is refused (Home never reuses Mesh :18790). */
+    prefer?: "auto" | "spawn" | "attach";
     modelPath?: string;
     binaryPath?: string;
     downloadRuntime?: boolean;
@@ -225,36 +546,18 @@ export class LocalEngineService {
 
   private async enableLocalLocked(opts: {
     accountId?: string;
-    prefer?: "auto" | "attach" | "spawn";
+    prefer?: "auto" | "spawn" | "attach" | string;
     modelPath?: string;
     binaryPath?: string;
     downloadRuntime?: boolean;
     modelAlias?: string;
   }): Promise<LocalEngineEnableResult> {
-    const prefer = opts.prefer ?? "auto";
-    const mesh = await probeOpenAiModels(MESH_ENVOY_LOCAL_BASE);
-    if ((prefer === "auto" || prefer === "attach") && mesh.ok) {
-      await this.leavePreviousMode("attach");
-      const model = opts.modelAlias ?? mesh.modelIds[0];
-      this.cfg = {
-        enabled: true,
-        mode: "attach",
-        baseUrl: MESH_ENVOY_LOCAL_BASE,
-        providerId: HOME_LOCAL_PROVIDER_ID,
-        ...(model ? { model } : {}),
-        ...(opts.accountId ? { accountId: opts.accountId } : {}),
-      };
-      await this.persist();
-      await this.registerProviderFromConfig({ setDefault: true });
-      this.logger.info("local-engine attached to EnvoyMesh Envoy Local :18790");
-      return this.toEnableResult();
-    }
-    if (prefer === "attach") {
+    if (opts.prefer === "attach") {
       throw Object.assign(
         new Error(
-          "envoyhome.local_engine_unavailable: EnvoyMesh Envoy Local not reachable on :18790",
+          "envoyhome.local_engine_independent: EnvoyHome Local never attaches to Mesh Envoy Local (:18790); use spawn or Ollama",
         ),
-        { code: "local_engine_unavailable" },
+        { code: "local_engine_independent" },
       );
     }
     await this.leavePreviousMode("spawn");
@@ -264,17 +567,16 @@ export class LocalEngineService {
       downloadRuntime: opts.downloadRuntime !== false,
       ...(opts.modelAlias ? { modelAlias: opts.modelAlias } : {}),
     });
+    // spawnServer sets model/modelPath from the GGUF — never inherit a prior Ollama id.
+    const model = opts.modelAlias?.trim() || this.cfg.model;
     this.cfg = {
       enabled: true,
       mode: "spawn",
       baseUrl: HOME_LOCAL_ENGINE_BASE,
       providerId: HOME_LOCAL_PROVIDER_ID,
-      ...(opts.modelAlias || this.cfg.model
-        ? { model: opts.modelAlias ?? this.cfg.model }
-        : {}),
+      ...(model ? { model } : {}),
       ...(this.cfg.binaryPath ? { binaryPath: this.cfg.binaryPath } : {}),
       ...(this.cfg.modelPath ? { modelPath: this.cfg.modelPath } : {}),
-      ...(opts.accountId ? { accountId: opts.accountId } : {}),
     };
     await this.persist();
     await this.registerProviderFromConfig({ setDefault: true });
@@ -312,7 +614,6 @@ export class LocalEngineService {
       baseUrl: normalized,
       providerId: OLLAMA_PROVIDER_ID,
       model,
-      ...(opts.accountId ? { accountId: opts.accountId } : {}),
     };
     await this.persist();
     await this.providers.setProvider({
@@ -326,9 +627,7 @@ export class LocalEngineService {
       costRank: 0,
       latencyClass: "fast",
     });
-    if (opts.accountId) {
-      await this.maybeSetDefault(opts.accountId, OLLAMA_PROVIDER_ID);
-    }
+    // defaultProviderId is cloud-only — do not promote Ollama to account default.
     this.logger.info(`local-engine using Ollama at ${normalized}`);
     return this.toEnableResult();
   }
@@ -390,12 +689,7 @@ export class LocalEngineService {
   private async registerProviderFromConfig(opts: { setDefault: boolean }): Promise<void> {
     const kind =
       this.cfg.mode === "ollama" ? "local_openai_compat" : "local_llama_cpp";
-    const label =
-      this.cfg.mode === "attach"
-        ? "EnvoyHome Local (Mesh)"
-        : this.cfg.mode === "ollama"
-          ? "Ollama"
-          : "EnvoyHome Local";
+    const label = this.cfg.mode === "ollama" ? "Ollama" : "EnvoyHome Local";
     await this.providers.setProvider({
       id: this.cfg.providerId,
       kind,
@@ -408,27 +702,9 @@ export class LocalEngineService {
       latencyClass: "fast",
       supportsTools: true,
     });
-    if (opts.setDefault && this.cfg.accountId) {
-      await this.maybeSetDefault(this.cfg.accountId, this.cfg.providerId);
-    }
-  }
-
-  /**
-   * Set default only when placementFilter allows. Never silently rewrite the filter.
-   */
-  private async maybeSetDefault(accountId: string, providerId: string): Promise<void> {
-    try {
-      await this.providers.setDefaultProvider(accountId, providerId);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("outside filter") || msg.includes("bad_params")) {
-        this.logger.warn(
-          `local-engine: not setting defaultProvider=${providerId} for ${accountId}: ${msg}`,
-        );
-        return;
-      }
-      throw err;
-    }
+    // defaultProviderId is cloud-only (Design §8.2 / 2026-10-12b). Local registration
+    // never becomes the account default; cloud-only routing keeps the cloud default.
+    void opts.setDefault;
   }
 
   private async spawnServer(opts: {
@@ -438,7 +714,10 @@ export class LocalEngineService {
     modelAlias?: string;
   }): Promise<void> {
     await this.stopChild();
+    const platform = detectLocalPlatform();
+    const assets = resolveLlamaCppReleaseAssets(platform);
     let binary: string | null = null;
+    let gpuOffload = assets.gpuOffload;
     if (opts.binaryPath?.trim()) {
       binary = resolveLocalBinaryPath(this.paths.localEngineRuntimeDir, opts.binaryPath.trim());
     } else if (process.env.ENVOYHOME_LLAMA_SERVER?.trim()) {
@@ -446,11 +725,33 @@ export class LocalEngineService {
       binary = process.env.ENVOYHOME_LLAMA_SERVER.trim();
     } else {
       binary = await findLlamaServerBinary(this.paths.localEngineRuntimeDir);
+      const mismatch = binary
+        ? await runtimeAccelMismatch(this.paths.localEngineRuntimeDir, platform)
+        : false;
+      if (mismatch && opts.downloadRuntime) {
+        this.logger.info(
+          `local-engine runtime accel mismatch (want ${platform.accel} / ${assets.runtimeName}) — re-downloading…`,
+        );
+        binary = null;
+      } else if (binary) {
+        const marker = await readRuntimeAccelMarker(this.paths.localEngineRuntimeDir);
+        if (marker) {
+          gpuOffload = marker.gpuOffload;
+        } else {
+          // Unmarked legacy: Metal binaries are GPU; NVIDIA unmarked may still be CPU.
+          gpuOffload = platform.accel === "metal";
+        }
+      }
     }
     if (!binary && opts.downloadRuntime) {
-      this.logger.info("local-engine downloading llama-server runtime…");
-      const dl = await downloadAndExtractLlamaServer(this.paths.localEngineRuntimeDir);
+      this.logger.info(
+        `local-engine downloading llama-server runtime (${platform.accel}${assets.gpuOffload ? ", GPU offload" : ", CPU"})…`,
+      );
+      const dl = await downloadAndExtractLlamaServer(this.paths.localEngineRuntimeDir, {
+        platform,
+      });
       binary = dl.binaryPath;
+      gpuOffload = dl.gpuOffload;
       this.logger.info(`local-engine runtime ready: ${dl.assetName}`);
     }
     if (!binary) {
@@ -465,8 +766,9 @@ export class LocalEngineService {
     if (opts.modelPath?.trim()) {
       modelPath = resolveLocalModelPath(this.paths.localEngineModelsDir, opts.modelPath.trim());
     } else {
-      const models = await this.listGgufModels();
-      modelPath = models[0];
+      modelPath = await this.pickGgufForSpawn({
+        ...(opts.modelAlias ? { modelAlias: opts.modelAlias } : {}),
+      });
     }
     if (!modelPath) {
       throw Object.assign(
@@ -484,12 +786,17 @@ export class LocalEngineService {
       });
     }
     const alias = opts.modelAlias?.trim() || basename(modelPath).replace(/\.gguf$/i, "");
+    const catalog = getHomeLocalCatalogModelByFileName(basename(modelPath));
     const args = buildHomeLlamaServerArgs({
       modelPath,
       modelAlias: alias,
       port: HOME_LOCAL_ENGINE_PORT,
+      gpuOffload,
+      ...(catalog?.chatTemplate ? { chatTemplate: catalog.chatTemplate } : {}),
     });
-    this.logger.info(`local-engine spawning ${binary} on :${HOME_LOCAL_ENGINE_PORT}`);
+    this.logger.info(
+      `local-engine spawning ${binary} on :${HOME_LOCAL_ENGINE_PORT} (ngl=${gpuOffload ? -1 : 0})`,
+    );
     const child = spawn(binary, args, {
       cwd: this.paths.localEngineRuntimeDir,
       stdio: ["ignore", "pipe", "pipe"],

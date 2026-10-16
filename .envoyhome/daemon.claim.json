@@ -1,0 +1,12 @@
+{
+  "product": "EnvoyHome",
+  "instanceId": "55f26878-0ffa-41d4-b2fd-157c784fec06",
+  "pid": 3430,
+  "host": "127.0.0.1",
+  "port": 4780,
+  "path": "/ws",
+  "stateDir": "/Users/shileipeng/Documents/mygithub/EnvoyHome/.envoyhome",
+  "startedAt": "2026-10-12T09:21:37.547Z",
+  "version": "0.0.0",
+  "managedBy": "app"
+}

@@ -148,8 +148,21 @@ export const EVENTS: Readonly<Record<string, EventSpec>> = {
     ),
   },
   "home:memory-compacted": {
-    summary: "Consolidation finished",
+    summary: "Standing-memory consolidation finished (nightly / Compact now)",
     data: obj({ accountId: str({ minLength: 1 }) }, ["accountId"]),
+  },
+  "home:session-compacted": {
+    summary: "L0 session transcript compacted under context pressure (Memory Design §8)",
+    data: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        sessionId: str({ minLength: 1 }),
+        turnId: str({ minLength: 1 }),
+        reason: str({ minLength: 1 }),
+        droppedLines: int({ minimum: 0 }),
+      },
+      ["accountId", "sessionId"],
+    ),
   },
   "home:mesh-status": {
     summary: "Mesh kind / peers changed",
@@ -202,6 +215,51 @@ export const EVENTS: Readonly<Record<string, EventSpec>> = {
         reason: str(),
       },
       ["jobId", "accountId", "status"],
+    ),
+  },
+  "home:workflow-step": {
+    summary: "A static-workflow node started or finished (Design §7 test-run / demos)",
+    data: obj(
+      {
+        runId: str({ minLength: 1 }),
+        workflowId: str({ minLength: 1 }),
+        accountId: str({ minLength: 1 }),
+        nodeId: str({ minLength: 1 }),
+        type: str({ minLength: 1 }),
+        phase: enumOf("started", "finished"),
+        ok: bool(),
+        detail: str(),
+        output: str(),
+      },
+      ["runId", "workflowId", "accountId", "nodeId", "type", "phase"],
+    ),
+  },
+  "home:workflow-finished": {
+    summary: "A static-workflow run completed (Design §7)",
+    data: obj(
+      {
+        runId: str({ minLength: 1 }),
+        workflowId: str({ minLength: 1 }),
+        accountId: str({ minLength: 1 }),
+        ok: bool(),
+      },
+      ["runId", "workflowId", "accountId", "ok"],
+    ),
+  },
+  "home:local-model-download": {
+    summary: "Local GGUF download progress / pause / complete (Design §8.5)",
+    data: obj(
+      {
+        fileName: str({ minLength: 1 }),
+        url: str(),
+        status: enumOf("downloading", "paused", "completed", "failed"),
+        bytesReceived: int({ minimum: 0 }),
+        bytesTotal: int({ minimum: 0 }),
+        modelId: str(),
+        path: str(),
+        error: str(),
+      },
+      ["fileName", "status", "bytesReceived"],
     ),
   },
 };

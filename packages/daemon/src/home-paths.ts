@@ -29,6 +29,10 @@ export interface HomePaths {
   accountFiles(accountId: string): string;
   /** Per-account workflow overlay: `accounts/<accountId>/workflows/` */
   accountWorkflowsDir(accountId: string): string;
+  /** Global reusable LLM step templates: `workflows/step-templates.json`. */
+  readonly workflowStepTemplatesJson: string;
+  /** Per-account LLM step templates: `accounts/<id>/workflow-step-templates.json`. */
+  accountWorkflowStepTemplatesJson(accountId: string): string;
 }
 
 /**
@@ -63,6 +67,10 @@ export function homePaths(stateDir: string): HomePaths {
     },
     accountWorkflowsDir(accountId: string): string {
       return join(accountsDir, accountId, "workflows");
+    },
+    workflowStepTemplatesJson: join(stateDir, "workflows", "step-templates.json"),
+    accountWorkflowStepTemplatesJson(accountId: string): string {
+      return join(accountsDir, accountId, "workflow-step-templates.json");
     },
   };
 }

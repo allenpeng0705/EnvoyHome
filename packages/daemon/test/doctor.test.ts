@@ -88,6 +88,7 @@ test("home.doctor includes migrate.homeclaw.plan when ENVOYHOME_HOMECLAW_ROOT se
         providers: daemon.providers,
         harnesses: daemon.harnesses,
         workflows: daemon.workflows,
+        workflowStepTemplates: daemon.workflowStepTemplates,
         skills: daemon.skills,
         artifacts: daemon.artifacts,
         actuations: daemon.actuations,

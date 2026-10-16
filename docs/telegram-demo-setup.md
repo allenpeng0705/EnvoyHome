@@ -8,7 +8,7 @@ Operator checklist for the bundled **Telegram** channel (`plugins/channel-telegr
 | Kind | `chat` (no actuate) |
 | Config RPC | `home.setChannelConfig` → `home.enableChannel` |
 | Bind RPC | `home.setBinding` (`channel` + `senderId` → `accountId`) |
-| Settings | Desktop → **Channels** |
+| Settings | Desktop → **Connections** → **Channels** |
 
 ---
 
@@ -24,13 +24,11 @@ Operator checklist for the bundled **Telegram** channel (`plugins/channel-telegr
 
 ### Via desktop Settings (preferred — V-UX-3)
 
-1. Run daemon + desktop; create an account under **Accounts**.
-2. Open **Channels**.
-3. Under **Telegram demo**:
-   - `channelAccount` = `default` (unless you run multiple bots)
-   - paste **botToken**
-   - **home.setChannelConfig** → **home.enableChannel**
-4. Status should show telegram `on` / health detail like `telegram @your_bot`.
+1. Run daemon + desktop; create a profile under **Profiles**.
+2. **Connections** → **Channels**.
+3. Under **Connect Telegram**, paste the **bot token** from @BotFather — config autosaves and enables (Advanced holds channel account / API base if needed).
+4. Status line should show `enabled · healthy · telegram @your_bot`.
+5. Under **Link a sender to a profile**: paste the numeric sender ID from the bot DM and pick a profile.
 
 ### Via RPC
 
@@ -53,10 +51,10 @@ Secrets are write-only (never echoed in `listChannels` / status). Persisted unde
 
 1. Open a DM with your bot and send any text.
 2. If unbound, the bot replies with a numeric **senderId**.
-3. In **Channels** → **Bind Telegram sender → account**:
-   - pick the household account
+3. In **Connections → Channels → Link a sender to a profile**:
    - paste `senderId`
-   - **home.setBinding**
+   - pick the household profile
+   - **Link sender**
 
 RPC form:
 

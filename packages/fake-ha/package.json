@@ -1,0 +1,31 @@
+{
+  "name": "@envoyhome/fake-ha",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Local demo Home Assistant REST + multi-kind home panel (not a real hub). For EnvoyHome demos alongside a real HA.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "envoyhome-fake-ha": "./dist/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "dev": "node ./dist/bin.js",
+    "test": "tsc -p tsconfig.json && node --test test/*.test.ts"
+  },
+  "devDependencies": {
+    "@envoyhome/smarthome": "workspace:*",
+    "@types/node": "^22.20.5"
+  }
+}

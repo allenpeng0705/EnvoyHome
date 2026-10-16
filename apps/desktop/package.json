@@ -15,7 +15,8 @@
     "tauri:build": "pnpm run frontend:bundle && tauri build"
   },
   "dependencies": {
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@envoyhome/test-utils": "workspace:*",

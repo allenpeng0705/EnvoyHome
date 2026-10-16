@@ -1,9 +1,17 @@
 // Skill install + verify gate — Design §9.2 / Plan B10.
 
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { copyFile, cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, dirname, join } from "node:path";
 import { safeJoin } from "./fs-jail.js";
 import type { HomePaths } from "./home-paths.js";
+import {
+  SkillRemoteError,
+  fetchSkillFromClawHub,
+  fetchSkillFromUrl,
+  searchClawHubSkills,
+  type ClawHubSearchHit,
+} from "./skill-remote.js";
 
 export interface SkillRecord {
   id: string;
@@ -27,12 +35,19 @@ const INDEX_FILE = "index.json";
 
 export class SkillsError extends Error {
   constructor(
-    readonly kind: "bad_params" | "not_found",
+    readonly kind: "bad_params" | "not_found" | "download_failed" | "unsafe",
     message: string,
   ) {
     super(message);
     this.name = "SkillsError";
   }
+}
+
+function mapRemoteErr(err: unknown): never {
+  if (err instanceof SkillRemoteError) {
+    throw new SkillsError(err.kind, err.message);
+  }
+  throw err;
 }
 
 function parseFrontmatter(text: string): {
@@ -125,36 +140,140 @@ export class SkillService {
     return rows.filter((r) => r.enabled && r.verified).map((r) => `skill:${r.id}`);
   }
 
-  async installSkill(input: { source: "path" | "clawhub" | "url"; ref: string }): Promise<{
-    id: string;
-    needsReview: boolean;
-  }> {
-    if (input.source !== "path") {
-      throw new SkillsError("bad_params", `install source ${input.source} not implemented in B10`);
-    }
-    const src = input.ref;
-    let id = src.split(/[/\\]/).filter(Boolean).pop() ?? "skill";
-    id = id.replace(/[^a-zA-Z0-9._-]/g, "_");
-    const dest = this.skillRoot(id);
-    await mkdir(this.paths.skillsDir, { recursive: true });
-    await cp(src, dest, { recursive: true, force: true });
+  private sanitizeId(raw: string): string {
+    const cleaned = raw.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/^\.+/, "");
+    return cleaned || "skill";
+  }
 
-    const skillMd = await readFile(join(dest, "SKILL.md"), "utf8").catch(() => "");
+  private async destPrep(candidate: string): Promise<{ id: string; dest: string }> {
+    const id = this.sanitizeId(candidate);
+    const dest = this.skillRoot(id);
+    await rm(dest, { recursive: true, force: true }).catch(() => undefined);
+    await mkdir(dest, { recursive: true });
+    return { id, dest };
+  }
+
+  private async registerFromDir(
+    srcDir: string,
+    suggestedId: string,
+  ): Promise<{ id: string; needsReview: boolean }> {
+    const skillMd = await readFile(join(srcDir, "SKILL.md"), "utf8").catch(() => "");
+    if (!skillMd.trim()) {
+      throw new SkillsError(
+        "bad_params",
+        "skill folder must contain SKILL.md (or install a SKILL.md file)",
+      );
+    }
     const parsed = parseFrontmatter(skillMd);
+    const installed = await this.destPrep(suggestedId || parsed.name || "skill");
+    await cp(srcDir, installed.dest, { recursive: true, force: true });
     const rows = await this.readIndex();
     const entry: SkillIndexEntry = {
-      id,
+      id: installed.id,
       name: parsed.name,
       enabled: false,
       verified: false,
       declaredExec: parsed.declaredExec,
       declaredNetwork: parsed.declaredNetwork,
     };
-    const idx = rows.findIndex((r) => r.id === id);
+    const idx = rows.findIndex((r) => r.id === entry.id);
     if (idx >= 0) rows[idx] = entry;
     else rows.push(entry);
     await this.writeIndex(rows);
-    return { id, needsReview: true };
+    return { id: entry.id, needsReview: true };
+  }
+
+  /**
+   * Search ClawHub (public registry HTTP API). Peer: EnvoyMesh skill search.
+   * Results still install via `installSkill({ source: "clawhub" })` + Verify.
+   */
+  async searchClawHub(query: string, limit?: number, fetchImpl?: typeof fetch): Promise<ClawHubSearchHit[]> {
+    try {
+      return await searchClawHubSkills(query, {
+        ...(limit !== undefined ? { limit } : {}),
+        ...(fetchImpl ? { fetchImpl } : {}),
+      });
+    } catch (err) {
+      mapRemoteErr(err);
+    }
+  }
+
+  /**
+   * Install from:
+   * - **path** — local folder with `SKILL.md`, or a `.md` file
+   * - **url** — https ZIP or raw `SKILL.md`
+   * - **clawhub** — registry slug (`owner/slug` or bare slug when unique)
+   *
+   * Never auto-enabled; operator must `verifySkill` (V-SKILL-1).
+   */
+  async installSkill(input: {
+    source: "path" | "clawhub" | "url";
+    ref: string;
+    /** Injected for tests. */
+    fetchImpl?: typeof fetch;
+  }): Promise<{
+    id: string;
+    needsReview: boolean;
+  }> {
+    const ref = input.ref.trim();
+    if (!ref) throw new SkillsError("bad_params", "skill ref is required");
+    await mkdir(this.paths.skillsDir, { recursive: true });
+
+    if (input.source === "path") {
+      let st;
+      try {
+        st = await stat(ref);
+      } catch {
+        throw new SkillsError("bad_params", `skill path not found: ${ref}`);
+      }
+
+      if (st.isDirectory()) {
+        return this.registerFromDir(ref, basename(ref));
+      }
+      if (st.isFile()) {
+        const fileName = basename(ref);
+        if (!/\.md$/i.test(fileName)) {
+          throw new SkillsError(
+            "bad_params",
+            "path install expects a skill folder or a .md file (SKILL.md)",
+          );
+        }
+        const parent = basename(dirname(ref));
+        const fromParent =
+          parent && parent !== "." && parent !== "/" && !/^[A-Za-z]:\\?$/.test(parent);
+        const fromFile = fileName.replace(/\.md$/i, "");
+        const idHint =
+          /^skill$/i.test(fromFile) && fromParent ? parent : fromFile || parent || "skill";
+        const staging = await mkdtemp(join(tmpdir(), "eh-skill-path-"));
+        try {
+          await copyFile(ref, join(staging, "SKILL.md"));
+          return await this.registerFromDir(staging, idHint);
+        } finally {
+          await rm(staging, { recursive: true, force: true }).catch(() => undefined);
+        }
+      }
+      throw new SkillsError("bad_params", `skill path is not a file or folder: ${ref}`);
+    }
+
+    if (input.source === "url" || input.source === "clawhub") {
+      const fetchImpl = input.fetchImpl ?? globalThis.fetch;
+      let fetched;
+      try {
+        fetched =
+          input.source === "url"
+            ? await fetchSkillFromUrl(ref, fetchImpl)
+            : await fetchSkillFromClawHub(ref, fetchImpl);
+      } catch (err) {
+        mapRemoteErr(err);
+      }
+      try {
+        return await this.registerFromDir(fetched.stagingDir, fetched.suggestedId);
+      } finally {
+        await rm(fetched.cleanupDir, { recursive: true, force: true }).catch(() => undefined);
+      }
+    }
+
+    throw new SkillsError("bad_params", `unknown install source`);
   }
 
   async verifySkill(id: string): Promise<{ ok: boolean; findings: string[] }> {

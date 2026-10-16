@@ -182,7 +182,12 @@ export class ScheduleService {
   /** Confirm a proposal → durable job + arm. */
   async confirmProposal(
     proposalId: string,
-    overrides?: { missPolicy?: MissPolicy; payload?: Partial<SchedulePayload> },
+    overrides?: {
+      missPolicy?: MissPolicy;
+      /** When `kind` is set, replaces the proposal payload entirely (no stale notify message). */
+      payload?: SchedulePayload;
+      name?: string;
+    },
   ): Promise<ScheduleJob> {
     const p = await this.store.takeProposal(proposalId);
     if (!p) {
@@ -195,12 +200,23 @@ export class ScheduleService {
         code: "bad_params",
       });
     }
+    const payload =
+      overrides?.payload?.kind !== undefined
+        ? overrides.payload
+        : overrides?.payload
+          ? { ...p.payload, ...overrides.payload }
+          : p.payload;
+    const missPolicy = overrides?.missPolicy ?? inferMissPolicy(payload);
+    const name =
+      typeof overrides?.name === "string" && overrides.name.trim().length > 0
+        ? overrides.name.trim().slice(0, 120)
+        : p.name;
     return this.createJob({
       accountId: p.accountId,
-      name: p.name,
+      name,
       spec: p.spec,
-      payload: { ...p.payload, ...overrides?.payload },
-      missPolicy: overrides?.missPolicy ?? "grace_catchup",
+      payload,
+      missPolicy,
       source: "user",
       sourceText: p.sourceText,
     });

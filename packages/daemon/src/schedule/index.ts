@@ -28,3 +28,9 @@ export {
   AUTO_DISABLE_AFTER_ERRORS,
   DEFAULT_TIME_ZONE,
 } from "./types.js";
+export {
+  normalizeUserSchedulePayload,
+  normalizeScheduleSpec,
+  type SchedulePayloadValidation,
+  type ScheduleSpecValidation,
+} from "./validate-payload.js";

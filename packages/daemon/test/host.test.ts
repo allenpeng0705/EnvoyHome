@@ -105,7 +105,7 @@ test("V-RPC-1: loopback home.hello returns protocolApiVersion + methods[]", asyn
   assert.equal(reply["error"], undefined);
   const result = reply["result"] as Record<string, unknown>;
   assert.equal(result["product"], "EnvoyHome");
-  assert.equal(result["protocolApiVersion"], 1);
+  assert.equal(result["protocolApiVersion"], 2);
   assert.ok(Array.isArray(result["methods"]));
   assert.ok((result["methods"] as string[]).includes("home.hello"));
   assert.equal((result["mesh"] as { kind: string }).kind, "no-node");

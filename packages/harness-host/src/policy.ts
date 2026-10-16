@@ -19,14 +19,34 @@ export const BUILTIN_TOOLS: Readonly<Record<string, ToolSpec>> = {
   http_fetch: { name: "http_fetch", risk: "network", grantable: true },
 };
 
+/** Extra specs registered by the daemon (HA/MQTT, etc.). */
+const EXTRA_TOOLS = new Map<string, ToolSpec>();
+
+export function registerToolSpec(spec: ToolSpec): void {
+  EXTRA_TOOLS.set(spec.name, spec);
+}
+
+export function clearExtraToolSpecsForTests(): void {
+  EXTRA_TOOLS.clear();
+}
+
 export function toolSpec(name: string): ToolSpec | undefined {
-  return BUILTIN_TOOLS[name];
+  if (BUILTIN_TOOLS[name]) return BUILTIN_TOOLS[name];
+  const extra = EXTRA_TOOLS.get(name);
+  if (extra) return extra;
+  // Verified skills appear as skill:<id> — read-tier prompt packs.
+  if (name.startsWith("skill:") && name.length > "skill:".length) {
+    return { name, risk: "read", grantable: false };
+  }
+  return undefined;
 }
 
 export interface PolicySnapshot {
   origin: TurnOrigin;
   tool_policy: ToolPolicyPreset;
   model_mode: "local" | "cloud" | "mix";
+  /** Design §5.7.8 — smart-home tools + bound inject allowed this turn. */
+  homeSurface?: boolean;
 }
 
 /** Restricted policy blocks exec/network tools entirely (V-HAR-4 uses standard + approval). */

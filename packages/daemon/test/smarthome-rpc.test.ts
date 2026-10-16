@@ -29,7 +29,7 @@ function memberSession(accountIds: string[]): HomeSession {
   };
 }
 
-test("V-HA-6/14: unbound event no turn; foreign listSources filtered", async () => {
+test("V-HA-6/14: unbound event no turn; household listSources; presence not shareable via wire", async () => {
   const stateDir = await mkdtemp(join(tmpdir(), "eh-ha-rpc-"));
   let daemon: Awaited<ReturnType<typeof startDaemon>> | undefined;
   try {
@@ -87,7 +87,8 @@ test("V-HA-6/14: unbound event no turn; foreign listSources filtered", async () 
     );
     assert.ok("result" in bobList);
     const sources = (bobList.result as { sources: Array<{ sourceId: string }> }).sources;
-    assert.equal(sources.some((s) => s.sourceId === "sensor.motion"), false);
+    // Household: Bob sees Alice-bound device (Design 2026-10-16l).
+    assert.equal(sources.some((s) => s.sourceId === "sensor.motion"), true);
 
     const ctx = daemon.channels.loader.getContextForTests("fake-events");
     assert.ok(ctx);
@@ -140,6 +141,7 @@ function daemonRouter(daemon: Awaited<ReturnType<typeof startDaemon>>) {
     providers: daemon.providers,
     harnesses: daemon.harnesses,
     workflows: daemon.workflows,
+        workflowStepTemplates: daemon.workflowStepTemplates,
     skills: daemon.skills,
     artifacts: daemon.artifacts,
     actuations: daemon.actuations,

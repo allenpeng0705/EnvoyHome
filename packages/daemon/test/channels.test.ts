@@ -17,6 +17,7 @@ import {
 import { ChannelService } from "../dist/channels/service.js";
 import { DaemonLogger } from "../dist/logger.js";
 import { WorkflowStore } from "../dist/workflows.js";
+import { WorkflowStepTemplateStore } from "../dist/workflow-step-templates.js";
 import { ScheduleService } from "../dist/schedule/service.js";
 import { SkillService } from "../dist/skills.js";
 import { ArtifactService } from "../dist/artifacts.js";
@@ -64,6 +65,7 @@ function channelRouterDeps(stateDir: string): RouterDeps {
     providers: {} as RouterDeps["providers"],
     harnesses: {} as RouterDeps["harnesses"],
     workflows: new WorkflowStore(homePaths(stateDir)),
+    workflowStepTemplates: new WorkflowStepTemplateStore(homePaths(stateDir)),
     schedules: new ScheduleService({ paths: homePaths(stateDir) }),
     skills: new SkillService(homePaths(stateDir)),
     artifacts: new ArtifactService(homePaths(stateDir), () => "http://127.0.0.1:1"),
@@ -83,7 +85,6 @@ function channelRouterDeps(stateDir: string): RouterDeps {
         providerId: "",
         healthy: false,
         modelIds: [],
-        meshAttachAvailable: false,
         runtimeInstalled: false,
         modelsOnDisk: [],
       }),

@@ -4,7 +4,7 @@
 |-------|--------|
 | **Document** | Dedicated Normative design for the **memory + learning** subsystem |
 | **Status** | Living draft |
-| **Last updated** | 2026-10-07 (R8–R10 closed) |
+| **Last updated** | 2026-10-13 (model-aware inject profiles) |
 | **Parent** | [`EnvoyHome-Design.md`](EnvoyHome-Design.md) — product-wide ground truth |
 | **Summary in parent** | Design §9 |
 | **Peer research** | [`analysis/peer-memory-systems.md`](analysis/peer-memory-systems.md) |
@@ -18,6 +18,15 @@
 
 | Date | Change |
 |------|--------|
+| 2026-10-13s | **§8 durable cues:** drop bare `I am`/`I'm` and cue-less bullets; keep anchored prefs/identity/diet/family/timezone only. Questions without durable cues stay out. |
+| 2026-10-13q | **§8 soft-flush fix:** soft-only preview uses soft-threshold budget (not compact); oldest-half durable fallback; unknown-context byte-force uses fixed 512-token keep window; durable cues drop bare always/never. |
+| 2026-10-13p | **§8 hardening:** do not burn flush cycle when `flushEnabled` skips or soft flush finds no durable lines; flush filter rejects sensitive/tool/chatter; byte-force flush+compact same turn; `home:session-compacted` separate from consolidate; workflow turns do not run L0 pressure (no full history window). |
+| 2026-10-13o | **§8 mid-session pressure:** daemon pre-turn flush + L0 compact (OpenClaw Gateway role — not harness). Soft threshold / reserve / once-per-cycle flush; tool-only flush plan → L3; transcript rewrite + history window into the turn. |
+| 2026-10-13n | **§4.2.1 table fix:** unknown **local** column now matches the formula (`HARD_MIN`, not baseline). V-MEM-22 wording aligned. |
+| 2026-10-13m | **§4.2.1 safety fix:** unknown **local** context → `HARD_MIN` package (not full 44k); known context **never** inflates above `affordable` (`MAX_FRACTION`). `HARD_MIN` is the unknown-local fallback, not a license to exceed the window. |
+| 2026-10-13l | **§4.2 / §4.2.1 OpenClaw-aligned inject caps:** baseline package becomes L1 **4000** / L2 **20 000** / L3 **20 000** (OpenClaw `USER.md` hard 4k + `bootstrapMaxChars` 20k); `CEILING_TOTAL` **60 000** (`bootstrapTotalMaxChars`). Auto uses that package when the model window can afford it; otherwise scales down (ratio 4:20:20) under `MAX_FRACTION` 0.20 / `HARD_MIN` 6k. Keep EnvoyHome section-aware L2 cuts + Configurable Custom. Peer: `openclaw/src/agents/embedded-agent-helpers/bootstrap.ts`. |
+| 2026-10-13k | **§4.2.1 more aggressive inject + configurable:** raise `SHARE_CLOUD` 0.07→**0.12**, `SHARE_LOCAL` 0.05→**0.08**, `CEILING_TOTAL` 24k→**48k**, `HARD_MIN_TOTAL` 3k→**6k**. Superseded for package numbers by `2026-10-13l` (OpenClaw-aligned). Configurable Custom retained. |
+| 2026-10-13j | **§4.2.1 Model-aware inject profiles:** `injectBudget` is derived separately for **cloud** (account cloud default’s `contextTokens`) and **local** (enabled local provider’s `contextTokens`). `rawSoftCap` stays fixed (disk). Floor/ceiling/fraction formula; turn prologue picks the profile from the **route-resolved placement**; `home.listMemory` reports both profiles. Manual `policy.json` → `caps` still wins. New ID **V-MEM-22**. Settings shows both packages (read-only auto). |
 | 2026-10-07 | Initial: layers, MemoryBackend slot, consolidate/learn. |
 | 2026-10-07m | Peer comparative pass: flush-before-compact, scarce bootstrap, session_search, COMPACT diary, store split (standing vs RAG vs KB), refresh-after-write, fitness table. |
 | 2026-10-07n | Design review hardenings: standing vs backend ownership; truncate→recall duty; writer locks; remember routing; defaults for pending notes; COMPACT rotate; open issues Design §19. |
@@ -123,31 +132,130 @@ Peers that mix “everything is memory” become unmaintainable. EnvoyHome names
 3. L5/L6 never silently overwrite L1/L2.  
 4. System prompt labels each injected block so the model knows the hierarchy.
 
-### 4.2 Bootstrap budgets (Normative — Adapt Hermes/OpenClaw)
+### 4.2 Bootstrap budgets (Normative — Adapt OpenClaw)
 
-Standing memory is **scarce by design**. Two budgets per asset, both exact and both enforced — a build that does not enforce them fails V-MEM-4:
+Standing memory is **scarce by design**. Inject caps follow OpenClaw’s proven bootstrap budgets (`bootstrapMaxChars` / `USER.md` hard ceiling / `bootstrapTotalMaxChars` in `embedded-agent-helpers/bootstrap.ts`). Two budgets per asset, both enforced — a build that does not enforce them fails V-MEM-4 / V-MEM-18:
 
-| Asset | `injectBudget` (chars) | `rawSoftCap` (file on disk) | Action on crossing `rawSoftCap` |
-|-------|------------------------|------------------------------|----------------------------------|
-| L1 `profile.json` | **2000** | **20 000** | Doctor issue `memory.profile_raw_oversize`; consolidate proposes supersede/removal. Never auto-delete a fact. |
-| L2 `MEMORY.md` | **4000** | **40 000** | **Consolidate rewrites L2** (merge duplicates, retire stale entries to L3/COMPACT). At 2× cap → Doctor `memory.memory_raw_oversize` severity=warn. |
-| L3 daily (today + yesterday) | **2000 combined** | **10 000 per file** | Older days stay on disk but leave the inject window; past 20 000 → Doctor issue. |
+| Asset | **Baseline** `injectBudget` (chars) | `rawSoftCap` (file on disk) | Action on crossing `rawSoftCap` |
+|-------|-------------------------------------|------------------------------|----------------------------------|
+| L1 `profile.json` | **4000** (OpenClaw `USER.md` hard ceiling) | **20 000** | Doctor issue `memory.profile_raw_oversize`; consolidate proposes supersede/removal. Never auto-delete a fact. |
+| L2 `MEMORY.md` | **20 000** (OpenClaw per-file `bootstrapMaxChars`) | **40 000** | **Consolidate rewrites L2** (merge duplicates, retire stale entries to L3/COMPACT). At 2× cap → Doctor `memory.memory_raw_oversize` severity=warn. |
+| L3 daily (today + yesterday) | **20 000 combined** (OpenClaw per-file cap applied to the combined daily inject) | **10 000 per file** | Older days stay on disk but leave the inject window; past 20 000 → Doctor issue. |
 | COMPACT.md | not injected | **20 000 chars or 20 entries** | Rotate to `memory/compact/` (§9 rule 6). |
 | PendingLearn | n/a | **50 entries / 30 days** | **Reject the new proposal** with event `home:learn-rejected-full`; never evict silently (§7.2). |
 | L4 session FTS | no inject | session retention (§4.6) | Purge with the session. |
 | L5/L6 | **off** (tool-only in v1) | backend-owned | — |
 
+**Split of concerns (Normative).**
+
+| Budget | Scales with model? | Why |
+|--------|--------------------|-----|
+| **`rawSoftCap`** | **No** | On-disk growth / consolidate pressure. Same whether the turn is local or cloud. Fixed table above; optional per-account override via `policy.json` → `caps.<asset>.rawSoftCap` only. |
+| **`injectBudget`** | **Yes** (§4.2.1) | How much standing text may enter **this turn’s** prompt. Must respect the resolved model’s context window. |
+
+The baseline inject column is the **OpenClaw-aligned target package**: used when cloud `contextTokens` is unknown, when `injectBudgetMode` is `baseline`, when `auto` can afford it, and as the reference for V-MEM-4 fixtures. Unknown **local** context uses `HARD_MIN` instead (§4.2.1). Under `auto`, tiny windows scale down; Custom may set other values.
+
 **Definition of `injectBudget` (Normative).** It is the character count of the **exact serialized block that is placed in the prompt, including that block's label/header and all JSON punctuation**. So L1's budget is measured on the rendered JSON, not on the sum of fact strings; L2's on the rendered Markdown; L3's on the sum of the two rendered daily blocks. Two implementations that disagree on the serialization will disagree on truncation — this definition is what makes V-MEM-4 falsifiable.
 
 **Definition of the L2 inject builder (Normative).** The builder is **section-aware, not prefix truncation**: it walks `MEMORY.md` in file order, keeps whole sections that fit (whole sections and whole bullets only, never a half line), and prefers the sections named by `policy.json` → `injectPrioritySections` (default `["## Standing"]`). Sections that do not fit are replaced by a one-line `§ <heading> — N entries omitted` marker. This is what makes §4.2's "prefer high-signal head sections" achievable rather than aspirational.
 
-**`home.listMemory` MUST report the contract**, not just the current sizes: per asset `{ rawChars, injectChars, truncated, injectBudget, rawSoftCap }`, and a `truncated` flag on `profileSummary` as well as on `notes[]` (see Design Appendix A.9).
+**`home.listMemory` MUST report the contract**, not just the current sizes: per asset `{ rawChars, injectChars, truncated, injectBudget, rawSoftCap }`, a `truncated` flag on `profileSummary` as well as on `notes[]`, **and** the §4.2.1 `injectProfiles` object (see Design Appendix A.9).
 
 The L3 recall corpus is `MEMORY.md` + `memory/*.md` **excluding** `memory/compact/**` — rotated consolidation diaries are not daily notes (§4.5).
 
-**Truncate ≠ delete.** Full files remain on disk. Caps are measured in **characters** as a v1 proxy; Settings may later expose token estimates. When any standing inject is truncated, the system prompt **must** include a fixed one-liner: standing bootstrap may be partial — use `recall` / `session_search` for more. (Verification: V-MEM-10.)
+**Truncate ≠ delete.** Full files remain on disk. Caps are measured in **characters** as a v1 proxy (§4.2.1 documents the chars↔tokens stand-in). When any standing inject is truncated, the system prompt **must** include a fixed one-liner: standing bootstrap may be partial — use `recall` / `session_search` for more. (Verification: V-MEM-10.)
 
 **Inject policy (Normative):** prefer keeping **high-signal head sections** of MEMORY.md (e.g. `## Standing` / bullet facts) inside the cap; push long narrative into daily files. Consolidate’s job is to **reshape** L2 so the injectable set stays useful — not to rely on blind tail truncation forever.
+
+### 4.2.1 Model-aware inject profiles (Normative)
+
+**Why.** A 128k cloud default can afford more standing inject than an 8k local GGUF. A single fixed inject package either wastes cloud context or blows a small local window. EnvoyHome already separates **cloud default** and **local** providers (Design §8.2 / §8.5); memory inject follows that split.
+
+**Two profiles per account (always computed).**
+
+| Profile id | Context source (Normative) | If source missing / `contextTokens` unset |
+|------------|----------------------------|---------------------------------------------|
+| **`cloud`** | The account’s **cloud default** provider (`defaultProviderId` when that row is cloud; else the newest enabled cloud provider — same rule as Design §8.2) → `contextTokens` | Use the **baseline** package (§4.2 table) |
+| **`local`** | The single enabled **local** provider (EnvoyHome Local / Ollama) → `contextTokens` when known; else a daemon-reported local context if the engine publishes one | Use the **`HARD_MIN`** package (6 000 chars; see formula) — **not** the full baseline |
+
+Do **not** average the whole cloud pool. Do **not** use a Smart Routing candidate that was not selected for this turn.
+
+**`injectBudgetMode` (per account, `policy.json`).**
+
+| Mode | Behaviour |
+|------|-----------|
+| **`auto`** (default once implemented; until then implementations MAY ship `baseline` and flip default in the same PR that lands derivation) | Derive each profile with the formula below |
+| **`baseline`** | Both profiles equal the §4.2 baseline package (ignore `contextTokens`) |
+| **`custom`** | Use explicit `policy.json` → `caps.l1|l2|l3.injectBudget` for **both** profiles (one manual package). Missing asset keys fall back to baseline for that asset only |
+
+`rawSoftCap` is never derived from the model; `custom` may still override raw via `caps.*.rawSoftCap`.
+
+**Derivation formula (Normative — falsifiable).**
+
+The **target package** is OpenClaw’s bootstrap policy (not a % share of context). Auto **scales down** only when the resolved model’s window cannot afford that package.
+
+Constants (characters; v1 token→char stand-in):
+
+| Symbol | Value | Role |
+|--------|------:|------|
+| `CHARS_PER_TOKEN` | **4** | `contextChars = contextTokens × 4` |
+| `OPENCLAW_L1` / `L2` / `L3` | **4000 / 20 000 / 20 000** | Target package (= §4.2 baseline); L1 mirrors OpenClaw `USER_BOOTSTRAP_MAX_CHARS` |
+| `BASELINE_TOTAL` | **44 000** | 4000+20000+20000 |
+| `CEILING_TOTAL` | **60 000** | OpenClaw `bootstrapTotalMaxChars` (standing three-asset sum is already ≤ 44k) |
+| `MAX_FRACTION` | **0.20** | Affordability: total standing inject ≤ 20% of `contextChars` |
+| `HARD_MIN_TOTAL` | **6 000** | Fallback package when **local** `contextTokens` is unknown; never used to inflate above `affordable` |
+
+```text
+contextChars = contextTokens * CHARS_PER_TOKEN
+affordable   = floor(contextChars * MAX_FRACTION)
+if contextTokens unknown/invalid:
+  cloud → OpenClaw package; local → split(HARD_MIN_TOTAL)
+else if affordable >= BASELINE_TOTAL:
+  use OpenClaw package exactly: l1=4000, l2=20000, l3=20000
+else:
+  total = min(affordable, BASELINE_TOTAL, CEILING_TOTAL)   # never > affordable
+  # split with OpenClaw ratios 4 : 20 : 20:
+  l1 = floor(total * 4000 / 44000)
+  l2 = floor(total * 20000 / 44000)
+  l3 = total - l1 - l2
+```
+
+Cloud vs local profiles still compute separately from each provider’s `contextTokens` — same OpenClaw target, different scale-down when the local window is smaller.
+
+Worked examples (illustrative, not a second Normative table):
+
+| Context | Profile | result |
+|--------:|---------|--------|
+| unknown | cloud | baseline **4000 / 20 000 / 20 000** |
+| unknown | local | **HARD_MIN 6000** → ~545 / 2727 / 2728 |
+| 4k tokens | local | `affordable=3276` → **3276** (not inflated to HARD_MIN) |
+| 8k tokens | local | `affordable=6553` → scale **6553** → ~595 / 2978 / 2980 |
+| 32k tokens | local | `affordable=25600` → scale **25600** → ~2327 / 11636 / 11637 |
+| 128k tokens | cloud | `affordable=102400` ≥ 44k → full OpenClaw **4000 / 20 000 / 20 000** |
+| 200k tokens | cloud | same full OpenClaw package |
+
+**Which profile applies on a turn (Normative).**
+
+1. Daemon resolves the provider for the turn (Design §8.2 MixRouter / placement / privacy force-local) **before** building standing inject.  
+2. If the resolved provider’s `placement` is `local` → use the **`local`** inject package.  
+3. Otherwise → use the **`cloud`** inject package.  
+4. Privacy / sensitive force-local (Design §8.3 / §4.3.2) uses **`local`** even if Routing UI shows Cloud.  
+5. Standing inject is **not** rebuilt mid-turn if auto-switch would flip providers after the first model call has started; the prologue package sticks for that turn. (Switching across turns is fine.)
+
+**Settings / `home.listMemory` (Normative).**
+
+- Always return both derived (or baseline/custom) packages under `injectProfiles: { cloud, local }`, each with `{ contextTokens?, sourceProviderId?, l1, l2, l3 }` (per-asset `injectBudget`), plus top-level `injectBudgetMode`.  
+- Per-note `injectBudget` / `profileSummary.injectBudget` reflect the package for **`injectProfiles.active`**: under Routing `local` → local; under `cloud` → cloud; under `any` → cloud for the Settings preview (actual turns still follow rule 2–4 above).  
+- Surface a one-line explanation: On disk vs In prompt; Cloud package vs Local package.  
+- **Default:** `injectBudgetMode: auto` — cloud package from the cloud default’s `contextTokens`; local package from the enabled local model.  
+- **Configurable (Normative):** Settings Memory MAY set `injectBudgetMode` and, when `custom`, `caps.l1|l2|l3.injectBudget` through **`home.setMemorySettings`** (also writable via `policy.json`). Switching UI to Custom **SHOULD** seed the three budgets from the **cloud** derived package (not baseline), so the default the user edits is model-aware. `baseline` locks both profiles to the §4.2 table. Leaving Custom stores one manual package applied to **both** profiles (same as §4.2.1 mode table).
+
+**Non-goals for this revision.**
+
+- No per-provider inject package beyond cloud-default and local.  
+- No token-accurate counting in v1 (chars × `CHARS_PER_TOKEN` only).  
+- No scaling of `rawSoftCap` with the model.  
+- No OpenClaw-style coding-harness-specific memory budgets.
 
 ### 4.3 Refresh after write (Normative invent — fix Hermes)
 
@@ -371,6 +479,20 @@ Before session compaction discards detail:
 
 This is distinct from nightly consolidate (§9) and from TokenJuice.
 
+**Ownership (Normative — match OpenClaw Gateway, not harness).** OpenClaw’s pre-compaction memory flush lives on the **Gateway / reply path** (`memory-flush.ts`), not inside a coding harness plugin. EnvoyHome mirrors that split:
+
+| Concern | Owner |
+|---------|--------|
+| Soft / compact thresholds from `contextTokens` (reserve ≤ ¼ window, soft margin ≤ 4k) | **Daemon** turn prologue |
+| Once-per-compaction-cycle flush (`memoryFlushCompactionCount`) | **Daemon** session meta |
+| Standing writes (L3 / PendingLearn) via flush plan | **`@envoyhome/memory`** |
+| Rewrite L0 `transcript.jsonl` + pass post-compaction **history** into the model call | **Daemon**; harness only consumes the window |
+| TokenJuice-style tool_result shrink | Optional harness middleware later — not this section |
+
+v1 ships a **tool-only flush plan** (heuristic **durable** lines from the dropped prefix → L3 under §8.1). Soft-only flush previews against the **soft** threshold budget (not the compact threshold — otherwise the drop-set is empty in the soft zone); if that still yields nothing durable, scan the **oldest half** of the transcript. Unknown-context byte-force keeps a **fixed small** history window (~512 tokens), not a fraction of the oversize transcript. The plan MUST NOT park sensitive/presence/tool chatter or pure acknowledgements; ambiguous chat is skipped (not burned into the once-per-cycle mark on soft flush). Durable cues are **anchored** (prefs, allergy/diet, name/timezone/locale, family, “please always/never …”) — bare `I am`/`I'm`/`always`/`never` and cue-less bullets do not qualify. A full silent agentic `NO_REPLY` flush turn (cheap/local model override) MAY land later without moving ownership into `envoy-harness`.
+
+**Workflow turns:** static-workflow execution does **not** send the full L0 history window into the model, so §8 pre-turn pressure runs on the **harness** path only. Workflows that later need long transcript context MUST reuse the same daemon maintenance helper.
+
 ### 8.1 Flush write policy (Normative — was R10)
 
 **The taint gate is one rule, applied to every target.** `trust` is derived per §13 (it is *not* the turn's trust if the turn carried tainted results — see §13's result-level taint), from the binding flags defined in Design Appendix A.3. If `trust == "untrusted"` — which includes **every turn originating from a `kind: "event-source"` channel** (Design §5.7.4 rule 2) — flush may write **nothing** directly; it proposes PendingLearn or drops.
@@ -482,8 +604,8 @@ Provisional later: deep `home.memorySearch` when L5 enabled.
 
 Screen **`memory`** — this is the authoritative list; Design §10.1's `memory` row is a summary of it and must match:
 
-- View L1 / L2 / L3, with **raw vs injected sizes** and the `truncated` flag per asset
-- **Exact caps** — both budgets per asset: `injectBudget` (L1 2000 / L2 4000 / L3 2000 combined) **and** `rawSoftCap` (L1 20 000 / L2 40 000 / L3 10 000 / COMPACT 20 000 or 20 entries), PendingLearn 50 @ 30 d — editable per account, defaults shown (§4.2)
+- View L1 / L2 / L3, with **On disk vs In prompt** sizes and the `truncated` flag per asset
+- **Caps** — show **cloud** and **local** inject packages (§4.2.1) plus fixed `rawSoftCap` (L1 20 000 / L2 40 000 / L3 10 000 / COMPACT 20 000 or 20 entries); PendingLearn 50 @ 30 d. Mode control: Auto (default, from model context) / Baseline / Custom; Custom edits L1/L2/L3 inject and seeds from the cloud package (§4.2, §4.2.1)
 - **Session retention** (`sessionRetentionDays`, default 180, `0` = forever) and the resulting FTS purge (§4.6; field schema in Design §8.3)
 - **Trust lists**: `policy.json` → `trustedChannels[]` (which channels may produce `agent`-trust writes) and `searchTainted` (whether `session_search` may return tainted spans — default off) (§13, §4.6)
 - **LearnQueue state**: depth vs cap; a **stale badge** per proposal (`stale: true`, with the base that moved) and a re-review action (§7.2); the coalescing group key (`diffKey`); and the last `home:learn-rejected-full` event if the cap was hit (§7.2)
@@ -571,7 +693,7 @@ Screen **`memory`** — this is the authoritative list; Design §10.1's `memory`
 | V-LEARN-1 | Skill unchanged until `acceptLearn` |
 | V-LEARN-2 | Background review: skills always pending; L1/L2 proposals pending by default (no silent skill/profile write) |
 | V-LEARN-3 | Provenance on flush/consolidate/learn writes |
-| V-UX-MEM-1 | Settings: view, pending learns (with stale badge), compact, caps and the exact §4.2 defaults, flush/review toggles, active backend
+| V-UX-MEM-1 | Settings: view, pending learns (with stale badge), compact, On disk / In prompt copy, **cloud + local inject packages** (§4.2.1), flush/review toggles, active backend |
 | V-MEM-10 | When inject truncated, prompt contains recall/session_search duty line |
 | V-MEM-11 | Concurrent flush + remember cannot corrupt MEMORY.md |
 | V-MEM-12 | Disabling L5 backend leaves L1–L3 intact |
@@ -581,6 +703,7 @@ Screen **`memory`** — this is the authoritative list; Design §10.1's `memory`
 | V-MEM-16 | One LearnQueue per account; accept refreshes all sessions |
 | V-MEM-17 | External MEMORY.md edit reloads before inject; no silent clobber (check performed **inside** the writer lock; last-writer-wins with a Doctor warning on a detected external-during-agent-write) |
 | V-MEM-18 | **Caps contract enforced**: inject truncation is measured on the serialized block including labels; `rawSoftCap` is enforced with its defined action; the L2 inject builder is section-aware (whole sections/bullets, `§ <heading> — N entries omitted` marker); `home.listMemory` returns `injectBudget`/`rawSoftCap`/`truncated` per asset **and** a `truncated` flag on `profileSummary` |
+| V-MEM-22 | **Model-aware inject profiles**: with known cloud-default and local `contextTokens`, `auto` mode derives two packages via §4.2.1; a local-resolved turn uses the local package and a cloud-resolved turn uses the cloud package; unknown cloud → baseline, unknown local → `HARD_MIN`; `custom` / explicit `caps.*.injectBudget` wins; `rawSoftCap` unchanged by derivation; `home.listMemory.injectProfiles` reports both; Settings preview `active` follows Routing (`local`→local, else cloud) while turns follow resolved placement |
 | V-MEM-19 | **LearnQueue discipline**: a proposal over the cap is rejected with `home:learn-rejected-full` (no silent eviction); equal `diffKey`s coalesce and unequal ones do not; accepting against a moved base either re-applies cleanly or fails `envoyhome.learn_stale` and stays pending |
 | V-MEM-20 | **Backend containment**: disabling a deep backend leaves L1–L3 intact **and** deletes nothing; deleting a session purges its derived L5 documents in the same job; deleting an account removes `memory-backend/` state; a backend cannot return another account's chunk (tested with two accounts sharing one backend instance) |
 | V-MEM-21 | **Trust derivation**: an `event-source` turn is `untrusted` for memory regardless of who owns the device; a `sensitive`-classified tool result makes the affected spans untrusted even inside an owner turn; an accepted learn keeps its originating `trust` |

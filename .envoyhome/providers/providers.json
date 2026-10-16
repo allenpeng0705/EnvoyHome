@@ -1,0 +1,36 @@
+{
+  "providers": [
+    {
+      "id": "minimax-cn",
+      "kind": "cloud_openai_compat",
+      "enabled": true,
+      "placement": "cloud",
+      "costRank": 100,
+      "baseUrl": "https://api.minimaxi.com/v1",
+      "model": "MiniMax-M3",
+      "label": "MiniMax CN"
+    }
+  ],
+  "modes": {
+    "default": "cloud",
+    "allen": "cloud"
+  },
+  "routing": {
+    "default": {
+      "placementFilter": "cloud",
+      "placementPreference": "cloud",
+      "autoModelSwitch": {
+        "enabled": false
+      },
+      "defaultProviderId": "minimax-cn"
+    },
+    "allen": {
+      "placementFilter": "cloud",
+      "autoModelSwitch": {
+        "enabled": false
+      },
+      "placementPreference": "auto",
+      "defaultProviderId": "minimax-cn"
+    }
+  }
+}

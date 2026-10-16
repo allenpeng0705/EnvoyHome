@@ -57,3 +57,29 @@ test("lintSkillContent flags network without declaration", () => {
   });
   assert.ok(findings.some((f) => f.includes("network")));
 });
+
+test("installSkill accepts a SKILL.md file path (uses parent folder as id)", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "envoyhome-skill-file-"));
+  try {
+    const paths = homePaths(stateDir);
+    const svc = new SkillService(paths);
+    const srcDir = join(stateDir, "morning-brief");
+    await mkdir(srcDir, { recursive: true });
+    const skillFile = join(srcDir, "SKILL.md");
+    await writeFile(
+      skillFile,
+      `---
+name: Morning brief
+---
+Prefer a short weather summary with coffee preference.
+`,
+    );
+    const installed = await svc.installSkill({ source: "path", ref: skillFile });
+    assert.equal(installed.id, "morning-brief");
+    assert.equal(installed.needsReview, true);
+    const listed = await svc.listSkills();
+    assert.equal(listed.some((s) => s.id === "morning-brief" && s.name === "Morning brief"), true);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});

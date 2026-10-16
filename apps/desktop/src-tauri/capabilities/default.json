@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Default capabilities for EnvoyHome Settings",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "allow-skill-pickers"]
 }

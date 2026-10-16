@@ -44,6 +44,7 @@ function depsOf(daemon: Awaited<ReturnType<typeof startDaemon>>) {
     providers: daemon.providers,
     harnesses: daemon.harnesses,
     workflows: daemon.workflows,
+        workflowStepTemplates: daemon.workflowStepTemplates,
     skills: daemon.skills,
     artifacts: daemon.artifacts,
     actuations: daemon.actuations,
@@ -130,6 +131,42 @@ test("home.setMemorySettings persists via policy.json", async () => {
     assert.ok("result" in listed);
     assert.equal((listed.result as { flushEnabled: boolean }).flushEnabled, false);
     assert.equal((listed.result as { sessionRetentionDays: number }).sessionRetentionDays, 30);
+    assert.equal((listed.result as { injectBudgetMode: string }).injectBudgetMode, "auto");
+
+    const custom = await dispatchForTest(
+      deps,
+      "home.setMemorySettings",
+      {
+        accountId: "mem1",
+        injectBudgetMode: "custom",
+        caps: {
+          l1: { injectBudget: 1111 },
+          l2: { injectBudget: 2222 },
+          l3: { injectBudget: 3333 },
+        },
+      },
+      loopbackSession(),
+    );
+    assert.ok("result" in custom);
+    assert.equal((custom.result as { injectBudgetMode: string }).injectBudgetMode, "custom");
+
+    const listed2 = await dispatchForTest(
+      deps,
+      "home.listMemory",
+      { accountId: "mem1" },
+      loopbackSession(),
+    );
+    assert.ok("result" in listed2);
+    const mem2 = listed2.result as {
+      injectBudgetMode: string;
+      injectProfiles: { cloud: { l1: number; l2: number; l3: number } };
+      caps: { l2?: { injectBudget?: number } };
+    };
+    assert.equal(mem2.injectBudgetMode, "custom");
+    assert.equal(mem2.injectProfiles.cloud.l1, 1111);
+    assert.equal(mem2.injectProfiles.cloud.l2, 2222);
+    assert.equal(mem2.injectProfiles.cloud.l3, 3333);
+    assert.equal(mem2.caps.l2?.injectBudget, 2222);
 
     const health = await dispatchForTest(deps, "home.health", {}, loopbackSession());
     assert.ok("result" in health);

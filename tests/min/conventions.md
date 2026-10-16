@@ -275,7 +275,7 @@ pnpm -r lint
 
 ```ts
 // protocol/version.ts
-export const PROTOCOL_API_VERSION = 1;   // bump ONLY for a breaking wire change
+export const PROTOCOL_API_VERSION = 2;   // bump ONLY for a breaking wire change
 
 // daemon/migrations/index.ts
 export const MIGRATIONS = [

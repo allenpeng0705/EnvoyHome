@@ -35,6 +35,7 @@ test("home.registerPushToken persists for paired device", async () => {
       providers: daemon.providers,
       harnesses: daemon.harnesses,
       workflows: daemon.workflows,
+        workflowStepTemplates: daemon.workflowStepTemplates,
       skills: daemon.skills,
       artifacts: daemon.artifacts,
       actuations: daemon.actuations,

@@ -29,6 +29,8 @@ export interface AccountPolicy {
   reviewEnabled: boolean;
   flushEnabled: boolean;
   reviewInCloud: boolean;
+  /** Memory Design §4.2.1 — auto derives cloud/local inject from contextTokens. */
+  injectBudgetMode: "auto" | "baseline" | "custom";
   caps: Record<string, unknown>;
 }
 
@@ -48,6 +50,7 @@ const DEFAULTS: AccountPolicy = {
   reviewEnabled: true,
   flushEnabled: true,
   reviewInCloud: false,
+  injectBudgetMode: "auto",
   caps: {},
 };
 

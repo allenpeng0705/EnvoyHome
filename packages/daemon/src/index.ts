@@ -11,6 +11,7 @@ export {
 
 export {
   defaultConfig,
+  defaultStateDir,
   loadDaemonConfig,
   DEFAULT_WS_PORT,
   DEFAULT_HTTP_PORT,
@@ -82,27 +83,58 @@ export {
   buildHomeLlamaServerArgs,
   probeOpenAiModels,
   HOME_LOCAL_ENGINE_PORT,
-  MESH_ENVOY_LOCAL_PORT,
   OLLAMA_DEFAULT_PORT,
   HOME_LOCAL_PROVIDER_ID,
   OLLAMA_PROVIDER_ID,
   assertLocalEngineBaseUrl,
+  assertHuggingFaceGgufUrl,
+  hfResolveUrl,
+  searchHuggingFaceGgufRepos,
+  listHuggingFaceGgufFiles,
+  downloadHuggingFaceGgufUrl,
   resolveLocalModelPath,
   resolveLocalBinaryPath,
   assertSafeArchiveEntry,
+  detectLocalPlatform,
+  HOME_LOCAL_MODEL_TIER_IDS,
+  detectHomeLocalHardware,
+  recommendHomeLocalModel,
+  buildHomeLocalRecommendation,
+  getHomeLocalCatalogModel,
   type LocalEngineStatus,
   type LocalEngineMode,
   type LocalEngineEnableResult,
   type LocalEngineDisableResult,
+  type LocalEngineRecommendationWire,
 } from "./local-engine/index.js";
 
-export { ProviderStore, type ProviderRecord } from "./providers-store.js";
+export {
+  ProviderStore,
+  type ProviderRecord,
+  type AccountRouting,
+  type PlacementPreference,
+} from "./providers-store.js";
 
 export {
   PathJailError,
   safeJoin,
   resolveSandboxPath,
 } from "./fs-jail.js";
+
+export {
+  draftWorkflowFromText,
+  draftWorkflowNodePrompt,
+  extractPromptCandidate,
+  extractYamlCandidate,
+  type DraftChatMessage,
+  type DraftComplete,
+} from "./workflow-draft.js";
+
+export {
+  WorkflowStepTemplateStore,
+  type WorkflowStepTemplate,
+  type LlmStepNodeType,
+} from "./workflow-step-templates.js";
 
 export {
   AccountStore,
@@ -191,3 +223,16 @@ export {
   type ScheduleJob,
   type ScheduleProposal,
 } from "./schedule/index.js";
+
+export {
+  CHAT_MEDIA_MAX_BYTES,
+  CHAT_MEDIA_MAX_FILES,
+  CHAT_MEDIA_UPLOAD_DIR,
+  ChatMediaError,
+  kindFromMime,
+  storeChatMedia,
+  normalizeMediaList,
+  appendMediaToUserText,
+  type ChatMediaKind,
+  type ChatMediaItem,
+} from "./chat-media.js";

@@ -12,11 +12,14 @@ import {
   type ProfileFact,
 } from "./profile.js";
 
-/** Exact v1 inject budgets (Memory Design §4.2). */
+/**
+ * Exact v1 inject budgets (Memory Design §4.2 — OpenClaw-aligned).
+ * L1 ↔ USER.md hard 4k; L2/L3 ↔ bootstrapMaxChars 20k.
+ */
 export const INJECT_BUDGET = {
-  l1: 2000,
-  l2: 4000,
-  l3: 2000,
+  l1: 4000,
+  l2: 20_000,
+  l3: 20_000,
 } as const;
 
 /** Exact v1 raw soft caps (Memory Design §4.2). */

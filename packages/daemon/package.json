@@ -27,6 +27,11 @@
   "dependencies": {
     "@envoyhome/channel-api": "workspace:*",
     "@envoyhome/channel-telegram": "workspace:*",
+    "@envoyhome/channel-discord": "workspace:*",
+    "@envoyhome/channel-slack": "workspace:*",
+    "@envoyhome/channel-feishu": "workspace:*",
+    "@envoyhome/channel-dingtalk": "workspace:*",
+    "@envoyhome/channel-wecom": "workspace:*",
     "@envoyhome/channel-mqtt": "workspace:*",
     "@envoyhome/channel-homeassistant": "workspace:*",
     "@envoyhome/harness-host": "workspace:*",
@@ -35,6 +40,8 @@
     "@envoyhome/test-utils": "workspace:*",
     "@envoyhome/protocol": "workspace:*",
     "@envoyhome/smarthome": "workspace:*",
+    "@envoyhome/fake-ha": "workspace:*",
+    "@envoyhome/fake-mqtt": "workspace:*",
     "@envoyhome/workflows": "workspace:*",
     "@envoymesh/protocol": "link:../../../EnvoyMesh/packages/protocol",
     "@envoymesh/reuse-host": "link:../../../EnvoyMesh/packages/reuse-host"

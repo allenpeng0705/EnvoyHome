@@ -54,6 +54,43 @@ test("V-CRON: propose → confirm arms job; fire at due time", async () => {
   });
 });
 
+test("confirmProposal payload override replaces notify with workflow", async () => {
+  await withService(async (svc) => {
+    const proposal = await svc.proposeFromText("alice", "Remind me in 5 minutes to stretch");
+    assert.ok(!("error" in proposal));
+    if ("error" in proposal) return;
+    assert.equal(proposal.payload.kind, "notify");
+    const job = await svc.confirmProposal(proposal.proposalId, {
+      name: "Morning brief",
+      payload: { kind: "workflow", workflowId: "morning_brief", message: "morning_brief" },
+    });
+    assert.equal(job.payload.kind, "workflow");
+    assert.equal(job.payload.workflowId, "morning_brief");
+    assert.equal(job.payload.message, "morning_brief");
+    assert.equal(job.name, "Morning brief");
+    assert.equal(job.missPolicy, "skip");
+  });
+});
+
+test("normalizeUserSchedulePayload refuses system", async () => {
+  const { normalizeUserSchedulePayload, normalizeScheduleSpec } = await import(
+    "../dist/schedule/validate-payload.js"
+  );
+  const sys = normalizeUserSchedulePayload({ kind: "system", systemJob: "consolidate" });
+  assert.equal(sys.ok, false);
+  const tool = normalizeUserSchedulePayload({ kind: "tool", toolName: "sandbox_read" });
+  assert.equal(tool.ok, true);
+  if (tool.ok) assert.equal(tool.payload.toolName, "sandbox_read");
+  const badAt = normalizeScheduleSpec({ kind: "at", timeZone: "UTC" });
+  assert.equal(badAt.ok, false);
+  const okCron = normalizeScheduleSpec({
+    kind: "cron",
+    cronExpr: "0 8 * * *",
+    timeZone: "Asia/Shanghai",
+  });
+  assert.equal(okCron.ok, true);
+});
+
 test("V-CRON: confirm required — proposal alone does not fire", async () => {
   await withService(async (svc, clock) => {
     await svc.proposeFromText("alice", "Remind me in 1 minutes to x");

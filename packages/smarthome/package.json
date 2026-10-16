@@ -18,7 +18,8 @@
     "test": "tsc -p tsconfig.json && node --test test/*.test.ts"
   },
   "dependencies": {
-    "@envoyhome/protocol": "workspace:*"
+    "@envoyhome/protocol": "workspace:*",
+    "mqtt": "^5.16.1"
   },
   "devDependencies": {
     "@types/node": "^22.20.5"

@@ -26,7 +26,7 @@ test("V-HA-5/19: safety class — unknown and lock/disarm deny", () => {
   assert.equal(classifySafety({ objectClass: "light", service: "turn_on" }).safetyClass, false);
 });
 
-test("V-HA-14: resolver holds for reads — foreign object fails", () => {
+test("V-HA-14: resolver holds for reads — unbound fails; bound is household-scoped", () => {
   const reg = new ObjectRegistry();
   reg.upsert({
     sourceId: "lock.front",
@@ -40,9 +40,25 @@ test("V-HA-14: resolver holds for reads — foreign object fails", () => {
     actuationAllowList: [],
     indirectionAllowList: [],
   });
-  assert.throws(() => resolveObject(reg, "lock.front", "bob"), /object_not_bound/);
+  // Bound for the home: any profile may resolve (Design 2026-10-16l).
+  const forBob = resolveObject(reg, "lock.front", "bob");
+  assert.equal(forBob.accountId, "alice");
   const handle = resolveObject(reg, "lock.front", "alice");
   assert.equal(tierForGetState(handle), "sensitive");
+  reg.upsert({
+    sourceId: "lock.unbound",
+    channel: "ha",
+    channelAccount: "ha1",
+    displayName: "Unbound",
+    class: "lock",
+    accountId: null,
+    shared: false,
+    neverUnattended: true,
+    actuationAllowList: [],
+    indirectionAllowList: [],
+  });
+  assert.throws(() => resolveObject(reg, "lock.unbound", "alice"), /object_not_bound/);
+  assert.throws(() => resolveObject(reg, "lock.missing", "alice"), /object_not_bound/);
 });
 
 test("V-HA-16: non-idempotent refused unattended; journal reconciles pending", async () => {

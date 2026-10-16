@@ -72,6 +72,10 @@ export interface ObjectRecord {
   lastSeen: string;
 }
 
+/** Design §5.7.3 — unbound inventory for Settings is capped and TTL'd. */
+export const UNBOUND_MAX = 50;
+export const UNBOUND_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 interface ObjectsFile {
   version: 1;
   objects: ObjectRecord[];
@@ -103,12 +107,40 @@ export class ObjectRegistry {
     this.cache = objects;
   }
 
+  /**
+   * Drop unbound rows older than 7 days, then keep the 50 newest unbound.
+   * Bound rows are never pruned. Returns whether any unbound was dropped for the cap/TTL.
+   */
+  async pruneUnbound(nowMs = Date.now()): Promise<{ pruned: number; capped: boolean }> {
+    const all = await this.load();
+    const cutoff = nowMs - UNBOUND_TTL_MS;
+    const bound: ObjectRecord[] = [];
+    const unbound: ObjectRecord[] = [];
+    for (const o of all) {
+      if (o.bound && o.accountId !== null) {
+        bound.push(o);
+        continue;
+      }
+      const seen = Date.parse(o.lastSeen);
+      if (Number.isFinite(seen) && seen < cutoff) continue;
+      unbound.push(o);
+    }
+    unbound.sort((a, b) => Date.parse(b.lastSeen) - Date.parse(a.lastSeen));
+    const keptUnbound = unbound.slice(0, UNBOUND_MAX);
+    const capped = unbound.length > UNBOUND_MAX;
+    const next = [...bound, ...keptUnbound];
+    const pruned = all.length - next.length;
+    if (pruned > 0) await this.save(next);
+    return { pruned, capped };
+  }
+
   async list(filter: {
     channel?: string;
     channelAccount?: string;
     accountId?: string;
     bound?: boolean;
   } = {}): Promise<ObjectRecord[]> {
+    await this.pruneUnbound();
     const all = await this.load();
     return all.filter((o) => {
       if (filter.channel !== undefined && o.channel !== filter.channel) return false;
@@ -237,6 +269,11 @@ export class ObjectRegistry {
     }
     const accountId = input.accountId;
     const now = new Date().toISOString();
+    // Presence-revealing classes stay always-ask; callers cannot clear the flag (Design §5.7.2).
+    const presenceLocked = (PRESENCE_REVEALING_CLASSES as readonly string[]).includes(nextClass);
+    const neverUnattended = presenceLocked
+      ? true
+      : (input.neverUnattended ?? prev.neverUnattended);
     const updated: ObjectRecord = {
       ...prev,
       class: nextClass,
@@ -244,7 +281,7 @@ export class ObjectRegistry {
       accountId,
       bound: accountId !== null,
       shared,
-      neverUnattended: input.neverUnattended ?? prev.neverUnattended,
+      neverUnattended,
       actuationAllowList: input.actuationAllowList ?? prev.actuationAllowList,
       indirectionAllowList: input.indirectionAllowList ?? prev.indirectionAllowList,
       lastSeen: now,
@@ -276,5 +313,19 @@ export class ObjectRegistry {
       lastSeen: new Date().toISOString(),
     };
     await this.save(all);
+  }
+
+  /**
+   * Delete registry rows for the given channel + sourceIds (any channelAccount).
+   * Used by demo stop so fake-ha / fake-mqtt inventory does not linger after the demo ends.
+   */
+  async removeSources(channel: string, sourceIds: readonly string[]): Promise<number> {
+    if (sourceIds.length === 0) return 0;
+    const wanted = new Set(sourceIds);
+    const all = await this.load();
+    const next = all.filter((o) => !(o.channel === channel && wanted.has(o.sourceId)));
+    const removed = all.length - next.length;
+    if (removed > 0) await this.save(next);
+    return removed;
   }
 }

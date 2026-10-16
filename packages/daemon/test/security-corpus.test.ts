@@ -31,6 +31,7 @@ import { ActuationService } from "../dist/actuation-service.js";
 import { MemoryFacade } from "@envoyhome/memory";
 import { ChannelService } from "../dist/channels/service.js";
 import { WorkflowStore } from "../dist/workflows.js";
+import { WorkflowStepTemplateStore } from "../dist/workflow-step-templates.js";
 import { ScheduleService } from "../dist/schedule/service.js";
 import { SkillService } from "../dist/skills.js";
 import { ArtifactService } from "../dist/artifacts.js";
@@ -87,6 +88,7 @@ function routerDeps(stateDir: string, devices = new DeviceCredentialStore()): Ro
     providers: {} as RouterDeps["providers"],
     harnesses: {} as RouterDeps["harnesses"],
     workflows: new WorkflowStore(paths),
+    workflowStepTemplates: new WorkflowStepTemplateStore(paths),
     schedules: new ScheduleService({ paths }),
     skills: new SkillService(paths),
     artifacts: new ArtifactService(paths, () => "http://127.0.0.1:1"),
@@ -106,7 +108,6 @@ function routerDeps(stateDir: string, devices = new DeviceCredentialStore()): Ro
         providerId: "",
         healthy: false,
         modelIds: [],
-        meshAttachAvailable: false,
         runtimeInstalled: false,
         modelsOnDisk: [],
       }),
@@ -414,6 +415,7 @@ test("B3 RPC: create/list/update/delete accounts + sender/device bindings", asyn
     providers: daemon.providers,
     harnesses: daemon.harnesses,
     workflows: daemon.workflows,
+        workflowStepTemplates: daemon.workflowStepTemplates,
     schedules: daemon.schedules,
     skills: daemon.skills,
     artifacts: daemon.artifacts,
@@ -529,6 +531,11 @@ test("homePaths exposes Design §4.2 roots", async () => {
     assert.equal(p.secretsDir, join(stateDir, "secrets"));
     assert.equal(p.objectsJson, join(stateDir, "objects.json"));
     assert.equal(p.accountRoot("alice"), join(stateDir, "accounts", "alice"));
+    assert.equal(p.workflowStepTemplatesJson, join(stateDir, "workflows", "step-templates.json"));
+    assert.equal(
+      p.accountWorkflowStepTemplatesJson("alice"),
+      join(stateDir, "accounts", "alice", "workflow-step-templates.json"),
+    );
   } finally {
     await rm(stateDir, { recursive: true, force: true });
   }

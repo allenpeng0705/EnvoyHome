@@ -273,6 +273,41 @@ test("home.hello: result round-trips including protocolApiVersion", () => {
   assert.ok(issues.some((i) => i.path === "/result/protocolApiVersion" && i.message === "is required"));
 });
 
+test("home.listWorkflowTools: result shape and optional sampleArgs", () => {
+  assert.equal(isKnownMethod("home.listWorkflowTools"), true);
+  assert.deepEqual(validateMethodParams("home.listWorkflowTools", {}).issues, []);
+  assert.deepEqual(
+    validateMethodParams("home.listWorkflowTools", { accountId: "alice" }).issues,
+    [],
+  );
+  const ok = {
+    tools: [
+      {
+        name: "write_file",
+        risk: "write",
+        source: "builtin",
+        summary: "Write a file",
+        available: true,
+        sampleArgs: { path: "a.txt", content: "hi" },
+      },
+      {
+        name: "ha_get_state",
+        risk: "read",
+        source: "smarthome",
+        summary: "HA get state",
+        available: false,
+        unavailableReason: "Enable the homeassistant channel in Settings",
+      },
+    ],
+  };
+  assert.deepEqual(validateMethodResult("home.listWorkflowTools", ok), []);
+  assert.ok(
+    validateMethodResult("home.listWorkflowTools", {
+      tools: [{ name: "x", risk: "read", source: "nope", summary: "s", available: true }],
+    }).length > 0,
+  );
+});
+
 test("home.updateProfile: supersede-by-key accepts a flat map and rejects append shapes", () => {
   const ok = {
     accountId: "alice",
@@ -305,6 +340,41 @@ test("home.sendMessage: accountId, sessionId and text are all required", () => {
       `dropping ${drop} must be reported at /params/${drop}`,
     );
   }
+});
+
+test("home.uploadChatMedia + sendMessage.media[] (additive chat attach)", () => {
+  assert.deepEqual(
+    validateMethodParams("home.uploadChatMedia", {
+      accountId: "alice",
+      fileName: "note.txt",
+      contentBase64: "aGVsbG8=",
+      mimeType: "text/plain",
+    }).issues,
+    [],
+  );
+  assert.ok(
+    validateMethodParams("home.uploadChatMedia", {
+      accountId: "alice",
+      fileName: "note.txt",
+    }).issues.length > 0,
+  );
+  assert.deepEqual(
+    validateMethodParams("home.sendMessage", {
+      accountId: "alice",
+      sessionId: "s1",
+      text: "",
+      media: [{ kind: "file", uri: "uploads/x-note.txt", fileName: "note.txt", bytes: 5 }],
+    }).issues,
+    [],
+  );
+  assert.ok(
+    validateMethodParams("home.sendMessage", {
+      accountId: "alice",
+      sessionId: "s1",
+      text: "hi",
+      media: [{ kind: "file", uri: "" }],
+    }).issues.length > 0,
+  );
 });
 
 test("home.getArtifactUrl: ttlSec is clamped, not rejected", () => {
@@ -402,6 +472,29 @@ test("unknown method is reported as unknownMethod (→ envoyhome.version_too_low
   // params optional and omitted is fine
   assert.equal(validateMethodParams("home.health", undefined).ok, true);
   assert.equal(validateMethodParams("home.listAccounts", undefined).ok, true);
+
+  // Design 2026-10-09aj — optional accountId (UI sends it for per-profile routing)
+  assert.equal(validateMethodParams("home.listProviders", undefined).ok, true);
+  assert.equal(validateMethodParams("home.listProviders", {}).ok, true);
+  assert.equal(validateMethodParams("home.listProviders", { accountId: "alice" }).ok, true);
+  assert.ok(
+    validateMethodParams("home.listProviders", { accountId: "alice", extra: 1 }).issues.some((i) =>
+      i.message.includes("not an allowed field"),
+    ),
+  );
+
+  // Design 2026-10-13s — Advanced Unset clears via null
+  assert.equal(
+    validateMethodParams("home.setProvider", {
+      id: "c1",
+      kind: "cloud_openai_compat",
+      paramCountB: null,
+      costRank: null,
+      contextTokens: null,
+      latencyClass: null,
+    }).ok,
+    true,
+  );
 });
 
 /* --------------------------------------------------------------- validator */

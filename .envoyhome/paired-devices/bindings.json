@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "bindings": [
+    {
+      "kind": "device",
+      "bindingId": "bind_2b6dd487f75f8020",
+      "deviceId": "dev_17f927121432441a",
+      "accountId": "allen",
+      "agentId": "default",
+      "ownerTrusted": false,
+      "createdAt": "2026-10-12T09:18:23.368Z",
+      "updatedAt": "2026-10-12T09:18:23.368Z"
+    }
+  ]
+}

@@ -34,6 +34,10 @@ test("V-CH-5/8/9: fake channel round-trip; secrets never read back; event-source
   assert.equal(status.config.echo, true);
   assert.equal(JSON.stringify(status).includes("secret-token"), false);
 
+  // Partial config update merges — does not wipe prior keys (Channels UI Save after reload).
+  await loader.setChannelConfig("fake", {});
+  assert.equal(loader.getChannelStatus("fake").config.echo, true);
+
   await assert.rejects(
     () => loader.setChannelConfig("fake", { undeclared: 1 }),
     /undeclared/,

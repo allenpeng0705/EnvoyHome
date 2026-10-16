@@ -10,6 +10,12 @@ import {
 } from "@envoyhome/channel-api";
 import type { BindingStore } from "../bindings.js";
 import type { DaemonLogger } from "../logger.js";
+import {
+  configPointsAtDemoHa,
+  configPointsAtDemoMqtt,
+  removeDemoHaRegistry,
+  removeDemoMqttRegistry,
+} from "../demo-cleanup.js";
 import { ObjectRegistry } from "../object-registry.js";
 import { ChannelStateStore } from "./state.js";
 import type { TurnCompleteInfo, TurnService, TurnWireResult } from "../turn-service.js";
@@ -96,6 +102,7 @@ export class ChannelService {
     await mkdir(this.state.paths.secretsDir, { recursive: true });
     const prev = await this.state.get(id);
     const wasEnabled = prev?.enabled === true || this.loader.getChannelStatus(id).enabled;
+    const prevCfg = { ...(this.loader.getChannelStatus(id).config ?? {}) };
     try {
       await this.loader.setChannelConfig(id, config, secrets);
     } catch (err) {
@@ -104,6 +111,15 @@ export class ChannelService {
         throw new ChannelError("bad_params", msg);
       }
       throw err;
+    }
+    // Leaving a demo URL for a real hub: drop demo inventory so Devices stays clean
+    // even when the user never clicked Stop (Design 2026-10-16o follow-up).
+    const nextCfg = this.loader.getChannelStatus(id).config ?? {};
+    if (id === "homeassistant" && configPointsAtDemoHa(prevCfg) && !configPointsAtDemoHa(nextCfg)) {
+      await removeDemoHaRegistry(this.objects).catch(() => undefined);
+    }
+    if (id === "mqtt" && configPointsAtDemoMqtt(prevCfg) && !configPointsAtDemoMqtt(nextCfg)) {
+      await removeDemoMqttRegistry(this.objects).catch(() => undefined);
     }
     const status = this.loader.getChannelStatus(id);
     const secretKeys = new Set(prev?.secretKeys ?? []);
@@ -178,7 +194,20 @@ export class ChannelService {
       detail: st.detail,
       sourceCount: st.unboundSources.length,
       unboundSources: unbound,
+      /** Non-secret config for UI hydration — never includes secret bag values (V-CH-9). */
+      config: { ...st.config },
     };
+  }
+
+  /** Internal: non-secret config for workflow / doctor tool integrations. */
+  async peekChannelConfig(id: string): Promise<Record<string, unknown>> {
+    const row = await this.state.get(id);
+    return row?.config ? { ...row.config } : {};
+  }
+
+  /** Internal: secret bag for workflow tool clients (never wire this). */
+  peekChannelSecrets(id: string): Record<string, string> {
+    return { ...(this.secrets.get(id) ?? {}) };
   }
 
   async deliverOutbound(channelId: string, msg: OutboundMessage): Promise<void> {

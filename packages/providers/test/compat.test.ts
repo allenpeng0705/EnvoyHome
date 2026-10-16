@@ -21,6 +21,21 @@ test("joinProviderUrl: /v1 base + chat completions", () => {
     joinProviderUrl("https://api.anthropic.com", "/v1/messages"),
     "https://api.anthropic.com/v1/messages",
   );
+  // Gemini OpenAI-compat (ai.google.dev/gemini-api/docs/openai).
+  assert.equal(
+    joinProviderUrl(
+      "https://generativelanguage.googleapis.com/v1beta/openai",
+      "/v1/chat/completions",
+    ),
+    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+  );
+  assert.equal(
+    joinProviderUrl(
+      "https://generativelanguage.googleapis.com/v1beta/openai/",
+      "/v1/chat/completions",
+    ),
+    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+  );
 });
 
 test("OpenAI-compat complete uses chat/completions + Bearer", async () => {

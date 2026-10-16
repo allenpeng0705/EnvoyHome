@@ -14,5 +14,7 @@ export interface TurnContext {
     origin: TurnOrigin;
     tool_policy: "standard" | "restricted";
     model_mode: "local" | "cloud" | "mix";
+    /** Design §5.7.8 — smart-home tools + bound inject allowed this turn. */
+    homeSurface?: boolean;
   };
 }

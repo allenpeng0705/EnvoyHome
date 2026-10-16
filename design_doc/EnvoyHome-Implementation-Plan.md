@@ -5,7 +5,7 @@ Living plan for **active** EnvoyHome build work. Style aligned with EnvoyMesh [`
 | Field | Value |
 |-------|-------|
 | **Role** | Subordinate to [`EnvoyHome-Design.md`](EnvoyHome-Design.md) and [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Design.md). **Design wins.** |
-| **Last updated** | 2026-10-09l |
+| **Last updated** | 2026-10-16l |
 | **Owner** | Allen Peng |
 | **G6** | **Accepted 2026-10-09** for Plan text matching Design `2026-10-08f` (with G1) |
 
@@ -41,10 +41,10 @@ Maintenance: flip checkboxes when shipping; refresh **Current Milestone**; keep 
 EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0–B14** is implemented on `main` against Design **`2026-10-08f`** (**G1/G6 Accepted 2026-10-09**).
 
 **Active epic:** **Desktop + mobile product depth** `[~]` — Settings completeness (V-UX-2/6, Models presets, §10.1) + Flutter thin-client chat/artifacts  
-**Parked:** **Demo IM (Telegram)** `[>]` — Channels UI exists; live @BotFather deferred  
+**Next (after mobile solid):** **First-party IM set** `[ ]` — Telegram live → Discord, Slack, Feishu/Lark, DingTalk, WeCom (Design §5.0 `2026-10-16c`); WhatsApp / WeChat personal deferred  
 **Optional:** Live HA C.4 `[>]` — fixture green; needs `ENVOYHOME_HA_*` on an operator machine
 
-**Last shipped (docs):** Owner reprioritize: desktop + mobile before Demo IM (2026-10-09j)
+**Last shipped (docs):** Owner lock first-party IM catalog (2026-10-16c); Channels UI already merged
 
 ## Key Decisions
 
@@ -56,35 +56,36 @@ EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0
 - `[x]` Approvals: durable + TTL + fail-closed; claim≠consume for grants (08f).
 - `[x]` Memory + gated LearnQueue are **v1 Normative** (not Phase 2).
 - `[x]` G1/G6 for Design/`Plan` through **`2026-10-08f`** — Accepted 2026-10-09.
-- `[x]` Owner product order: **desktop → EnvoyMesh mobile → demo IM last**.
+- `[x]` Owner product order: **desktop → EnvoyMesh mobile → first-party IM set**.
+- `[x]` First-party chat plugins (Design §5.0): **Telegram**, **Discord**, **Slack**, **Feishu/Lark**, **DingTalk**, **WeCom**; **WhatsApp** + **WeChat personal** deferred.
 - `[ ]` Tag `v1.0.0` — when [release bar](#release-bar-8--design-21) items (1)–(8) all `[x]` with honest evidence.
-- `[>]` Demo Telegram live bot — Settings path parked; resume after desktop + mobile feel solid.
+- `[ ]` First-party IM epic — Telegram live first, then the five additional bots; Channels UI becomes a chat-plugin catalog.
 - `[ ]` Phase 2 Privacy Mode RPC / automation authoring UX — after mobile path is clear.
 
 ## Current Milestone
 
-**Milestone:** Spine shipped; **deepen desktop Settings + mobile thin client** (Demo IM parked).
+**Milestone:** Spine shipped; **deepen desktop Settings + mobile thin client**; then **first-party IM set** (Design §5.0).
 
 | Track | Status | Notes |
 |-------|--------|-------|
 | Design `2026-10-08f` G1 | `[x]` | Accepted 2026-10-09 |
 | Plan G6 (08f text) | `[x]` | Accepted 2026-10-09 |
 | B0–B14 code on `main` | `[x]` | Every-ID e2e not claimed for all V-HA/V-UX |
-| Desktop product shell | `[~]` | V-UX-2/6 + §10.1 nav (bindings/skills/workflows/artifacts/harness); live HA inventory still operator |
+| Desktop product shell | `[~]` | V-UX-2/6 + §10.1 nav; Channels tab merged; live HA inventory still operator |
 | Tauri supervise | `[x]` | Spawn/reap; OS service install/uninstall/restart RPCs + Advanced controls |
 | Inbound → turns + product events | `[x]` | Daemon + Settings subscribe/`on` |
 | policy.json / forceLocalForEventSource | `[x]` | PolicyStore |
 | Privacy Mode preview file | `[~]` | `privacy-mode.json` stub; RPC = Phase 2 |
 | Live HA C.4 | `[>]` | Fixture `[x]` (`pnpm ha:c4-diff`); live needs hub creds — unset here |
 | EnvoyMesh mobile thin client | `[~]` | Pair + push + chat stream + artifacts open; Store polish operator-side |
-| Demo IM (Telegram) | `[>]` | Parked — Channels UI kept; live bot later |
+| First-party IM set | `[~]` | Telegram+Discord+Slack+Feishu+DingTalk+WeCom plugins+Channels catalog; live operator verify remaining |
 
 ### Next planning pulls
 
 0. **Desktop depth** `[~]` — V-UX-2/6 + Models presets `[x]`; live HA inventory / V-UX-7 deny e2e when hub present.  
 1. **Mobile thin client** `[~]` — accountIds + chat + artifacts `[x]`; Store/TestFlight polish.  
 2. **Optional live HA C.4** `[>]` — when hub creds available.  
-3. **Demo IM channel** `[>]` — parked.  
+3. **First-party IM set** `[ ]` — Telegram live + five bots (Design §5.0); catalog UI.  
 4. **Tag `v1.0.0`** `[ ]` — when release bar holds.
 
 ## Build stage board (B0–B14)
@@ -100,7 +101,7 @@ Honest: `[x]` = stage acceptance met for **scaffold + CI-owned IDs**; `[~]` = co
 | **B4** Pairing + mesh hosting | `[x]` | hosting status; dual-mode notes |
 | **B5** Memory L1–L3 | `[x]` | StandingStore + facade |
 | **B6** Providers / harness / approvals | `[x]` | TurnService; durable approvals |
-| **B7** Channel SDK + Telegram demo | `[~]` | SDK `[x]`; Settings path `[x]`; live @BotFather `[>]` parked |
+| **B7** Channel SDK + Telegram demo | `[~]` | SDK `[x]`; Settings path `[x]`; live Telegram + five first-party IMs = post-mobile epic |
 | **B8** Memory depth | `[x]` | LearnQueue, flush, L4 FTS, compact |
 | **B9** Static workflows | `[x]` | matcher/executor; V-DAG-4 real model `[ ]` optional |
 | **B9.1** ScheduleService | `[x]` | clock + NL propose/confirm + workflow sync; V-CRON-1..6 |
@@ -135,7 +136,7 @@ Tag `v1.0.0` when (1)–(8) are honestly `[x]` including bar 1’s e2e bar you c
 | EnvoyMesh mobile thin client | `[~]` | §19.2 — chat/approvals/artifacts + push |
 | Privacy Mode RPC (+ smart-home egress) | `[ ]` | §19.4, V-P2-PRIV-* |
 | Automation authoring UX | `[ ]` | §19.8 |
-| Demo IM channel (Telegram) | `[>]` | §5.3 — parked after Channels UI; live bot later |
+| First-party IM set (Telegram + Discord + Slack + Feishu + DingTalk + WeCom) | `[ ]` | Design §5.0 `2026-10-16c` — after mobile solid |
 | Memory Tree / fleets / TokenJuice | `[>]` | §19.7 — not core |
 
 ---
@@ -159,7 +160,7 @@ EnvoyHome/
     memory/                           # @envoyhome/memory — MemoryFacade + StandingStore + L4 FTS + LearnQueue + CompactDiary
     smarthome/                        # @envoyhome/smarthome — HA REST/WS + MQTT clients + ha_*/mqtt_* tool bundle (B14)
     test-utils/                       # @envoyhome/test-utils — flushLoop() + __resetActiveXForTests() (conventions R8)
-  plugins/                            # bundled channel plugins: channel-telegram (B7); channel-mqtt, channel-homeassistant (B14)
+  plugins/                            # channel-telegram (+ discord/slack/feishu/dingtalk/wecom); channel-mqtt, channel-homeassistant
   scripts/                            # ci, peers-check, fetch-peers, ha-c4-diff, doctor-*, smoke-rpc
   tests/manual/                       # v1 Design §10.2 smoke checklist (bar 4)
   .github/workflows/ci.yml
@@ -266,7 +267,7 @@ Stages are roughly sequential. Where two stages can run in parallel, it's marked
 
 | Item | Detail |
 |------|--------|
-| Deliverable | `packages/memory/src/{standing-store,memory-facade,profile,notes,writer-lock,recall-fts,external-reload,bootstrap-inject}.ts`; `home.getProfile`, `home.updateProfile` (Appendix A.9 supersede-by-key); `home.recall` (keyword/FTS over L2+L3, account-scoped, **CJK-capable tokenizer**); `home.forget`; tools `profile_get`, `profile_update`, `remember`, `recall`, `forget`. Bootstrap inject enforces the **exact** caps of Memory Design §4.2 (L1 2000 / L2 4000 / L3 2000 chars) and adds the **fixed duty line** when any standing inject is truncated. **Per-account writer lock** at `accounts/<id>/memory/.lock` (or an in-process mutex) — not a `memories/` directory, which does not exist in Design §4.2. **External edit reload** by mtime/hash before inject and before write. |
+| Deliverable | `packages/memory/src/{standing-store,memory-facade,profile,notes,writer-lock,recall-fts,external-reload,bootstrap-inject}.ts`; `home.getProfile`, `home.updateProfile` (Appendix A.9 supersede-by-key); `home.recall` (keyword/FTS over L2+L3, account-scoped, **CJK-capable tokenizer**); `home.forget`; tools `profile_get`, `profile_update`, `remember`, `recall`, `forget`. Bootstrap inject enforces the **exact** caps of Memory Design §4.2 (L1 4000 / L2 20 000 / L3 20 000 chars — OpenClaw-aligned) and adds the **fixed duty line** when any standing inject is truncated. **Per-account writer lock** at `accounts/<id>/memory/.lock` (or an in-process mutex) — not a `memories/` directory, which does not exist in Design §4.2. **External edit reload** by mtime/hash before inject and before write. |
 | Acceptance | Cross-account recall/forget denied; refresh-after-write works in same session; **V-MEM-11's interleaving test lives here** (concurrent flush + remember cannot corrupt MEMORY.md); truncation flag visible in `home.listMemory` (`truncated: true`); a **Chinese query matches Chinese note content** (V-MEM-13); a rotated `memory/compact/*.md` diary is **not** returned by `recall` as an L3 daily note. |
 | Verification IDs | V-MEM-1, V-MEM-3, V-MEM-4, V-MEM-5, V-MEM-7, V-MEM-10, V-MEM-11, V-MEM-13, V-MEM-17, V-MEM-18. |
 | Risk | Soft loss if model skips `recall` — settings UI must show pending LearnQueue so user can spot it. StandingStore vs L5 backend ownership boundary — keep profile.json **and L2/L3** core-owned; a backend may *read* L2/L3 but must not become their writer (Memory Design §3/§5.3 conflict, resolved in §5.3). **`recall` is FTS-only in v1**, and SQLite FTS5's default tokenizer does not segment CJK — use the `trigram` tokenizer (Hermes precedent: `messages_fts_trigram`) because `preferred_language: zh` is a first-class locale in Design A.9. |
@@ -284,9 +285,9 @@ Stages are roughly sequential. Where two stages can run in parallel, it's marked
 | Risk | **Pre-loop asserts must persist failures** — sanity checks at function head bypass the loop try-catch and silent-break. Move them inside the try-catch. **Watchdog signals OR** (log parser + direct probe). **Cap checks inside iteration**, not before. **Allow-list is the contract** for any "send any intent" transport routed through a validator gate. **Approvals must be durable, not in-memory** — a restart must not lose a pending question or resurrect a stale allow (this is the HomeClaw failure mode we are explicitly not copying). |
 | Depends on | B3 (sandbox + bindings), B5 (memory inject reads), B2 (event bus) |
 
-### B7 — Channel SDK + Telegram demo `[~]` **[parallel-eligible with B6]** · live IM `[>]`
+### B7 — Channel SDK + Telegram demo `[~]` **[parallel-eligible with B6]** · first-party IM epic `[ ]`
 
-**Scope:** `@envoyhome/channel-api` package; in-process plugin loader; sidecar spawner; Telegram demo plugin.
+**Scope:** `@envoyhome/channel-api` package; in-process plugin loader; sidecar spawner; Telegram reference plugin. **Follow-on (post-mobile):** Discord, Slack, Feishu/Lark, DingTalk, WeCom — same contract (Design §5.0).
 
 | Item | Detail |
 |------|--------|
@@ -308,16 +309,16 @@ Stages are roughly sequential. Where two stages can run in parallel, it's marked
 | Risk | **Concurrent flush + remember must not corrupt MEMORY.md** — single writer lock per account is the contract; test interleavings explicitly (the lock lands in B5, the flush/consolidate writers here). **Pending learn fatigue** — coalesce near-duplicates (same kind + similar diff hash) while queued. **Tainted/untrusted channel content → pending only**; never auto-promote to L1/L2. **A backend must not append to L2/L3** (Memory Design §3 vs §5.3): the core owns those paths; a backend may read them. |
 | Depends on | B5 |
 
-### B9 — Static workflows (matcher + executor) `[x]` **[parallel-eligible with B10]** · V-DAG-4 live model `[ ]`
+### B9 — Static workflows (matcher + DAG executor) `[x]` **[parallel-eligible with B10]** · V-DAG-4 live model `[ ]`
 
-**Scope:** Static-workflow executor + YAML loader + global/overlay semantics. Design §7. **These are linear ordered step lists, not edge graphs** — keep the name honest until `depends_on`/edges exist.
+**Scope:** Static-workflow **DAG** executor + YAML loader + global/overlay + authoring RPCs. Design §7. Product name **Workflow**; linear `steps[]` compiles to a single path.
 
 | Item | Detail |
 |------|--------|
-| Deliverable | `packages/workflows/src/{loader,executor,steps/llm-fill,steps/tool,steps/llm-summarize,matcher}.ts`; `home.listWorkflows`, `home.getWorkflow`, `home.reloadWorkflows`. Load order: global `workflows/*.yml` first, then `accounts/<id>/workflows/*.yml` overlays (same `id` replaces global). `llm_fill` / `llm_summarize` are narrow calls — not open tool loops — and go through the **same `provider_handle` + `approval_sink`** as a harness turn (Design §6.1), so a workflow's `tool` step is subject to Design §4.3 risk tiers exactly like a harness tool call. |
-| Acceptance | A matched **keyword/rule** trigger routes to the workflow and does not open a free tool loop; unmatched input falls through to the harness; a `tool` step's side effects are sandboxed and gated by policy; a sample workflow runs on a small local model. |
-| Verification IDs | V-DAG-1, V-DAG-2, V-DAG-3, V-DAG-4, V-DAG-5. |
-| Risk | **The scheduler is new here.** `match.schedule` runs unattended with no turn text, so it must not depend on keywords; `match.event` fires on a **registered** object (Design §5.7.3) and its rendered text is untrusted. **There is still no intent classifier in v1** (Design §8.3, Q3 closed), so `match.keywords` remains the only text trigger — do not write a matcher that requires `match.intents` to be produced by a model, or V-DAG-1/2/4 are unreachable. Keep the matcher conservative: a positive match wins, otherwise the harness. |
+| Deliverable | `packages/workflows/src/{loader,executor,matcher}.ts` (+ step helpers); `home.listWorkflows`, `home.getWorkflow`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.runWorkflow`. Load order: global `workflows/*.yml` first, then `accounts/<id>/workflows/*.yml` overlays (same `id` replaces global). Graph: `nodes`+`edges`+optional `when`/`join`; cycles fail `workflow.cycle`. `llm_fill` / `llm_summarize` are narrow calls — not open tool loops — and go through the **same `provider_handle` + `approval_sink`** as a harness turn (Design §6.1), so a workflow's `tool` node is subject to Design §4.3 risk tiers exactly like a harness tool call. |
+| Acceptance | Keyword match → workflow (no free tool loop); unmatched → harness; tool nodes sandboxed+§4.4; cycle reject; conditional branch; `join: all`; linear YAML still loads; put/validate/test-run from Settings. |
+| Verification IDs | V-DAG-1, V-DAG-2, V-DAG-3, V-DAG-4, V-DAG-5, V-DAG-6, V-DAG-7, V-DAG-8. |
+| Risk | **The scheduler is new here.** `match.schedule` runs unattended with no turn text, so it must not depend on keywords; `match.event` fires on a **registered** object (Design §5.7.3) and its rendered text is untrusted. **There is still no intent classifier in v1** (Design §8.3, Q3 closed), so `match.keywords` remains the only text trigger — do not write a matcher that requires `match.intents` to be produced by a model, or V-DAG-1/2/4 are unreachable. Keep the matcher conservative: a positive match wins, otherwise the harness. Conditions are static expressions only — never a model-picked next node. |
 | Depends on | B3 (sandbox), B5 (memory reads), B6 (turn pipeline routes here; `provider_handle` + `approval_sink`) |
 
 ### B10 — Skills (verify gate) `[x]` **[parallel-eligible with B9]**
@@ -326,7 +327,7 @@ Stages are roughly sequential. Where two stages can run in parallel, it's marked
 
 | Item | Detail |
 |------|--------|
-| Deliverable | `packages/daemon/src/skills.ts`; `home.listSkills`, `home.installSkill` (`source: "path"\|"clawhub"\|"url"`), `home.verifySkill`, `home.removeSkill`. Catalog → load body → `references/` on demand. Operator-installed skills work from day one; agent-authored skill create/patch/delete goes through PendingLearn (B8). |
+| Deliverable | `packages/daemon/src/skills.ts` + `skill-remote.ts`; `home.listSkills`, `home.searchClawHubSkills`, `home.installSkill` (`source: "path"\|"clawhub"\|"url"`), `home.verifySkill`, `home.removeSkill`. Catalog → load body → `references/` on demand. Operator-installed skills work from day one; agent-authored skill create/patch/delete goes through PendingLearn (B8). |
 | Acceptance | Install + verify before skill tools available; verified=false skills cannot be loaded into tool list (V-SKILL-1). |
 | Verification IDs | V-SKILL-1. |
 | Risk | Skill bundles often pull deps that try to `exec` — verify gate must lint for exec/network capability before enable. |
@@ -352,7 +353,7 @@ Stages are roughly sequential. Where two stages can run in parallel, it's marked
 |------|--------|
 | Deliverable | `apps/desktop/src/{app,nav,views/{accounts,account-detail,bindings,pairing,channels,approvals,models,harness,skills,workflows,memory,artifacts,doctor,advanced}}.tsx` (or svelte — match EnvoyCoder decision); pairing QR; device→account binding editor; WS client over the hosting peer (or LAN WS); `daemon.json` editor for advanced; **OS service control** (`home.getServiceStatus` / `installService` / `uninstallService` / `restartService`, Design A.1) surfaced on `advanced` (EnvoyCoder precedent: `SectionsService`). Settings reads the **RESOLVED** config (bundled + persisted), keeps the source-URI form, and never overwrites an unparseable settings file — **quarantine + report**, in the family's idiom (`../EnvoyCoder/apps/desktop/src/daemon/state-file.ts:1-20`). |
 | Acceptance | V-UX-1..5 + V-UX-MEM-1 + V-SEC-6 pass: new account + channel bind without raw config edit; view/revoke pairings and pending approvals and grants in UI; Telegram enable + token via Settings only; Advanced shows ports 4780/4781 and publicBaseUrl and service state; Memory screen shows pending learns, exact caps, flush/review toggles and compact now. |
-| Verification IDs | V-UX-1, V-UX-2, V-UX-3, V-UX-4, V-UX-5, V-UX-MEM-1, V-SEC-6. |
+| Verification IDs | V-UX-1, V-UX-2, V-UX-3, V-UX-4, V-UX-5, V-UX-9, V-UX-10, V-UX-11, V-UX-12, V-UX-MEM-1, V-SEC-6. |
 | Risk | **Persisted-wins-over-bundled path** must be tested explicitly ("Settings UI for merged-config features must read resolved, not persisted"). UI hints on classified errors, not regex of message — persist `lastErrorKind` (network\|proof-token\|other) alongside `lastError`. Don't render every error as plain red text. **Write settings atomically and quarantine rather than clobber** — a settings file is user data. |
 | Depends on | All RPC stages B2–B11 (UI is thin wrapper around stable wire). The smart-home view is **added by the stage that builds it**, on top of this nav shell — naming it here would be a cycle, so this cell lists only real dependencies. |
 
@@ -370,13 +371,13 @@ Stages are roughly sequential. Where two stages can run in parallel, it's marked
 
 ### B14 — Smart home (MQTT + Home Assistant) `[~]` **[parallel-eligible with B9; after B12 shell]** · live household `[ ]`
 
-**Scope:** Design §5.7. The smart-home surface: a tool bundle, two `kind: "event-source"` channel plugins, and example workflows. **No core device model, no new `home.*` methods** (Design §5.7.1). This stage exists because "home agent" without the home is a misnomer (Design §1.1, Design §1.3).
+**Scope:** Design §5.7. The smart-home surface: a tool bundle, two `kind: "event-source"` channel plugins, example workflows, and §5.7.8 NL control (home-intent routing, bound-only inject, Home chat). **No core device model** (Design §5.7.1). Additive optional `purpose` on existing `home.openSession` only — no new method names. This stage exists because "home agent" without the home is a misnomer (Design §1.1, Design §1.3).
 
 | Item | Detail |
 |------|--------|
 | Deliverable | `packages/smarthome/src/{ha-client,mqtt-client,object-resolver,safety-class,tools/{ha,mqtt},actuation-journal}.ts` — the `ha_*` (`ha_list_entities`, `ha_get_state`, `ha_list_services`, `ha_call_service`) and `mqtt_*` (`mqtt_subscribe`, `mqtt_read`, `mqtt_publish`) tools, each declaring its Design §4.3.2 tier **and** `idempotent`, and each taking a **resolved object handle** from `object-resolver` (never a raw `entity_id`/topic). `safety-class` implements Design §5.7.2 as data (object class + service deny list + script/scene/button indirection + MQTT allow-list + `neverUnattended`), defaulting unknown to safety-class. `actuation-journal` writes the intent record **before** dispatch and reconciles on restart (Design §5.7.7). `plugins/channel-mqtt/` + `plugins/channel-homeassistant/` as `kind: "event-source"` plugins with **read-only credentials**, `registerSources` inventory, and notification-only `outbound`. `home.listSources`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations` (Design §3.4, A.3, A.5); `objects.json` registry; **`apps/desktop/src/views/smarthome.tsx`** — the object registry, unbound list, sharing/`neverUnattended` flags, actuation journal and credential warning, added to B12's nav shell (Design §10.1). Doctor hooks for `objects.json` drift, unregistered sources, stale actuation rows and the write-credential warning. Example workflows: morning brief (**`schedule` trigger**) and motion → notify (**`event` trigger**). |
-| Acceptance | **V-HA-1..20** pass (V-CH-8/V-CH-9 belong to B7). Specifically: a topic/state event opens a turn **only** for the bound account and **only** for a source registered by that plugin instance; an unbound object opens none; **every** object access — reads included — goes through `resolveObject`, and a foreign object fails `envoyhome.object_not_bound`; actuation is `admin` and blocked when attended-with-no-answer; unattended actuation without a grant fails closed (`envoyhome.actuation_not_granted`); a broad grant is refused (`envoyhome.grant_too_broad`); the safety class is refused at creation **and** dispatch (`envoyhome.actuation_never_unattended`) and the whole Appendix C.4 corpus is denied; non-idempotent services are refused unattended; the journal has an intent record for every dispatch and reconciles `pending` records after a crash without re-issuing; the `smarthome` screen binds an unbound object, refuses `shared` on a presence class, and toggles `neverUnattended` without editing files (V-UX-6), and an actuation approval renders its **target summary** (V-UX-7); object state reaches no store outside Design §5.7.4; tokens never surface in reads or logs; with the broker down a local turn still works and actuation fails closed with a classified error. |
-| Verification IDs | V-HA-1 … V-HA-20, V-SEC-11, **V-UX-6, V-UX-7** (the `smarthome` screen and its approval-target rendering — owned here because this is the stage that builds them). |
+| Acceptance | **V-HA-1..24** pass (V-CH-8/V-CH-9 belong to B7). Specifically: a topic/state event opens a turn **only** for the bound account and **only** for a source registered by that plugin instance; an unbound object opens none; **every** object access — reads included — goes through `resolveObject`, and a foreign object fails `envoyhome.object_not_bound`; actuation is `admin` and blocked when attended-with-no-answer; unattended actuation without a grant fails closed (`envoyhome.actuation_not_granted`); a broad grant is refused (`envoyhome.grant_too_broad`); the safety class is refused at creation **and** dispatch (`envoyhome.actuation_never_unattended`) and the whole Appendix C.4 corpus is denied; non-idempotent services are refused unattended; the journal has an intent record for every dispatch and reconciles `pending` records after a crash without re-issuing; Connections → Home Assistant or MQTT binds an unbound object, refuses `shared` on a presence class, and toggles `neverUnattended` without editing files (V-UX-6), and an actuation approval renders its **target summary** (V-UX-7); **§5.7.8** home-intent routing keeps `ha_*`/`mqtt_*` off general Chat unless home-related (V-HA-21), bound-only inject is capped (V-HA-22), Home chat (`purpose: "home"`) works (V-HA-23, V-UX-8), and ambiguous intent does not actuate (V-HA-24); object state reaches no store outside Design §5.7.4; tokens never surface in reads or logs; with the broker down a local turn still works and actuation fails closed with a classified error. |
+| Verification IDs | V-HA-1 … V-HA-24, V-SEC-11, **V-UX-6, V-UX-7, V-UX-8** (smart-home screen, actuation Approvals, Home chat — owned here). |
 | Risk | **Actuation is the highest-consequence tool call in the product.** Hence R13, the `admin` tier, the data-driven safety **class** (Design §5.7.2 — a regex was tried and withdrawn: it missed `alarm_control_panel.alarm_disarm`, garage/`cover.*`, `lock.open`, all MQTT, and every script/scene/button indirection), the resolver chokepoint for reads as well as writes, and the actuation journal. **Second: presence leakage** — motion/lock/camera state reveals whether anyone is home; Design §5.7.4 names every store, event turns are privacy-tagged local, and event bodies are untrusted input to the *tool gate* too. **Third: the plugin holds credentials** — an `event-source` plugin gets a **read-only** credential and its `outbound` is notification-only, because a plugin that can publish bypasses the gate entirely. **Fourth: scope creep into a hub** — do not grow a device model, a broker, or radio support in v1 (Design §5.7.1, Design §19.8). |
 | Depends on | B3 (bindings, layout), B6 (tool catalogue + approvals/grants + risk tiers), B7 (Channel SDK + loader + `setChannelConfig`), B9 (workflows for automations), B12 (`smarthome` Settings screen) |
 
@@ -425,17 +426,22 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-LLM-2 | **B6** | swap llama.cpp ↔ openai-compat via `home.setProvider` + `home.setModelMode` |
 | V-LLM-3 | **B6** | privacy-tagged turn (Design §8.3) stays local in `mix`; fails closed in `cloud` |
 | V-LLM-4 | **B6** | `home.setProviderSecret` value never echoed in `home.listProviders` or logs |
-| V-LLM-7 | **B6** | `home.enableLocalEngine` attaches Mesh Envoy Local `:18790` when healthy |
+| V-LLM-7 | **B6** | `prefer=attach` → `envoyhome.local_engine_independent`; `auto`/`spawn` registers Home-owned `envoyhome-local` on `:18792` (never Mesh `:18790`) |
 | V-LLM-8 | **B6** | `home.enableOllama` fail-closed when down; registers `ollama` when healthy |
 | V-LLM-9 | **B6** | Home spawn uses `:18792`; missing GGUF ⇒ `envoyhome.local_engine_no_model` |
+| V-LLM-10 | **B6** | hardware probe recommends curated GGUF; `home.downloadLocalModel` installs under `local-engine/models/` |
+| V-LLM-11 | **B6** | Spawn downloads GPU llama.cpp when NVIDIA present (Win CUDA / Linux Vulkan / Mac Metal); missing accel marker on NVIDIA re-downloads; `-ngl -1` when GPU offload |
 | V-DAG-1 | **B9** | a matched keyword/rule trigger does not open a free tool loop |
 | V-DAG-2 | **B9** | unmatched input falls through to the harness |
 | V-DAG-3 | **B9** | a `tool` step's side effects are sandboxed and policy-gated |
 | V-DAG-4 | **B9** | sample workflow runs on a small local model (nightly/local suite) |
 | V-DAG-5 | **B9** | `schedule` trigger fires unattended without a model call; `event` trigger fires on a registered object change; two trigger classes rejected at load |
+| V-DAG-6 | **B9** | cyclic graph rejected at load (`workflow.cycle`) |
+| V-DAG-7 | **B9** | conditional `when` edge takes only the matching branch |
+| V-DAG-8 | **B9** | `join: all` waits for every parent before the join node runs |
 | V-MEM-1 | **B5** | no cross-account recall / forget |
 | V-MEM-3 | **B5** | prompt authority ordering; supersede-by-key profile |
-| V-MEM-4 | **B5** | bootstrap caps (L1 2000 / L2 4000 / L3 2000) enforced; Settings shows truncation |
+| V-MEM-4 | **B5** | bootstrap caps (L1 4000 / L2 20 000 / L3 20 000 — OpenClaw-aligned) enforced; Settings shows truncation |
 | V-MEM-5 | **B5** | default `files` backend works with zero plugins |
 | V-MEM-7 | **B5** | after `remember`, the same session sees the updated fact |
 | V-MEM-10 | **B5** | truncated inject ⇒ recall/session_search duty line present |
@@ -454,6 +460,7 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-MEM-19 | **B8** | `diffKey` coalescing; accepting against a moved base re-validates or fails `envoyhome.learn_stale` |
 | V-MEM-20 | **B8** | backend containment: disable/delete/account-removal leave L1–L3 intact, purge derived documents, and cannot return another account's chunk |
 | V-MEM-21 | **B8** | trust derivation: `event-source` ⇒ `untrusted`; `sensitive` result taints its spans even in an owner turn; accepted learns keep their origin's trust |
+| V-MEM-22 | **B8** | model-aware inject: cloud vs local packages from `contextTokens` (Memory Design §4.2.1); turn uses route-resolved placement; `listMemory.injectProfiles` reports both |
 | V-LEARN-1 | **B8** | skill unchanged until `acceptLearn` |
 | V-LEARN-2 | **B8** | background review: skills always pending; L1/L2 pending by default |
 | V-LEARN-3 | **B8** | provenance recorded on flush/consolidate/learn writes |
@@ -464,8 +471,13 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-UX-3 | **B12** | Telegram enable + token via Settings only |
 | V-UX-4 | **B12** | Advanced shows ports 4780/4781, `publicBaseUrl`, service state |
 | V-UX-5 | **B12** | Memory screen shows pending learns, exact caps, flush/review toggles + compact now |
-| V-UX-6 | **B14** | Smart-home screen binds an unbound object, marks shared/read-only, toggles `neverUnattended` |
+| V-UX-6 | **B14** | Connections → Home Assistant or MQTT binds an unbound object, marks shared/read-only, toggles `neverUnattended` |
 | V-UX-7 | **B14** | An actuation request appears in Approvals labelled as actuation and can be denied |
+| V-UX-8 | **B14** | Home chat opens with `purpose: "home"` only when HA is configured+enabled; entry hidden otherwise; general Chat does not dump full HA inventory |
+| V-UX-9 | **B12** | Workflows Diagram\|YAML dual editor round-trips; YAML remains put source of truth |
+| V-UX-10 | **B12** | `home.draftWorkflow` / `home.draftWorkflowPrompt` draft-only (never write); optional `currentYaml` revise; Settings New/Edit Draft/Revise with AI; invalid/unknown-tool fail closed |
+| V-UX-11 | **B12** | reusable LLM step templates list/put/remove; Add step ▾ + Save as step; runtime kinds stay closed |
+| V-UX-12 | **B12** | Schedules authoring: Reminder/Workflow/Tool; list payloadKind + Workflow badge; putSchedule / confirm payload override |
 | V-UX-MEM-1 | **B12** | Memory screen: view, pending, caps, compact, flush/review toggles, active backend |
 | V-P2-MESH-1 | **B4** | phone path works with hosting only (no Social, attach not required) |
 | V-P2-MESH-2 | **B4** | if attach is enabled, the dial target stays the hosting peer; dual-mode ports/mDNS do not collide |
@@ -475,20 +487,24 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-HA-4 | **B14** | a workflow whose `tool` step actuates is subject to Design §4.4 — blocked unattended with no grant, never an approval bypass |
 | V-HA-5 | **B14** | the safety list (unlock/garage/valve/gate/disarm) is not grant-satisfiable; such a grant is refused |
 | V-HA-6 | **B14** | an event from an unbound object opens no turn and actuates nothing; it lists in Settings |
-| V-HA-7 | **B14** | a workflow for account A cannot actuate an object bound to account B |
+| V-HA-7 | **B14** | unbound object cannot be actuated/resolved; bound objects are household-scoped |
 | V-HA-8 | **B14** | device state / entity names never auto-enter L1/L2/L3 |
 | V-HA-9 | **B14** | HA/MQTT credentials never appear in `getChannelStatus`, `listChannels`, or logs |
 | V-HA-10 | **B14** | broker down → local turn still works; actuation fails closed with a classified error |
 | V-HA-11 | **B14** | broad grant refused for an actuating tool; a lamp grant cannot be replayed against a door |
 | V-HA-12 | **B14** | grant expired/revoked between check and effect cannot actuate (CAS at dispatch) |
 | V-HA-13 | **B14** | `sourceId` spoofing dropped before account resolution; no cross-account turn via a claimed id |
-| V-HA-14 | **B14** | the resolver holds for reads — foreign object read fails `envoyhome.object_not_bound` |
+| V-HA-14 | **B14** | the resolver holds for reads — unbound/unknown fails `envoyhome.object_not_bound`; bound is household-scoped |
 | V-HA-15 | **B14** | a read-only-credential plugin cannot change state via `outbound`; write credential raises Doctor `channel.write_credential` |
 | V-HA-16 | **B14** | non-idempotent service refused unattended; crash ⇒ `unconfirmed`, never re-issued; duplicate delivery does not double-apply |
 | V-HA-17 | **B14** | presence reaches no L4 row, COMPACT.md, artifact, foreign `turn-delta` subscriber, notification, or default log |
 | V-HA-18 | **B14** | event turns are privacy-tagged: local in `mix`, fail closed in `cloud` without a local provider |
 | V-HA-19 | **B14** | the whole Appendix C.4 required-deny corpus is denied |
 | V-HA-20 | **B14** | approvals state their target; a mismatched `argsDigest` answer is rejected |
+| V-HA-21 | **B14** | general Chat omits `ha_*`/`mqtt_*` unless home-intent routing marks the turn; default gate is local/session/sticky — not a per-turn LLM classify |
+| V-HA-22 | **B14** | home inject = bound objects only, capped; no full HA dump in standing inject |
+| V-HA-23 | **B14** | Home chat (`purpose: "home"`) enables smart-home tools + bound inject; Approvals still required to actuate |
+| V-HA-24 | **B14** | ambiguous / low-confidence home intent does not call `ha_call_service` / `mqtt_publish` |
 | V-P2-PRIV-1 | *(Phase 2 — unowned by design)* | Privacy Mode → cloud fails closed |
 | V-P2-PRIV-2 | *(Phase 2 — unowned by design)* | Privacy Mode also stops outbound smart-home calls **and** notifications (Design §19.4) |
 | V-P2-MOB-1 | *(Phase 2 — unowned by design)* | Dart thin client; no local model; dials the hosting peer |
@@ -693,6 +709,59 @@ If you need to change the answer to "in what order we build," edit this doc and 
 
 | Date | Change |
 |------|--------|
+| 2026-10-16l | **B14 / §5.7.3:** Household device bind — any profile may use bound objects; Shared UI dropped; V-HA-7/14 rewritten. Aligns Design `2026-10-16l`. |
+| 2026-10-16k | **B14 / V-UX-6:** Object bind/flags/journal on Connections → HA and MQTT (channel-filtered); Skills Smart home tab removed. Aligns Design `2026-10-16k`. |
+| 2026-10-14b | **Product / B10:** Skills UI shows a sample `SKILL.md` (how to write). Aligns Design `2026-10-14b`. |
+| 2026-10-14a | **§9.2 / B10:** `home.searchClawHubSkills` + desktop ClawHub search→Install (EnvoyMesh peer). Aligns Design `2026-10-14a`. |
+| 2026-10-13v | **§9.2:** Skills `url` + `clawhub` install sources (SSRF/zip-slip). Aligns Design `2026-10-13v`. |
+| 2026-10-13u | **Product:** Skills path install — drop zone + native picker; folder or SKILL.md. Aligns Design `2026-10-13u`. |
+| 2026-10-13t | **Product:** Sidebar Automation → Skills label (tabs unchanged). Aligns Design `2026-10-13t`. |
+| 2026-10-13s | **LLM Settings polish:** Routing in-place extras; Advanced autosave + latency + Unset clears; durable flush cues narrowed. Aligns Design / Memory Design `2026-10-13s`. |
+| 2026-10-13r | **§8.5:** llama.cpp default when unset; Ollama only after Connect, then restored on boot. Aligns Design `2026-10-13r`. |
+| 2026-10-13q | **Memory §8 soft-flush:** soft-threshold preview + oldest-half fallback; fixed unknown-context keep window. Aligns Design / Memory Design `2026-10-13q`. |
+| 2026-10-13p | **Memory §8:** flush-cycle / durable-filter / same-turn byte compact / `home:session-compacted`. Aligns Design / Memory Design `2026-10-13p`. |
+| 2026-10-13o | **Memory §8:** daemon pre-turn session pressure (flush + L0 compact); harness receives history window only. Aligns Design / Memory Design `2026-10-13o`. |
+| 2026-10-13n | **Routing:** `shared: true` only on enter/leave Local only; `setSharedLocalOnly(false)` no-op when already off. Aligns Design `2026-10-13n`. |
+| 2026-10-13c | Local only is one switch for every profile (`shared: true` on setPlacementFilter). Aligns Design `2026-10-13c`. |
+| 2026-10-13b | Local model (llama.cpp / Ollama) is one selection shared by every profile. Aligns Design `2026-10-13b`. |
+| 2026-10-13m | **Memory:** unknown-local HARD_MIN; never inflate above affordable; inject auto-save queues latest. Aligns Memory Design / Design `2026-10-13m`. |
+| 2026-10-13l | **Memory:** OpenClaw-aligned inject caps (L1 4k / L2·L3 20k / total 60k); auto scale-down for small windows. Aligns Memory Design / Design `2026-10-13l`. |
+| 2026-10-13k | **Memory:** aggressive §4.2.1 constants; configurable inject via `setMemorySettings` (mode + caps); Caps UI. Package numbers superseded by `2026-10-13l`. |
+| 2026-10-13j | **Memory:** model-aware cloud/local inject profiles (V-MEM-22). Derivation + `listMemory.injectProfiles` + turn placement + Caps UI. Aligns Memory Design / Design `2026-10-13j`. |
+| 2026-10-13f | **Harness:** ship **envoy-harness only**; remove `codex-adapter` catalogue row; ACP adapters deferred. Aligns Design `2026-10-13f`. |
+| 2026-10-13a | Local Model: per-item download progress + Stop/Continue (Range resume). Aligns Design `2026-10-13a`. |
+| 2026-10-12q | Local Model: Hugging Face search + list GGUF files + URL download. Aligns Design `2026-10-12q`. |
+| 2026-10-12p | Local Model: select active GGUF (`activeModelFile` + Use this); spawn prefers last selection. Aligns Design `2026-10-12p`. |
+| 2026-10-12o | `listProviders` newest-first (with newest cloud as default). Aligns Design `2026-10-12o`. |
+| 2026-10-12n | MiniMax default = M3; Design §8.2 vision opt-in wording. Aligns Design `2026-10-12n`. |
+| 2026-10-12m | Google Gemini OpenAI-compat preset + `joinProviderUrl` `/openai` mount. Aligns Design `2026-10-12m`. |
+| 2026-10-12l | Preset catalog re-check (order, Moonshot intl, Anthropic Sonnet 4.5 omitted). Aligns Design `2026-10-12l`. |
+| 2026-10-12k | DeepSeek V4.1-Flash labels + GLM overview sync + model picker labels. Aligns Design `2026-10-12k`. |
+| 2026-10-12j | Preset catalog re-audit (OpenAI/Grok/MiniMax/Kimi corrections). Aligns Design `2026-10-12j`. |
+| 2026-10-12i | Preset catalog audit (context/params/vision-off-default). Aligns Design `2026-10-12i`. |
+| 2026-10-12h | Preset cost default = Subscription included (manual override to pay-per-use). Aligns Design `2026-10-12h`. |
+| 2026-10-12g | Cost level **Subscription included** (already-paid monthly/yearly → prefer over usage APIs). Aligns Design `2026-10-12g`. |
+| 2026-10-12f | Cost level select (Free…Flagship → costRank); every preset has paramCountB + contextTokens. Aligns Design `2026-10-12f`. |
+| 2026-10-12e | Curated preset model profiles + Add Provider auto-fill Advanced. Aligns Design `2026-10-12e`. |
+| 2026-10-12d | Daemon default `stateDir` = `~/.envoyhome` (align Tauri). Design `2026-10-12d`. |
+| 2026-10-16i | **Schedules nav label** (tab id stays `jobs`). Aligns Design `2026-10-16i`. |
+| 2026-10-16h | **Schedules authoring UX:** Reminder/Workflow/Tool create; `home.putSchedule` + confirm payload override; list payloadKind + Workflow badge (V-UX-12). Aligns Design `2026-10-16h`. |
+| 2026-10-16g | **Workflows list:** remove redundant Create with AI button; New + in-editor Draft/Revise only. Aligns Design `2026-10-16g`. |
+| 2026-10-16f | **AI draft/revise whole workflow:** optional `currentYaml` on `home.draftWorkflow`; Settings Draft/Revise with AI (V-UX-10). Aligns Design `2026-10-16f`. |
+| 2026-10-16c | **LLM step templates:** `home.list/put/removeWorkflowStepTemplates` + Settings Save as step / Add step ▾ (V-UX-11). Aligns Design `2026-10-16c`. |
+| 2026-10-16a | **Workflow DAG canvas + draft RPCs:** Diagram\|YAML dual editor (V-UX-9); `home.draftWorkflow` / `home.draftWorkflowPrompt` (V-UX-10). Aligns Design `2026-10-16a`. |
+| 2026-10-16e | **First-party IM plugins:** Discord, Slack, Feishu, DingTalk, WeCom (+ Telegram); Channels catalog UI; Chat-only. |
+| 2026-10-16d | **IM = Chat only** + start Discord: `plugins/channel-discord` (DM Gateway), daemon bundle, Channels UI card, `docs/discord-setup.md`. Aligns Design `2026-10-16d`. |
+| 2026-10-16c | **First-party IM set locked:** Telegram, Discord, Slack, Feishu/Lark, DingTalk, WeCom; WhatsApp + WeChat personal deferred. Product order: desktop → mobile → IM epic. Aligns Design §5.0 `2026-10-16c`. |
+| 2026-10-15f | **Home chat hidden** until HA configured+enabled (V-UX-8). Aligns Design `2026-10-15f`. |
+| 2026-10-15e | **§5.7.8 P1/P2:** no per-turn LLM home-classifier by default; Home chat + sticky + local hits for recall. Aligns Design `2026-10-15e`. |
+| 2026-10-15c | **§5.7.8 / §10 HA NL control:** home-intent routing, bound-only inject, Home chat (`purpose: "home"`), V-HA-21…24 + V-UX-8 owned by B14. Aligns Design `2026-10-15c`. |
+| 2026-10-12c | **§8.2:** newest added cloud → `defaultProviderId`. Aligns Design `2026-10-12c`. |
+| 2026-10-12b | **§8.2:** cloud-only `defaultProviderId` (card action, not Routing); single enabled local; cloud-only pool uses cloud default. Aligns Design `2026-10-12b`. |
+| 2026-10-12a | **§8.2 safe defaults:** adaptive `placementFilter` (`cloud` if any cloud else `local`); UI **Smart Routing** = `any` (opt-in); `placementPreference` lock; auto-switch only under `any`. Aligns Design `2026-10-12a`. |
+| 2026-10-09af | **V-LLM-11:** GPU llama.cpp runtime (Win CUDA 12.4 + cudart / Linux Vulkan / Mac Metal); missing `runtime-accel.json` on NVIDIA forces one-shot re-download; spawn prefers recommended GGUF when installed. Aligns Design §8.5 `2026-10-09af`. |
+| 2026-10-09ae | **V-LLM-10:** hardware-based curated GGUF recommendations + `home.downloadLocalModel` (Adapt EnvoyMesh Envoy Local hw/catalog). |
+| 2026-10-09ad | **V-LLM-7:** EnvoyHome Local independent — never attach Mesh `:18790`; spawn `:18792` / Ollama only. Aligns Design §8.5 `2026-10-09ad` (`protocolApiVersion` → 2). |
 | 2026-10-09o | **B9.1 ScheduleService:** `at`/`every`/`cron`, NL propose→confirm, IANA/DST, miss skip for admin workflows, protocol schedule RPCs + `home:schedule-fired`. Design §7.4. |
 | 2026-10-09n | **§8 Slice B:** needClass + weighted scorer in `@envoyhome/providers`; MixRouter `auto_switch`; Slice A fixes (persist auto-switch across load; defaultProvider without cloud bias on `any`). |
 | 2026-10-09m | **§8 Slice A:** provider pool + `defaultProviderId` / `placementFilter` / `autoModelSwitch` (default off); model properties; `home:route-decided`; Design §8 rewrite. Scorer = Slice B. |

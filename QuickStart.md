@@ -139,6 +139,8 @@ Typical first path after connect:
 4. **Pairing** — mint QR for the phone  
 5. **Approvals** — confirm elevated tool calls when prompted  
 
+**Smart home (HA / MQTT):** [`docs/smart-home.md`](docs/smart-home.md) — connect and bind on **Connections → Home Assistant** or **MQTT**, smoke-test with Workflows. Optional chat bots: **Connections → Channels**. Recommended demo today: Home Assistant REST (`docs/homeassistant-setup.md`). MQTT live broker I/O is still stubbed (`docs/mqtt-setup.md`).
+
 Demo IM (Telegram, etc.) stays last — see [`docs/telegram-demo-setup.md`](docs/telegram-demo-setup.md).
 
 ## Useful commands

@@ -228,6 +228,27 @@ const memoryNote = obj(
   ["path", "rawChars", "injectChars", "truncated", "injectBudget", "rawSoftCap", "sectionsOmitted"],
 );
 
+/** Memory Design §4.2.1 — one cloud/local inject package. */
+const injectProfile = obj(
+  {
+    contextTokens: int({ minimum: 1 }),
+    sourceProviderId: str({ minLength: 1 }),
+    l1: int({ minimum: 0 }),
+    l2: int({ minimum: 0 }),
+    l3: int({ minimum: 0 }),
+  },
+  ["l1", "l2", "l3"],
+);
+
+const injectProfiles = obj(
+  {
+    active: enumOf("cloud", "local"),
+    cloud: injectProfile,
+    local: injectProfile,
+  },
+  ["active", "cloud", "local"],
+);
+
 const pendingLearnKind = enumOf(
   "profile_patch",
   "memory_append",
@@ -700,7 +721,7 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     group: "objects",
     scope: "account-scoped",
     paramsOptional: true,
-    summary: "List smart-home objects (owner: all; account: own + shared)",
+    summary: "List smart-home objects (household registry; unbound included for Settings)",
     params: obj({ accountId: str(), channel: str(), bound: bool() }),
     result: obj({ sources: arr(sourceRecord), unboundCapped: bool() }, ["sources"]),
   },
@@ -743,9 +764,15 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     group: "chat",
     scope: "account-scoped",
     paramsOptional: false,
-    summary: "Open a chat session",
+    summary: "Open a chat session (optional purpose=home for Home chat)",
     params: obj(
-      { accountId: str({ minLength: 1 }), agentId: str(), title: str(), channel: str() },
+      {
+        accountId: str({ minLength: 1 }),
+        agentId: str(),
+        title: str(),
+        channel: str(),
+        purpose: enumOf("general", "home"),
+      },
       ["accountId"],
     ),
     result: obj(
@@ -754,6 +781,7 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         accountId: str({ minLength: 1 }),
         agentId: str(),
         createdAt: iso(),
+        purpose: enumOf("general", "home"),
       },
       ["sessionId", "accountId", "agentId", "createdAt"],
     ),
@@ -762,17 +790,23 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     group: "chat",
     scope: "account-scoped",
     paramsOptional: false,
-    summary: "Send a turn (streams via turn events)",
+    summary: "Send a turn (streams via turn events); optional media[] from home.uploadChatMedia",
     params: obj(
       {
         accountId: str({ minLength: 1 }),
         sessionId: str({ minLength: 1 }),
         text: str(),
         media: arr(
-          obj({ kind: enumOf("image", "audio", "video", "file"), uri: str({ minLength: 1 }) }, [
-            "kind",
-            "uri",
-          ]),
+          obj(
+            {
+              kind: enumOf("image", "audio", "video", "file"),
+              uri: str({ minLength: 1 }),
+              fileName: str(),
+              mimeType: str(),
+              bytes: int({ minimum: 0 }),
+            },
+            ["kind", "uri"],
+          ),
         ),
         clientTurnId: str(),
       },
@@ -786,6 +820,32 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         route: turnRoute,
       },
       ["turnId", "sessionId", "status", "route"],
+    ),
+  },
+  "home.uploadChatMedia": {
+    group: "chat",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary:
+      "Upload a chat attachment into the account sandbox (uploads/); returns media uri for home.sendMessage",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        fileName: str({ minLength: 1 }),
+        contentBase64: str({ minLength: 1 }),
+        mimeType: str(),
+      },
+      ["accountId", "fileName", "contentBase64"],
+    ),
+    result: obj(
+      {
+        kind: enumOf("image", "audio", "video", "file"),
+        uri: str({ minLength: 1 }),
+        fileName: str({ minLength: 1 }),
+        mimeType: str(),
+        bytes: int({ minimum: 0 }),
+      },
+      ["kind", "uri", "fileName", "bytes"],
     ),
   },
   "home.cancelTurn": {
@@ -802,8 +862,13 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     paramsOptional: false,
     summary: "Read a session transcript (tainted spans excluded by default)",
     params: obj(
-      { sessionId: str({ minLength: 1 }), limit: int({ minimum: 1, maximum: 500 }), before: str() },
-      ["sessionId"],
+      {
+        accountId: str({ minLength: 1 }),
+        sessionId: str({ minLength: 1 }),
+        limit: int({ minimum: 1, maximum: 500 }),
+        before: str(),
+      },
+      ["accountId", "sessionId"],
     ),
     result: obj(
       { messages: arr(any("session message")), nextCursor: str() },
@@ -913,6 +978,10 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         detail: str(),
         sourceCount: int({ minimum: 0 }),
         unboundSources: arr(str()),
+        /** Home Assistant: configured (baseUrl+token) and enabled — Home chat gate. */
+        ready: bool(),
+        /** Non-secret config snapshot for UI drafts (secrets never included). */
+        config: obj({}, [], true),
       },
       ["id", "enabled", "healthy"],
     ),
@@ -934,6 +1003,104 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
       { channel: obj({ id: str(), enabled: bool(), healthy: bool() }, ["id", "enabled", "healthy"]) },
       ["channel"],
     ),
+  },
+  "home.startDemoHa": {
+    group: "channels",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary:
+      "Start local fake-ha demo (or attach if already running), point homeassistant at it, enable, bind demo devices",
+    params: obj({ accountId: str({ minLength: 1 }) }, ["accountId"]),
+    result: obj(
+      {
+        running: bool(),
+        baseUrl: str(),
+        panelUrl: str(),
+        token: str(),
+        port: int({ minimum: 1 }),
+        external: bool(),
+        bound: arr(str()),
+      },
+      ["running", "baseUrl", "panelUrl", "bound"],
+    ),
+  },
+  "home.getDemoHaStatus": {
+    group: "channels",
+    scope: "account-scoped",
+    paramsOptional: true,
+    summary: "Status of the in-daemon fake Home Assistant demo",
+    params: emptyParams,
+    result: obj(
+      {
+        running: bool(),
+        baseUrl: str(),
+        panelUrl: str(),
+        token: str(),
+        port: int({ minimum: 1 }),
+        external: bool(),
+      },
+      ["running"],
+    ),
+  },
+  "home.stopDemoHa": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary:
+      "Stop in-daemon fake-ha; when homeassistant still points at the demo URL, remove demo objects, clear demo flag, disable channel",
+    params: emptyParams,
+    result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.startDemoMqtt": {
+    group: "channels",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary:
+      "Start local fake-mqtt demo (or attach if already running), point mqtt at it, enable, bind demo topics — can run alongside demo HA",
+    params: obj({ accountId: str({ minLength: 1 }) }, ["accountId"]),
+    result: obj(
+      {
+        running: bool(),
+        brokerUrl: str(),
+        panelUrl: str(),
+        username: str(),
+        password: str(),
+        mqttPort: int({ minimum: 1 }),
+        panelPort: int({ minimum: 1 }),
+        external: bool(),
+        bound: arr(str()),
+      },
+      ["running", "brokerUrl", "panelUrl", "username", "password", "bound"],
+    ),
+  },
+  "home.getDemoMqttStatus": {
+    group: "channels",
+    scope: "account-scoped",
+    paramsOptional: true,
+    summary: "Status of the in-daemon fake MQTT demo",
+    params: emptyParams,
+    result: obj(
+      {
+        running: bool(),
+        brokerUrl: str(),
+        panelUrl: str(),
+        username: str(),
+        password: str(),
+        mqttPort: int({ minimum: 1 }),
+        panelPort: int({ minimum: 1 }),
+        external: bool(),
+      },
+      ["running"],
+    ),
+  },
+  "home.stopDemoMqtt": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary:
+      "Stop in-daemon fake-mqtt; when mqtt still points at the demo broker URL, remove demo objects, clear demo flag, disable channel",
+    params: emptyParams,
+    result: obj({ ok: bool() }, ["ok"]),
   },
   "home.listHarnesses": {
     group: "channels",
@@ -970,14 +1137,18 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     scope: "account-scoped",
     paramsOptional: true,
     summary: "List model providers, default, placement filter, and auto-switch",
-    params: emptyParams,
+    params: obj({ accountId: str({ minLength: 1 }) }),
     result: obj(
       {
         providers: arr(providerSummary),
         mode: modelMode,
         defaultProviderId: str(),
         placementFilter: placementFilter,
+        /** auto = follow enabled providers; any/cloud/local = user-locked (Smart Routing / Cloud / Local). */
+        placementPreference: enumOf("auto", "any", "local", "cloud"),
         autoModelSwitch: obj({ enabled: bool() }, ["enabled"]),
+        /** Daemon-wide: every profile uses the shared local model. */
+        localOnly: bool(),
       },
       ["providers", "mode", "placementFilter", "autoModelSwitch"],
     ),
@@ -997,14 +1168,15 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         label: str(),
         placement: enumOf("local", "cloud"),
         cost: providerCost,
-        costRank: num(),
-        paramCountB: num(),
+        /** null clears a previously stored Advanced field (Settings autosave Unset). */
+        costRank: nullable(num()),
+        paramCountB: nullable(num()),
         capabilityRank: num(),
-        contextTokens: int({ minimum: 0 }),
+        contextTokens: nullable(int({ minimum: 0 })),
         supportsTools: bool(),
         supportsVision: bool(),
         supportsLogprobs: bool(),
-        latencyClass: enumOf("fast", "standard", "slow"),
+        latencyClass: nullable(enumOf("fast", "standard", "slow")),
       },
       ["id", "kind"],
     ),
@@ -1071,9 +1243,10 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     group: "channels",
     scope: "account-scoped",
     paramsOptional: false,
-    summary: "Restrict the provider pool to any / local / cloud",
+    summary:
+      "Restrict the provider pool to any / local / cloud. shared:true sets Local only for every profile.",
     params: obj(
-      { accountId: str(), filter: placementFilter },
+      { accountId: str(), filter: placementFilter, shared: bool() },
       ["filter"],
     ),
     result: obj({ ok: bool() }, ["ok"]),
@@ -1093,22 +1266,72 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     group: "channels",
     scope: "owner-scope",
     paramsOptional: true,
-    summary: "EnvoyHome Local / Ollama engine status (Design §8.5)",
+    summary: "EnvoyHome Local / Ollama engine status (Design §8.5; Home-owned, never Mesh :18790)",
     params: obj({}),
     result: obj(
       {
         enabled: bool(),
-        mode: enumOf("off", "attach", "spawn", "ollama"),
+        mode: enumOf("off", "spawn", "ollama"),
         baseUrl: str(),
         providerId: str(),
         healthy: bool(),
         modelIds: arr(str()),
-        meshAttachAvailable: bool(),
         runtimeInstalled: bool(),
         modelsOnDisk: arr(str()),
+        /** Basename of the selected GGUF when still under local-engine/models/. */
+        activeModelFile: str(),
+        downloads: arr(
+          obj(
+            {
+              fileName: str(),
+              url: str(),
+              status: enumOf("downloading", "paused", "completed", "failed"),
+              bytesReceived: int({ minimum: 0 }),
+              bytesTotal: int({ minimum: 0 }),
+              modelId: str(),
+              path: str(),
+              error: str(),
+            },
+            ["fileName", "status", "bytesReceived"],
+          ),
+        ),
         pid: int({ minimum: 0 }),
         hint: str(),
         error: str(),
+        hardwareSummary: str(),
+        recommendation: obj(
+          {
+            hardwareSummary: str(),
+            reason: str(),
+            primary: obj(
+              {
+                id: str(),
+                label: str(),
+                description: str(),
+                fileName: str(),
+                url: str(),
+                approxBytes: int({ minimum: 0 }),
+                installed: bool(),
+              },
+              ["id", "label", "fileName", "url", "approxBytes", "installed"],
+            ),
+            also: arr(
+              obj(
+                {
+                  id: str(),
+                  label: str(),
+                  description: str(),
+                  fileName: str(),
+                  url: str(),
+                  approxBytes: int({ minimum: 0 }),
+                  installed: bool(),
+                },
+                ["id", "label", "fileName", "url", "approxBytes", "installed"],
+              ),
+            ),
+          },
+          ["hardwareSummary", "reason", "primary", "also"],
+        ),
       },
       [
         "enabled",
@@ -1117,10 +1340,133 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         "providerId",
         "healthy",
         "modelIds",
-        "meshAttachAvailable",
         "runtimeInstalled",
         "modelsOnDisk",
       ],
+    ),
+  },
+  "home.downloadLocalModel": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary:
+      "Start/resume curated GGUF download (async; progress via home:local-model-download; Design §8.5)",
+    params: obj({ modelId: str() }, ["modelId"]),
+    result: obj(
+      {
+        ok: bool(),
+        fileName: str(),
+        status: enumOf("downloading", "paused", "completed", "failed"),
+        bytesReceived: int({ minimum: 0 }),
+        bytesTotal: int({ minimum: 0 }),
+        path: str(),
+        bytes: int({ minimum: 0 }),
+      },
+      ["ok", "fileName", "status", "bytesReceived"],
+    ),
+  },
+  "home.searchHuggingFaceModels": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary:
+      "Search Hugging Face Hub for GGUF-tagged model repos (Design §8.5; public Hub API only)",
+    params: obj({ query: str(), limit: int({ minimum: 1, maximum: 50 }) }, ["query"]),
+    result: obj(
+      {
+        models: arr(
+          obj(
+            {
+              id: str(),
+              downloads: int({ minimum: 0 }),
+              likes: int({ minimum: 0 }),
+              gated: bool(),
+              pipelineTag: str(),
+            },
+            ["id"],
+          ),
+        ),
+      },
+      ["models"],
+    ),
+  },
+  "home.listHuggingFaceGgufFiles": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "List .gguf files in a Hugging Face model repo (Design §8.5)",
+    params: obj({ repoId: str() }, ["repoId"]),
+    result: obj(
+      {
+        files: arr(
+          obj(
+            {
+              path: str(),
+              size: int({ minimum: 0 }),
+              url: str(),
+            },
+            ["path", "url"],
+          ),
+        ),
+      },
+      ["files"],
+    ),
+  },
+  "home.downloadLocalModelUrl": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary:
+      "Start/resume Hugging Face .gguf URL download (async; progress via home:local-model-download; Design §8.5)",
+    params: obj({ url: str() }, ["url"]),
+    result: obj(
+      {
+        ok: bool(),
+        fileName: str(),
+        status: enumOf("downloading", "paused", "completed", "failed"),
+        bytesReceived: int({ minimum: 0 }),
+        bytesTotal: int({ minimum: 0 }),
+        path: str(),
+        bytes: int({ minimum: 0 }),
+      },
+      ["ok", "fileName", "status", "bytesReceived"],
+    ),
+  },
+  "home.cancelLocalModelDownload": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Stop an in-flight GGUF download; keeps .partial for resume (Design §8.5)",
+    params: obj({ fileName: str() }, ["fileName"]),
+    result: obj(
+      {
+        fileName: str(),
+        url: str(),
+        status: enumOf("downloading", "paused", "completed", "failed"),
+        bytesReceived: int({ minimum: 0 }),
+        bytesTotal: int({ minimum: 0 }),
+        modelId: str(),
+        path: str(),
+        error: str(),
+      },
+      ["fileName", "status", "bytesReceived"],
+    ),
+  },
+  "home.resumeLocalModelDownload": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Continue a paused GGUF download from .partial (Design §8.5)",
+    params: obj({ fileName: str() }, ["fileName"]),
+    result: obj(
+      {
+        ok: bool(),
+        fileName: str(),
+        status: enumOf("downloading", "paused", "completed", "failed"),
+        bytesReceived: int({ minimum: 0 }),
+        bytesTotal: int({ minimum: 0 }),
+      },
+      ["ok", "fileName", "status", "bytesReceived"],
     ),
   },
   "home.enableLocalEngine": {
@@ -1128,10 +1474,10 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     scope: "owner-scope",
     paramsOptional: true,
     summary:
-      "Enable EnvoyHome Local: attach Mesh Envoy Local (:18790) or spawn llama-server (:18792)",
+      "Enable EnvoyHome Local: spawn Home-owned llama-server (:18792). prefer=attach is refused (independent of Mesh).",
     params: obj({
       accountId: str(),
-      prefer: enumOf("auto", "attach", "spawn"),
+      prefer: enumOf("auto", "spawn", "attach"),
       modelPath: str(),
       binaryPath: str(),
       modelAlias: str(),
@@ -1140,7 +1486,7 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     result: obj(
       {
         enabled: bool(),
-        mode: enumOf("off", "attach", "spawn", "ollama"),
+        mode: enumOf("off", "spawn", "ollama"),
         healthy: bool(),
         baseUrl: str(),
       },
@@ -1160,7 +1506,7 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     result: obj(
       {
         enabled: bool(),
-        mode: enumOf("off", "attach", "spawn", "ollama"),
+        mode: enumOf("off", "spawn", "ollama"),
         healthy: bool(),
         baseUrl: str(),
       },
@@ -1176,7 +1522,7 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     result: obj(
       {
         enabled: bool(),
-        mode: enumOf("off", "attach", "spawn", "ollama"),
+        mode: enumOf("off", "spawn", "ollama"),
         healthy: bool(),
       },
       ["enabled", "mode", "healthy"],
@@ -1204,13 +1550,18 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     scope: "account-scoped",
     paramsOptional: true,
     summary: "List static workflows (global + account overlay)",
-    params: emptyParams,
+    params: obj({ accountId: str() }, []),
     result: obj(
       {
         workflows: arr(
           obj(
-            { id: str(), source: enumOf("global", "account"), accountId: str() },
-            ["id", "source"],
+            {
+              id: str(),
+              source: enumOf("global", "account"),
+              accountId: str(),
+              enabled: bool(),
+            },
+            ["id", "source", "enabled"],
           ),
         ),
       },
@@ -1233,6 +1584,205 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     params: emptyParams,
     result: obj({ ok: bool(), count: int({ minimum: 0 }) }, ["ok", "count"]),
   },
+  "home.validateWorkflow": {
+    group: "workflows",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Validate workflow YAML without writing",
+    params: obj({ yaml: str({ minLength: 1 }) }, ["yaml"]),
+    result: obj({ ok: bool(), id: str(), error: str() }, ["ok"]),
+  },
+  "home.putWorkflow": {
+    group: "workflows",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Create or replace a workflow (global or account overlay)",
+    params: obj({ yaml: str({ minLength: 1 }), accountId: str() }, ["yaml"]),
+    result: obj({ ok: bool(), id: str({ minLength: 1 }) }, ["ok", "id"]),
+  },
+  "home.removeWorkflow": {
+    group: "workflows",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Remove a workflow file",
+    params: obj({ id: str({ minLength: 1 }), accountId: str() }, ["id"]),
+    result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.setWorkflowEnabled": {
+    group: "workflows",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Enable or disable a workflow without deleting it",
+    params: obj(
+      { id: str({ minLength: 1 }), enabled: bool(), accountId: str() },
+      ["id", "enabled"],
+    ),
+    result: obj(
+      { ok: bool(), id: str({ minLength: 1 }), enabled: bool() },
+      ["ok", "id", "enabled"],
+    ),
+  },
+  "home.runWorkflow": {
+    group: "workflows",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Attended test-run of a workflow (tool nodes still §4.3/§4.4)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        id: str({ minLength: 1 }),
+        text: str(),
+      },
+      ["accountId", "id"],
+    ),
+    result: obj(
+      {
+        ok: bool(),
+        runId: str({ minLength: 1 }),
+        results: arr(
+          obj(
+            {
+              nodeId: str(),
+              type: str(),
+              ok: bool(),
+              detail: str(),
+              output: str(),
+            },
+            ["nodeId", "type", "ok"],
+          ),
+        ),
+      },
+      ["ok", "results"],
+    ),
+  },
+  "home.listWorkflowTools": {
+    group: "workflows",
+    scope: "account-scoped",
+    paramsOptional: true,
+    summary: "Catalogue of tools usable in workflow tool nodes",
+    params: obj({ accountId: str() }, []),
+    result: obj(
+      {
+        tools: arr(
+          obj(
+            {
+              name: str({ minLength: 1 }),
+              risk: riskTier,
+              source: enumOf("builtin", "skill", "smarthome"),
+              summary: str(),
+              sampleArgs: any(),
+              /** Known discrete values per arg → Settings Schedules uses a dropdown. */
+              argChoices: any("map of arg name → string[]"),
+              /** Dependent choice tables (e.g. service options by domain). */
+              argChoiceGroups: any("map of arg name → { parentValue → string[] }"),
+              argChoiceDependsOn: any("map of child arg → parent arg name"),
+              available: bool(),
+              unavailableReason: str(),
+            },
+            ["name", "risk", "source", "summary", "available"],
+          ),
+        ),
+      },
+      ["tools"],
+    ),
+  },
+  "home.draftWorkflow": {
+    group: "workflows",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary:
+      "NL → draft or revise workflow YAML (attended; never writes; user must put)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        text: str({ minLength: 1 }),
+        hintTools: arr(str({ minLength: 1 })),
+        currentYaml: str({ minLength: 1 }),
+      },
+      ["accountId", "text"],
+    ),
+    result: obj({ yaml: str({ minLength: 1 }), notes: str() }, ["yaml"]),
+  },
+  "home.draftWorkflowPrompt": {
+    group: "workflows",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Draft or improve an llm_fill / llm_summarize node prompt",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        nodeType: enumOf("llm_fill", "llm_summarize"),
+        goal: str(),
+        currentPrompt: str(),
+      },
+      ["accountId", "nodeType"],
+    ),
+    result: obj({ prompt: str({ minLength: 1 }) }, ["prompt"]),
+  },
+  "home.listWorkflowStepTemplates": {
+    group: "workflows",
+    scope: "account-scoped",
+    paramsOptional: true,
+    summary: "List reusable LLM step templates (Add step ▾ custom prompts)",
+    params: obj({ accountId: str({ minLength: 1 }) }, []),
+    result: obj(
+      {
+        templates: arr(
+          obj(
+            {
+              id: str({ minLength: 1 }),
+              label: str({ minLength: 1 }),
+              nodeType: enumOf("llm_fill", "llm_summarize"),
+              prompt: str({ minLength: 1 }),
+              out: str(),
+              source: enumOf("global", "account"),
+              accountId: str(),
+            },
+            ["id", "label", "nodeType", "prompt", "source"],
+          ),
+        ),
+      },
+      ["templates"],
+    ),
+  },
+  "home.putWorkflowStepTemplate": {
+    group: "workflows",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Create or replace a reusable LLM step template",
+    params: obj(
+      {
+        label: str({ minLength: 1 }),
+        nodeType: enumOf("llm_fill", "llm_summarize"),
+        prompt: str({ minLength: 1 }),
+        id: str({ minLength: 1 }),
+        out: str(),
+        accountId: str({ minLength: 1 }),
+      },
+      ["label", "nodeType", "prompt"],
+    ),
+    result: obj(
+      {
+        ok: bool(),
+        id: str({ minLength: 1 }),
+        label: str({ minLength: 1 }),
+        nodeType: enumOf("llm_fill", "llm_summarize"),
+        source: enumOf("global", "account"),
+      },
+      ["ok", "id", "label", "nodeType", "source"],
+    ),
+  },
+  "home.removeWorkflowStepTemplate": {
+    group: "workflows",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Remove a reusable LLM step template",
+    params: obj(
+      { id: str({ minLength: 1 }), accountId: str({ minLength: 1 }) },
+      ["id"],
+    ),
+    result: obj({ ok: bool() }, ["ok"]),
+  },
   "home.listSchedules": {
     group: "schedules",
     scope: "account-scoped",
@@ -1251,8 +1801,12 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
               nextRunAt: iso(),
               lastStatus: enumOf("ok", "error", "skipped"),
               source: enumOf("user", "workflow"),
+              payloadKind: enumOf("notify", "workflow", "tool", "system"),
+              message: str(),
+              workflowId: str({ minLength: 1 }),
+              toolName: str({ minLength: 1 }),
             },
-            ["id", "name", "enabled", "kind", "source"],
+            ["id", "name", "enabled", "kind", "source", "payloadKind"],
           ),
         ),
       },
@@ -1290,10 +1844,70 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     group: "schedules",
     scope: "account-scoped",
     paramsOptional: false,
-    summary: "Confirm a proposal and arm the schedule timer",
+    summary: "Confirm a proposal and arm the schedule timer (optional payload/name override)",
     params: obj(
-      { accountId: str({ minLength: 1 }), proposalId: str({ minLength: 1 }) },
+      {
+        accountId: str({ minLength: 1 }),
+        proposalId: str({ minLength: 1 }),
+        name: str({ minLength: 1 }),
+        payload: obj(
+          {
+            kind: enumOf("notify", "workflow", "tool"),
+            message: str(),
+            workflowId: str({ minLength: 1 }),
+            toolName: str({ minLength: 1 }),
+            toolArgs: any("tool args object"),
+          },
+          ["kind"],
+        ),
+      },
       ["accountId", "proposalId"],
+    ),
+    result: obj(
+      {
+        job: obj(
+          {
+            id: str({ minLength: 1 }),
+            enabled: bool(),
+            nextRunAt: iso(),
+          },
+          ["id", "enabled"],
+        ),
+      },
+      ["job"],
+    ),
+  },
+  "home.putSchedule": {
+    group: "schedules",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Create a structured schedule job (notify/workflow/tool; Design §7.4)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        name: str({ minLength: 1 }),
+        spec: obj(
+          {
+            kind: enumOf("at", "every", "cron"),
+            whenInstant: iso(),
+            everyMs: int({ minimum: 1 }),
+            cronExpr: str({ minLength: 1 }),
+            timeZone: str({ minLength: 1 }),
+          },
+          ["kind", "timeZone"],
+        ),
+        payload: obj(
+          {
+            kind: enumOf("notify", "workflow", "tool"),
+            message: str(),
+            workflowId: str({ minLength: 1 }),
+            toolName: str({ minLength: 1 }),
+            toolArgs: any("tool args object"),
+          },
+          ["kind"],
+        ),
+      },
+      ["accountId", "name", "spec", "payload"],
     ),
     result: obj(
       {
@@ -1385,6 +1999,34 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
             "enabled",
             "verified",
           ]),
+        ),
+      },
+      ["skills"],
+    ),
+  },
+  "home.searchClawHubSkills": {
+    group: "skills",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary:
+      "Search the public ClawHub registry for SKILL.md skills (Design §9.2; install still needs Verify)",
+    params: obj({ query: str({ minLength: 1 }), limit: int({ minimum: 1, maximum: 50 }) }, [
+      "query",
+    ]),
+    result: obj(
+      {
+        skills: arr(
+          obj(
+            {
+              slug: str(),
+              ownerHandle: str(),
+              name: str(),
+              description: str(),
+              ref: str(),
+              url: str(),
+            },
+            ["slug", "name", "ref"],
+          ),
         ),
       },
       ["skills"],
@@ -1520,6 +2162,16 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
           ["factCount", "injectChars", "rawChars", "truncated", "injectBudget", "rawSoftCap"],
         ),
         notes: arr(memoryNote),
+        injectBudgetMode: enumOf("auto", "baseline", "custom"),
+        injectProfiles,
+        caps: obj(
+          {
+            l1: obj({ injectBudget: int({ minimum: 0 }), rawSoftCap: int({ minimum: 0 }) }, []),
+            l2: obj({ injectBudget: int({ minimum: 0 }), rawSoftCap: int({ minimum: 0 }) }, []),
+            l3: obj({ injectBudget: int({ minimum: 0 }), rawSoftCap: int({ minimum: 0 }) }, []),
+          },
+          [],
+        ),
         reviewEnabled: bool(),
         flushEnabled: bool(),
         sessionRetentionDays: int({ minimum: 0 }),
@@ -1544,13 +2196,23 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     group: "memory",
     scope: "account-scoped",
     paramsOptional: false,
-    summary: "Toggle flush/review and session retention (Settings Memory screen)",
+    summary:
+      "Toggle flush/review, session retention, and inject budget mode/caps (Settings Memory)",
     params: obj(
       {
         accountId: str({ minLength: 1 }),
         flushEnabled: bool(),
         reviewEnabled: bool(),
         sessionRetentionDays: int({ minimum: 0 }),
+        injectBudgetMode: enumOf("auto", "baseline", "custom"),
+        caps: obj(
+          {
+            l1: obj({ injectBudget: int({ minimum: 0 }), rawSoftCap: int({ minimum: 0 }) }, []),
+            l2: obj({ injectBudget: int({ minimum: 0 }), rawSoftCap: int({ minimum: 0 }) }, []),
+            l3: obj({ injectBudget: int({ minimum: 0 }), rawSoftCap: int({ minimum: 0 }) }, []),
+          },
+          [],
+        ),
       },
       ["accountId"],
     ),
@@ -1560,8 +2222,17 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         flushEnabled: bool(),
         reviewEnabled: bool(),
         sessionRetentionDays: int({ minimum: 0 }),
+        injectBudgetMode: enumOf("auto", "baseline", "custom"),
+        caps: obj(
+          {
+            l1: obj({ injectBudget: int({ minimum: 0 }), rawSoftCap: int({ minimum: 0 }) }, []),
+            l2: obj({ injectBudget: int({ minimum: 0 }), rawSoftCap: int({ minimum: 0 }) }, []),
+            l3: obj({ injectBudget: int({ minimum: 0 }), rawSoftCap: int({ minimum: 0 }) }, []),
+          },
+          [],
+        ),
       },
-      ["ok", "flushEnabled", "reviewEnabled", "sessionRetentionDays"],
+      ["ok", "flushEnabled", "reviewEnabled", "sessionRetentionDays", "injectBudgetMode"],
     ),
   },
   "home.recall": {

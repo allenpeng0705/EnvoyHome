@@ -66,7 +66,7 @@ EnvoyHome/
     memory/                    # @envoyhome/memory — facade + standing store (B5/B8)
     smarthome/                 # @envoyhome/smarthome — HA + MQTT clients, ha_*/mqtt_* tools, safety list (B14)
     test-utils/                # @envoyhome/test-utils — flushLoop + __resetActiveXForTests (R8)
-  plugins/                     # bundled channel plugins: channel-telegram (B7); channel-mqtt, channel-homeassistant (B14)
+  plugins/                     # chat: telegram/discord/slack/feishu/dingtalk/wecom (§5.0); event-source: mqtt/homeassistant
   scripts/                     # peers-check, fetch-peers, build, lint, test, ci
   tests/
     min/

@@ -41,7 +41,7 @@ export const ENVOYHOME_ERRORS = {
     "a non-idempotent service (`*.toggle`) was requested on an unattended turn (Design §5.7.7)",
   actuation_in_flight: "another actuation for the same object is in flight (Design §5.7.7)",
   object_not_bound:
-    "the object is unknown, unregistered, foreign, or bound to another account — reads included (Design §5.7.3)",
+    "the object is unknown, unregistered, or unbound — reads included (Design §5.7.3 household bind)",
   object_unknown: "`home.setSourceBinding` named a `sourceId` the daemon has never seen (Design A.3)",
   object_not_shareable:
     "`shared: true` was requested for a presence-revealing class (lock/alarm/camera/presence) (Design §5.7.3)",

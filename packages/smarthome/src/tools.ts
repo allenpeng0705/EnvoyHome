@@ -36,6 +36,8 @@ export function assertActuationAllowed(input: {
   service: string;
   origin: "attended" | "unattended";
   hasGrant: boolean;
+  /** MQTT: false when topic is not on the object's actuationAllowList. */
+  mqttTopicAllowed?: boolean;
 }): void {
   const decision = classifySafety({
     objectClass: input.handle.class,
@@ -45,6 +47,9 @@ export function assertActuationAllowed(input: {
     indirectionAllowListed: input.handle.indirectionAllowList.includes(
       `${input.domain}.${input.service}`,
     ),
+    ...(input.mqttTopicAllowed !== undefined
+      ? { mqttTopicAllowed: input.mqttTopicAllowed }
+      : {}),
   });
   if (decision.safetyClass && input.origin === "unattended") {
     throw Object.assign(

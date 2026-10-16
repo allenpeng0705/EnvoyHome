@@ -130,15 +130,25 @@ export class ChannelLoader {
     }
     const prev = this.loaded.get(channelId);
     const nextSecrets = { ...(prev?.secrets ?? {}), ...secrets };
+    // Merge with previous non-secret config so partial UI saves (blank advanced fields)
+    // do not wipe required keys like agentId. Empty-string values clear a key.
+    const nextConfig: Record<string, unknown> = { ...(prev?.config ?? {}) };
+    for (const [key, value] of Object.entries(config)) {
+      if (value === "" || value === null || value === undefined) {
+        delete nextConfig[key];
+      } else {
+        nextConfig[key] = value;
+      }
+    }
     const channelAccount =
-      typeof config.channelAccount === "string" && config.channelAccount.length > 0
-        ? config.channelAccount
+      typeof nextConfig.channelAccount === "string" && nextConfig.channelAccount.length > 0
+        ? nextConfig.channelAccount
         : (prev?.channelAccount ?? "default");
     this.loaded.set(channelId, {
       manifest: plugin.manifest,
       channelAccount,
       sources: prev?.sources ?? [],
-      config,
+      config: nextConfig,
       secrets: nextSecrets,
       enabled: prev?.enabled ?? false,
       healthy: prev?.healthy ?? true,

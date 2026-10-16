@@ -50,17 +50,35 @@ export interface ProviderRecord {
   latencyClass?: LatencyClass;
 }
 
+/** Explicit UI/API choice locks the filter; `auto` follows enabled providers. */
+export type PlacementPreference = "auto" | PlacementFilter;
+
 export interface AccountRouting {
   defaultProviderId?: string;
   placementFilter: PlacementFilter;
   autoModelSwitch: { enabled: boolean };
+  /**
+   * `auto` (default): placementFilter = cloud if any enabled cloud else local if any local else any.
+   * Explicit `any` | `cloud` | `local` locks the filter (Smart Routing / Cloud only / Local only).
+   */
+  placementPreference?: PlacementPreference;
 }
 
 interface ProviderStateFile {
   providers: ProviderRecord[];
+  /**
+   * When true, `providers[0]` is the most recently added.
+   * Older files used append order (oldest first) — migrated on load.
+   */
+  providersNewestFirst?: boolean;
   /** Compat — mirrored into routing.placementFilter via setMode. */
   modes: Record<string, ModelMode>;
   routing?: Record<string, AccountRouting>;
+  /**
+   * Daemon-wide. When true, every profile's pool is local (the shared llama.cpp / Ollama model).
+   * New profiles inherit it. Not a per-profile choice.
+   */
+  localOnly?: boolean;
 }
 
 function placementFromKind(kind: WireProviderKind): Placement {
@@ -75,7 +93,14 @@ function defaultRouting(): AccountRouting {
   return {
     placementFilter: "any",
     autoModelSwitch: { enabled: false },
+    placementPreference: "auto",
   };
+}
+
+function modeFromFilter(filter: PlacementFilter): ModelMode {
+  if (filter === "local") return "local";
+  if (filter === "cloud") return "cloud";
+  return "mix";
 }
 
 export class ProviderStore {
@@ -94,21 +119,47 @@ export class ProviderStore {
     try {
       this.state = JSON.parse(await readFile(this.statePath, "utf8")) as ProviderStateFile;
     } catch {
-      this.state = { providers: [], modes: {}, routing: {} };
+      this.state = { providers: [], modes: {}, routing: {}, providersNewestFirst: true };
     }
     if (!this.state.routing) this.state.routing = {};
+    let orderDirty = false;
+    // Legacy files appended (oldest first). Flip once so index 0 = newest.
+    if (!this.state.providersNewestFirst && Array.isArray(this.state.providers)) {
+      this.state.providers.reverse();
+      this.state.providersNewestFirst = true;
+      orderDirty = true;
+    } else {
+      this.state.providersNewestFirst = true;
+    }
     this.migrateModesIntoRouting();
+    let routingDirty = false;
+    for (const accountId of Object.keys(this.state.routing)) {
+      const before = JSON.stringify(this.state.routing[accountId]);
+      this.applyAdaptivePlacement(accountId);
+      this.ensureDefaultProvider(accountId);
+      if (JSON.stringify(this.state.routing[accountId]) !== before) routingDirty = true;
+    }
     this.rebuildRouter();
     await this.loadSecretsFromDisk();
+    // Persist adaptive migration (e.g. legacy filter=any without preference → cloud).
+    if (routingDirty || orderDirty) await this.persist();
   }
 
   private migrateModesIntoRouting(): void {
     for (const [accountId, mode] of Object.entries(this.state.modes)) {
       const existing = this.state.routing![accountId];
       const cur = existing ?? defaultRouting();
-      if (mode === "local") cur.placementFilter = "local";
-      else if (mode === "cloud") cur.placementFilter = "cloud";
-      else cur.placementFilter = "any";
+      if (mode === "local") {
+        cur.placementFilter = "local";
+        cur.placementPreference = "local";
+      } else if (mode === "cloud") {
+        cur.placementFilter = "cloud";
+        cur.placementPreference = "cloud";
+      } else {
+        cur.placementFilter = "any";
+        // Historical mix → treat as locked Smart Routing so we do not rewrite to cloud.
+        cur.placementPreference = existing?.placementPreference ?? "any";
+      }
       // Never wipe a persisted autoModelSwitch on reload — only default on first create.
       if (!existing) {
         cur.autoModelSwitch = { enabled: false };
@@ -116,6 +167,47 @@ export class ProviderStore {
       this.state.routing![accountId] = cur;
       this.ensureDefaultProvider(accountId);
     }
+  }
+
+  /** Cloud if any enabled cloud; else local if any local; else any (empty pool). */
+  adaptivePlacementFilter(): PlacementFilter {
+    const enabled = this.state.providers.filter((p) => p.enabled);
+    if (enabled.some((p) => this.isCloudKind(p.kind))) return "cloud";
+    if (enabled.some((p) => !this.isCloudKind(p.kind))) return "local";
+    return "any";
+  }
+
+  /**
+   * When placementPreference is `auto` (or missing on a new row), sync placementFilter
+   * from enabled providers. Explicit preference locks the filter.
+   */
+  private applyAdaptivePlacement(accountId: string): void {
+    if (!this.state.routing) this.state.routing = {};
+    const routing = this.state.routing[accountId] ?? defaultRouting();
+    const pref = routing.placementPreference ?? "auto";
+    routing.placementPreference = pref;
+    if (this.state.localOnly) {
+      routing.placementFilter = "local";
+      routing.placementPreference = "local";
+      routing.autoModelSwitch = { enabled: false };
+      this.state.modes[accountId] = "local";
+      this.state.routing[accountId] = routing;
+      return;
+    }
+    if (pref === "auto") {
+      routing.placementFilter = this.adaptivePlacementFilter();
+      this.state.modes[accountId] = modeFromFilter(routing.placementFilter);
+    }
+    this.state.routing[accountId] = routing;
+  }
+
+  private touchAccountRouting(accountId: string): AccountRouting {
+    if (!this.state.routing) this.state.routing = {};
+    if (!this.state.routing[accountId]) {
+      this.state.routing[accountId] = defaultRouting();
+    }
+    this.applyAdaptivePlacement(accountId);
+    return this.state.routing[accountId]!;
   }
 
   private secretsPath(providerId: string): string {
@@ -208,74 +300,160 @@ export class ProviderStore {
 
   routingForAccount(accountId: string): AccountRouting {
     const r = this.state.routing?.[accountId];
-    if (r) return { ...r, autoModelSwitch: { ...r.autoModelSwitch } };
+    if (r) {
+      return {
+        ...r,
+        autoModelSwitch: { ...r.autoModelSwitch },
+        placementPreference: r.placementPreference ?? "auto",
+      };
+    }
     const mode = this.state.modes[accountId];
-    if (mode === "local") return { placementFilter: "local", autoModelSwitch: { enabled: false } };
-    if (mode === "cloud") return { placementFilter: "cloud", autoModelSwitch: { enabled: false } };
-    return defaultRouting();
+    if (mode === "local") {
+      return {
+        placementFilter: "local",
+        autoModelSwitch: { enabled: false },
+        placementPreference: "local",
+      };
+    }
+    if (mode === "cloud") {
+      return {
+        placementFilter: "cloud",
+        autoModelSwitch: { enabled: false },
+        placementPreference: "cloud",
+      };
+    }
+    const fresh = defaultRouting();
+    fresh.placementFilter = this.adaptivePlacementFilter();
+    return fresh;
   }
 
   modeForAccount(accountId: string): ModelMode {
     const filter = this.routingForAccount(accountId).placementFilter;
-    if (filter === "local") return "local";
-    if (filter === "cloud") return "cloud";
-    return this.state.modes[accountId] ?? "mix";
+    return modeFromFilter(filter);
   }
 
   private ensureDefaultProvider(accountId: string): void {
     const routing = this.state.routing![accountId] ?? defaultRouting();
     const enabled = this.state.providers.filter((p) => p.enabled);
-    const inFilter = enabled.filter((p) => {
-      const pl = p.placement ?? placementFromKind(p.kind);
-      if (routing.placementFilter === "any") return true;
-      return pl === routing.placementFilter;
-    });
-    const pool = inFilter.length > 0 ? inFilter : enabled;
-    if (pool.length === 0) {
+    const clouds = enabled.filter((p) => this.isCloudKind(p.kind));
+    // defaultProviderId is the cloud default (UI: "Use as default" on cloud cards).
+    // Local-only setups fall back to the single local for operational picks.
+    if (clouds.length > 0) {
+      if (
+        routing.defaultProviderId &&
+        clouds.some((p) => p.id === routing.defaultProviderId)
+      ) {
+        this.state.routing![accountId] = routing;
+        return;
+      }
+      // providers[0] is newest (see providersNewestFirst).
+      routing.defaultProviderId = clouds[0]!.id;
+      this.state.routing![accountId] = routing;
+      return;
+    }
+    const locals = enabled.filter((p) => !this.isCloudKind(p.kind));
+    if (locals.length === 0) {
       delete routing.defaultProviderId;
       this.state.routing![accountId] = routing;
       return;
     }
     if (
       routing.defaultProviderId &&
-      pool.some((p) => p.id === routing.defaultProviderId)
+      locals.some((p) => p.id === routing.defaultProviderId)
     ) {
       this.state.routing![accountId] = routing;
       return;
     }
-    // Last enabled matching filter; cloud/local filters prefer last of that kind.
-    let pick = pool[pool.length - 1]!;
-    if (routing.placementFilter === "cloud") {
-      const clouds = pool.filter((p) => this.isCloudKind(p.kind));
-      if (clouds.length > 0) pick = clouds[clouds.length - 1]!;
-    } else if (routing.placementFilter === "local") {
-      const locals = pool.filter((p) => !this.isCloudKind(p.kind));
-      if (locals.length > 0) pick = locals[locals.length - 1]!;
-    }
-    routing.defaultProviderId = pick.id;
+    routing.defaultProviderId = locals[0]!.id;
     this.state.routing![accountId] = routing;
+  }
+
+  /** At most one enabled local provider (EnvoyHome Local / Ollama / custom local). */
+  private enforceSingleLocal(keepId: string): void {
+    for (const p of this.state.providers) {
+      if (p.id === keepId) continue;
+      if (!this.isCloudKind(p.kind) && p.enabled) {
+        p.enabled = false;
+      }
+    }
   }
 
   async setMode(accountId: string, mode: ModelMode): Promise<void> {
     this.state.modes[accountId] = mode;
-    const routing = this.routingForAccount(accountId);
-    if (mode === "local") routing.placementFilter = "local";
-    else if (mode === "cloud") routing.placementFilter = "cloud";
-    else routing.placementFilter = "any";
-    routing.autoModelSwitch = { enabled: false };
     if (!this.state.routing) this.state.routing = {};
+    const routing = this.routingForAccount(accountId);
+    if (mode === "local") {
+      routing.placementFilter = "local";
+      routing.placementPreference = "local";
+    } else if (mode === "cloud") {
+      routing.placementFilter = "cloud";
+      routing.placementPreference = "cloud";
+    } else {
+      routing.placementFilter = "any";
+      routing.placementPreference = "any";
+    }
+    routing.autoModelSwitch = { enabled: false };
     this.state.routing[accountId] = routing;
     this.ensureDefaultProvider(accountId);
     await this.persist();
   }
 
+  /**
+   * Local-only is one switch for every profile: the shared local model, or not.
+   * `accountIds` is the full account list so profiles with no routing row yet are included.
+   */
+  async setSharedLocalOnly(enabled: boolean, accountIds: string[]): Promise<void> {
+    // Idempotent clear: do not rewrite per-profile locks when Local only is already off.
+    if (!enabled && this.state.localOnly !== true) {
+      return;
+    }
+    this.state.localOnly = enabled;
+    if (!this.state.routing) this.state.routing = {};
+    const ids = new Set<string>([
+      ...accountIds,
+      ...Object.keys(this.state.routing),
+      ...Object.keys(this.state.modes ?? {}),
+    ]);
+    for (const accountId of ids) {
+      if (!accountId) continue;
+      if (enabled) {
+        const routing = this.routingForAccount(accountId);
+        routing.placementFilter = "local";
+        routing.placementPreference = "local";
+        routing.autoModelSwitch = { enabled: false };
+        this.state.routing[accountId] = routing;
+        this.state.modes[accountId] = "local";
+        this.ensureDefaultProvider(accountId);
+      } else {
+        const routing = this.routingForAccount(accountId);
+        routing.placementPreference = "auto";
+        routing.autoModelSwitch = { enabled: false };
+        this.state.routing[accountId] = routing;
+        this.applyAdaptivePlacement(accountId);
+        this.ensureDefaultProvider(accountId);
+      }
+    }
+    await this.persist();
+  }
+
+  isSharedLocalOnly(): boolean {
+    return this.state.localOnly === true;
+  }
+
   async setPlacementFilter(accountId: string, filter: PlacementFilter): Promise<void> {
     if (!this.state.routing) this.state.routing = {};
+    // Leaving Local only must clear the daemon-wide switch, or the next
+    // listProviders touch forces this profile back to local.
+    if (filter !== "local") this.state.localOnly = false;
     const routing = this.routingForAccount(accountId);
     routing.placementFilter = filter;
+    // Explicit UI/API choice locks adaptive defaults (Smart Routing / Cloud / Local).
+    routing.placementPreference = filter;
+    if (filter !== "any") {
+      routing.autoModelSwitch = { enabled: false };
+    }
     this.state.routing[accountId] = routing;
-    this.state.modes[accountId] =
-      filter === "local" ? "local" : filter === "cloud" ? "cloud" : "mix";
+    this.state.modes[accountId] = modeFromFilter(filter);
     this.ensureDefaultProvider(accountId);
     await this.persist();
   }
@@ -287,20 +465,16 @@ export class ProviderStore {
         code: "provider_not_found",
       });
     }
-    if (!this.state.routing) this.state.routing = {};
-    const routing = this.routingForAccount(accountId);
-    const placement = rec.placement ?? placementFromKind(rec.kind);
-    if (
-      routing.placementFilter !== "any" &&
-      placement !== routing.placementFilter
-    ) {
+    if (!this.isCloudKind(rec.kind)) {
       throw Object.assign(
         new Error(
-          `envoyhome.bad_params: provider ${providerId} placement ${placement} outside filter ${routing.placementFilter}`,
+          `envoyhome.bad_params: default provider must be a cloud provider (got ${providerId})`,
         ),
         { code: "bad_params" },
       );
     }
+    if (!this.state.routing) this.state.routing = {};
+    const routing = this.routingForAccount(accountId);
     routing.defaultProviderId = providerId;
     this.state.routing[accountId] = routing;
     await this.persist();
@@ -309,7 +483,10 @@ export class ProviderStore {
   async setAutoModelSwitch(accountId: string, enabled: boolean): Promise<void> {
     if (!this.state.routing) this.state.routing = {};
     const routing = this.routingForAccount(accountId);
-    routing.autoModelSwitch = { enabled };
+    // Auto-switch is only meaningful under Smart Routing (placementFilter any).
+    routing.autoModelSwitch = {
+      enabled: enabled && routing.placementFilter === "any",
+    };
     this.state.routing[accountId] = routing;
     await this.persist();
   }
@@ -323,23 +500,36 @@ export class ProviderStore {
     label?: string;
     placement?: Placement;
     cost?: ProviderCost;
-    costRank?: number;
-    paramCountB?: number;
+    /** `null` clears to the kind default (Advanced Unset). */
+    costRank?: number | null;
+    /** `null` clears the stored value. */
+    paramCountB?: number | null;
     capabilityRank?: number;
-    contextTokens?: number;
+    /** `null` clears the stored value. */
+    contextTokens?: number | null;
     supportsTools?: boolean;
     supportsVision?: boolean;
     supportsLogprobs?: boolean;
-    latencyClass?: LatencyClass;
+    /** `null` clears the stored value. */
+    latencyClass?: LatencyClass | null;
   }): Promise<ProviderRecord> {
     const existing = this.state.providers.find((p) => p.id === input.id);
+    const wasNew = !existing;
     const placement = input.placement ?? existing?.placement ?? placementFromKind(input.kind);
+    const enabled = input.enabled ?? existing?.enabled ?? true;
+    if (!this.isCloudKind(input.kind) && enabled) {
+      this.enforceSingleLocal(input.id);
+    }
+    const costRank =
+      input.costRank === null
+        ? defaultCostRank(input.kind)
+        : (input.costRank ?? existing?.costRank ?? defaultCostRank(input.kind));
     const rec: ProviderRecord = {
       id: input.id,
       kind: input.kind,
-      enabled: input.enabled ?? existing?.enabled ?? true,
+      enabled,
       placement,
-      costRank: input.costRank ?? existing?.costRank ?? defaultCostRank(input.kind),
+      costRank,
       ...(input.baseUrl !== undefined
         ? { baseUrl: input.baseUrl }
         : existing?.baseUrl
@@ -360,21 +550,25 @@ export class ProviderStore {
         : existing?.cost
           ? { cost: existing.cost }
           : {}),
-      ...(input.paramCountB !== undefined
-        ? { paramCountB: input.paramCountB }
-        : existing?.paramCountB !== undefined
-          ? { paramCountB: existing.paramCountB }
-          : {}),
+      ...(input.paramCountB === null
+        ? {}
+        : input.paramCountB !== undefined
+          ? { paramCountB: input.paramCountB }
+          : existing?.paramCountB !== undefined
+            ? { paramCountB: existing.paramCountB }
+            : {}),
       ...(input.capabilityRank !== undefined
         ? { capabilityRank: input.capabilityRank }
         : existing?.capabilityRank !== undefined
           ? { capabilityRank: existing.capabilityRank }
           : {}),
-      ...(input.contextTokens !== undefined
-        ? { contextTokens: input.contextTokens }
-        : existing?.contextTokens !== undefined
-          ? { contextTokens: existing.contextTokens }
-          : {}),
+      ...(input.contextTokens === null
+        ? {}
+        : input.contextTokens !== undefined
+          ? { contextTokens: input.contextTokens }
+          : existing?.contextTokens !== undefined
+            ? { contextTokens: existing.contextTokens }
+            : {}),
       ...(input.supportsTools !== undefined
         ? { supportsTools: input.supportsTools }
         : existing?.supportsTools !== undefined
@@ -390,22 +584,44 @@ export class ProviderStore {
         : existing?.supportsLogprobs !== undefined
           ? { supportsLogprobs: existing.supportsLogprobs }
           : {}),
-      ...(input.latencyClass !== undefined
-        ? { latencyClass: input.latencyClass }
-        : existing?.latencyClass
-          ? { latencyClass: existing.latencyClass }
-          : {}),
+      ...(input.latencyClass === null
+        ? {}
+        : input.latencyClass !== undefined
+          ? { latencyClass: input.latencyClass }
+          : existing?.latencyClass
+            ? { latencyClass: existing.latencyClass }
+            : {}),
     };
-    if (existing) Object.assign(existing, rec);
-    else this.state.providers.push(rec);
+    if (existing) {
+      Object.assign(existing, rec);
+      // Object.assign does not remove keys — clear Unset Advanced fields explicitly.
+      if (input.paramCountB === null) delete existing.paramCountB;
+      if (input.contextTokens === null) delete existing.contextTokens;
+      if (input.latencyClass === null) delete existing.latencyClass;
+    } else {
+      // Newest first in store + listProviders (Design §8.2).
+      this.state.providers.unshift(rec);
+      this.state.providersNewestFirst = true;
+    }
+    const newestCloudDefault =
+      wasNew && enabled && this.isCloudKind(input.kind) ? input.id : undefined;
     for (const accountId of new Set([
       ...Object.keys(this.state.modes),
       ...Object.keys(this.state.routing ?? {}),
       "default",
     ])) {
-      if (!this.state.routing) this.state.routing = {};
-      if (!this.state.routing[accountId]) this.state.routing[accountId] = defaultRouting();
-      this.ensureDefaultProvider(accountId);
+      this.touchAccountRouting(accountId);
+      if (newestCloudDefault) {
+        const routing = this.state.routing![accountId]!;
+        routing.defaultProviderId = newestCloudDefault;
+        // New cloud under auto preference → Cloud only (never leave legacy any).
+        if ((routing.placementPreference ?? "auto") === "auto") {
+          routing.placementFilter = "cloud";
+          this.state.modes[accountId] = "cloud";
+        }
+      } else {
+        this.ensureDefaultProvider(accountId);
+      }
     }
     await this.persist();
     this.rebuildRouter();
@@ -421,6 +637,7 @@ export class ProviderStore {
       // best-effort
     }
     for (const accountId of Object.keys(this.state.routing ?? {})) {
+      this.applyAdaptivePlacement(accountId);
       this.ensureDefaultProvider(accountId);
     }
     await this.persist();
@@ -466,14 +683,75 @@ export class ProviderStore {
     }
   }
 
+  /**
+   * Context sources for Memory Design §4.2.1 inject profiles.
+   * Cloud = account cloud default (else newest enabled cloud).
+   * Local = the single enabled local provider.
+   */
+  injectContextSources(accountId: string): {
+    cloud?: { providerId: string; contextTokens?: number };
+    local?: { providerId: string; contextTokens?: number };
+  } {
+    this.touchAccountRouting(accountId);
+    this.ensureDefaultProvider(accountId);
+    const routing = this.routingForAccount(accountId);
+    const enabled = this.state.providers.filter((p) => p.enabled);
+    const clouds = enabled.filter((p) => this.isCloudKind(p.kind));
+    const locals = enabled.filter((p) => !this.isCloudKind(p.kind));
+    const out: {
+      cloud?: { providerId: string; contextTokens?: number };
+      local?: { providerId: string; contextTokens?: number };
+    } = {};
+    if (clouds.length > 0) {
+      const preferred =
+        (routing.defaultProviderId &&
+          clouds.find((p) => p.id === routing.defaultProviderId)) ||
+        clouds[0]!;
+      out.cloud = {
+        providerId: preferred.id,
+        ...(preferred.contextTokens !== undefined
+          ? { contextTokens: preferred.contextTokens }
+          : {}),
+      };
+    }
+    if (locals.length > 0) {
+      const local = locals[0]!;
+      out.local = {
+        providerId: local.id,
+        ...(local.contextTokens !== undefined
+          ? { contextTokens: local.contextTokens }
+          : {}),
+      };
+    }
+    return out;
+  }
+
+  /** Placement of an enabled provider id (for post-pick inject profile). */
+  placementOf(providerId: string): Placement | undefined {
+    const rec = this.state.providers.find((p) => p.id === providerId && p.enabled);
+    if (!rec) return undefined;
+    return rec.placement ?? placementFromKind(rec.kind);
+  }
+
   listProviders(accountId: string): {
     providers: Array<Record<string, unknown>>;
     mode: ModelMode;
     defaultProviderId?: string;
     placementFilter: PlacementFilter;
+    placementPreference: PlacementPreference;
     autoModelSwitch: { enabled: boolean };
+    /** Daemon-wide: every profile uses the shared local model. */
+    localOnly: boolean;
   } {
+    // Materialize adaptive routing + default for this account.
+    const before = JSON.stringify(this.state.routing?.[accountId] ?? null);
+    this.touchAccountRouting(accountId);
+    this.ensureDefaultProvider(accountId);
+    if (JSON.stringify(this.state.routing?.[accountId] ?? null) !== before) {
+      void this.persist();
+    }
     const routing = this.routingForAccount(accountId);
+    // Store keeps newest first (`unshift` + load migration).
     const providers = this.state.providers.map((p) => ({
       id: p.id,
       kind: p.kind,
@@ -501,7 +779,9 @@ export class ProviderStore {
         ? { defaultProviderId: routing.defaultProviderId }
         : {}),
       placementFilter: routing.placementFilter,
+      placementPreference: routing.placementPreference ?? "auto",
       autoModelSwitch: { enabled: routing.autoModelSwitch.enabled },
+      localOnly: this.state.localOnly === true,
     };
   }
 

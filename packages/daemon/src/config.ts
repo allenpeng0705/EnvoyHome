@@ -1,8 +1,14 @@
 // daemon.json loader — Design §2.4 ports, Plan B2.
 
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
+
+/** Canonical on-disk state — matches Tauri (`~/`.envoyhome), not cwd. */
+export function defaultStateDir(): string {
+  return join(homedir(), ".envoyhome");
+}
 
 export interface DaemonConfig {
   instanceId: string;
@@ -31,7 +37,7 @@ export const DEFAULT_HTTP_PORT = 4781;
 export const DEFAULT_STATE_SCHEMA_VERSION = 1;
 
 export function defaultConfig(overrides: Partial<DaemonConfig> = {}): DaemonConfig {
-  const stateDir = overrides.stateDir ?? join(process.cwd(), ".envoyhome");
+  const stateDir = overrides.stateDir ?? defaultStateDir();
   return {
     instanceId: overrides.instanceId ?? randomUUID(),
     label: overrides.label ?? "EnvoyHome",

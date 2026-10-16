@@ -110,17 +110,18 @@ test("V-MEM-4 + V-MEM-18: inject budgets enforced; listMemory echoes caps contra
   }
   const inject = await facade.buildStandingInject(accountId);
   assert.ok(inject.profile.injectChars <= INJECT_BUDGET.l1);
-  assert.equal(inject.profile.injectBudget, 2000);
+  assert.equal(inject.profile.injectBudget, 4000);
   assert.equal(inject.profile.rawSoftCap, 20_000);
   assert.equal(inject.profile.truncated, true);
 
   // Oversized L2 with multiple sections → section-aware omit markers.
+  // Must exceed OpenClaw-aligned L2 inject (20k) so truncation stays falsifiable.
   const sections = ["## Standing", "## Narrative", "## Archive"];
   let md = "# MEMORY\n\n";
   for (const h of sections) {
     md += `${h}\n\n`;
-    for (let i = 0; i < 40; i++) {
-      md += `- bullet ${h} ${i} ${"y".repeat(80)}\n`;
+    for (let i = 0; i < 80; i++) {
+      md += `- bullet ${h} ${i} ${"y".repeat(120)}\n`;
     }
     md += "\n";
   }
@@ -132,19 +133,19 @@ test("V-MEM-4 + V-MEM-18: inject budgets enforced; listMemory echoes caps contra
   facade.store.invalidate(accountId);
   const inject2 = await facade.buildStandingInject(accountId);
   assert.ok(inject2.memory.injectChars <= INJECT_BUDGET.l2);
-  assert.equal(inject2.memory.injectBudget, 4000);
+  assert.equal(inject2.memory.injectBudget, 20_000);
   assert.equal(inject2.memory.truncated, true);
   assert.ok(
     inject2.text.includes("entries omitted") || inject2.memory.sectionsOmitted.length > 0,
   );
 
   const listed = await facade.listMemory(accountId);
-  assert.equal(listed.profileSummary.injectBudget, 2000);
+  assert.equal(listed.profileSummary.injectBudget, 4000);
   assert.equal(listed.profileSummary.rawSoftCap, 20_000);
   assert.equal(listed.profileSummary.truncated, true);
   const memNote = listed.notes.find((n) => n.path === "MEMORY.md");
   assert.ok(memNote);
-  assert.equal(memNote!.injectBudget, 4000);
+  assert.equal(memNote!.injectBudget, 20_000);
   assert.equal(memNote!.rawSoftCap, 40_000);
   assert.equal(memNote!.truncated, true);
   assert.ok(Array.isArray(memNote!.sectionsOmitted));

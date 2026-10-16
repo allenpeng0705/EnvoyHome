@@ -1,4 +1,4 @@
-// Static harness catalogue (Design §6.3 — v1 built-in + ACP adapters).
+// Static harness catalogue (Design §6.3 — v1: envoy-harness only).
 
 export interface HarnessManifest {
   id: string;
@@ -10,6 +10,11 @@ export interface HarnessManifest {
 
 export const DEFAULT_HARNESS_ID = "envoy-harness";
 
+/**
+ * v1 ships only the built-in home tool-loop. ACP/CLI adapters (Codex, etc.)
+ * stay out of the product catalogue for now — confirm-gate helpers remain
+ * so a future non-built-in entry reuses the same trust path (Design §6.3).
+ */
 export const HARNESS_CATALOG: readonly HarnessManifest[] = [
   {
     id: "envoy-harness",
@@ -17,13 +22,6 @@ export const HARNESS_CATALOG: readonly HarnessManifest[] = [
     version: "1.0.0",
     builtin: true,
     requiresConfirm: false,
-  },
-  {
-    id: "codex-adapter",
-    name: "Codex (ACP)",
-    version: "1.0.0",
-    builtin: false,
-    requiresConfirm: true,
   },
 ] as const;
 
@@ -44,7 +42,9 @@ export function resolveHarnessId(
   agentId: string,
 ): string {
   const key = harnessKey(accountId, agentId);
-  return state.selections[key] ?? DEFAULT_HARNESS_ID;
+  const selected = state.selections[key];
+  if (selected && catalogEntry(selected)) return selected;
+  return DEFAULT_HARNESS_ID;
 }
 
 export function canEnableHarness(

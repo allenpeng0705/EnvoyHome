@@ -102,15 +102,16 @@ test("V-HAR-3: write outside sandbox_root fails", () => {
   assert.throws(() => safeJoin(root, "../../../etc/passwd"), PathJailError);
 });
 
-test("V-HAR-5: non-built-in harness requires confirm", async () => {
+test("V-HAR-5: unknown / removed adapter cannot be set (confirm gate unit-tested in harness-host)", async () => {
   const { daemon, cleanup } = await boot();
+  // Codex (ACP) removed from the v1 catalogue — even confirm must fail closed.
   const denied = await rpc(daemon.config.wsPort, "home.setHarness", {
     harnessId: "codex-adapter",
+    confirm: true,
   });
   assert.ok(denied["error"]);
   const ok = await rpc(daemon.config.wsPort, "home.setHarness", {
-    harnessId: "codex-adapter",
-    confirm: true,
+    harnessId: "envoy-harness",
   });
   assert.equal(ok["error"], undefined);
   await cleanup();
@@ -161,19 +162,22 @@ test("V-LLM-5: default provider + auto-switch off", async () => {
     baseUrl: "http://127.0.0.1:9",
     enabled: true,
   });
-  await daemon.providers.setDefaultProvider("alice", "local-a");
+  // Cloud-only (safe default): uses cloud defaultProviderId; local is not a default pick.
+  await daemon.providers.setPlacementFilter("alice", "cloud");
+  await daemon.providers.setDefaultProvider("alice", "cloud-b");
   await daemon.providers.setAutoModelSwitch("alice", false);
   const listed = daemon.providers.listProviders("alice");
-  assert.equal(listed.defaultProviderId, "local-a");
+  assert.equal(listed.defaultProviderId, "cloud-b");
   assert.equal(listed.autoModelSwitch.enabled, false);
-  assert.equal(listed.placementFilter, "any");
+  assert.equal(listed.placementFilter, "cloud");
+  assert.equal(listed.placementPreference, "cloud");
   const picked = daemon.providers.getRouter().pick({
     mode: listed.mode,
     placementFilter: listed.placementFilter,
     defaultProviderId: listed.defaultProviderId,
     autoModelSwitch: listed.autoModelSwitch.enabled,
   });
-  assert.equal(picked.id, "local-a");
+  assert.equal(picked.id, "cloud-b");
   await cleanup();
 });
 
@@ -195,7 +199,8 @@ test("V-LLM-6: auto-switch emits home:route-decided with needClass", async () =>
     paramCountB: 70,
     costRank: 100,
   });
-  await daemon.providers.setDefaultProvider("alice", "local-a");
+  await daemon.providers.setPlacementFilter("alice", "any");
+  await daemon.providers.setDefaultProvider("alice", "cloud-b");
   await daemon.providers.setAutoModelSwitch("alice", true);
   const events: Array<Record<string, unknown>> = [];
   daemon.events.asNodeService().on("home:route-decided", (data) => {
@@ -225,7 +230,7 @@ test("V-LLM-6: auto-switch emits home:route-decided with needClass", async () =>
   await cleanup();
 });
 
-test("setDefaultProvider refuses provider outside placementFilter", async () => {
+test("setDefaultProvider refuses local (default is cloud-only)", async () => {
   const { daemon, cleanup } = await boot();
   await daemon.providers.setProvider({
     id: "local-a",
@@ -239,10 +244,9 @@ test("setDefaultProvider refuses provider outside placementFilter", async () => 
     baseUrl: "http://127.0.0.1:9",
     enabled: true,
   });
-  await daemon.providers.setPlacementFilter("alice", "local");
   await assert.rejects(
-    () => daemon.providers.setDefaultProvider("alice", "cloud-b"),
-    /outside filter/,
+    () => daemon.providers.setDefaultProvider("alice", "local-a"),
+    /must be a cloud provider/,
   );
   await cleanup();
 });

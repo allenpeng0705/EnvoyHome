@@ -13,6 +13,8 @@ export const haManifest = {
   configSchema: {
     baseUrl: { required: true },
     accessToken: { secret: true, required: true, credentialScope: "read" as const },
+    /** When true, this instance points at EnvoyHome's local fake-ha demo. */
+    demo: { required: false },
   },
 };
 

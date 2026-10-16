@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "devices": [
+    {
+      "deviceId": "dev_17f927121432441a",
+      "tokenHash": "a991df4d49af1cf73ccfd6f61688f568b3d4fc4b72c55d43328a4dafbb75469c",
+      "accountIds": [
+        "allen"
+      ],
+      "ownerTrusted": false,
+      "revoked": false,
+      "label": "Phone",
+      "createdAt": "2026-10-12T09:18:23.366Z",
+      "mintKind": "qr"
+    }
+  ]
+}

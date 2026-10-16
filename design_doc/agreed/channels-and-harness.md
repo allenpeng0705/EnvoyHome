@@ -58,8 +58,8 @@ flowchart LR
 
 Control plane (sessions, channels, policy, memory, approvals) stays in the **EnvoyHome daemon**.
 
-- **Built-in default:** `../envoy-harness` (`@envoymesh/envoy-harness`)
-- **Also support** other harnesses as plugins (Claude Code, Codex, OpenCode, Cursor ACP, DeepSeek CLI, …) — same idea as OpenClaw harness plugins + EnvoyCoder’s multi-agent window
+- **Built-in default (v1 only shipped row):** `../envoy-harness` (`@envoymesh/envoy-harness`)
+- **Other coding harnesses deferred** (Claude Code, Codex, OpenCode, Cursor ACP, …) — Home deepens via daemon tools/workflows, not an OpenClaw-style harness zoo. Confirm-gate kept for a future adapter.
 - Channels do **not** embed agent stacks; they call the daemon, which selects the harness
 
 ### What “harness” means
