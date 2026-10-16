@@ -968,6 +968,13 @@ export class TurnService {
     channel?: string;
     rawRef?: string;
     hasMedia?: boolean;
+    media?: Array<{
+      kind: "image" | "audio" | "video" | "file";
+      uri: string;
+      fileName?: string;
+      mimeType?: string;
+      bytes?: number;
+    }>;
   }): Promise<void> {
     const record = active.get(input.turnId);
     if (!record) return;
@@ -1040,6 +1047,7 @@ export class TurnService {
       text: input.text,
       at: new Date().toISOString(),
       turnId: input.turnId,
+      ...(input.media && input.media.length ? { media: input.media } : {}),
     });
 
     const turnDeps: TurnDeps = {
@@ -1122,6 +1130,13 @@ export class TurnService {
     channel?: string;
     rawRef?: string;
     hasMedia?: boolean;
+    media?: Array<{
+      kind: "image" | "audio" | "video" | "file";
+      uri: string;
+      fileName?: string;
+      mimeType?: string;
+      bytes?: number;
+    }>;
   }): Promise<void> {
     const record = active.get(input.turnId);
     if (!record) return;
@@ -1270,6 +1285,7 @@ export class TurnService {
       text: input.text,
       at: new Date().toISOString(),
       turnId: input.turnId,
+      ...(input.media && input.media.length ? { media: input.media } : {}),
     });
 
     let replyText = "";

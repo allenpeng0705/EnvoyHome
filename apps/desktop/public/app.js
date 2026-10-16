@@ -987,6 +987,133 @@ function chatAttachChipsHtml(files) {
     )
     .join("")}</ul>`;
 }
+
+/** Web Speech API (macOS WKWebView → Apple Speech; WebView2 often cloud). */
+function speechRecognitionCtor() {
+  const w = typeof window !== "undefined" ? window : undefined;
+  if (!w) return null;
+  return w.SpeechRecognition || w.webkitSpeechRecognition || null;
+}
+
+function chatVoiceSupported() {
+  return Boolean(speechRecognitionCtor());
+}
+
+function chatOsDictationHint() {
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent || "" : "";
+  if (/Windows/i.test(ua)) return t("chat.voiceHintWin");
+  if (/Mac OS X|Macintosh/i.test(ua)) return t("chat.voiceHintMac");
+  return t("chat.voiceHintGeneric");
+}
+
+/** Mic icon for the Chat voice control (matches nav stroke icons). */
+function chatMicIconSvg() {
+  return `<svg class="chat-voice-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>`;
+}
+
+function setChatVoiceBtnState(listening) {
+  const btn = document.getElementById("chat-voice");
+  if (!btn) return;
+  const label = listening ? t("chat.voiceStop") : t("chat.voice");
+  btn.classList.toggle("is-listening", Boolean(listening));
+  btn.setAttribute("aria-pressed", listening ? "true" : "false");
+  btn.setAttribute("aria-label", label);
+  // Idle hover: OS-specific dictation tip when Web Speech is missing, else OS STT note.
+  btn.title = listening
+    ? label
+    : chatVoiceSupported()
+      ? t("chat.voiceHintOs")
+      : chatOsDictationHint();
+  btn.innerHTML = chatMicIconSvg();
+}
+
+/** @type {InstanceType<NonNullable<ReturnType<typeof speechRecognitionCtor>>> | null} */
+let chatSpeechRec = null;
+/** Prefix in the input before the current recognition session started. */
+let chatSpeechBase = "";
+
+function stopChatSpeech() {
+  const rec = chatSpeechRec;
+  chatSpeechRec = null;
+  chatSpeechBase = "";
+  if (rec) {
+    try {
+      rec.onresult = null;
+      rec.onerror = null;
+      rec.onend = null;
+      rec.stop();
+    } catch {
+      /* ignore */
+    }
+  }
+  setChatVoiceBtnState(false);
+}
+
+/**
+ * Toggle push-to-talk dictation into #chat-input (OS / WebView speech service).
+ * @param {HTMLInputElement | null} input
+ */
+function toggleChatSpeech(input) {
+  if (!input) return;
+  if (chatSpeechRec) {
+    stopChatSpeech();
+    return;
+  }
+  const Ctor = speechRecognitionCtor();
+  if (!Ctor) {
+    // No Web Speech (common WebView gaps) — point at OS dictation (Win+H / macOS).
+    showToast(chatOsDictationHint(), "ok");
+    return;
+  }
+  /** @type {any} */
+  const rec = new Ctor();
+  rec.continuous = false;
+  rec.interimResults = true;
+  try {
+    const lang =
+      (typeof document !== "undefined" && document.documentElement.lang) ||
+      (typeof navigator !== "undefined" && navigator.language) ||
+      "en-US";
+    rec.lang = lang;
+  } catch {
+    /* ignore */
+  }
+  chatSpeechBase = String(input.value || "");
+  if (chatSpeechBase && !/\s$/.test(chatSpeechBase)) chatSpeechBase += " ";
+  chatSpeechRec = rec;
+  setChatVoiceBtnState(true);
+  rec.onresult = (event) => {
+    let interim = "";
+    let finalText = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const row = event.results[i];
+      const piece = row?.[0]?.transcript || "";
+      if (row.isFinal) finalText += piece;
+      else interim += piece;
+    }
+    input.value = chatSpeechBase + finalText + interim;
+    if (finalText) chatSpeechBase = chatSpeechBase + finalText;
+  };
+  rec.onerror = (ev) => {
+    const err = ev && typeof ev === "object" && "error" in ev ? String(ev.error) : "";
+    stopChatSpeech();
+    if (err === "aborted" || err === "no-speech") return;
+    if (err === "not-allowed" || err === "service-not-allowed") {
+      showToast(t("chat.voiceDenied"), "err");
+      return;
+    }
+    showToast(t("chat.voiceFailed"), "err");
+  };
+  rec.onend = () => {
+    if (chatSpeechRec === rec) stopChatSpeech();
+  };
+  try {
+    rec.start();
+  } catch {
+    stopChatSpeech();
+    showToast(t("chat.voiceFailed"), "err");
+  }
+}
 /** @type {Array<{ accountId: string, displayName?: string, createdAt?: string }>} */
 let cachedAccounts = [];
 /**
@@ -1063,6 +1190,51 @@ function refreshOpenChatView() {
   }
 }
 
+/** Marker appended by daemon appendMediaToUserText — keep in sync with chat-media.ts. */
+const CHAT_ATTACH_TRANSCRIPT_MARKER =
+  "[Attached files — paths are under the account sandbox `files/`; use read_file to inspect contents]";
+
+/**
+ * Split transcript user text into display body + media chips.
+ * Prefers structured `media[]` on the line; falls back to parsing the attach block.
+ * @param {string} text
+ * @param {unknown} rawMedia
+ */
+function displayUserTranscript(text, rawMedia) {
+  /** @type {Array<{ kind: string, uri: string, fileName?: string, mimeType?: string, bytes?: number }>} */
+  let media = [];
+  if (Array.isArray(rawMedia)) {
+    for (const item of rawMedia) {
+      if (!item || typeof item !== "object") continue;
+      const uri = typeof item.uri === "string" ? item.uri : "";
+      const kind = typeof item.kind === "string" ? item.kind : "file";
+      if (!uri) continue;
+      media.push({
+        kind,
+        uri,
+        ...(typeof item.fileName === "string" ? { fileName: item.fileName } : {}),
+        ...(typeof item.mimeType === "string" ? { mimeType: item.mimeType } : {}),
+        ...(typeof item.bytes === "number" ? { bytes: item.bytes } : {}),
+      });
+    }
+  }
+  let body = text;
+  const markerIdx = text.indexOf(CHAT_ATTACH_TRANSCRIPT_MARKER);
+  if (markerIdx >= 0) {
+    body = text.slice(0, markerIdx).trim();
+    if (media.length === 0) {
+      const block = text.slice(markerIdx + CHAT_ATTACH_TRANSCRIPT_MARKER.length);
+      for (const line of block.split("\n")) {
+        const m = line.match(/^- (.+?) \((\w+)(?:, [^)]*)?\) · path `([^`]+)`/);
+        if (!m) continue;
+        media.push({ fileName: m[1], kind: m[2], uri: m[3] });
+      }
+    }
+  }
+  if (!body && media.length) body = t("chat.attachedOnly");
+  return { text: body, media };
+}
+
 /** Merge daemon transcript into the in-memory log (source of truth after a turn). */
 async function hydrateChatLogFromTranscript(accountIdVal, sessionId, log) {
   if (!accountIdVal || !sessionId) return false;
@@ -1084,10 +1256,18 @@ async function hydrateChatLogFromTranscript(accountIdVal, sessionId, log) {
       const text =
         typeof m.text === "string" ? m.text : typeof m.content === "string" ? m.content : "";
       if (!role || !text) continue;
-      const shown = role === "assistant" ? displayChatText(text) : text;
-      if (!shown) continue;
-      /** @type {{ role: string, text: string, turnId?: string }} */
-      const row = { role, text: shown };
+      /** @type {{ role: string, text: string, turnId?: string, media?: Array<{ kind: string, uri: string, fileName?: string }> }} */
+      let row;
+      if (role === "user") {
+        const parsed = displayUserTranscript(text, m.media);
+        if (!parsed.text && !(parsed.media && parsed.media.length)) continue;
+        row = { role, text: parsed.text };
+        if (parsed.media.length) row.media = parsed.media;
+      } else {
+        const shown = role === "assistant" ? displayChatText(text) : text;
+        if (!shown) continue;
+        row = { role, text: shown };
+      }
       if (typeof m.turnId === "string" && m.turnId) row.turnId = m.turnId;
       next.push(row);
     }
@@ -2274,6 +2454,8 @@ async function showView(id) {
         ? `<p class="muted chat-home-banner">${escapeHtml(t("homeChat.banner"))}</p>`
         : "";
       const pendingFiles = pendingFilesForView(isHome);
+      stopChatSpeech();
+      const voiceTitle = chatVoiceSupported() ? t("chat.voiceHintOs") : chatOsDictationHint();
       el.innerHTML = `<div class="chat-page">
         ${banner}
         <div class="chat-layout">
@@ -2283,11 +2465,11 @@ async function showView(id) {
               ${chatAttachChipsHtml(pendingFiles)}
               <div class="chat-composer-row">
                 <input type="file" id="chat-file" multiple hidden />
-                <button type="button" class="secondary chat-attach-btn" id="chat-attach" title="${escapeHtml(t("chat.attach"))}">${escapeHtml(t("chat.attach"))}</button>
+                <button type="button" class="secondary chat-attach-btn" id="chat-attach" title="${escapeHtml(t("chat.attachHint"))}">${escapeHtml(t("chat.attach"))}</button>
+                <button type="button" class="secondary chat-voice-btn" id="chat-voice" title="${escapeHtml(voiceTitle)}" aria-label="${escapeHtml(t("chat.voice"))}" aria-pressed="false">${chatMicIconSvg()}</button>
                 <input name="text" id="chat-input" placeholder="${escapeHtml(t(placeholderKey))}" autocomplete="off" />
                 <button type="submit" id="chat-send">${escapeHtml(t("app.send"))}</button>
               </div>
-              <p class="muted chat-attach-hint">${escapeHtml(t("chat.attachHint"))}</p>
             </div>
           </form>
         </div>
@@ -2302,6 +2484,9 @@ async function showView(id) {
       const form = document.getElementById("chat-form");
       const sendBtn = document.getElementById("chat-send");
       const fileInput = document.getElementById("chat-file");
+      document.getElementById("chat-voice")?.addEventListener("click", () => {
+        toggleChatSpeech(/** @type {HTMLInputElement | null} */ (document.getElementById("chat-input")));
+      });
       const refreshAttachUi = () => {
         const list = document.getElementById("chat-attach-list");
         const wrap = document.querySelector(".chat-composer-main");
@@ -2330,6 +2515,7 @@ async function showView(id) {
         fileInput.value = "";
         if (!picked.length) return;
         let next = [...pendingFilesForView(isHome)];
+        let added = 0;
         for (const file of picked) {
           if (next.length >= CHAT_ATTACH_MAX_FILES) {
             showToast(t("chat.attachTooMany", { n: String(CHAT_ATTACH_MAX_FILES) }), "err");
@@ -2352,13 +2538,25 @@ async function showView(id) {
             mimeType: file.type || "application/octet-stream",
             size: file.size,
           });
+          added += 1;
         }
         setPendingFilesForView(isHome, next);
         refreshAttachUi();
+        if (added > 0) {
+          showToast(
+            t("chat.attachAdded", {
+              n: String(added),
+              max: String(CHAT_ATTACH_MAX_FILES),
+              size: formatAttachSize(CHAT_ATTACH_MAX_BYTES),
+            }),
+            "ok",
+          );
+        }
       });
       refreshAttachUi();
       form?.addEventListener("submit", async (ev) => {
         ev.preventDefault();
+        stopChatSpeech();
         const input = document.getElementById("chat-input");
         const text = String(new FormData(ev.target).get("text") || "").trim();
         const localFiles = [...pendingFilesForView(isHome)];
@@ -2375,6 +2573,8 @@ async function showView(id) {
         if (input) input.disabled = true;
         const attachBtn = document.getElementById("chat-attach");
         if (attachBtn) attachBtn.disabled = true;
+        const voiceBtn = document.getElementById("chat-voice");
+        if (voiceBtn) voiceBtn.disabled = true;
         /** @type {Array<{ kind: string, uri: string, fileName?: string, mimeType?: string, bytes?: number }>} */
         let media = [];
         try {
@@ -2405,6 +2605,7 @@ async function showView(id) {
           if (sendBtn) sendBtn.disabled = false;
           if (input) input.disabled = false;
           if (attachBtn) attachBtn.disabled = false;
+          if (voiceBtn) voiceBtn.disabled = false;
           return;
         }
         setPendingFilesForView(isHome, []);
@@ -2464,6 +2665,7 @@ async function showView(id) {
         } finally {
           if (sendBtn) sendBtn.disabled = false;
           if (attachBtn) attachBtn.disabled = false;
+          if (voiceBtn) voiceBtn.disabled = false;
           if (input) {
             input.disabled = false;
             input.focus();

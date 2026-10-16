@@ -101,6 +101,9 @@ test("chat: user message paints immediately; turn ends with reply or visible err
     await page.waitForSelector("#chat-form", { timeout: 10000 });
     await page.waitForSelector("#chat-attach", { timeout: 5000 });
     assert.ok(await page.locator("#chat-file").count(), "hidden multi-file input for attach");
+    // Mic is always present; without Web Speech it toasts OS dictation (e.g. Win+H).
+    await page.waitForSelector("#chat-voice", { timeout: 5000 });
+    assert.equal(await page.locator(".chat-attach-hint").count(), 0);
     await page.fill("#chat-input", "hello display test");
     await page.click("#chat-send");
 

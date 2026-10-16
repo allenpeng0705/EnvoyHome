@@ -3521,6 +3521,27 @@ body[data-view="homeChat"] .chat-composer {
   white-space: nowrap;
 }
 
+.chat-voice-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.45rem;
+  min-width: 2.45rem;
+  padding: 0.45rem !important;
+  line-height: 0;
+}
+
+.chat-voice-btn .chat-voice-icon {
+  display: block;
+  flex-shrink: 0;
+}
+
+.chat-voice-btn.is-listening {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  color: var(--danger);
+}
+
 .chat-attach-hint {
   margin: 0;
   font-size: 0.78rem;

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>EnvoyHome uses the microphone so you can dictate messages in Chat.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>EnvoyHome uses speech recognition to turn your voice into Chat text. Recognition is provided by the operating system.</string>
+</dict>
+</plist>

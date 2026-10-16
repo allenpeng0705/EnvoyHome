@@ -237,7 +237,8 @@ fn open_external_url(url: String) -> Result<(), String> {
   if !(lower.starts_with("https://") || lower.starts_with("http://")) {
     return Err("only http(s) URLs allowed".into());
   }
-  // Reject obvious shell metacharacters before handing off to the OS opener.
+  // Reject control chars and quoting tricks. Query `&` / `%` stay allowed for
+  // real http(s) URLs — Windows must not route through unquoted `cmd /C start`.
   if trimmed.bytes().any(|b| b <= 0x1f || matches!(b, b';' | b'"' | b'\\' | b'|')) {
     return Err("url contains disallowed characters".into());
   }
@@ -258,8 +259,18 @@ fn open_external_url(url: String) -> Result<(), String> {
   }
   #[cfg(target_os = "windows")]
   {
-    Command::new("cmd")
-      .args(["/C", "start", "", trimmed])
+    // Pass the URL via env so `&` / `%` / `^` in query strings cannot become
+    // extra `cmd` tokens (Bugbot: cmd injection via open_external_url).
+    Command::new("powershell.exe")
+      .args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        "Start-Process -FilePath $env:ENVOYHOME_OPEN_URL",
+      ])
+      .env("ENVOYHOME_OPEN_URL", trimmed)
       .spawn()
       .map_err(|e| format!("start: {e}"))?;
   }
