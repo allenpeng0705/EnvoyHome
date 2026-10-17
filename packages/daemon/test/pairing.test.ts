@@ -530,11 +530,14 @@ test("paired phone survives remint: lastSeenAt blocks unused-QR prune", async ()
   });
   assert.equal(minted["error"], undefined);
   const result = minted["result"] as {
-    token: string;
+    uri: string;
     device: { deviceId: string };
   };
   const phoneId = result.device.deviceId;
-  const token = result.token;
+  const parsed = checkPairingCode(result.uri);
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) return;
+  const token = parsed.token;
 
   // Phone dials once — stamps lastSeenAt so later QR prune cannot drop it.
   const hello = await rpc("127.0.0.1", daemon.config.wsPort, "home.hello", {}, token);
