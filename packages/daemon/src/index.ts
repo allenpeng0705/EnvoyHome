@@ -164,6 +164,7 @@ export {
   PairingStore,
   PairingError,
   checkPairingCode,
+  compressedPairingToken,
   hostnameOfReach,
   assertDeviceAccountBound,
   ZERO_BINDING_ALLOW_LIST,
@@ -190,20 +191,36 @@ export {
 
 export {
   createMeshHost,
+  createHomeMeshPeer,
+  homeMeshOptions,
+  meshMintFields,
   resolveMeshStatus,
   DEFAULT_MESH_HOST_CONFIG,
+  HOME_MESH_RELAY_HINTS,
   type MeshKind,
   type MeshStatus,
   type MeshHostConfig,
   type MeshHostHandle,
+  type HomeMeshPeer,
+  type HomeMeshPeerNode,
+  type HomeMeshNodeFactory,
+  type HomeMeshPeerOptions,
 } from "./mesh-host.js";
+
+export {
+  loadOrCreateMeshIdentity,
+  meshIdentityPath,
+  type HomeMeshPrivateKey,
+} from "./mesh-identity.js";
 
 export {
   hasCircuitRelayDebug,
   probeCircuitRelayDebug,
   doctorMeshRelayDebugIssue,
+  doctorMeshHostingIssue,
   collectMeshDoctorIssues,
   DOCTOR_MESH_RELAY_DEBUG_ID,
+  DOCTOR_MESH_HOSTING_FAILED_ID,
   type DoctorIssue,
   type DoctorSeverity,
 } from "./doctor-mesh.js";

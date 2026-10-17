@@ -34,6 +34,19 @@ export class ProductEventBus {
     return (this.listeners.get(event)?.size ?? 0) > 0;
   }
 
+  /** Subscribe with an unsubscribe handle (mesh peer event fan-out). */
+  on(event: string, listener: (data: unknown) => void): () => void {
+    let set = this.listeners.get(event);
+    if (!set) {
+      set = new Set();
+      this.listeners.set(event, set);
+    }
+    set.add(listener);
+    return () => {
+      set!.delete(listener);
+    };
+  }
+
   readonly emit: ProductEmit = (event, data) => {
     const set = this.listeners.get(event);
     if (set) {

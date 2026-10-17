@@ -1,6 +1,8 @@
 // Doctor probe: missing DEBUG=libp2p:circuit-relay* (Plan B4 / Design §21 bar).
 // Platform-appropriate — no /proc-only check (macOS-first).
 
+import type { MeshStatus } from "./mesh-host.js";
+
 export type DoctorSeverity = "info" | "warn" | "error";
 
 export interface DoctorIssue {
@@ -12,6 +14,9 @@ export interface DoctorIssue {
 
 /** Issue id for a missing circuit-relay DEBUG namespace. */
 export const DOCTOR_MESH_RELAY_DEBUG_ID = "mesh.relay_debug_missing";
+
+/** Mesh hosting enabled but the live peer did not reach `hosting`. */
+export const DOCTOR_MESH_HOSTING_FAILED_ID = "mesh.hosting_failed";
 
 /**
  * True when `DEBUG` already enables `libp2p:circuit-relay` (exact or `*` / prefix).
@@ -77,15 +82,57 @@ export function doctorMeshRelayDebugIssue(options: {
   };
 }
 
+/**
+ * When mesh hosting is on but the peer is `refused` / stuck at `no-node`,
+ * surface it in `home.doctor` (default-on hosting can fail silently otherwise).
+ */
+export function doctorMeshHostingIssue(options: {
+  hostingEnabled: boolean;
+  status?: MeshStatus;
+}): DoctorIssue | null {
+  if (!options.hostingEnabled) return null;
+  const status = options.status;
+  if (!status) return null;
+  if (status.kind === "hosting") return null;
+  if (status.kind === "attached") {
+    return {
+      id: DOCTOR_MESH_HOSTING_FAILED_ID,
+      severity: "warn",
+      message:
+        "Mesh status is attached — phone dial target must be hosting (V-P2-MESH-1/2).",
+      fixable: false,
+    };
+  }
+  const detail =
+    status.reason ??
+    (status.kind === "refused"
+      ? `peer refused${status.code ? ` (${status.code})` : ""}`
+      : "no hosting peer is running");
+  return {
+    id: DOCTOR_MESH_HOSTING_FAILED_ID,
+    severity: "warn",
+    message: `Mesh hosting is enabled but not hosting: ${detail}. Phones fall back to LAN/WS only until the peer starts. Set ENVOYHOME_MESH_HOSTING=0 to disable.`,
+    fixable: false,
+  };
+}
+
 /** Collect mesh-related doctor issues for `home.doctor`. */
 export function collectMeshDoctorIssues(options: {
   env?: NodeJS.ProcessEnv;
   production?: boolean;
   dualModeNotes?: string[];
+  /** True when config.meshHostingEnabled (daemon binary defaults on). */
+  meshHostingEnabled?: boolean;
+  meshStatus?: MeshStatus;
 } = {}): DoctorIssue[] {
   const issues: DoctorIssue[] = [];
   const relay = doctorMeshRelayDebugIssue(options);
   if (relay) issues.push(relay);
+  const hosting = doctorMeshHostingIssue({
+    hostingEnabled: options.meshHostingEnabled === true,
+    ...(options.meshStatus !== undefined ? { status: options.meshStatus } : {}),
+  });
+  if (hosting) issues.push(hosting);
   for (const note of options.dualModeNotes ?? []) {
     issues.push({
       id: "mesh.dual_mode_note",

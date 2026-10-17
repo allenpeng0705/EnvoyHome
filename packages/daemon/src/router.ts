@@ -1542,6 +1542,7 @@ export function createDispatcher(deps: RouterDeps) {
           },
           {
             dualModeNotes: deps.meshDualModeNotes?.() ?? [],
+            meshStatus: deps.meshStatus(),
             ...(typeof params.homeClawRoot === "string"
               ? { homeClawRoot: params.homeClawRoot }
               : {}),
@@ -1563,12 +1564,15 @@ export function createDispatcher(deps: RouterDeps) {
         const issueIds = (params.issueIds as unknown[]).filter(
           (x): x is string => typeof x === "string",
         );
-        const issues = await collectDoctorIssues({
-          config: deps.config,
-          accounts: deps.accounts,
-          bindings: deps.bindings,
-          channels: deps.channels,
-        });
+        const issues = await collectDoctorIssues(
+          {
+            config: deps.config,
+            accounts: deps.accounts,
+            bindings: deps.bindings,
+            channels: deps.channels,
+          },
+          { meshStatus: deps.meshStatus() },
+        );
         const result = await applyDoctorFixes({
           issueIds,
           issues,

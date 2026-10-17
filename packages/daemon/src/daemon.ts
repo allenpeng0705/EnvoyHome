@@ -12,7 +12,14 @@ import { startHttpHatch } from "./http.js";
 import { AccountStore } from "./accounts.js";
 import { BindingStore } from "./bindings.js";
 import { PairingStore } from "./pairing.js";
-import { createMeshHost, type MeshHostHandle } from "./mesh-host.js";
+import {
+  createHomeMeshPeer,
+  createMeshHost,
+  meshMintFields,
+  type HomeMeshNodeFactory,
+  type HomeMeshPeer,
+  type MeshHostHandle,
+} from "./mesh-host.js";
 import { MemoryFacade } from "@envoyhome/memory";
 import telegramPlugin from "@envoyhome/channel-telegram";
 import discordPlugin from "@envoyhome/channel-discord";
@@ -64,6 +71,8 @@ export interface RunningDaemon {
   push: PushDispatcher;
   localEngine: LocalEngineService;
   mesh: MeshHostHandle;
+  /** Live hosting peer when meshHostingEnabled (null when stub-only). */
+  meshPeer: HomeMeshPeer | null;
   subscriptions: SubscriptionRegistry;
   events: ProductEventBus;
   ws: HostHandle;
@@ -80,6 +89,11 @@ export interface StartDaemonOptions {
   /** Accounts the hatch API key may act for (V-SEC-12). */
   hatchBoundAccounts?: string[];
   managedBy?: "app" | "service";
+  /**
+   * Inject a fake libp2p node factory (unit tests). Production omits this and
+   * uses real `@envoymesh/network` EnvoyMesh.
+   */
+  createMeshNode?: HomeMeshNodeFactory;
 }
 
 export async function startDaemon(options: StartDaemonOptions = {}): Promise<RunningDaemon> {
@@ -211,12 +225,6 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       workflows.scheduleSyncRows(defs),
     );
   }
-  const mesh = createMeshHost({
-    config: {
-      hostingEnabled: config.meshHostingEnabled,
-      attachEnabled: config.meshAttachEnabled,
-    },
-  });
   const subscriptions = new SubscriptionRegistry();
   const startedAt = new Date();
   const packageVersion = options.packageVersion ?? "0.0.0";
@@ -231,6 +239,13 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
 
   let stopping = false;
   const stoppers: Array<() => void | Promise<void>> = [];
+  let meshPeer: HomeMeshPeer | null = null;
+  const meshStub = createMeshHost({
+    config: {
+      hostingEnabled: config.meshHostingEnabled,
+      attachEnabled: config.meshAttachEnabled,
+    },
+  });
 
   const stop = async (): Promise<void> => {
     if (stopping) return;
@@ -252,7 +267,11 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   let wsRef: HostHandle | undefined;
   pairing.onRevokeLive = (deviceId) => {
     wsRef?.disconnectClientsForDevice(deviceId);
+    meshPeer?.closeStreamsForDevice(deviceId);
   };
+
+  const meshStatus = () => (meshPeer ? meshPeer.status() : meshStub.status());
+  const meshDualModeNotes = () => meshStub.dualModeNotes();
 
   const ws = await startWsHost({
     port: config.wsPort,
@@ -286,8 +305,8 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       demoHa,
       demoMqtt,
       activeTurns: () => turns.activeTurnCount(),
-      meshStatus: () => mesh.status(),
-      meshDualModeNotes: () => mesh.dualModeNotes(),
+      meshStatus,
+      meshDualModeNotes,
       onShutdown: (_reason, graceSec) => {
         setTimeout(() => {
           void stop();
@@ -296,6 +315,36 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     },
   });
   wsRef = ws;
+
+  if (config.meshHostingEnabled) {
+    meshPeer = createHomeMeshPeer({
+      paths,
+      sessionIdentity: ws.sessionIdentity,
+      dispatch: ws.dispatch,
+      subscribe: (send) => {
+        const offs = (["home:turn-delta", "home:approval", "home:schedule-fired"] as const).map(
+          (ev) => events.on(ev, (data) => send(ev, data)),
+        );
+        return () => {
+          for (const off of offs) off();
+        };
+      },
+      ...(options.createMeshNode ? { createNode: options.createMeshNode } : {}),
+    });
+    const meshStart = await meshPeer.start();
+    if (meshStart.kind === "hosting") {
+      logger.info(
+        `mesh hosting as ${meshStart.peerId} — ${(meshStart.multiaddrs ?? []).length} addr(s), ${(meshStart.relayHints ?? []).length} relay hint(s)`,
+      );
+    } else {
+      logger.warn(
+        `mesh peer start: ${meshStart.kind}${meshStart.code ? ` (${meshStart.code})` : ""} — ${meshStart.reason ?? "unknown"}`,
+      );
+    }
+    pairing.meshForMint = () => meshMintFields(meshPeer);
+    stoppers.push(() => meshPeer?.stop() ?? Promise.resolve());
+  }
+
   await localEngine.restoreOnBoot();
   stoppers.push(() => localEngine.stop());
   stoppers.push(() => demoHa.stop(channels).catch(() => undefined));
@@ -304,10 +353,20 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   // appends the resolved WS port (Design A.2).
   config.wsPort = ws.host.port;
   stoppers.push(() => {
-    mesh.stop();
+    meshStub.stop();
     ws.stop();
   });
   stoppers.push(() => schedules.stop());
+
+  const mesh: MeshHostHandle = {
+    status: meshStatus,
+    createTransport: meshStub.createTransport,
+    dualModeNotes: meshDualModeNotes,
+    stop: () => {
+      meshStub.stop();
+      void meshPeer?.stop();
+    },
+  };
 
   const http = await startHttpHatch({
     port: config.httpPort,
@@ -342,10 +401,6 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     `daemon claim written (pid=${claim.pid} instanceId=${claim.instanceId} ws=${claim.port})`,
   );
   logger.info(`WS listening on ${ws.host.port} path=/ws`);
-  if (config.meshHostingEnabled) {
-    logger.info("mesh hosting enabled (status=hosting; phone dials this peer — V-P2-MESH-1)");
-  }
-
   return {
     config: { ...config, wsPort: ws.host.port, httpPort },
     logger,
@@ -368,6 +423,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     push,
     localEngine,
     mesh,
+    meshPeer,
     subscriptions,
     events,
     ws,

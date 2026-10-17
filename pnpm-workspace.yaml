@@ -17,6 +17,7 @@ packages:
 # See Design §1.4 (sibling reuse boundary) and Plan §2.
 overrides:
   "@envoymesh/protocol": "link:../EnvoyMesh/packages/protocol"
+  "@envoymesh/api": "link:../EnvoyMesh/packages/api"
   "@envoymesh/host-connect": "link:../EnvoyMesh/packages/host-connect"
   "@envoymesh/reuse-host": "link:../EnvoyMesh/packages/reuse-host"
   "@envoymesh/network": "link:../EnvoyMesh/packages/network"

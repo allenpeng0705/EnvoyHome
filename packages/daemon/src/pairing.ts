@@ -6,7 +6,11 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
 import { dirname, join } from "node:path";
 import { pairingAppMismatch } from "@envoymesh/protocol";
-import { buildPairingUri, parsePairingUri } from "@envoymesh/reuse-host";
+import {
+  buildPairingUri,
+  decodePairingToken,
+  parsePairingUri,
+} from "@envoymesh/reuse-host";
 import { PRODUCT_NAME } from "@envoyhome/protocol";
 import {
   DeviceCredentialStore,
@@ -98,6 +102,12 @@ export interface MintPairingInput {
   /** Bound WS port — daemon owns this; never client-supplied. */
   wsPort: number;
   wsPath?: string;
+  /**
+   * Live hosting peer snapshot for the phone dial ladder (EnvoyDev mesh fields).
+   * When both are set, mint writes `homeNodePeerId` + `bootstrapPeers` into the URI.
+   */
+  homeNodePeerId?: string;
+  bootstrapPeers?: string[];
 }
 
 export interface MintPairingResult {
@@ -120,6 +130,8 @@ export type CheckPairingCodeResult =
       ownerId: string;
       app?: string;
       lanWsUrl?: string;
+      homeNodePeerId?: string;
+      bootstrapPeers?: string[];
     }
   | { ok: false; reason: "malformed" | "pairing_app_mismatch"; message: string };
 
@@ -159,15 +171,99 @@ async function atomicWrite(path: string, body: string): Promise<void> {
 }
 
 /**
+ * The `pairing=` value of an `envoy://pair` URI, or `null` when this is not
+ * the compressed form (EnvoyCoder `compressedPairingToken` peer).
+ */
+export function compressedPairingToken(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("envoy://pair")) return null;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "envoy:" || url.hostname !== "pair") return null;
+    const token = url.searchParams.get("pairing")?.trim();
+    return token ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+type ParsedPairingFields = {
+  wsUrl: string;
+  token: string;
+  ownerId: string;
+  app?: string;
+  lanWsUrl?: string;
+  homeNodePeerId?: string;
+  bootstrapPeers?: string[];
+};
+
+function okFromParsed(parsed: ParsedPairingFields): CheckPairingCodeResult {
+  const result: Extract<CheckPairingCodeResult, { ok: true }> = {
+    ok: true,
+    wsUrl: parsed.wsUrl,
+    token: parsed.token,
+    ownerId: parsed.ownerId,
+  };
+  if (parsed.app !== undefined) result.app = parsed.app;
+  if (parsed.lanWsUrl !== undefined) result.lanWsUrl = parsed.lanWsUrl;
+  if (parsed.homeNodePeerId !== undefined) result.homeNodePeerId = parsed.homeNodePeerId;
+  if (parsed.bootstrapPeers !== undefined && parsed.bootstrapPeers.length > 0) {
+    result.bootstrapPeers = parsed.bootstrapPeers;
+  }
+  return result;
+}
+
+/**
  * Refuse a pairing code minted by another product (V-RPC-4).
  * Uses `@envoymesh/protocol`'s `pairingAppMismatch` against PRODUCT_NAME.
+ *
+ * Reads compressed `pairing=` (mesh QR) via the family's sync decoder, then
+ * falls back to the legacy query form — same order as the Dart phone reader.
  */
 export function checkPairingCode(
   input: string,
   product: string = PRODUCT_NAME,
 ): CheckPairingCodeResult {
-  const parsed = parsePairingUri(input);
-  if (!parsed) {
+  let parsed: ParsedPairingFields | null = null;
+
+  const compressed = compressedPairingToken(input);
+  if (compressed !== null) {
+    try {
+      const decoded = decodePairingToken(compressed);
+      parsed = {
+        wsUrl: decoded.wsUrl,
+        token: decoded.token,
+        ownerId: decoded.ownerId,
+        ...(decoded.app ? { app: decoded.app } : {}),
+        ...(decoded.lanWsUrl ? { lanWsUrl: decoded.lanWsUrl } : {}),
+        ...(decoded.homeNodePeerId ? { homeNodePeerId: decoded.homeNodePeerId } : {}),
+        ...(decoded.bootstrapPeers && decoded.bootstrapPeers.length > 0
+          ? { bootstrapPeers: decoded.bootstrapPeers }
+          : {}),
+      };
+    } catch {
+      // Fall through — a non-token `pairing=` value must not block legacy params.
+    }
+  }
+
+  if (parsed === null) {
+    const legacy = parsePairingUri(input);
+    if (legacy) {
+      parsed = {
+        wsUrl: legacy.wsUrl,
+        token: legacy.token,
+        ownerId: legacy.ownerId,
+        ...(legacy.app ? { app: legacy.app } : {}),
+        ...(legacy.lanWsUrl ? { lanWsUrl: legacy.lanWsUrl } : {}),
+        ...(legacy.homeNodePeerId ? { homeNodePeerId: legacy.homeNodePeerId } : {}),
+        ...(legacy.bootstrapPeers && legacy.bootstrapPeers.length > 0
+          ? { bootstrapPeers: legacy.bootstrapPeers }
+          : {}),
+      };
+    }
+  }
+
+  if (parsed === null) {
     return {
       ok: false,
       reason: "malformed",
@@ -178,40 +274,7 @@ export function checkPairingCode(
   if (mismatch) {
     return { ok: false, reason: "pairing_app_mismatch", message: mismatch };
   }
-  if (parsed.app !== undefined && parsed.lanWsUrl !== undefined) {
-    return {
-      ok: true,
-      wsUrl: parsed.wsUrl,
-      token: parsed.token,
-      ownerId: parsed.ownerId,
-      app: parsed.app,
-      lanWsUrl: parsed.lanWsUrl,
-    };
-  }
-  if (parsed.app !== undefined) {
-    return {
-      ok: true,
-      wsUrl: parsed.wsUrl,
-      token: parsed.token,
-      ownerId: parsed.ownerId,
-      app: parsed.app,
-    };
-  }
-  if (parsed.lanWsUrl !== undefined) {
-    return {
-      ok: true,
-      wsUrl: parsed.wsUrl,
-      token: parsed.token,
-      ownerId: parsed.ownerId,
-      lanWsUrl: parsed.lanWsUrl,
-    };
-  }
-  return {
-    ok: true,
-    wsUrl: parsed.wsUrl,
-    token: parsed.token,
-    ownerId: parsed.ownerId,
-  };
+  return okFromParsed(parsed);
 }
 
 export class PairingStore {
@@ -223,6 +286,11 @@ export class PairingStore {
   private lastMintAt = 0;
   /** Invoked on revoke to drop live WS (and later mesh) sessions — V-RPC-3. */
   onRevokeLive?: (deviceId: string) => void;
+  /**
+   * Optional live mesh snapshot for QR mint (EnvoyDev pairingUri mesh*).
+   * Wired by the daemon after the hosting peer starts.
+   */
+  meshForMint?: () => { homeNodePeerId?: string; bootstrapPeers?: string[] };
 
   constructor(
     stateDir: string,
@@ -377,6 +445,16 @@ export class PairingStore {
     const wsUrl = wsUrlFor(reach, input.wsPort, path);
     const lanHost =
       lanHint && lanHint !== reach && lanHint !== "127.0.0.1" ? lanHint : undefined;
+    const meshSnap = this.meshForMint?.() ?? {};
+    const homeNodePeerId =
+      input.homeNodePeerId?.trim() || meshSnap.homeNodePeerId?.trim() || undefined;
+    const bootstrapPeers = [
+      ...new Set(
+        [...(input.bootstrapPeers ?? []), ...(meshSnap.bootstrapPeers ?? [])]
+          .map((a) => a.trim())
+          .filter((a) => a.length > 0),
+      ),
+    ];
     const uriParams: Parameters<typeof buildPairingUri>[0] = {
       wsUrl,
       token,
@@ -387,7 +465,16 @@ export class PairingStore {
     if (lanHost !== undefined) {
       uriParams.lanWsUrl = wsUrlFor(lanHost, input.wsPort, path);
     }
-    const uri = buildPairingUri(uriParams);
+    if (homeNodePeerId && bootstrapPeers.length > 0) {
+      uriParams.homeNodePeerId = homeNodePeerId;
+      uriParams.bootstrapPeers = bootstrapPeers;
+    }
+    // QR (random token) compresses when mesh fields bloat the payload (EnvoyDev).
+    // Typed user-token route stays legacy query for paste/readback.
+    const uri =
+      mintKind === "qr" && homeNodePeerId && bootstrapPeers.length > 0
+        ? await buildPairingUri(uriParams, { compressed: true })
+        : buildPairingUri(uriParams);
 
     this.noteMint();
     return {

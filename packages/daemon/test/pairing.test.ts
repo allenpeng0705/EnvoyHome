@@ -10,7 +10,9 @@ import {
   checkPairingCode,
   canonicalJson,
   createMeshHost,
+  doctorMeshHostingIssue,
   doctorMeshRelayDebugIssue,
+  DOCTOR_MESH_HOSTING_FAILED_ID,
   hasCircuitRelayDebug,
   resolveMeshStatus,
   signArtifactToken,
@@ -18,6 +20,7 @@ import {
   verifyArtifactToken,
   type RunningDaemon,
 } from "../dist/index.js";
+import { buildPairingUri } from "@envoymesh/reuse-host";
 
 const daemons: RunningDaemon[] = [];
 
@@ -42,6 +45,27 @@ async function boot(extra: {
       meshAttachEnabled: extra.meshAttachEnabled ?? false,
     },
     packageVersion: "0.0.0-test",
+    // Avoid real libp2p in CI when hosting is enabled for mint tests.
+    ...(extra.meshHostingEnabled
+      ? {
+          createMeshNode: () => ({
+            peerId: "12D3KooWTestBootPeer",
+            multiaddrs: ["/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWTestBootPeer"],
+            async start() {},
+            async stop() {},
+            async handleRawProtocol() {},
+            getRelayAdvertisedMultiaddrs() {
+              return [
+                "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWTestBootPeer",
+                "/ip4/47.93.11.212/tcp/4001/p2p/12D3KooWrelay/p2p-circuit/p2p/12D3KooWTestBootPeer",
+              ];
+            },
+            getConnectedPeerIds() {
+              return [];
+            },
+          }),
+        }
+      : {}),
   });
   const addr = daemon.http.address();
   assert.ok(addr && typeof addr === "object");
@@ -576,6 +600,126 @@ test("paired phone survives remint: lastSeenAt blocks unused-QR prune", async ()
     token,
   );
   assert.equal(helloAgain["error"], undefined);
+});
+
+test("home.mintPairing: QR carries homeNodePeerId + bootstrapPeers when mesh hosts", async () => {
+  const bootPeerId = "12D3KooWTestBootPeer";
+  const { daemon } = await boot({ meshHostingEnabled: true });
+  daemon.pairing.__resetMintRateForTests();
+
+  // Live path: createMeshNode fake → meshMintFields → mint (no meshForMint override).
+  const fields = daemon.pairing.meshForMint?.();
+  assert.equal(fields?.homeNodePeerId, bootPeerId);
+  assert.ok((fields?.bootstrapPeers?.length ?? 0) >= 1);
+
+  const minted = await rpc("127.0.0.1", daemon.config.wsPort, "home.mintPairing", {
+    deviceLabel: "Phone",
+  });
+  assert.equal(minted["error"], undefined);
+  const uri = (minted["result"] as { uri: string }).uri;
+  assert.match(uri, /^envoy:\/\/pair/);
+  assert.ok(
+    uri.includes("pairing="),
+    `expected compressed mesh QR, got: ${uri.slice(0, 160)}`,
+  );
+
+  const parsed = checkPairingCode(uri);
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) return;
+  assert.equal(parsed.homeNodePeerId, bootPeerId);
+  assert.ok(
+    (parsed.bootstrapPeers ?? []).some((a) => a.includes(bootPeerId)),
+    `bootstrapPeers missing home multiaddr: ${JSON.stringify(parsed.bootstrapPeers)}`,
+  );
+  assert.equal(parsed.app, "EnvoyHome");
+});
+
+test("checkPairingCode: compressed pairing= round-trips mesh fields", async () => {
+  const uri = await buildPairingUri(
+    {
+      wsUrl: "ws://10.0.0.2:4780/ws",
+      lanWsUrl: "ws://10.0.0.2:4780/ws",
+      token: "meshTok9x",
+      ownerPublicKey: "pk",
+      ownerId: "oid",
+      app: "EnvoyHome",
+      homeNodePeerId: "12D3KooWRoundTrip",
+      bootstrapPeers: ["/ip4/10.0.0.2/tcp/4001/p2p/12D3KooWRoundTrip"],
+    },
+    { compressed: true },
+  );
+  const parsed = checkPairingCode(uri);
+  assert.equal(parsed.ok, true);
+  if (!parsed.ok) return;
+  assert.equal(parsed.token, "meshTok9x");
+  assert.equal(parsed.homeNodePeerId, "12D3KooWRoundTrip");
+  assert.deepEqual(parsed.bootstrapPeers, [
+    "/ip4/10.0.0.2/tcp/4001/p2p/12D3KooWRoundTrip",
+  ]);
+});
+
+test("V-RPC-3: revoke closes mesh proxy streams for the device", async () => {
+  const { daemon } = await boot({ meshHostingEnabled: true });
+  assert.ok(daemon.meshPeer);
+  daemon.pairing.__resetMintRateForTests();
+
+  const closed: string[] = [];
+  const peer = daemon.meshPeer!;
+  const orig = peer.closeStreamsForDevice.bind(peer);
+  peer.closeStreamsForDevice = (deviceId: string) => {
+    closed.push(deviceId);
+    return orig(deviceId);
+  };
+
+  const mint = await rpc("127.0.0.1", daemon.config.wsPort, "home.mintPairing", {
+    deviceLabel: "Phone",
+    host: "127.0.0.1",
+  });
+  assert.equal(mint["error"], undefined);
+  const deviceId = (mint["result"] as { device: { deviceId: string } }).device.deviceId;
+  const uri = (mint["result"] as { uri: string }).uri;
+  const parsed = checkPairingCode(uri);
+  assert.ok(parsed.ok);
+  if (!parsed.ok) return;
+
+  const session = await openRpcSession("127.0.0.1", daemon.config.wsPort, parsed.token);
+  await session.call("home.health");
+
+  const revoked = await rpc("127.0.0.1", daemon.config.wsPort, "home.revokePairedDevice", {
+    deviceId,
+  });
+  assert.equal(revoked["error"], undefined);
+  assert.deepEqual(closed, [deviceId]);
+  session.close();
+});
+
+test("doctor: mesh hosting refused is surfaced", () => {
+  const issue = doctorMeshHostingIssue({
+    hostingEnabled: true,
+    status: {
+      kind: "refused",
+      code: "mesh-start-failed",
+      reason: "The mesh peer did not start: boom.",
+    },
+  });
+  assert.ok(issue);
+  assert.equal(issue!.id, DOCTOR_MESH_HOSTING_FAILED_ID);
+  assert.match(issue!.message, /MESH_HOSTING=0|LAN\/WS/i);
+
+  assert.equal(
+    doctorMeshHostingIssue({
+      hostingEnabled: true,
+      status: { kind: "hosting", peerId: "12D3KooWok" },
+    }),
+    null,
+  );
+  assert.equal(
+    doctorMeshHostingIssue({
+      hostingEnabled: false,
+      status: { kind: "no-node" },
+    }),
+    null,
+  );
 });
 
 test("home.mintPairing: omit host (LAN/loopback fill) + short user token", async () => {

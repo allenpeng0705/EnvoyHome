@@ -21,6 +21,8 @@ export interface CollectDoctorOptions {
   dualModeNotes?: string[];
   homeClawRoot?: string;
   importChat?: boolean;
+  /** Live mesh status for hosting-failed probe. */
+  meshStatus?: import("../mesh-host.js").MeshStatus;
 }
 
 export async function collectDoctorIssues(
@@ -37,6 +39,8 @@ export async function collectDoctorIssues(
   issues.push(
     ...collectMeshDoctorIssues({
       dualModeNotes: options.dualModeNotes ?? [],
+      meshHostingEnabled: deps.config.meshHostingEnabled,
+      ...(options.meshStatus !== undefined ? { meshStatus: options.meshStatus } : {}),
       ...(options.env !== undefined ? { env: options.env } : {}),
       ...(options.production !== undefined ? { production: options.production } : {}),
     }),

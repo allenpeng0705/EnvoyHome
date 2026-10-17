@@ -43,8 +43,12 @@
     "@envoyhome/fake-ha": "workspace:*",
     "@envoyhome/fake-mqtt": "workspace:*",
     "@envoyhome/workflows": "workspace:*",
+    "@envoymesh/api": "link:../../../EnvoyMesh/packages/api",
+    "@envoymesh/network": "link:../../../EnvoyMesh/packages/network",
     "@envoymesh/protocol": "link:../../../EnvoyMesh/packages/protocol",
-    "@envoymesh/reuse-host": "link:../../../EnvoyMesh/packages/reuse-host"
+    "@envoymesh/reuse-host": "link:../../../EnvoyMesh/packages/reuse-host",
+    "@libp2p/crypto": "5.1.18",
+    "@libp2p/interface": "3.2.2"
   },
   "devDependencies": {
     "@envoyhome/test-utils": "workspace:*",

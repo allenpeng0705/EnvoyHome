@@ -11,12 +11,17 @@ const httpPort = Number(process.env.ENVOYHOME_HTTP_PORT ?? 4781);
 const stateDir = process.env.ENVOYHOME_STATE_DIR ?? defaultStateDir();
 const hatchApiKey = process.env.ENVOYHOME_HATCH_API_KEY ?? "";
 
+// Hosting peer on by default so phones dial libp2p → relay (Design §2.3).
+// Set ENVOYHOME_MESH_HOSTING=0 to disable (LAN/WS-only).
+const meshHostingEnabled = process.env.ENVOYHOME_MESH_HOSTING !== "0";
+
 const daemon = await startDaemon({
   config: {
     wsPort,
     httpPort,
     stateDir,
     hatchApiKey,
+    meshHostingEnabled,
     ...(process.env.ENVOYHOME_INSTANCE_ID
       ? { instanceId: process.env.ENVOYHOME_INSTANCE_ID }
       : {}),

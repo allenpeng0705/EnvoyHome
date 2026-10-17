@@ -1,40 +1,49 @@
-// Mesh hosting status — Design §2.3 / Plan B4.
+// Mesh hosting — Design §2.3 / Plan B4 / EnvoyDev createCoderMeshPeer peer.
 //
-// Prefer `createMeshHostTransport` from `@envoymesh/reuse-host` when a real duplex
-// is available (V-P2-MESH-1/2). B4 does **not** re-derive EnvoyMesh relay handling
-// (`addRelay` / `ReservationStore` / reservation verification live upstream in
-// `@envoymesh/network`). This module owns EnvoyHome concerns only: status surface,
-// dual-mode port/mDNS notes, and a faithful stub for tests with fakes.
+// Reuse `@envoymesh/network` for the libp2p stack; do not re-derive relay handling.
+// Phone dials this hosting peer (never attach-as-route — V-P2-MESH-1/2).
 
-import { createMeshHostTransport } from "@envoymesh/reuse-host";
-import type { createSessionIdentity } from "./auth.js";
+import { DEFAULT_ENVOY_COMMUNITY_RELAY_BOOTSTRAP_ADDRS } from "@envoymesh/api/core";
+import {
+  CLIENT_PROXY_PROTOCOL,
+  EnvoyMesh,
+  buildEnvoyUserAgent,
+  meshStreamAsDuplex,
+  type EnvoyMeshOptions,
+} from "@envoymesh/network";
+import { ENVOYMESH_VERSION } from "@envoymesh/protocol";
+import {
+  createMeshHostTransport,
+  createProxyCloseRegistry,
+  type FramedDuplex,
+  type HostRpcDispatcher,
+  type MeshHostTransportOptions,
+  type SessionIdentityResolver,
+} from "@envoymesh/reuse-host";
+import type { HomePaths } from "./home-paths.js";
+import {
+  loadOrCreateMeshIdentity,
+  meshIdentityPath,
+  type HomeMeshPrivateKey,
+} from "./mesh-identity.js";
 
-export type MeshKind = "hosting" | "attached" | "no-node";
+export type MeshKind = "hosting" | "attached" | "no-node" | "refused";
 
 export interface MeshStatus {
   kind: MeshKind;
   peerId?: string;
   multiaddrs?: string[];
+  relayHints?: string[];
+  peerCount?: number;
   scopeKey?: string;
+  reason?: string;
+  code?: string;
 }
 
 export interface MeshHostConfig {
-  /**
-   * When true, the daemon reports `{ kind: "hosting" }` (phone dials this peer —
-   * V-P2-MESH-1). Default false ⇒ `no-node` so B2/B3 tests stay green without a
-   * libp2p stack.
-   */
   hostingEnabled: boolean;
-  /**
-   * Optional dual-mode: product may attach to a local EnvoyMesh node *beside*
-   * hosting (Design §2.3). Attach never becomes the phone dial target
-   * (V-P2-MESH-2). When both are set, status remains `hosting` — the dial target
-   * stays the hosting peer.
-   */
   attachEnabled: boolean;
-  /** Pinned listen port for dual-mode (avoid colliding with EnvoyMesh 3030/3031). */
   listenPort?: number;
-  /** Disable duplicate mDNS advertisement when attach + hosting coexist. */
   disableDuplicateMdns?: boolean;
   peerId?: string;
   multiaddrs?: string[];
@@ -46,13 +55,27 @@ export const DEFAULT_MESH_HOST_CONFIG: MeshHostConfig = {
   disableDuplicateMdns: true,
 };
 
-/**
- * Resolve `home.meshStatus` / `home.hello.mesh` (Design A.1).
- *
- * - hostingEnabled → `hosting` (even if attachEnabled — phone dial stays hosting)
- * - attach only → `attached`
- * - neither → `no-node`
- */
+export const HOME_MESH_RELAY_HINTS: readonly string[] =
+  DEFAULT_ENVOY_COMMUNITY_RELAY_BOOTSTRAP_ADDRS;
+
+/** Phone-facing host options — QR names the peer; no DHT/mDNS swarm (EnvoyDev coderMeshOptions). */
+export function homeMeshOptions(identity?: HomeMeshPrivateKey): EnvoyMeshOptions {
+  return {
+    listen: ["/ip4/0.0.0.0/tcp/0"],
+    enableMdns: false,
+    enableDht: false,
+    dhtClientMode: false,
+    bootstrapPeers: [],
+    enableAutoNat: false,
+    enableRelay: true,
+    configuredRelayAddrs: [...DEFAULT_ENVOY_COMMUNITY_RELAY_BOOTSTRAP_ADDRS],
+    enableDcutr: true,
+    // Family UA enum has no "envoyhome" yet — use envoydev (same thin-daemon hosting role).
+    userAgent: buildEnvoyUserAgent("envoydev", ENVOYMESH_VERSION),
+    ...(identity ? { libp2pPrivateKey: identity } : {}),
+  };
+}
+
 export function resolveMeshStatus(config: MeshHostConfig): MeshStatus {
   if (config.hostingEnabled) {
     const status: MeshStatus = { kind: "hosting" };
@@ -71,28 +94,14 @@ export function resolveMeshStatus(config: MeshHostConfig): MeshStatus {
 
 export interface MeshHostHandle {
   status: () => MeshStatus;
-  /**
-   * Build a mesh-host transport over a product-supplied duplex (reuse-host).
-   * Tests inject fakes; production wires a libp2p stream from `@envoymesh/network`
-   * without re-implementing relay reservation here (Plan B4 risk row).
-   */
   createTransport: typeof createMeshHostTransport;
-  /** Dual-mode contention notes for doctor / operators (V-P2-MESH-2). */
   dualModeNotes: () => string[];
   stop: () => void;
 }
 
-type SessionIdentity = ReturnType<typeof createSessionIdentity>;
-
-/**
- * Thin wrap / stub. Does not start a libp2p stack — that belongs to
- * `@envoymesh/network`. When `hostingEnabled`, status reports `hosting` so
- * phone-path tests (V-P2-MESH-1) can assert without a real peer.
- */
+/** Lightweight status stub (tests / doctor notes). Live peer is {@link createHomeMeshPeer}. */
 export function createMeshHost(options: {
   config?: Partial<MeshHostConfig>;
-  /** Reserved for a future live peer; unused by the stub. */
-  sessionIdentity?: SessionIdentity;
 }): MeshHostHandle {
   const config: MeshHostConfig = {
     ...DEFAULT_MESH_HOST_CONFIG,
@@ -117,8 +126,280 @@ export function createMeshHost(options: {
       }
       return notes;
     },
-    stop: () => {
-      // Stub: no live peer to tear down. Real transport close is per-duplex.
+    stop: () => undefined,
+  };
+}
+
+/* ── Live hosting peer (EnvoyDev createCoderMeshPeer) ─────────────────────── */
+
+export interface HomeMeshPeerNode {
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  readonly peerId: string;
+  readonly multiaddrs: string[];
+  handleRawProtocol(
+    protocol: string,
+    handler: (stream: unknown, connection: unknown) => Promise<void>,
+  ): Promise<void>;
+  getRelayAdvertisedMultiaddrs?(): string[];
+  getConnectedPeerIds?(): string[];
+}
+
+export type HomeMeshNodeFactory = (options: EnvoyMeshOptions) => HomeMeshPeerNode;
+
+export interface HomeMeshPeerOptions {
+  paths: HomePaths;
+  sessionIdentity: SessionIdentityResolver<unknown>;
+  dispatch: HostRpcDispatcher<unknown>;
+  subscribe?: (send: (event: string, data: unknown) => void) => () => void;
+  createNode?: HomeMeshNodeFactory;
+  toDuplex?: (stream: unknown) => FramedDuplex;
+}
+
+export interface HomeMeshPeer {
+  start(): Promise<MeshStatus>;
+  stop(): Promise<void>;
+  status(): MeshStatus;
+  readonly peerId: string | undefined;
+  readonly multiaddrs: string[];
+  readonly relayHints: string[];
+  closeStreamsForDevice(deviceId: string): number;
+}
+
+function createProxyServe(
+  ports: Pick<HomeMeshPeerOptions, "sessionIdentity" | "dispatch" | "subscribe">,
+  registry: ReturnType<typeof createProxyCloseRegistry>,
+): (duplex: FramedDuplex) => Promise<void> {
+  return createMeshHostTransport<unknown>((duplex: FramedDuplex): MeshHostTransportOptions<unknown> => {
+    let unregister: () => void = () => undefined;
+    return {
+      sessionIdentity: {
+        localScopeKey: ports.sessionIdentity.localScopeKey,
+        resolveSession: async (token: string) => {
+          const session = await ports.sessionIdentity.resolveSession(token);
+          if (!session) return null;
+          unregister = registry.register(session.deviceId, () => {
+            void duplex.close();
+          });
+          return session;
+        },
+      },
+      dispatch: ports.dispatch,
+      subscribe: (send: (event: string, data: unknown) => void) => {
+        const unsubscribe = ports.subscribe?.(send) ?? (() => undefined);
+        return () => {
+          unsubscribe();
+          unregister();
+        };
+      },
+    };
+  });
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function stopQuietly(target: HomeMeshPeerNode): Promise<void> {
+  try {
+    await target.stop();
+  } catch {
+    /* abandon cause already reported */
+  }
+}
+
+/**
+ * EnvoyHome's own mesh peer — phone dials this hosting peer over CLIENT_PROXY
+ * (same surface as local WS `home.*`).
+ */
+export function createHomeMeshPeer(options: HomeMeshPeerOptions): HomeMeshPeer {
+  const relayHints = [...DEFAULT_ENVOY_COMMUNITY_RELAY_BOOTSTRAP_ADDRS];
+  const createNode =
+    options.createNode ?? ((meshOptions: EnvoyMeshOptions) => new EnvoyMesh(meshOptions));
+  const toDuplex = options.toDuplex ?? ((stream: unknown) => meshStreamAsDuplex(stream as never));
+  const registry = createProxyCloseRegistry();
+  const serve = createProxyServe(options, registry);
+
+  let node: HomeMeshPeerNode | undefined;
+  let generation = 0;
+  let lastStatus: MeshStatus = {
+    kind: "no-node",
+    reason: "The daemon's own mesh peer has not been started.",
+  };
+
+  const readPeerId = (target: HomeMeshPeerNode): string | undefined => {
+    try {
+      const id = target.peerId;
+      return typeof id === "string" && id.length > 0 ? id : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+
+  const advertisedAddrs = (): string[] => {
+    if (!node) return [];
+    try {
+      const relayed = node.getRelayAdvertisedMultiaddrs?.();
+      const addrs = relayed && relayed.length > 0 ? relayed : node.multiaddrs;
+      return [...new Set(addrs)];
+    } catch {
+      return [];
+    }
+  };
+
+  const hostingStatus = (): MeshStatus | undefined => {
+    if (!node) return undefined;
+    const peerId = readPeerId(node);
+    if (!peerId) return undefined;
+    let peerCount: number | undefined;
+    try {
+      peerCount = node.getConnectedPeerIds?.()?.length;
+    } catch {
+      peerCount = undefined;
+    }
+    const status: MeshStatus = {
+      kind: "hosting",
+      peerId,
+      multiaddrs: advertisedAddrs(),
+      relayHints: [...relayHints],
+    };
+    if (peerCount !== undefined) status.peerCount = peerCount;
+    return status;
+  };
+
+  const refused = (code: string, reason: string): MeshStatus => ({
+    kind: "refused",
+    code,
+    reason,
+  });
+
+  return {
+    get peerId() {
+      return node ? readPeerId(node) : undefined;
+    },
+    get multiaddrs() {
+      return advertisedAddrs();
+    },
+    get relayHints() {
+      return [...relayHints];
+    },
+
+    async start() {
+      if (node) return hostingStatus() ?? lastStatus;
+      const mine = ++generation;
+
+      let created: HomeMeshPeerNode;
+      try {
+        const identity = await loadOrCreateMeshIdentity(meshIdentityPath(options.paths));
+        if (mine !== generation) return lastStatus;
+        created = createNode(homeMeshOptions(identity));
+      } catch (error) {
+        lastStatus = refused(
+          "mesh-start-failed",
+          `The mesh peer could not be created: ${messageOf(error)}.`,
+        );
+        return lastStatus;
+      }
+
+      try {
+        await created.start();
+      } catch (error) {
+        await stopQuietly(created);
+        lastStatus = refused(
+          "mesh-start-failed",
+          `The mesh peer did not start: ${messageOf(error)}.`,
+        );
+        return lastStatus;
+      }
+      if (mine !== generation) {
+        await stopQuietly(created);
+        return lastStatus;
+      }
+
+      if (!readPeerId(created)) {
+        await stopQuietly(created);
+        lastStatus = refused(
+          "mesh-unusable",
+          "The mesh peer started but reported no peer id.",
+        );
+        return lastStatus;
+      }
+
+      try {
+        await created.handleRawProtocol(CLIENT_PROXY_PROTOCOL, async (stream) => {
+          await serve(toDuplex(stream));
+        });
+      } catch (error) {
+        await stopQuietly(created);
+        lastStatus = refused(
+          "mesh-protocol-failed",
+          `CLIENT_PROXY_PROTOCOL could not be registered: ${messageOf(error)}.`,
+        );
+        return lastStatus;
+      }
+      if (mine !== generation) {
+        await stopQuietly(created);
+        return lastStatus;
+      }
+
+      node = created;
+      const hosting = hostingStatus();
+      if (!hosting) {
+        node = undefined;
+        await stopQuietly(created);
+        lastStatus = refused("mesh-unusable", "The mesh peer reported no peer id after start.");
+        return lastStatus;
+      }
+      lastStatus = hosting;
+      return lastStatus;
+    },
+
+    async stop() {
+      generation += 1;
+      const current = node;
+      node = undefined;
+      if (!current) return;
+      try {
+        await current.stop();
+        lastStatus = { kind: "no-node", reason: "The daemon's own mesh peer is stopped." };
+      } catch (error) {
+        lastStatus = refused(
+          "mesh-stop-failed",
+          `Stopping the mesh peer failed: ${messageOf(error)}.`,
+        );
+      }
+    },
+
+    status() {
+      if (lastStatus.kind === "hosting") return hostingStatus() ?? lastStatus;
+      return lastStatus;
+    },
+
+    closeStreamsForDevice(deviceId: string): number {
+      return registry.closeForDevice(deviceId);
     },
   };
+}
+
+/** Snapshot for `home.mintPairing` QR mesh fields (EnvoyDev pairingUri mesh* → homeNodePeerId). */
+export function meshMintFields(peer: HomeMeshPeer | null | undefined): {
+  homeNodePeerId?: string;
+  bootstrapPeers?: string[];
+} {
+  if (!peer) return {};
+  const st = peer.status();
+  if (st.kind !== "hosting" || !st.peerId) return {};
+  const addrs = [
+    ...(st.multiaddrs ?? peer.multiaddrs),
+    ...(st.relayHints ?? peer.relayHints),
+  ];
+  const seen = new Set<string>();
+  const bootstrapPeers: string[] = [];
+  for (const a of addrs) {
+    const t = a.trim();
+    if (!t || !seen.add(t)) continue;
+    bootstrapPeers.push(t);
+  }
+  if (bootstrapPeers.length === 0) return {};
+  return { homeNodePeerId: st.peerId, bootstrapPeers };
 }

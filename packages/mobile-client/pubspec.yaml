@@ -12,8 +12,18 @@ environment:
 dependencies:
   envoy_thin_client:
     path: ../../../EnvoyMesh/packages/envoy-thin-client-dart
+  envoy_mesh_libp2p:
+    path: ../../../EnvoyMesh/packages/envoy-mesh-libp2p-dart
   dartssh2: ^2.22.0
 
 dev_dependencies:
+  archive: ^3.6.1
   lints: ^4.0.0
   test: ^1.25.0
+
+# Same pins as EnvoyDev mobile (mdns_dart + pointycastle + patched dart_libp2p).
+dependency_overrides:
+  mdns_dart: 2.2.2
+  pointycastle: ^4.0.0
+  dart_libp2p:
+    path: ../../../EnvoyMesh/vendor/dart_libp2p

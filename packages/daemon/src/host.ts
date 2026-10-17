@@ -26,6 +26,9 @@ export interface HostHandle {
   connectionCount: () => number;
   /** Drop live WS sessions for a revoked device (V-RPC-3). */
   disconnectClientsForDevice: (deviceId: string) => number;
+  /** Shared with the mesh hosting peer (same auth + home.* dispatch). */
+  sessionIdentity: SessionIdentityResolver;
+  dispatch: HostRpcDispatcher;
   stop: () => void;
 }
 
@@ -77,6 +80,8 @@ export async function startWsHost(input: {
     host,
     connectionCount: () => connections,
     disconnectClientsForDevice: (deviceId: string) => host.disconnectClientsForDevice(deviceId),
+    sessionIdentity: sessionIdentity as SessionIdentityResolver,
+    dispatch,
     stop: () => host.stop(),
   };
 }

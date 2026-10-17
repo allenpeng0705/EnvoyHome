@@ -9,3 +9,5 @@ export 'src/join_channel.dart';
 export 'src/ssh_tunnel.dart';
 export 'src/dial_policy.dart';
 export 'src/home_session.dart';
+export 'src/libp2p_transport.dart';
+export 'src/route_plan.dart';

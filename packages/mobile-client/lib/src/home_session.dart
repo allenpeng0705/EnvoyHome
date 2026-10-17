@@ -5,8 +5,10 @@ import 'package:envoy_thin_client/services/platform_web_socket.dart';
 
 import 'dial_policy.dart';
 import 'join_channel.dart';
+import 'libp2p_transport.dart';
 import 'pairing.dart';
 import 'product.dart';
+import 'route_plan.dart';
 import 'ssh_tunnel.dart';
 
 /// Thin `home.*` session over [HomeRemoteClient] (no local model — V-P2-MOB-1).
@@ -20,10 +22,12 @@ class EnvoyHomeSession {
   /// Last `home.subscribe` catalogue — re-bound after transport reconnect.
   List<String> _subscribedEvents = const [];
 
+  static final Libp2pTransport _defaultLibp2p = Libp2pTransport();
+
   HomeRemoteClient get remote => _client;
   JoinChannel get joinChannel => pairing.joinChannel;
 
-  /// Connect using hosting WS candidates derived from [pairing].
+  /// Connect using the EnvoyDev dial ladder (LAN → libp2p → relay WS).
   ///
   /// For [JoinChannel.ssh], opens a local forward first so candidates dial
   /// loopback (Adapt EnvoyCoder).
@@ -31,6 +35,7 @@ class EnvoyHomeSession {
     AcceptedPairing pairing, {
     FutureOr<WebSocketLike> Function(HomeRemoteCandidate candidate)? createTransport,
     SshTunnel? tunnel,
+    Libp2pDialer? libp2pDialer,
   }) async {
     SshTunnel? ownedTunnel;
     var effective = pairing;
@@ -63,6 +68,9 @@ class EnvoyHomeSession {
           app: pairing.data.app,
           ownerId: pairing.data.ownerId,
           ownerPublicKey: pairing.data.ownerPublicKey,
+          homeNodePeerId: pairing.data.homeNodePeerId,
+          bootstrapPeers: pairing.data.bootstrapPeers,
+          relayWsUrls: pairing.data.relayWsUrls,
         ),
         joinChannel: JoinChannel.ssh,
         endpoint: ep,
@@ -70,18 +78,26 @@ class EnvoyHomeSession {
       );
     }
 
-    final candidates = hostingCandidatesFor(effective);
+    // SSH loopback stays on the thin hostingCandidates list; otherwise walk
+    // the EnvoyDev family ladder (CandidateResolver).
+    final candidates = effective.joinChannel == JoinChannel.ssh
+        ? hostingCandidatesFor(effective)
+        : candidatesFor(effective);
     if (candidates.isEmpty) {
       await ownedTunnel?.close();
-      throw StateError('pairing has no WS dial target');
+      throw StateError('pairing has no dial target');
     }
     // Assigned before [onReconnect] can fire so resubscribe has a target.
     late final EnvoyHomeSession session;
+    final dialer = libp2pDialer ?? _defaultLibp2p.dial;
     final client = HomeRemoteClient(
       HomeRemoteClientOptions(
-        resolveCandidates: () async => candidates,
+        resolveCandidates: () async =>
+            effective.joinChannel == JoinChannel.ssh
+                ? hostingCandidatesFor(effective)
+                : candidatesFor(effective),
         createTransport: createTransport ??
-            (candidate) => PlatformWebSocket.connect(candidate.url),
+            (candidate) => _createTransportFor(candidate, dialer),
         upgradeSweepMs: 0,
         onReconnect: () {
           unawaited(session._resubscribeAfterReconnect());
@@ -97,6 +113,29 @@ class EnvoyHomeSession {
     session = EnvoyHomeSession._(client, pairing, ownedTunnel);
     await session.hello();
     return session;
+  }
+
+  /// EnvoyDev `host_client._createTransportFor` — libp2p → relay proxy → WS.
+  static Future<WebSocketLike> _createTransportFor(
+    HomeRemoteCandidate candidate,
+    Libp2pDialer libp2pDialer,
+  ) async {
+    switch (homeTransportKindFor(candidate)) {
+      case HomeTransportKind.libp2p:
+        return libp2pDialer(candidate);
+      case HomeTransportKind.clientProxy:
+        final homePeerId = candidate.homePeerId!;
+        final target = candidate.url.indexOf('?target=');
+        return ClientProxyTransport.connect(
+          relayWsUrl: candidate.url.substring(0, target),
+          homePeerId: homePeerId,
+          sessionToken: candidate.sessionToken ?? '',
+          product: 'envoyhome-mobile',
+          handshakeTimeout: const Duration(seconds: 12),
+        );
+      case HomeTransportKind.webSocket:
+        return PlatformWebSocket.connect(candidate.url);
+    }
   }
 
   static String _endpointFromWs(String wsUrl) {
