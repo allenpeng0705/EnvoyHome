@@ -2,6 +2,10 @@
   "@@locale": "it",
   "appName": "EnvoyHome",
   "appLanguage": "Lingua",
+  "appThemePicker": "Aspetto",
+  "appThemeSystem": "Sistema",
+  "appThemeLight": "Chiaro",
+  "appThemeDark": "Scuro",
   "pairLede": "Unisciti al desktop di casa via EnvoyMesh — scansiona un QR, inserisci host:port o passa via SSH.",
   "pairTabLink": "Link",
   "pairTabHost": "Host:porta",
@@ -28,15 +32,214 @@
   "pairTokenOptional": "Token (opzionale)",
   "shellOnline": "online",
   "shellDegraded": "degradato",
+  "shellOffline": "offline",
+  "shellConnect": "Connetti",
+  "shellReconnect": "Riconnetti",
   "shellDisconnect": "Disconnetti",
+  "shellForgetPairing": "Dimentica associazione",
+  "connectGuideTitle": "Collegati a casa",
+  "connectGuideHint": "Sul desktop apri Impostazioni → Associa dispositivi e scansiona il QR — oppure incolla il link / host.",
+  "connectGuideReconnectHint": "Questo telefono è già associato. Riconnettiti al desktop, oppure associa di nuovo se hai cambiato casa.",
+  "settingsNeedConnect": "Collegati per configurare LLM, Connessioni, Skill e Sistema.",
   "shellProfilePending": "Il profilo sarà scelto dall’abbinamento di questo dispositivo.",
   "shellProfileOne": "Profilo · {id}",
+  "@shellProfileOne": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "shellProfile": "Profilo",
   "shellMeshHint": "mesh {mesh} · tira le schede per aggiornare",
+  "@shellMeshHint": {
+    "placeholders": {
+      "mesh": {
+        "type": "String"
+      }
+    }
+  },
+  "shellCreateProfile": "Create",
+  "shellProfileDisplayName": "Display name",
+  "shellProfileIdOptional": "Account id (optional)",
+  "shellCancel": "Cancel",
+  "shellCreate": "Create",
+  "shellProfileCreated": "Profile created",
+  "shellProfileCreateFailed": "Create failed: {error}",
+  "@shellProfileCreateFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "navChat": "Chat",
+  "navHomeChat": "Home",
+  "navSettings": "Settings",
+  "navLlm": "LLM",
+  "navConnections": "Connections",
+  "navSkills": "Skills",
+  "navSystem": "System",
   "navApprovals": "Approvazioni",
   "navModels": "Modelli",
   "navArtifacts": "Artefatti",
+  "settingsHubHint": "Configure the home daemon from your phone. Some owner-only actions need a trusted device.",
+  "settingsLlmSubtitle": "Models, Local, Routing, Memory",
+  "settingsConnectionsSubtitle": "Pairing, Home Assistant, MQTT, Channels",
+  "settingsSkillsSubtitle": "Skills, Workflows, Schedules",
+  "settingsSystemSubtitle": "Shared files, Health, Grants",
+  "homeChatSessionTitle": "Phone home chat",
+  "homeChatEmptyTitle": "Talk to your home",
+  "homeChatEmptyHint": "Smart-home tools stay available here. Approvals still gate actuations.",
+  "homeChatHint": "Ask about lights, locks, climate…",
+  "chatAttach": "Attach",
+  "chatAttachTooMany": "At most {n} files",
+  "@chatAttachTooMany": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "chatAttachTooLarge": "{name} exceeds {mb} MB",
+  "@chatAttachTooLarge": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "mb": {
+        "type": "String"
+      }
+    }
+  },
+  "chatAttachAdded": "Attached {n} file(s)",
+  "@chatAttachAdded": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "chatAttachedOnly": "(attachment)",
+  "chatVoiceStart": "Dictate",
+  "chatVoiceStop": "Stop dictation",
+  "chatVoiceUnsupported": "Speech recognition is not available on this device.",
+  "llmTabModels": "Models",
+  "llmTabLocal": "Local",
+  "llmTabRouting": "Routing",
+  "llmTabMemory": "Memory",
+  "llmLocalDownloadHint": "Search Hugging Face and download GGUF files onto the home machine.",
+  "llmHfSearchHint": "Search models…",
+  "llmSearch": "Search",
+  "llmCancelDownload": "Cancel",
+  "llmResumeDownload": "Resume",
+  "llmGgufFiles": "GGUF in {repo}",
+  "@llmGgufFiles": {
+    "placeholders": {
+      "repo": {
+        "type": "String"
+      }
+    }
+  },
+  "llmRoutingHint": "Choose where turns may run for this profile.",
+  "llmFilterAny": "Smart / any",
+  "llmFilterCloud": "Cloud only",
+  "llmFilterLocal": "Local only",
+  "llmAutoSwitch": "Auto model switch",
+  "llmCompactNow": "Compact memory now",
+  "llmFlushEnabled": "Flush standing notes",
+  "llmReviewEnabled": "Review before learn write",
+  "llmInjectMode": "Inject budget mode",
+  "llmInjectAuto": "Auto",
+  "llmInjectBaseline": "Baseline",
+  "llmInjectCustom": "Custom",
+  "llmPendingLearns": "Pending learns",
+  "llmNoPendingLearns": "No pending learns.",
+  "connTabPairing": "Pairing",
+  "connTabHa": "Home Assistant",
+  "connTabMqtt": "MQTT",
+  "connTabChannels": "Channels",
+  "connPairingHint": "Mint and revoke phones from desktop Settings → Pair devices. This list is read-only on mobile.",
+  "connNoDevices": "No paired devices listed.",
+  "connEnabled": "Enabled",
+  "connDisabled": "Disabled",
+  "connReady": "Ready",
+  "connHealthy": "Healthy",
+  "connUnhealthy": "Unhealthy",
+  "connHaUrl": "HA base URL",
+  "connHaToken": "Access token",
+  "connMqttUrl": "Broker URL",
+  "connMqttPassword": "Password",
+  "connSaveEnable": "Save & enable",
+  "connBindTitle": "Object bindings",
+  "connBoundTo": "Bound to {id}",
+  "@connBoundTo": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "connUnbound": "Unbound",
+  "connChannelsHint": "Paste a bot token and enable. Prefer desktop for first-time setup.",
+  "connBotToken": "Bot token",
+  "connDisable": "Disable",
+  "connSenderBinds": "Sender → profile",
+  "connSenderBindsHint": "Link an IM sender id to the active profile.",
+  "connBindChannel": "Channel",
+  "connChannelAccount": "Channel account",
+  "connSenderId": "Sender id",
+  "connBindSender": "Bind sender",
+  "skillsTabSkills": "Skills",
+  "skillsVerify": "Verify",
+  "skillsVerified": "Skill verified",
+  "skillsTabWorkflows": "Workflows",
+  "skillsTabSchedules": "Schedules",
+  "skillsInstallUrl": "Install from URL",
+  "skillsInstall": "Install",
+  "skillsClawHubSearch": "ClawHub search",
+  "schedWhenHint": "When (natural language)",
+  "schedMessageHint": "Reminder message",
+  "schedPropose": "Propose",
+  "schedConfirm": "Confirm reminder",
+  "schedKindNotify": "Notify",
+  "schedKindWorkflow": "Workflow",
+  "schedKindTool": "Tool",
+  "schedWorkflowId": "Workflow id",
+  "schedToolName": "Tool name",
+  "wfEditorTitle": "Workflow",
+  "wfEnable": "Enable",
+  "wfDisable": "Disable",
+  "wfTools": "Insert tool",
+  "wfId": "Workflow id",
+  "wfAiPrompt": "Describe the workflow",
+  "wfAiPromptHint": "e.g. turn off lights at 11pm if nobody home",
+  "wfAiDraft": "Draft with AI",
+  "wfDiagramNodes": "Nodes (phone diagram)",
+  "wfNoNodes": "No nodes yet — draft or paste YAML.",
+  "wfYaml": "YAML",
+  "wfSave": "Validate & save",
+  "wfRun": "Test run",
+  "wfDrafted": "Draft applied",
+  "wfSaved": "Saved",
+  "wfRan": "Run started",
+  "sysTabFiles": "Shared files",
+  "sysTabHealth": "Health",
+  "sysTabGrants": "Grants",
+  "sysTestPush": "Send test push",
+  "sysTestPushSent": "Test push requested",
+  "sysDoctorFix": "Fix",
+  "sysDoctorFixAll": "Fix all",
+  "sysDoctorFixed": "Fixed: {ids}",
+  "@sysDoctorFixed": {
+    "placeholders": {
+      "ids": {
+        "type": "String"
+      }
+    }
+  },
+  "sysNoIssues": "No doctor issues.",
+  "sysNoGrants": "No grants.",
   "chatNeedAccount": "Scegli un account sopra prima di chattare.",
   "chatEmptyMessage": "Messaggio vuoto.",
   "chatSessionTitle": "Chat telefono",
@@ -44,8 +247,29 @@
   "chatEmptyHint": "I turni girano sul demone di casa. Quando l’agente serve un permesso, Consenti/Nega compare qui.",
   "chatHint": "Messaggio…",
   "chatSubscribeFailed": "iscrizione non riuscita: {error}",
+  "@chatSubscribeFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "chatStatus": "stato: {status}",
+  "@chatStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
   "chatError": "errore: {error}",
+  "@chatError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "approvalsTitle": "Approvazioni",
   "approvalsHint": "Richieste di tool e attuazione in attesa di decisione.",
   "approvalsNeedAccount": "Scegli un account per caricare le approvazioni.",
@@ -57,6 +281,13 @@
   "approvalsAllowed": "Consentito",
   "approvalsDenied": "Negato",
   "approvalsFailed": "Non riuscito: {error}",
+  "@approvalsFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "modelsTitle": "Modelli",
   "modelsOwnerHint": "Abilita Local o Ollama sulla macchina di casa. Preferisci Desktop per la prima configurazione.",
   "modelsReadonlyHint": "Solo lettura su questo dispositivo. Usa Impostazioni desktop → Modelli (o telefono owner fidato) per abilitare Local.",
@@ -73,7 +304,21 @@
   "modelsThisAccount": "Questo account",
   "modelsNeedAccount": "Imposta accountId sopra.",
   "modelsDefault": "Predefinito: {id}",
+  "@modelsDefault": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "modelsPool": "Pool: {filter}",
+  "@modelsPool": {
+    "placeholders": {
+      "filter": {
+        "type": "String"
+      }
+    }
+  },
   "modelsModeMesh": "Mesh locale",
   "modelsModeSpawn": "Home llama-server",
   "modelsModeOllama": "Ollama",
@@ -87,6 +332,24 @@
   "modelsLocalOnlySet": "Routing solo locale impostato",
   "modelsDefaultLabel": "predefinito",
   "modelsOffLabel": "off",
+  "modelsTest": "Test",
+  "modelsSetDefault": "Set default",
+  "modelsTestOk": "Tested {id}",
+  "@modelsTestOk": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "modelsDefaultSet": "Default → {id}",
+  "@modelsDefaultSet": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "artifactsTitle": "Artefatti",
   "artifactsHint": "Link firmati dal demone di casa. Tocca per aprire.",
   "artifactsNeedAccount": "Scegli un account per elencare gli artefatti.",
@@ -94,5 +357,19 @@
   "artifactsEmptyHint": "Tira per aggiornare dopo che l’agente produce un file.",
   "artifactsUrlCopied": "Impossibile aprire — URL copiato",
   "artifactsOpenFailed": "Apertura non riuscita: {error}",
-  "chatPendingApprovals": "{count} in attesa della tua approvazione"
+  "@artifactsOpenFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatPendingApprovals": "{count} in attesa della tua approvazione",
+  "@chatPendingApprovals": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

@@ -19,6 +19,14 @@ import {
   setLocale,
   t,
 } from "./i18n/index.js";
+import {
+  THEME_OPTIONS,
+  getThemePreference,
+  initTheme,
+  onThemeChange,
+  resolvedTheme,
+  setThemePreference,
+} from "./theme.js";
 import { graphToYaml, yamlToGraph } from "./workflow-model.js";
 import { mountWorkflowCanvas } from "./workflow-canvas.js";
 
@@ -1768,6 +1776,12 @@ function currentProfileLabel() {
 
 const LANGUAGE_ICON_SVG = `<svg class="locale-switcher__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
 
+/** Lucide-style qr-code — shortcut into Connections → Pair devices. */
+const PAIRING_QR_ICON_SVG = `<svg class="topbar-icon-btn__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>`;
+
+const THEME_SUN_SVG = `<svg class="topbar-icon-btn__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>`;
+const THEME_MOON_SVG = `<svg class="topbar-icon-btn__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>`;
+
 function currentLocaleLabel() {
   return LOCALE_OPTIONS.find((o) => o.id === getLocale())?.label || getLocale();
 }
@@ -1784,6 +1798,12 @@ function closeTopbarMenus() {
   if (localeBtn && localeMenu) {
     localeMenu.hidden = true;
     localeBtn.setAttribute("aria-expanded", "false");
+  }
+  const themeBtn = document.getElementById("theme-switcher-btn");
+  const themeMenu = document.getElementById("theme-switcher-menu");
+  if (themeBtn && themeMenu) {
+    themeMenu.hidden = true;
+    themeBtn.setAttribute("aria-expanded", "false");
   }
 }
 
@@ -1820,6 +1840,13 @@ function navProfileHtml() {
   </div>`;
 }
 
+function pairingQrShortcutHtml() {
+  const tip = t("app.pairingQrTip");
+  return `<button type="button" id="topbar-pairing-qr" class="topbar-icon-btn" title="${escapeHtml(
+    tip,
+  )}" aria-label="${escapeHtml(tip)}">${PAIRING_QR_ICON_SVG}</button>`;
+}
+
 function localeSwitcherHtml() {
   const label = currentLocaleLabel();
   const tip = t("app.languageTip", { language: label });
@@ -1833,7 +1860,7 @@ function localeSwitcherHtml() {
       )}</button></li>`,
   ).join("");
   return `<div class="locale-switcher">
-    <button type="button" id="locale-switcher-btn" class="locale-switcher__trigger" aria-haspopup="listbox" aria-expanded="false" title="${escapeHtml(
+    <button type="button" id="locale-switcher-btn" class="locale-switcher__trigger topbar-icon-btn" aria-haspopup="listbox" aria-expanded="false" title="${escapeHtml(
       tip,
     )}" aria-label="${escapeHtml(menuLabel)}">
       ${LANGUAGE_ICON_SVG}
@@ -1842,6 +1869,39 @@ function localeSwitcherHtml() {
       t("app.languagePicker"),
     )}" hidden>${options}</ul>
   </div>`;
+}
+
+function themeSwitcherHtml() {
+  const pref = getThemePreference();
+  const tip = t("app.themeTip", { theme: t(`app.theme${pref[0].toUpperCase()}${pref.slice(1)}`) });
+  const icon = resolvedTheme() === "light" ? THEME_SUN_SVG : THEME_MOON_SVG;
+  const options = THEME_OPTIONS.map(
+    (o) =>
+      `<li role="presentation"><button type="button" role="option" class="locale-switcher__option${
+        o.id === pref ? " active" : ""
+      }" data-theme="${escapeHtml(o.id)}" aria-selected="${o.id === pref ? "true" : "false"}">${escapeHtml(
+        t(o.labelKey),
+      )}</button></li>`,
+  ).join("");
+  return `<div class="locale-switcher theme-switcher">
+    <button type="button" id="theme-switcher-btn" class="locale-switcher__trigger topbar-icon-btn" aria-haspopup="listbox" aria-expanded="false" title="${escapeHtml(
+      tip,
+    )}" aria-label="${escapeHtml(t("app.themePicker"))}">
+      ${icon}
+    </button>
+    <ul class="locale-switcher__menu" id="theme-switcher-menu" role="listbox" aria-label="${escapeHtml(
+      t("app.themePicker"),
+    )}" hidden>${options}</ul>
+  </div>`;
+}
+
+function bindPairingQrShortcut() {
+  const btn = document.getElementById("topbar-pairing-qr");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    closeTopbarMenus();
+    void showView("pairing");
+  });
 }
 
 function bindNavProfile() {
@@ -1889,10 +1949,10 @@ function bindNavProfile() {
   });
 }
 
-function bindLocaleSwitcher() {
-  const root = document.querySelector(".locale-switcher");
-  const btn = document.getElementById("locale-switcher-btn");
-  const menu = document.getElementById("locale-switcher-menu");
+function bindMenuSwitcher(rootSelector, btnId, menuId, optionAttr, onPick) {
+  const root = document.querySelector(rootSelector);
+  const btn = document.getElementById(btnId);
+  const menu = document.getElementById(menuId);
   if (!root || !btn || !menu) return;
 
   const close = () => {
@@ -1922,21 +1982,34 @@ function bindLocaleSwitcher() {
     if (menu.hidden) open();
     else close();
   });
-  menu.querySelectorAll("[data-locale]").forEach((opt) => {
+  menu.querySelectorAll(`[${optionAttr}]`).forEach((opt) => {
     opt.addEventListener("click", () => {
-      const next = opt.getAttribute("data-locale") || "";
-      if (next && next !== getLocale()) setLocale(next);
+      onPick(opt.getAttribute(optionAttr) || "");
       close();
     });
+  });
+}
+
+function bindLocaleSwitcher() {
+  bindMenuSwitcher(".locale-switcher:not(.theme-switcher)", "locale-switcher-btn", "locale-switcher-menu", "data-locale", (next) => {
+    if (next && next !== getLocale()) setLocale(next);
+  });
+}
+
+function bindThemeSwitcher() {
+  bindMenuSwitcher(".theme-switcher", "theme-switcher-btn", "theme-switcher-menu", "data-theme", (next) => {
+    if (next && next !== getThemePreference()) setThemePreference(next);
   });
 }
 
 function renderTopbarTools() {
   const tools = document.getElementById("topbar-tools");
   if (!tools) return;
-  // Precedent: ../EnvoyMesh/apps/social LocaleSwitcher (globe + menu).
-  tools.innerHTML = `${navProfileHtml()}${localeSwitcherHtml()}`;
+  // Profile · pairing QR · theme · language.
+  tools.innerHTML = `${navProfileHtml()}${pairingQrShortcutHtml()}${themeSwitcherHtml()}${localeSwitcherHtml()}`;
   bindNavProfile();
+  bindPairingQrShortcut();
+  bindThemeSwitcher();
   bindLocaleSwitcher();
 }
 
@@ -8500,12 +8573,17 @@ function promptForm(opts) {
   });
 }
 
+initTheme();
 initLocale();
 applyDomI18n();
 onLocaleChange(() => {
   applyDomI18n();
   renderNav(activeView);
+  renderTopbarTools();
   if (sock && sock.readyState === WebSocket.OPEN) void showView(activeView);
+});
+onThemeChange(() => {
+  renderTopbarTools();
 });
 renderNav(activeView);
 connect();

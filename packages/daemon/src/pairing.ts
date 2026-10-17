@@ -421,6 +421,24 @@ export class PairingStore {
   }
 
   /**
+   * Mark a device as seen (WS / mesh auth). Prevents unused-QR prune from
+   * deleting an already-paired phone (Design §4.2 / EnvoyCoder lastSeenAt).
+   * Fire-and-forget persist — callers must not await across the hot path.
+   */
+  noteSeen(deviceId: string): void {
+    const rec = this.devices.getById(deviceId);
+    if (!rec || rec.revoked) return;
+    const seen = new Date().toISOString();
+    // Skip no-op writes within the same second (auth can fire often).
+    if (rec.lastSeenAt && rec.lastSeenAt.slice(0, 19) === seen.slice(0, 19)) {
+      return;
+    }
+    rec.lastSeenAt = seen;
+    this.devices.put(rec);
+    void this.persist().catch(() => undefined);
+  }
+
+  /**
    * Drop unused QR pairing codes that never authenticated a phone.
    * Precedent: EnvoyCoder `paired-devices.ts` pruneUnusedQrCodes.
    * User-chosen short tokens and used/revoked rows are kept.

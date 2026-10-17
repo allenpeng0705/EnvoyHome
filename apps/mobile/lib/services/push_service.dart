@@ -49,12 +49,26 @@ class PushService {
 
     try {
       if (Platform.isIOS) {
-        await _channel.invokeMethod<void>('requestPermissionAndRegister');
+        // Scene-based iOS may wire the MethodChannel a tick after launch.
+        await _requestIosPushWithRetry();
       } else if (Platform.isAndroid) {
         await _initAndroidFcm();
       }
     } catch (e, st) {
       debugPrint('[push] initialize failed: $e\n$st');
+    }
+  }
+
+  Future<void> _requestIosPushWithRetry() async {
+    const attempts = 8;
+    for (var i = 0; i < attempts; i++) {
+      try {
+        await _channel.invokeMethod<void>('requestPermissionAndRegister');
+        return;
+      } on MissingPluginException {
+        if (i == attempts - 1) rethrow;
+        await Future<void>.delayed(Duration(milliseconds: 50 * (i + 1)));
+      }
     }
   }
 

@@ -1,12 +1,24 @@
 :root {
-  /* Surfaces — EnvoyHome shell */
+  /* Shared chrome (colors live under theme selectors below). */
+  --radius: 8px;
+  --radius-lg: 12px;
+  --transition: 0.2s ease;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  font-family: var(--font);
+}
+
+/* Dark default — also when data-theme is unset (before initTheme). */
+:root,
+:root[data-theme="dark"] {
   --bg: #0c1117;
   --bg-elevated: #12181f;
   --panel: #171e27;
   --panel-2: #1c2530;
   --text: #e8eef4;
   --muted: #8b9aab;
-  /* Accent — EnvoyMesh design tokens (dark primary) */
   --accent: #34d399;
   --accent-dim: #10b981;
   --accent-ink: #052e16;
@@ -17,17 +29,39 @@
   --danger: #c45c5c;
   --danger-soft: #e8a0a0;
   --warn: #c9a227;
-  --radius: 8px;
-  --radius-lg: 12px;
+  --glow-a: rgba(61, 154, 106, 0.12);
+  --glow-b: rgba(80, 120, 180, 0.08);
   --shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
-  --transition: 0.2s ease;
-  /* Type — EnvoyMesh system stack + mono for codes */
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
-  --font-weight-medium: 500;
-  --font-weight-semibold: 600;
-  font-family: var(--font);
+  --menu-bg: #12181f;
+  --menu-hover: #1c2530;
   color-scheme: dark;
+}
+
+/* Higher specificity than bare :root so light tokens always win. */
+:root[data-theme="light"] {
+  --bg: #e8edf3;
+  --bg-elevated: #ffffff;
+  --panel: #ffffff;
+  --panel-2: #f3f6f9;
+  --text: #12181f;
+  --muted: #4a5a6a;
+  --accent: #047857;
+  --accent-dim: #065f46;
+  --accent-ink: #ecfdf5;
+  --accent-hot: #059669;
+  --accent-subtle: color-mix(in srgb, var(--accent) 12%, transparent);
+  --border: #c5ced8;
+  --border-subtle: color-mix(in srgb, var(--border) 80%, transparent);
+  --danger: #b42318;
+  /* Readable on light surfaces (was near-white coral). */
+  --danger-soft: #b42318;
+  --warn: #92400e;
+  --glow-a: rgba(4, 120, 87, 0.08);
+  --glow-b: rgba(79, 70, 229, 0.06);
+  --shadow: 0 10px 28px rgba(15, 23, 42, 0.07);
+  --menu-bg: #ffffff;
+  --menu-hover: #eef2f6;
+  color-scheme: light;
 }
 
 * {
@@ -37,8 +71,8 @@
 body {
   margin: 0;
   background:
-    radial-gradient(1200px 600px at 10% -10%, rgba(61, 154, 106, 0.12), transparent 55%),
-    radial-gradient(900px 500px at 90% 0%, rgba(80, 120, 180, 0.08), transparent 50%),
+    radial-gradient(1200px 600px at 10% -10%, var(--glow-a), transparent 55%),
+    radial-gradient(900px 500px at 90% 0%, var(--glow-b), transparent 50%),
     var(--bg);
   color: var(--text);
   min-height: 100vh;
@@ -188,7 +222,7 @@ body {
   top: calc(100% + 4px);
   z-index: 60;
   min-width: 12rem;
-  background: var(--bg-elevated);
+  background: var(--menu-bg, var(--bg-elevated));
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: var(--shadow);
@@ -196,6 +230,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.1rem;
+  color: var(--text);
 }
 
 .nav-profile-menu[hidden] {
@@ -216,16 +251,21 @@ body {
   border-radius: 6px;
   cursor: pointer;
   font: inherit;
+  -webkit-text-fill-color: var(--text);
 }
 
 .nav-profile-option:hover,
 .nav-profile-manage:hover {
-  background: var(--panel);
+  background: var(--menu-hover, var(--panel-2));
+  color: var(--text);
+  -webkit-text-fill-color: var(--text);
 }
 
 .nav-profile-option.selected {
   color: var(--text);
-  background: rgba(167, 139, 250, 0.16);
+  -webkit-text-fill-color: var(--text);
+  background: color-mix(in srgb, var(--accent) 18%, var(--menu-bg, var(--bg-elevated)));
+  font-weight: var(--font-weight-semibold);
 }
 
 .nav-profile-empty {
@@ -455,13 +495,8 @@ body[data-view="homeChat"] #view.view-panel {
   box-sizing: border-box;
 }
 
-/* Precedent: EnvoyMesh Social LocaleSwitcher — globe icon + menu */
-.locale-switcher {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.locale-switcher__trigger {
+/* Icon buttons in the topbar (pairing QR, locale globe, …) */
+.topbar-icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -473,18 +508,26 @@ body[data-view="homeChat"] #view.view-panel {
   color: var(--muted);
   border-radius: var(--radius);
   cursor: pointer;
+  flex-shrink: 0;
   transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
 }
 
-.locale-switcher__trigger:hover,
-.locale-switcher__trigger[aria-expanded="true"] {
+.topbar-icon-btn:hover,
+.topbar-icon-btn[aria-expanded="true"] {
   color: var(--text);
   background: var(--panel);
   border-color: var(--border);
 }
 
+.topbar-icon-btn__icon,
 .locale-switcher__icon {
   display: block;
+}
+
+/* Precedent: EnvoyMesh Social LocaleSwitcher — globe icon + menu */
+.locale-switcher {
+  position: relative;
+  flex-shrink: 0;
 }
 
 .locale-switcher__menu {
@@ -497,10 +540,11 @@ body[data-view="homeChat"] #view.view-panel {
   margin: 0;
   padding: 0.25rem;
   list-style: none;
-  background: var(--bg-elevated);
+  background: var(--menu-bg, var(--bg-elevated));
   border: 1px solid var(--border);
   border-radius: 10px;
   box-shadow: var(--shadow);
+  color: var(--text);
 }
 
 .locale-switcher__menu[hidden] {
@@ -514,7 +558,9 @@ body[data-view="homeChat"] #view.view-panel {
   border: none;
   border-radius: 6px;
   background: transparent;
+  /* Always body text — never accent-ink (near-white on light menus). */
   color: var(--text);
+  -webkit-text-fill-color: var(--text);
   font: inherit;
   font-size: 0.875rem;
   text-align: left;
@@ -523,13 +569,17 @@ body[data-view="homeChat"] #view.view-panel {
 }
 
 .locale-switcher__option:hover {
-  background: var(--panel);
+  background: var(--menu-hover, var(--panel-2));
+  color: var(--text);
+  -webkit-text-fill-color: var(--text);
 }
 
 .locale-switcher__option.active {
-  color: var(--accent);
+  /* Keep readable body text; mark selection with tint + weight (not accent fill text). */
+  color: var(--text);
+  -webkit-text-fill-color: var(--text);
   font-weight: var(--font-weight-semibold);
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--menu-bg, var(--bg-elevated)));
 }
 
 .brand {
@@ -668,7 +718,9 @@ body[data-view="homeChat"] #view.view-panel {
 
 .panel,
 .view-panel {
-  background: rgba(23, 30, 39, 0.88);
+  /* Theme-aware — never hardcode dark navy (breaks light-mode text contrast). */
+  background: var(--panel);
+  color: var(--text);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 1.1rem 1.25rem 1.4rem;
@@ -714,6 +766,7 @@ pre {
 
 .card {
   background: var(--panel-2);
+  color: var(--text);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.9rem 1rem;
@@ -2353,7 +2406,7 @@ pre {
 #view input,
 #view select,
 #view textarea {
-  background: var(--bg);
+  background: var(--bg-elevated);
   color: var(--text);
   border: 1px solid var(--border);
   border-radius: 6px;

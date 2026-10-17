@@ -125,14 +125,29 @@ export class DeviceCredentialStore {
   }
 }
 
+export interface SessionIdentityOptions {
+  /**
+   * Called when a device token authenticates successfully.
+   * PairingStore stamps `lastSeenAt` so unused-QR prune cannot drop a live pair
+   * (EnvoyCoder paired-devices resolveSession side effect).
+   */
+  onDeviceSeen?: (deviceId: string) => void;
+}
+
 export function createSessionIdentity(
   devices: DeviceCredentialStore,
+  options: SessionIdentityOptions = {},
 ): SessionIdentityResolver<HomeCaller> {
   return {
     localScopeKey: LOOPBACK_SCOPE,
     async resolveSession(token: string): Promise<HomeSession | null> {
       const rec = devices.getByToken(token);
       if (!rec || rec.revoked) return null;
+      try {
+        options.onDeviceSeen?.(rec.deviceId);
+      } catch {
+        // Best-effort — never refuse auth because persist failed.
+      }
       return {
         scopeKey: rec.deviceId,
         ownerId: rec.deviceId,

@@ -22,6 +22,7 @@
 
 | Date | Change |
 |------|--------|
+| 2026-10-17 | **Product (mobile §10.1 IA):** Flutter thin client mirrors desktop Settings map — phone bottom nav **Chat · Home (HA-gated) · Settings hub**; tablet rail. Settings hub → LLM (Models/Local+HF·GGUF/Routing/Memory), Connections (Pairing status/HA/MQTT/Channels), Skills (Skills/Workflows AI-draft+YAML/Schedules), System (Artifacts/Doctor/Grants). Chat/Home gain attach (`uploadChatMedia`) + OS speech dictation + session persistence. Ignores OS service, pairing mint/revoke, provider secret vault. No wire bump. |
 | 2026-10-16t | **Product (Chat voice discoverability):** Mic control is always shown. With Web Speech it dictating; without it (or on click-before-support), toast + `title` explain OS dictation (Windows Win+H / macOS Dictation). Fixes unreachable Win+H hint after composer copy was removed. |
 | 2026-10-16s | **Product (Chat composer hints):** Remove always-on attach/voice copy under the composer. Caps and sandbox note appear on Attach hover + toast when files are added; errors stay toasts. Voice OS note stays on the mic button `title`. |
 | 2026-10-16r | **Product (Chat / Home chat voice):** Progressive Web Speech mic on Settings Chat + Home chat when `SpeechRecognition` / `webkitSpeechRecognition` exists (macOS WKWebView → Apple Speech). Otherwise show OS dictation hint (Windows Win+H / macOS Dictation). No daemon STT, no Whisper, no wire change. macOS bundle declares `NSMicrophoneUsageDescription` + `NSSpeechRecognitionUsageDescription`. |

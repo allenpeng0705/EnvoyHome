@@ -2,6 +2,10 @@
   "@@locale": "ja",
   "appName": "EnvoyHome",
   "appLanguage": "言語",
+  "appThemePicker": "外観",
+  "appThemeSystem": "システム",
+  "appThemeLight": "ライト",
+  "appThemeDark": "ダーク",
   "pairLede": "EnvoyMesh でホームデスクトップに参加 — QR をスキャン、host:port を入力、または SSH 経由。",
   "pairTabLink": "リンク",
   "pairTabHost": "ホスト:ポート",
@@ -28,15 +32,214 @@
   "pairTokenOptional": "トークン（任意）",
   "shellOnline": "オンライン",
   "shellDegraded": "低下",
+  "shellOffline": "オフライン",
+  "shellConnect": "接続",
+  "shellReconnect": "再接続",
   "shellDisconnect": "切断",
+  "shellForgetPairing": "ペアリングを忘れる",
+  "connectGuideTitle": "ホームに接続",
+  "connectGuideHint": "デスクトップの設定 → デバイスのペアリングでQRをスキャンするか、ペアリングリンク／ホストを入力してください。",
+  "connectGuideReconnectHint": "この端末はすでにペアリング済みです。再接続するか、別のホームなら再度ペアリングしてください。",
+  "settingsNeedConnect": "接続すると LLM・接続・スキル・システムを設定できます。",
   "shellProfilePending": "プロファイルはこのデバイスのペアリングから選ばれます。",
   "shellProfileOne": "プロファイル · {id}",
+  "@shellProfileOne": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "shellProfile": "プロファイル",
   "shellMeshHint": "mesh {mesh} · タブを引いて更新",
+  "@shellMeshHint": {
+    "placeholders": {
+      "mesh": {
+        "type": "String"
+      }
+    }
+  },
+  "shellCreateProfile": "Create",
+  "shellProfileDisplayName": "Display name",
+  "shellProfileIdOptional": "Account id (optional)",
+  "shellCancel": "Cancel",
+  "shellCreate": "Create",
+  "shellProfileCreated": "Profile created",
+  "shellProfileCreateFailed": "Create failed: {error}",
+  "@shellProfileCreateFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "navChat": "チャット",
+  "navHomeChat": "Home",
+  "navSettings": "Settings",
+  "navLlm": "LLM",
+  "navConnections": "Connections",
+  "navSkills": "Skills",
+  "navSystem": "System",
   "navApprovals": "承認",
   "navModels": "モデル",
   "navArtifacts": "成果物",
+  "settingsHubHint": "Configure the home daemon from your phone. Some owner-only actions need a trusted device.",
+  "settingsLlmSubtitle": "Models, Local, Routing, Memory",
+  "settingsConnectionsSubtitle": "Pairing, Home Assistant, MQTT, Channels",
+  "settingsSkillsSubtitle": "Skills, Workflows, Schedules",
+  "settingsSystemSubtitle": "Shared files, Health, Grants",
+  "homeChatSessionTitle": "Phone home chat",
+  "homeChatEmptyTitle": "Talk to your home",
+  "homeChatEmptyHint": "Smart-home tools stay available here. Approvals still gate actuations.",
+  "homeChatHint": "Ask about lights, locks, climate…",
+  "chatAttach": "Attach",
+  "chatAttachTooMany": "At most {n} files",
+  "@chatAttachTooMany": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "chatAttachTooLarge": "{name} exceeds {mb} MB",
+  "@chatAttachTooLarge": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "mb": {
+        "type": "String"
+      }
+    }
+  },
+  "chatAttachAdded": "Attached {n} file(s)",
+  "@chatAttachAdded": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "chatAttachedOnly": "(attachment)",
+  "chatVoiceStart": "Dictate",
+  "chatVoiceStop": "Stop dictation",
+  "chatVoiceUnsupported": "Speech recognition is not available on this device.",
+  "llmTabModels": "Models",
+  "llmTabLocal": "Local",
+  "llmTabRouting": "Routing",
+  "llmTabMemory": "Memory",
+  "llmLocalDownloadHint": "Search Hugging Face and download GGUF files onto the home machine.",
+  "llmHfSearchHint": "Search models…",
+  "llmSearch": "Search",
+  "llmCancelDownload": "Cancel",
+  "llmResumeDownload": "Resume",
+  "llmGgufFiles": "GGUF in {repo}",
+  "@llmGgufFiles": {
+    "placeholders": {
+      "repo": {
+        "type": "String"
+      }
+    }
+  },
+  "llmRoutingHint": "Choose where turns may run for this profile.",
+  "llmFilterAny": "Smart / any",
+  "llmFilterCloud": "Cloud only",
+  "llmFilterLocal": "Local only",
+  "llmAutoSwitch": "Auto model switch",
+  "llmCompactNow": "Compact memory now",
+  "llmFlushEnabled": "Flush standing notes",
+  "llmReviewEnabled": "Review before learn write",
+  "llmInjectMode": "Inject budget mode",
+  "llmInjectAuto": "Auto",
+  "llmInjectBaseline": "Baseline",
+  "llmInjectCustom": "Custom",
+  "llmPendingLearns": "Pending learns",
+  "llmNoPendingLearns": "No pending learns.",
+  "connTabPairing": "Pairing",
+  "connTabHa": "Home Assistant",
+  "connTabMqtt": "MQTT",
+  "connTabChannels": "Channels",
+  "connPairingHint": "Mint and revoke phones from desktop Settings → Pair devices. This list is read-only on mobile.",
+  "connNoDevices": "No paired devices listed.",
+  "connEnabled": "Enabled",
+  "connDisabled": "Disabled",
+  "connReady": "Ready",
+  "connHealthy": "Healthy",
+  "connUnhealthy": "Unhealthy",
+  "connHaUrl": "HA base URL",
+  "connHaToken": "Access token",
+  "connMqttUrl": "Broker URL",
+  "connMqttPassword": "Password",
+  "connSaveEnable": "Save & enable",
+  "connBindTitle": "Object bindings",
+  "connBoundTo": "Bound to {id}",
+  "@connBoundTo": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "connUnbound": "Unbound",
+  "connChannelsHint": "Paste a bot token and enable. Prefer desktop for first-time setup.",
+  "connBotToken": "Bot token",
+  "connDisable": "Disable",
+  "connSenderBinds": "Sender → profile",
+  "connSenderBindsHint": "Link an IM sender id to the active profile.",
+  "connBindChannel": "Channel",
+  "connChannelAccount": "Channel account",
+  "connSenderId": "Sender id",
+  "connBindSender": "Bind sender",
+  "skillsTabSkills": "Skills",
+  "skillsVerify": "Verify",
+  "skillsVerified": "Skill verified",
+  "skillsTabWorkflows": "Workflows",
+  "skillsTabSchedules": "Schedules",
+  "skillsInstallUrl": "Install from URL",
+  "skillsInstall": "Install",
+  "skillsClawHubSearch": "ClawHub search",
+  "schedWhenHint": "When (natural language)",
+  "schedMessageHint": "Reminder message",
+  "schedPropose": "Propose",
+  "schedConfirm": "Confirm reminder",
+  "schedKindNotify": "Notify",
+  "schedKindWorkflow": "Workflow",
+  "schedKindTool": "Tool",
+  "schedWorkflowId": "Workflow id",
+  "schedToolName": "Tool name",
+  "wfEditorTitle": "Workflow",
+  "wfEnable": "Enable",
+  "wfDisable": "Disable",
+  "wfTools": "Insert tool",
+  "wfId": "Workflow id",
+  "wfAiPrompt": "Describe the workflow",
+  "wfAiPromptHint": "e.g. turn off lights at 11pm if nobody home",
+  "wfAiDraft": "Draft with AI",
+  "wfDiagramNodes": "Nodes (phone diagram)",
+  "wfNoNodes": "No nodes yet — draft or paste YAML.",
+  "wfYaml": "YAML",
+  "wfSave": "Validate & save",
+  "wfRun": "Test run",
+  "wfDrafted": "Draft applied",
+  "wfSaved": "Saved",
+  "wfRan": "Run started",
+  "sysTabFiles": "Shared files",
+  "sysTabHealth": "Health",
+  "sysTabGrants": "Grants",
+  "sysTestPush": "Send test push",
+  "sysTestPushSent": "Test push requested",
+  "sysDoctorFix": "Fix",
+  "sysDoctorFixAll": "Fix all",
+  "sysDoctorFixed": "Fixed: {ids}",
+  "@sysDoctorFixed": {
+    "placeholders": {
+      "ids": {
+        "type": "String"
+      }
+    }
+  },
+  "sysNoIssues": "No doctor issues.",
+  "sysNoGrants": "No grants.",
   "chatNeedAccount": "チャットの前に上でアカウントを選んでください。",
   "chatEmptyMessage": "空のメッセージです。",
   "chatSessionTitle": "スマホチャット",
@@ -44,8 +247,29 @@
   "chatEmptyHint": "ターンはホームデーモンで実行されます。許可が必要なときは、ここで許可/拒否できます。",
   "chatHint": "メッセージ…",
   "chatSubscribeFailed": "購読失敗: {error}",
+  "@chatSubscribeFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "chatStatus": "状態: {status}",
+  "@chatStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
   "chatError": "エラー: {error}",
+  "@chatError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "approvalsTitle": "承認",
   "approvalsHint": "決定待ちのツールと作動リクエスト。",
   "approvalsNeedAccount": "承認を読み込むにはアカウントを選んでください。",
@@ -57,6 +281,13 @@
   "approvalsAllowed": "許可しました",
   "approvalsDenied": "拒否しました",
   "approvalsFailed": "失敗: {error}",
+  "@approvalsFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "modelsTitle": "モデル",
   "modelsOwnerHint": "ホームマシンで Local または Ollama を有効にします。初回はデスクトップ推奨。",
   "modelsReadonlyHint": "このデバイスは読み取り専用です。デスクトップ設定 → モデル（または所有者信頼の端末）で Local を有効にしてください。",
@@ -73,7 +304,21 @@
   "modelsThisAccount": "このアカウント",
   "modelsNeedAccount": "上で accountId を設定してください。",
   "modelsDefault": "既定: {id}",
+  "@modelsDefault": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "modelsPool": "プール: {filter}",
+  "@modelsPool": {
+    "placeholders": {
+      "filter": {
+        "type": "String"
+      }
+    }
+  },
   "modelsModeMesh": "Mesh ローカル",
   "modelsModeSpawn": "Home llama-server",
   "modelsModeOllama": "Ollama",
@@ -87,6 +332,24 @@
   "modelsLocalOnlySet": "ローカルのみルーティングを設定",
   "modelsDefaultLabel": "既定",
   "modelsOffLabel": "オフ",
+  "modelsTest": "Test",
+  "modelsSetDefault": "Set default",
+  "modelsTestOk": "Tested {id}",
+  "@modelsTestOk": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "modelsDefaultSet": "Default → {id}",
+  "@modelsDefaultSet": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "artifactsTitle": "成果物",
   "artifactsHint": "ホームデーモンの署名付きリンク。タップで開きます。",
   "artifactsNeedAccount": "成果物を一覧するにはアカウントを選んでください。",
@@ -94,5 +357,19 @@
   "artifactsEmptyHint": "エージェントがファイルを出したあと引っ張って更新。",
   "artifactsUrlCopied": "開けません — URL をコピーしました",
   "artifactsOpenFailed": "オープン失敗: {error}",
-  "chatPendingApprovals": "承認待ち {count} 件"
+  "@artifactsOpenFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatPendingApprovals": "承認待ち {count} 件",
+  "@chatPendingApprovals": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

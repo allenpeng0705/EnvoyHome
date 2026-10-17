@@ -757,6 +757,7 @@ If you need to change the answer to "in what order we build," edit this doc and 
 | 2026-10-15e | **§5.7.8 P1/P2:** no per-turn LLM home-classifier by default; Home chat + sticky + local hits for recall. Aligns Design `2026-10-15e`. |
 | 2026-10-15c | **§5.7.8 / §10 HA NL control:** home-intent routing, bound-only inject, Home chat (`purpose: "home"`), V-HA-21…24 + V-UX-8 owned by B14. Aligns Design `2026-10-15c`. |
 | 2026-10-12c | **§8.2:** newest added cloud → `defaultProviderId`. Aligns Design `2026-10-12c`. |
+| 2026-10-17 | **Mobile §10.1 IA:** Flutter Chat|Home|Settings hub (+ tablet rail); LLM/Connections/Skills/System slim Settings; Chat attach+STT; host HF/GGUF + workflow AI draft/YAML. Aligns Design `2026-10-17`. |
 | 2026-10-12b | **§8.2:** cloud-only `defaultProviderId` (card action, not Routing); single enabled local; cloud-only pool uses cloud default. Aligns Design `2026-10-12b`. |
 | 2026-10-12a | **§8.2 safe defaults:** adaptive `placementFilter` (`cloud` if any cloud else `local`); UI **Smart Routing** = `any` (opt-in); `placementPreference` lock; auto-switch only under `any`. Aligns Design `2026-10-12a`. |
 | 2026-10-09af | **V-LLM-11:** GPU llama.cpp runtime (Win CUDA 12.4 + cudart / Linux Vulkan / Mac Metal); missing `runtime-accel.json` on NVIDIA forces one-shot re-download; spawn prefers recommended GGUF when installed. Aligns Design §8.5 `2026-10-09af`. |

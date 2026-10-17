@@ -18,6 +18,7 @@ One checklist for the phone app (`com.envoymesh.envoyhome`) and home-daemon push
 2. Open desktop Settings, create an account, **Mint pairing** (QR shown).
 3. On the phone: `cd apps/mobile && flutter pub get && flutter run`.
 4. Scan the QR (or paste the URI) → set **accountId** → confirm Chat/Approvals work over WS.
+   - **iOS:** allow **Local Network** when prompted (pair screen probes early; required for LAN `ws://192.168.…`). Settings → EnvoyHome → Local Network if you denied it once.
 
 Push alerts only matter after step 4 succeeds and credentials below are configured on the **daemon host**.
 

@@ -315,14 +315,45 @@ class _ModelsTabState extends State<ModelsTab> {
                         dense: true,
                         title: Text(label),
                         subtitle: Text(
-                          '${p['kind']} · ${p['placement'] ?? ''} · ${p['model'] ?? ''}',
+                          '${p['kind']} · ${p['placement'] ?? ''} · ${p['model'] ?? ''}'
+                          '${isDefault ? ' · ${l10n.modelsDefaultLabel}' : ''}'
+                          '${on ? '' : ' · ${l10n.modelsOffLabel}'}',
                         ),
-                        trailing: Text(
-                          [
-                            if (isDefault) l10n.modelsDefaultLabel,
-                            if (!on) l10n.modelsOffLabel,
-                          ].join(' · '),
-                          style: theme.textTheme.labelSmall,
+                        trailing: Wrap(
+                          spacing: 4,
+                          children: [
+                            IconButton(
+                              tooltip: l10n.modelsTest,
+                              icon: const Icon(Icons.science_outlined, size: 20),
+                              onPressed: _busy
+                                  ? null
+                                  : () => _run(
+                                        (h) => h.testProvider(
+                                          providerId: id,
+                                          accountId: accountId,
+                                        ),
+                                        okNote: l10n.modelsTestOk(id),
+                                      ),
+                            ),
+                            IconButton(
+                              tooltip: l10n.modelsSetDefault,
+                              icon: Icon(
+                                isDefault
+                                    ? Icons.star
+                                    : Icons.star_outline,
+                                size: 20,
+                              ),
+                              onPressed: _busy || isDefault
+                                  ? null
+                                  : () => _run(
+                                        (h) => h.setDefaultProvider(
+                                          accountId: accountId,
+                                          providerId: id,
+                                        ),
+                                        okNote: l10n.modelsDefaultSet(id),
+                                      ),
+                            ),
+                          ],
                         ),
                       );
                     }),

@@ -24,6 +24,9 @@ class SessionController extends ChangeNotifier {
   String? get error => _error;
   bool get busy => _busy;
   bool get isConnected => _session != null;
+  /// True when a join credential is on disk (or in memory) — reconnect without re-scan.
+  bool get hasSavedPairing =>
+      _joinPersist != null && _joinPersist!.trim().isNotEmpty;
   Map<String, dynamic>? get hello => _hello;
   Map<String, dynamic>? get health => _health;
   JoinChannel? get joinChannel => _session?.joinChannel;
@@ -34,18 +37,43 @@ class SessionController extends ChangeNotifier {
     final persist =
         prefs.getString(_kJoinPersist) ?? prefs.getString(_kPairUri);
     if (persist == null || persist.isEmpty) return;
+    // Keep the saved join even if reconnect fails (daemon offline, LAN down).
+    // Never force a remote re-pair just because this cold start could not dial.
+    _joinPersist = persist;
+    _accountId = account;
     final pairing = decodeJoinPersist(persist);
-    if (pairing == null) return;
+    if (pairing == null) {
+      _error = 'Saved pairing is invalid — scan the desktop QR again';
+      notifyListeners();
+      return;
+    }
     if (pairing.joinChannel == JoinChannel.ssh &&
         (pairing.ssh?.password == null || pairing.ssh!.password!.isEmpty)) {
       // Password is never persisted — user must re-enter on SSH tab.
-      _joinPersist = persist;
-      _accountId = account;
       _error = 'Re-enter SSH password to reconnect';
       notifyListeners();
       return;
     }
     await connectWithPairing(pairing, accountId: account, persist: false);
+  }
+
+  /// Retry the last saved join without clearing credentials.
+  Future<void> reconnect() async {
+    final persist = _joinPersist;
+    if (persist == null || persist.isEmpty) return;
+    final pairing = decodeJoinPersist(persist);
+    if (pairing == null) {
+      _error = 'Saved pairing is invalid — scan the desktop QR again';
+      notifyListeners();
+      return;
+    }
+    if (pairing.joinChannel == JoinChannel.ssh &&
+        (pairing.ssh?.password == null || pairing.ssh!.password!.isEmpty)) {
+      _error = 'Re-enter SSH password to reconnect';
+      notifyListeners();
+      return;
+    }
+    await connectWithPairing(pairing, accountId: _accountId, persist: false);
   }
 
   Future<void> connectWithUri(
@@ -164,16 +192,27 @@ class SessionController extends ChangeNotifier {
     });
   }
 
-  Future<void> disconnect() async {
+  /// Replace cached `home.hello` (e.g. after createAccount).
+  void applyHello(Map<String, dynamic> hello) {
+    _hello = hello;
+    final fromHello = _accountIdFromHello(hello);
+    if (fromHello != null) _accountId = fromHello;
+    notifyListeners();
+  }
+
+  /// Drop the live WS only — keep saved pairing for the next launch / reconnect.
+  Future<void> disconnect({bool forgetPairing = false}) async {
     await PushService.instance.unbind();
     _session?.dispose();
     _session = null;
-    _joinPersist = null;
     _hello = null;
     _health = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_kJoinPersist);
-    await prefs.remove(_kPairUri);
+    if (forgetPairing) {
+      _joinPersist = null;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_kJoinPersist);
+      await prefs.remove(_kPairUri);
+    }
     notifyListeners();
   }
 

@@ -2,6 +2,10 @@
   "@@locale": "zh",
   "appName": "EnvoyHome",
   "appLanguage": "语言",
+  "appThemePicker": "外观",
+  "appThemeSystem": "跟随系统",
+  "appThemeLight": "浅色",
+  "appThemeDark": "深色",
   "pairLede": "通过 EnvoyMesh 加入家中桌面 — 扫描二维码、输入 host:port，或经 SSH 跳转。",
   "pairTabLink": "链接",
   "pairTabHost": "主机:端口",
@@ -28,15 +32,214 @@
   "pairTokenOptional": "令牌（可选）",
   "shellOnline": "在线",
   "shellDegraded": "降级",
+  "shellOffline": "未连接",
+  "shellConnect": "连接",
+  "shellReconnect": "重新连接",
   "shellDisconnect": "断开",
+  "shellForgetPairing": "忘记配对",
+  "connectGuideTitle": "连接家庭主机",
+  "connectGuideHint": "在桌面端打开 设置 → 配对设备，扫描二维码，或粘贴配对链接 / 主机地址。",
+  "connectGuideReconnectHint": "此手机已配对。可直接重连桌面；若更换了家庭环境，请重新配对。",
+  "settingsNeedConnect": "先连接家庭主机，再配置 LLM、连接、技能与系统。",
   "shellProfilePending": "资料将由此设备的配对关系决定。",
   "shellProfileOne": "资料 · {id}",
+  "@shellProfileOne": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "shellProfile": "资料",
   "shellMeshHint": "mesh {mesh} · 下拉标签页刷新",
+  "@shellMeshHint": {
+    "placeholders": {
+      "mesh": {
+        "type": "String"
+      }
+    }
+  },
+  "shellCreateProfile": "Create",
+  "shellProfileDisplayName": "Display name",
+  "shellProfileIdOptional": "Account id (optional)",
+  "shellCancel": "Cancel",
+  "shellCreate": "Create",
+  "shellProfileCreated": "Profile created",
+  "shellProfileCreateFailed": "Create failed: {error}",
+  "@shellProfileCreateFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "navChat": "聊天",
+  "navHomeChat": "Home",
+  "navSettings": "Settings",
+  "navLlm": "LLM",
+  "navConnections": "Connections",
+  "navSkills": "Skills",
+  "navSystem": "System",
   "navApprovals": "审批",
   "navModels": "模型",
   "navArtifacts": "产物",
+  "settingsHubHint": "Configure the home daemon from your phone. Some owner-only actions need a trusted device.",
+  "settingsLlmSubtitle": "Models, Local, Routing, Memory",
+  "settingsConnectionsSubtitle": "Pairing, Home Assistant, MQTT, Channels",
+  "settingsSkillsSubtitle": "Skills, Workflows, Schedules",
+  "settingsSystemSubtitle": "Shared files, Health, Grants",
+  "homeChatSessionTitle": "Phone home chat",
+  "homeChatEmptyTitle": "Talk to your home",
+  "homeChatEmptyHint": "Smart-home tools stay available here. Approvals still gate actuations.",
+  "homeChatHint": "Ask about lights, locks, climate…",
+  "chatAttach": "Attach",
+  "chatAttachTooMany": "At most {n} files",
+  "@chatAttachTooMany": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "chatAttachTooLarge": "{name} exceeds {mb} MB",
+  "@chatAttachTooLarge": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "mb": {
+        "type": "String"
+      }
+    }
+  },
+  "chatAttachAdded": "Attached {n} file(s)",
+  "@chatAttachAdded": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "chatAttachedOnly": "(attachment)",
+  "chatVoiceStart": "Dictate",
+  "chatVoiceStop": "Stop dictation",
+  "chatVoiceUnsupported": "Speech recognition is not available on this device.",
+  "llmTabModels": "Models",
+  "llmTabLocal": "Local",
+  "llmTabRouting": "Routing",
+  "llmTabMemory": "Memory",
+  "llmLocalDownloadHint": "Search Hugging Face and download GGUF files onto the home machine.",
+  "llmHfSearchHint": "Search models…",
+  "llmSearch": "Search",
+  "llmCancelDownload": "Cancel",
+  "llmResumeDownload": "Resume",
+  "llmGgufFiles": "GGUF in {repo}",
+  "@llmGgufFiles": {
+    "placeholders": {
+      "repo": {
+        "type": "String"
+      }
+    }
+  },
+  "llmRoutingHint": "Choose where turns may run for this profile.",
+  "llmFilterAny": "Smart / any",
+  "llmFilterCloud": "Cloud only",
+  "llmFilterLocal": "Local only",
+  "llmAutoSwitch": "Auto model switch",
+  "llmCompactNow": "Compact memory now",
+  "llmFlushEnabled": "Flush standing notes",
+  "llmReviewEnabled": "Review before learn write",
+  "llmInjectMode": "Inject budget mode",
+  "llmInjectAuto": "Auto",
+  "llmInjectBaseline": "Baseline",
+  "llmInjectCustom": "Custom",
+  "llmPendingLearns": "Pending learns",
+  "llmNoPendingLearns": "No pending learns.",
+  "connTabPairing": "Pairing",
+  "connTabHa": "Home Assistant",
+  "connTabMqtt": "MQTT",
+  "connTabChannels": "Channels",
+  "connPairingHint": "Mint and revoke phones from desktop Settings → Pair devices. This list is read-only on mobile.",
+  "connNoDevices": "No paired devices listed.",
+  "connEnabled": "Enabled",
+  "connDisabled": "Disabled",
+  "connReady": "Ready",
+  "connHealthy": "Healthy",
+  "connUnhealthy": "Unhealthy",
+  "connHaUrl": "HA base URL",
+  "connHaToken": "Access token",
+  "connMqttUrl": "Broker URL",
+  "connMqttPassword": "Password",
+  "connSaveEnable": "Save & enable",
+  "connBindTitle": "Object bindings",
+  "connBoundTo": "Bound to {id}",
+  "@connBoundTo": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "connUnbound": "Unbound",
+  "connChannelsHint": "Paste a bot token and enable. Prefer desktop for first-time setup.",
+  "connBotToken": "Bot token",
+  "connDisable": "Disable",
+  "connSenderBinds": "Sender → profile",
+  "connSenderBindsHint": "Link an IM sender id to the active profile.",
+  "connBindChannel": "Channel",
+  "connChannelAccount": "Channel account",
+  "connSenderId": "Sender id",
+  "connBindSender": "Bind sender",
+  "skillsTabSkills": "Skills",
+  "skillsVerify": "Verify",
+  "skillsVerified": "Skill verified",
+  "skillsTabWorkflows": "Workflows",
+  "skillsTabSchedules": "Schedules",
+  "skillsInstallUrl": "Install from URL",
+  "skillsInstall": "Install",
+  "skillsClawHubSearch": "ClawHub search",
+  "schedWhenHint": "When (natural language)",
+  "schedMessageHint": "Reminder message",
+  "schedPropose": "Propose",
+  "schedConfirm": "Confirm reminder",
+  "schedKindNotify": "Notify",
+  "schedKindWorkflow": "Workflow",
+  "schedKindTool": "Tool",
+  "schedWorkflowId": "Workflow id",
+  "schedToolName": "Tool name",
+  "wfEditorTitle": "Workflow",
+  "wfEnable": "Enable",
+  "wfDisable": "Disable",
+  "wfTools": "Insert tool",
+  "wfId": "Workflow id",
+  "wfAiPrompt": "Describe the workflow",
+  "wfAiPromptHint": "e.g. turn off lights at 11pm if nobody home",
+  "wfAiDraft": "Draft with AI",
+  "wfDiagramNodes": "Nodes (phone diagram)",
+  "wfNoNodes": "No nodes yet — draft or paste YAML.",
+  "wfYaml": "YAML",
+  "wfSave": "Validate & save",
+  "wfRun": "Test run",
+  "wfDrafted": "Draft applied",
+  "wfSaved": "Saved",
+  "wfRan": "Run started",
+  "sysTabFiles": "Shared files",
+  "sysTabHealth": "Health",
+  "sysTabGrants": "Grants",
+  "sysTestPush": "Send test push",
+  "sysTestPushSent": "Test push requested",
+  "sysDoctorFix": "Fix",
+  "sysDoctorFixAll": "Fix all",
+  "sysDoctorFixed": "Fixed: {ids}",
+  "@sysDoctorFixed": {
+    "placeholders": {
+      "ids": {
+        "type": "String"
+      }
+    }
+  },
+  "sysNoIssues": "No doctor issues.",
+  "sysNoGrants": "No grants.",
   "chatNeedAccount": "请先在上方选择资料再聊天。",
   "chatEmptyMessage": "消息为空。",
   "chatSessionTitle": "手机聊天",
@@ -44,8 +247,29 @@
   "chatEmptyHint": "回合在家庭守护进程上运行。需要许可时，允许/拒绝会出现在这里。",
   "chatHint": "消息…",
   "chatSubscribeFailed": "订阅失败：{error}",
+  "@chatSubscribeFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "chatStatus": "状态：{status}",
+  "@chatStatus": {
+    "placeholders": {
+      "status": {
+        "type": "String"
+      }
+    }
+  },
   "chatError": "错误：{error}",
+  "@chatError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "approvalsTitle": "审批",
   "approvalsHint": "等待决定的工具与执行请求。",
   "approvalsNeedAccount": "请先选择资料以加载审批。",
@@ -57,6 +281,13 @@
   "approvalsAllowed": "已允许",
   "approvalsDenied": "已拒绝",
   "approvalsFailed": "失败：{error}",
+  "@approvalsFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
   "modelsTitle": "模型",
   "modelsOwnerHint": "在家庭主机上启用本地或 Ollama。首次设置建议用桌面。",
   "modelsReadonlyHint": "此设备只读。请在桌面设置 → 模型（或受信任的机主手机）启用本地。",
@@ -73,7 +304,21 @@
   "modelsThisAccount": "此账号",
   "modelsNeedAccount": "请先在上方设置 accountId。",
   "modelsDefault": "默认：{id}",
+  "@modelsDefault": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "modelsPool": "池：{filter}",
+  "@modelsPool": {
+    "placeholders": {
+      "filter": {
+        "type": "String"
+      }
+    }
+  },
   "modelsModeMesh": "Mesh 本地",
   "modelsModeSpawn": "Home llama-server",
   "modelsModeOllama": "Ollama",
@@ -87,6 +332,24 @@
   "modelsLocalOnlySet": "已设为仅本地路由",
   "modelsDefaultLabel": "默认",
   "modelsOffLabel": "关",
+  "modelsTest": "Test",
+  "modelsSetDefault": "Set default",
+  "modelsTestOk": "Tested {id}",
+  "@modelsTestOk": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "modelsDefaultSet": "Default → {id}",
+  "@modelsDefaultSet": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
   "artifactsTitle": "产物",
   "artifactsHint": "来自家庭守护进程的签名链接。点按打开。",
   "artifactsNeedAccount": "请先选择资料以列出产物。",
@@ -94,5 +357,19 @@
   "artifactsEmptyHint": "智能体生成文件后下拉刷新。",
   "artifactsUrlCopied": "无法打开 — 已复制 URL",
   "artifactsOpenFailed": "打开失败：{error}",
-  "chatPendingApprovals": "{count} 项等待你的批准"
+  "@artifactsOpenFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatPendingApprovals": "{count} 项等待你的批准",
+  "@chatPendingApprovals": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  }
 }

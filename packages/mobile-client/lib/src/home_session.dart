@@ -17,6 +17,9 @@ class EnvoyHomeSession {
   final AcceptedPairing pairing;
   final SshTunnel? _tunnel;
 
+  /// Last `home.subscribe` catalogue — re-bound after transport reconnect.
+  List<String> _subscribedEvents = const [];
+
   HomeRemoteClient get remote => _client;
   JoinChannel get joinChannel => pairing.joinChannel;
 
@@ -72,12 +75,17 @@ class EnvoyHomeSession {
       await ownedTunnel?.close();
       throw StateError('pairing has no WS dial target');
     }
+    // Assigned before [onReconnect] can fire so resubscribe has a target.
+    late final EnvoyHomeSession session;
     final client = HomeRemoteClient(
       HomeRemoteClientOptions(
         resolveCandidates: () async => candidates,
         createTransport: createTransport ??
             (candidate) => PlatformWebSocket.connect(candidate.url),
         upgradeSweepMs: 0,
+        onReconnect: () {
+          unawaited(session._resubscribeAfterReconnect());
+        },
       ),
     );
     try {
@@ -86,7 +94,7 @@ class EnvoyHomeSession {
       await ownedTunnel?.close();
       rethrow;
     }
-    final session = EnvoyHomeSession._(client, pairing, ownedTunnel);
+    session = EnvoyHomeSession._(client, pairing, ownedTunnel);
     await session.hello();
     return session;
   }
@@ -98,11 +106,19 @@ class EnvoyHomeSession {
     return '${uri.host}:$port';
   }
 
+  Future<Map<String, dynamic>> _call(
+    String method,
+    Map<String, dynamic> params,
+  ) async {
+    final result = await _client.call(method, params);
+    return Map<String, dynamic>.from(result as Map);
+  }
+
   Future<Map<String, dynamic>> hello({
     String? clientId,
     String platform = 'ios',
   }) async {
-    final result = await _client.call('home.hello', {
+    return _call('home.hello', {
       'client': {
         'name': kEnvoyHomeClientName,
         'version': '0.0.0',
@@ -110,18 +126,11 @@ class EnvoyHomeSession {
         'id': clientId ?? 'envoyhome-mobile',
       },
     });
-    return Map<String, dynamic>.from(result as Map);
   }
 
-  Future<Map<String, dynamic>> health() async {
-    final result = await _client.call('home.health', {});
-    return Map<String, dynamic>.from(result as Map);
-  }
+  Future<Map<String, dynamic>> health() => _call('home.health', {});
 
-  Future<Map<String, dynamic>> meshStatus() async {
-    final result = await _client.call('home.meshStatus', {});
-    return Map<String, dynamic>.from(result as Map);
-  }
+  Future<Map<String, dynamic>> meshStatus() => _call('home.meshStatus', {});
 
   /// Assert phone path is hosting (or no-node in stub labs) — never attach-only.
   Future<void> assertHostingDialPath() async {
@@ -137,40 +146,89 @@ class EnvoyHomeSession {
   Future<Map<String, dynamic>> openSession({
     required String accountId,
     String? title,
+    String? purpose,
   }) async {
     final params = <String, dynamic>{'accountId': accountId};
     if (title != null) params['title'] = title;
-    final result = await _client.call('home.openSession', params);
-    return Map<String, dynamic>.from(result as Map);
+    if (purpose != null) params['purpose'] = purpose;
+    return _call('home.openSession', params);
   }
 
   Future<Map<String, dynamic>> sendMessage({
     required String accountId,
     required String sessionId,
     required String text,
+    List<Map<String, dynamic>>? media,
   }) async {
-    final result = await _client.call('home.sendMessage', {
+    final params = <String, dynamic>{
       'accountId': accountId,
       'sessionId': sessionId,
       'text': text,
-    });
-    return Map<String, dynamic>.from(result as Map);
+    };
+    if (media != null && media.isNotEmpty) params['media'] = media;
+    return _call('home.sendMessage', params);
   }
+
+  Future<Map<String, dynamic>> uploadChatMedia({
+    required String accountId,
+    required String fileName,
+    required String contentBase64,
+    String? mimeType,
+  }) async {
+    final params = <String, dynamic>{
+      'accountId': accountId,
+      'fileName': fileName,
+      'contentBase64': contentBase64,
+    };
+    if (mimeType != null && mimeType.isNotEmpty) params['mimeType'] = mimeType;
+    return _call('home.uploadChatMedia', params);
+  }
+
+  Future<Map<String, dynamic>> cancelTurn({required String turnId}) =>
+      _call('home.cancelTurn', {'turnId': turnId});
 
   Future<Map<String, dynamic>> getTranscript({
+    required String accountId,
     required String sessionId,
     int limit = 50,
-  }) async {
-    final result = await _client.call('home.getTranscript', {
-      'sessionId': sessionId,
-      'limit': limit,
-    });
-    return Map<String, dynamic>.from(result as Map);
+  }) =>
+      _call('home.getTranscript', {
+        'accountId': accountId,
+        'sessionId': sessionId,
+        'limit': limit,
+      });
+
+  /// Product catalogue ([home.subscribe]) **and** transport `on` per event.
+  ///
+  /// Desktop does both (Design §3.1). `home.subscribe` alone only updates
+  /// daemon bookkeeping — without transport `on`, the host never pushes
+  /// `home:turn-delta` / `home:turn-finished` frames to this socket.
+  Future<Map<String, dynamic>> subscribe(List<String> events) async {
+    _subscribedEvents = List<String>.unmodifiable(events);
+    final result = await _call('home.subscribe', {'events': events});
+    await _bindTransportEvents(events);
+    return result;
   }
 
-  Future<Map<String, dynamic>> subscribe(List<String> events) async {
-    final result = await _client.call('home.subscribe', {'events': events});
-    return Map<String, dynamic>.from(result as Map);
+  Future<void> _bindTransportEvents(List<String> events) async {
+    for (final event in events) {
+      try {
+        await _client.call('on', {'event': event});
+      } catch (_) {
+        // Best-effort — match desktop `.catch(() => undefined)`.
+      }
+    }
+  }
+
+  Future<void> _resubscribeAfterReconnect() async {
+    final events = _subscribedEvents;
+    if (events.isEmpty) return;
+    try {
+      await _call('home.subscribe', {'events': events});
+      await _bindTransportEvents(events);
+    } catch (_) {
+      // Next user action / ChatTab subscribe retry can recover.
+    }
   }
 
   /// Listen for a daemon push event (after [subscribe]).
@@ -178,29 +236,22 @@ class EnvoyHomeSession {
     return _client.on(event, handler);
   }
 
-  Future<Map<String, dynamic>> listApprovals({required String accountId}) async {
-    final result = await _client.call('home.listApprovals', {
-      'accountId': accountId,
-    });
-    return Map<String, dynamic>.from(result as Map);
-  }
+  Future<Map<String, dynamic>> listApprovals({required String accountId}) =>
+      _call('home.listApprovals', {'accountId': accountId});
 
   Future<Map<String, dynamic>> answerApproval({
     required String id,
     required String decision,
     required String argsDigest,
     String scope = 'once',
-  }) async {
-    final result = await _client.call('home.answerApproval', {
-      'id': id,
-      'decision': decision,
-      'argsDigest': argsDigest,
-      'scope': scope,
-    });
-    return Map<String, dynamic>.from(result as Map);
-  }
+  }) =>
+      _call('home.answerApproval', {
+        'id': id,
+        'decision': decision,
+        'argsDigest': argsDigest,
+        'scope': scope,
+      });
 
-  /// Register APNs (ios) or FCM (android) alert token with the home daemon.
   Future<Map<String, dynamic>> registerPushToken({
     required String platform,
     required String token,
@@ -214,14 +265,11 @@ class EnvoyHomeSession {
     if (accountId != null && accountId.isNotEmpty) {
       params['accountId'] = accountId;
     }
-    final result = await _client.call('home.registerPushToken', params);
-    return Map<String, dynamic>.from(result as Map);
+    return _call('home.registerPushToken', params);
   }
 
-  Future<Map<String, dynamic>> unregisterPushToken() async {
-    final result = await _client.call('home.unregisterPushToken', {});
-    return Map<String, dynamic>.from(result as Map);
-  }
+  Future<Map<String, dynamic>> unregisterPushToken() =>
+      _call('home.unregisterPushToken', {});
 
   Future<Map<String, dynamic>> listArtifacts({
     required String accountId,
@@ -229,36 +277,30 @@ class EnvoyHomeSession {
   }) async {
     final params = <String, dynamic>{'accountId': accountId};
     if (sessionId != null) params['sessionId'] = sessionId;
-    final result = await _client.call('home.listArtifacts', params);
-    return Map<String, dynamic>.from(result as Map);
+    return _call('home.listArtifacts', params);
   }
 
   Future<Map<String, dynamic>> getArtifactUrl({
     required String accountId,
     required String path,
     int ttlSec = 3600,
-  }) async {
-    final result = await _client.call('home.getArtifactUrl', {
-      'accountId': accountId,
-      'path': path,
-      'ttlSec': ttlSec,
-    });
-    return Map<String, dynamic>.from(result as Map);
-  }
+  }) =>
+      _call('home.getArtifactUrl', {
+        'accountId': accountId,
+        'path': path,
+        'ttlSec': ttlSec,
+      });
 
   Future<Map<String, dynamic>> listProviders({String? accountId}) async {
     final params = <String, dynamic>{};
     if (accountId != null && accountId.isNotEmpty) {
       params['accountId'] = accountId;
     }
-    final result = await _client.call('home.listProviders', params);
-    return Map<String, dynamic>.from(result as Map);
+    return _call('home.listProviders', params);
   }
 
-  Future<Map<String, dynamic>> getLocalEngineStatus() async {
-    final result = await _client.call('home.getLocalEngineStatus', {});
-    return Map<String, dynamic>.from(result as Map);
-  }
+  Future<Map<String, dynamic>> getLocalEngineStatus() =>
+      _call('home.getLocalEngineStatus', {});
 
   Future<Map<String, dynamic>> enableLocalEngine({
     String? accountId,
@@ -268,8 +310,7 @@ class EnvoyHomeSession {
     if (accountId != null && accountId.isNotEmpty) {
       params['accountId'] = accountId;
     }
-    final result = await _client.call('home.enableLocalEngine', params);
-    return Map<String, dynamic>.from(result as Map);
+    return _call('home.enableLocalEngine', params);
   }
 
   Future<Map<String, dynamic>> enableOllama({
@@ -283,35 +324,396 @@ class EnvoyHomeSession {
     }
     if (baseUrl != null && baseUrl.isNotEmpty) params['baseUrl'] = baseUrl;
     if (model != null && model.isNotEmpty) params['model'] = model;
-    final result = await _client.call('home.enableOllama', params);
-    return Map<String, dynamic>.from(result as Map);
+    return _call('home.enableOllama', params);
   }
 
-  Future<Map<String, dynamic>> disableLocalEngine() async {
-    final result = await _client.call('home.disableLocalEngine', {});
-    return Map<String, dynamic>.from(result as Map);
-  }
+  Future<Map<String, dynamic>> disableLocalEngine() =>
+      _call('home.disableLocalEngine', {});
 
   Future<Map<String, dynamic>> setPlacementFilter({
     required String accountId,
     required String filter,
-  }) async {
-    final result = await _client.call('home.setPlacementFilter', {
-      'accountId': accountId,
-      'filter': filter,
-    });
-    return Map<String, dynamic>.from(result as Map);
-  }
+  }) =>
+      _call('home.setPlacementFilter', {
+        'accountId': accountId,
+        'filter': filter,
+      });
 
   Future<Map<String, dynamic>> setDefaultProvider({
     required String accountId,
     required String providerId,
+  }) =>
+      _call('home.setDefaultProvider', {
+        'accountId': accountId,
+        'providerId': providerId,
+      });
+
+  Future<Map<String, dynamic>> setAutoModelSwitch({
+    required String accountId,
+    required bool enabled,
+  }) =>
+      _call('home.setAutoModelSwitch', {
+        'accountId': accountId,
+        'enabled': enabled,
+      });
+
+  Future<Map<String, dynamic>> testProvider({
+    required String providerId,
+    String? accountId,
   }) async {
-    final result = await _client.call('home.setDefaultProvider', {
+    final params = <String, dynamic>{'providerId': providerId};
+    if (accountId != null && accountId.isNotEmpty) {
+      params['accountId'] = accountId;
+    }
+    return _call('home.testProvider', params);
+  }
+
+  Future<Map<String, dynamic>> searchHuggingFaceModels({
+    required String query,
+    int limit = 20,
+  }) =>
+      _call('home.searchHuggingFaceModels', {'query': query, 'limit': limit});
+
+  Future<Map<String, dynamic>> listHuggingFaceGgufFiles({
+    required String repoId,
+  }) =>
+      _call('home.listHuggingFaceGgufFiles', {'repoId': repoId});
+
+  Future<Map<String, dynamic>> downloadLocalModel({
+    required String modelId,
+  }) =>
+      _call('home.downloadLocalModel', {'modelId': modelId});
+
+  Future<Map<String, dynamic>> downloadLocalModelUrl({
+    required String url,
+  }) =>
+      _call('home.downloadLocalModelUrl', {'url': url});
+
+  Future<Map<String, dynamic>> cancelLocalModelDownload({
+    required String fileName,
+  }) =>
+      _call('home.cancelLocalModelDownload', {'fileName': fileName});
+
+  Future<Map<String, dynamic>> resumeLocalModelDownload({
+    required String fileName,
+  }) =>
+      _call('home.resumeLocalModelDownload', {'fileName': fileName});
+
+  Future<Map<String, dynamic>> getChannelStatus({
+    required String id,
+    bool? all,
+  }) async {
+    final params = <String, dynamic>{'id': id};
+    if (all != null) params['all'] = all;
+    return _call('home.getChannelStatus', params);
+  }
+
+  Future<Map<String, dynamic>> setChannelConfig({
+    required String id,
+    Map<String, dynamic>? config,
+    Map<String, dynamic>? secrets,
+  }) async {
+    final params = <String, dynamic>{'id': id};
+    if (config != null) params['config'] = config;
+    if (secrets != null) params['secrets'] = secrets;
+    return _call('home.setChannelConfig', params);
+  }
+
+  Future<Map<String, dynamic>> enableChannel({required String id}) =>
+      _call('home.enableChannel', {'id': id});
+
+  Future<Map<String, dynamic>> disableChannel({required String id}) =>
+      _call('home.disableChannel', {'id': id});
+
+  Future<Map<String, dynamic>> listSources({String? accountId}) async {
+    final params = <String, dynamic>{};
+    if (accountId != null && accountId.isNotEmpty) {
+      params['accountId'] = accountId;
+    }
+    return _call('home.listSources', params);
+  }
+
+  Future<Map<String, dynamic>> setSourceBinding({
+    required String channel,
+    required String channelAccount,
+    required String sourceId,
+    required String? accountId,
+    bool? shared,
+    bool? neverUnattended,
+    List<String>? actuationAllowList,
+    String? displayName,
+  }) async {
+    final params = <String, dynamic>{
+      'channel': channel,
+      'channelAccount': channelAccount,
+      'sourceId': sourceId,
       'accountId': accountId,
-      'providerId': providerId,
-    });
-    return Map<String, dynamic>.from(result as Map);
+    };
+    if (shared != null) params['shared'] = shared;
+    if (neverUnattended != null) params['neverUnattended'] = neverUnattended;
+    if (actuationAllowList != null) {
+      params['actuationAllowList'] = actuationAllowList;
+    }
+    if (displayName != null) params['displayName'] = displayName;
+    return _call('home.setSourceBinding', params);
+  }
+
+  Future<Map<String, dynamic>> removeSourceBinding({
+    required String channel,
+    required String channelAccount,
+    required String sourceId,
+  }) =>
+      _call('home.removeSourceBinding', {
+        'channel': channel,
+        'channelAccount': channelAccount,
+        'sourceId': sourceId,
+      });
+
+  Future<Map<String, dynamic>> listBindings({String? accountId}) async {
+    final params = <String, dynamic>{};
+    if (accountId != null && accountId.isNotEmpty) {
+      params['accountId'] = accountId;
+    }
+    return _call('home.listBindings', params);
+  }
+
+  Future<Map<String, dynamic>> setBinding({
+    required String channel,
+    required String channelAccount,
+    required String senderId,
+    required String accountId,
+  }) =>
+      _call('home.setBinding', {
+        'channel': channel,
+        'channelAccount': channelAccount,
+        'senderId': senderId,
+        'accountId': accountId,
+      });
+
+  Future<Map<String, dynamic>> removeBinding({required String bindingId}) =>
+      _call('home.removeBinding', {'bindingId': bindingId});
+
+  Future<Map<String, dynamic>> listPairedDevices() =>
+      _call('home.listPairedDevices', {});
+
+  Future<Map<String, dynamic>> listMemory({required String accountId}) =>
+      _call('home.listMemory', {'accountId': accountId});
+
+  Future<Map<String, dynamic>> listPendingLearns({required String accountId}) =>
+      _call('home.listPendingLearns', {'accountId': accountId});
+
+  Future<Map<String, dynamic>> acceptLearn({required String id}) =>
+      _call('home.acceptLearn', {'id': id});
+
+  Future<Map<String, dynamic>> rejectLearn({required String id}) =>
+      _call('home.rejectLearn', {'id': id});
+
+  Future<Map<String, dynamic>> setMemorySettings({
+    required String accountId,
+    Map<String, dynamic>? settings,
+  }) async {
+    final params = <String, dynamic>{'accountId': accountId};
+    if (settings != null) params.addAll(settings);
+    return _call('home.setMemorySettings', params);
+  }
+
+  Future<Map<String, dynamic>> compactMemory({required String accountId}) =>
+      _call('home.compactMemory', {'accountId': accountId});
+
+  Future<Map<String, dynamic>> listSkills() => _call('home.listSkills', {});
+
+  Future<Map<String, dynamic>> installSkill({
+    required String source,
+    required String ref,
+  }) =>
+      _call('home.installSkill', {'source': source, 'ref': ref});
+
+  Future<Map<String, dynamic>> searchClawHubSkills({
+    required String query,
+  }) =>
+      _call('home.searchClawHubSkills', {'query': query});
+
+  Future<Map<String, dynamic>> verifySkill({required String id}) =>
+      _call('home.verifySkill', {'id': id});
+
+  Future<Map<String, dynamic>> removeSkill({required String id}) =>
+      _call('home.removeSkill', {'id': id});
+
+  Future<Map<String, dynamic>> listWorkflows({String? accountId}) async {
+    final params = <String, dynamic>{};
+    if (accountId != null && accountId.isNotEmpty) {
+      params['accountId'] = accountId;
+    }
+    return _call('home.listWorkflows', params);
+  }
+
+  Future<Map<String, dynamic>> getWorkflow({required String id}) =>
+      _call('home.getWorkflow', {'id': id});
+
+  Future<Map<String, dynamic>> putWorkflow({
+    required String yaml,
+    String? accountId,
+  }) async {
+    final params = <String, dynamic>{'yaml': yaml};
+    if (accountId != null) params['accountId'] = accountId;
+    return _call('home.putWorkflow', params);
+  }
+
+  Future<Map<String, dynamic>> validateWorkflow({required String yaml}) =>
+      _call('home.validateWorkflow', {'yaml': yaml});
+
+  Future<Map<String, dynamic>> setWorkflowEnabled({
+    required String id,
+    required bool enabled,
+  }) =>
+      _call('home.setWorkflowEnabled', {'id': id, 'enabled': enabled});
+
+  Future<Map<String, dynamic>> removeWorkflow({required String id}) =>
+      _call('home.removeWorkflow', {'id': id});
+
+  Future<Map<String, dynamic>> runWorkflow({
+    required String id,
+    String? accountId,
+  }) async {
+    final params = <String, dynamic>{'id': id};
+    if (accountId != null) params['accountId'] = accountId;
+    return _call('home.runWorkflow', params);
+  }
+
+  Future<Map<String, dynamic>> draftWorkflow({
+    required String accountId,
+    required String text,
+    String? currentYaml,
+    List<String>? hintTools,
+  }) async {
+    final params = <String, dynamic>{
+      'accountId': accountId,
+      'text': text,
+    };
+    if (currentYaml != null && currentYaml.isNotEmpty) {
+      params['currentYaml'] = currentYaml;
+    }
+    if (hintTools != null) params['hintTools'] = hintTools;
+    return _call('home.draftWorkflow', params);
+  }
+
+  Future<Map<String, dynamic>> draftWorkflowPrompt({
+    required String prompt,
+    Map<String, dynamic>? node,
+  }) async {
+    final params = <String, dynamic>{'prompt': prompt};
+    if (node != null) params['node'] = node;
+    return _call('home.draftWorkflowPrompt', params);
+  }
+
+  Future<Map<String, dynamic>> listWorkflowTools() =>
+      _call('home.listWorkflowTools', {});
+
+  Future<Map<String, dynamic>> listWorkflowStepTemplates() =>
+      _call('home.listWorkflowStepTemplates', {});
+
+  Future<Map<String, dynamic>> listSchedules({String? accountId}) async {
+    final params = <String, dynamic>{};
+    if (accountId != null && accountId.isNotEmpty) {
+      params['accountId'] = accountId;
+    }
+    return _call('home.listSchedules', params);
+  }
+
+  Future<Map<String, dynamic>> proposeSchedule({
+    required String accountId,
+    required String text,
+    String? timeZone,
+  }) async {
+    final params = <String, dynamic>{
+      'accountId': accountId,
+      'text': text,
+    };
+    if (timeZone != null) params['timeZone'] = timeZone;
+    return _call('home.proposeSchedule', params);
+  }
+
+  Future<Map<String, dynamic>> confirmSchedule({
+    required String accountId,
+    required String proposalId,
+    String? name,
+    Map<String, dynamic>? payload,
+  }) async {
+    final params = <String, dynamic>{
+      'accountId': accountId,
+      'proposalId': proposalId,
+    };
+    if (name != null) params['name'] = name;
+    if (payload != null) params['payload'] = payload;
+    return _call('home.confirmSchedule', params);
+  }
+
+  Future<Map<String, dynamic>> updateSchedule({
+    required String accountId,
+    required String jobId,
+    required bool enabled,
+  }) =>
+      _call('home.updateSchedule', {
+        'accountId': accountId,
+        'jobId': jobId,
+        'enabled': enabled,
+      });
+
+  Future<Map<String, dynamic>> runSchedule({
+    required String accountId,
+    required String jobId,
+  }) =>
+      _call('home.runSchedule', {
+        'accountId': accountId,
+        'jobId': jobId,
+      });
+
+  Future<Map<String, dynamic>> removeSchedule({
+    required String accountId,
+    required String jobId,
+  }) =>
+      _call('home.removeSchedule', {
+        'accountId': accountId,
+        'jobId': jobId,
+      });
+
+  Future<Map<String, dynamic>> doctor() => _call('home.doctor', {});
+
+  Future<Map<String, dynamic>> doctorFix({required List<String> issueIds}) =>
+      _call('home.doctorFix', {'issueIds': issueIds});
+
+  Future<Map<String, dynamic>> listGrants({String? accountId}) async {
+    final params = <String, dynamic>{};
+    if (accountId != null && accountId.isNotEmpty) {
+      params['accountId'] = accountId;
+    }
+    return _call('home.listGrants', params);
+  }
+
+  Future<Map<String, dynamic>> revokeGrant({required String id}) =>
+      _call('home.revokeGrant', {'id': id});
+
+  Future<Map<String, dynamic>> listAccounts() => _call('home.listAccounts', {});
+
+  Future<Map<String, dynamic>> createAccount({
+    required String displayName,
+    String? accountId,
+    String? locale,
+  }) async {
+    final params = <String, dynamic>{'displayName': displayName};
+    if (accountId != null && accountId.isNotEmpty) {
+      params['accountId'] = accountId;
+    }
+    if (locale != null && locale.isNotEmpty) params['locale'] = locale;
+    return _call('home.createAccount', params);
+  }
+
+  Future<Map<String, dynamic>> sendTestPush({String? accountId}) async {
+    final params = <String, dynamic>{};
+    if (accountId != null && accountId.isNotEmpty) {
+      params['accountId'] = accountId;
+    }
+    return _call('home.sendTestPush', params);
   }
 
   void dispose() {

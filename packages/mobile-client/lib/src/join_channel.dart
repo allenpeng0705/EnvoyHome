@@ -171,8 +171,19 @@ JoinDraft buildSshJoin({
 String encodeJoinPersist(AcceptedPairing pairing) {
   switch (pairing.joinChannel) {
     case JoinChannel.link:
-      // Caller should persist the original URI; this is a fallback.
-      return pairing.wsUrl;
+      // Rebuild a full envoy://pair URI so reconnect keeps token + lanWsUrl.
+      final q = <String, String>{
+        'wsUrl': pairing.wsUrl,
+        'token': pairing.token,
+        'app': pairing.data.app ?? kEnvoyHomeAppName,
+        'ownerId': pairing.data.ownerId ?? 'envoy:owner:unknown',
+        'ownerPublicKey': pairing.data.ownerPublicKey ?? 'unknown',
+      };
+      final lan = pairing.lanWsUrl?.trim();
+      if (lan != null && lan.isNotEmpty) q['lanWsUrl'] = lan;
+      final relay = pairing.data.relayWsUrl.trim();
+      if (relay.isNotEmpty) q['relayWsUrl'] = relay;
+      return Uri(scheme: 'envoy', host: 'pair', queryParameters: q).toString();
     case JoinChannel.direct:
       final ep = pairing.endpoint ?? _hostPortFromWs(pairing.wsUrl);
       return 'envoyhome://direct?endpoint=${Uri.encodeComponent(ep)}'

@@ -42,9 +42,14 @@ export async function startWsHost(input: {
   /** Product event surface — required for home:* delivery. */
   nodeService: HostNodeService;
   eventDispositions?: Readonly<Record<string, EventDisposition>>;
+  /** Stamp lastSeenAt when a paired device authenticates. */
+  onDeviceSeen?: (deviceId: string) => void;
 }): Promise<HostHandle> {
   let connections = 0;
-  const sessionIdentity = createSessionIdentity(input.devices);
+  const sessionIdentity = createSessionIdentity(
+    input.devices,
+    input.onDeviceSeen ? { onDeviceSeen: input.onDeviceSeen } : {},
+  );
   const inner = createDispatcher({
     ...input.routerDeps,
     connections: () => connections,

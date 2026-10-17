@@ -521,6 +521,60 @@ test("home.mintPairing: unused QR codes are pruned (no stack on re-mint)", async
   assert.equal(unused[0]?.deviceId, secondId);
 });
 
+test("paired phone survives remint: lastSeenAt blocks unused-QR prune", async () => {
+  const { daemon } = await boot();
+  daemon.pairing.__resetMintRateForTests();
+
+  const minted = await rpc("127.0.0.1", daemon.config.wsPort, "home.mintPairing", {
+    deviceLabel: "Phone",
+  });
+  assert.equal(minted["error"], undefined);
+  const result = minted["result"] as {
+    token: string;
+    device: { deviceId: string };
+  };
+  const phoneId = result.device.deviceId;
+  const token = result.token;
+
+  // Phone dials once — stamps lastSeenAt so later QR prune cannot drop it.
+  const hello = await rpc("127.0.0.1", daemon.config.wsPort, "home.hello", {}, token);
+  assert.equal(hello["error"], undefined);
+
+  // Persist may be async from noteSeen; wait briefly then assert.
+  await new Promise((r) => setTimeout(r, 50));
+  const afterDial = await rpc("127.0.0.1", daemon.config.wsPort, "home.listPairedDevices", {});
+  const afterDevices = (afterDial["result"] as {
+    devices: Array<{ deviceId: string; lastSeenAt?: string }>;
+  }).devices;
+  const seen = afterDevices.find((d) => d.deviceId === phoneId);
+  assert.ok(seen?.lastSeenAt, "expected lastSeenAt after device auth");
+
+  daemon.pairing.__resetMintRateForTests();
+  const remint = await rpc("127.0.0.1", daemon.config.wsPort, "home.mintPairing", {
+    deviceLabel: "Phone",
+  });
+  assert.equal(remint["error"], undefined);
+
+  const listed = await rpc("127.0.0.1", daemon.config.wsPort, "home.listPairedDevices", {});
+  const devices = (listed["result"] as {
+    devices: Array<{ deviceId: string; lastSeenAt?: string; revoked: boolean }>;
+  }).devices;
+  assert.ok(
+    devices.some((d) => d.deviceId === phoneId && !d.revoked && d.lastSeenAt),
+    "active paired phone must survive unused-QR prune on remint",
+  );
+
+  // Same token still authenticates after remint (no remote re-pair).
+  const helloAgain = await rpc(
+    "127.0.0.1",
+    daemon.config.wsPort,
+    "home.hello",
+    {},
+    token,
+  );
+  assert.equal(helloAgain["error"], undefined);
+});
+
 test("home.mintPairing: omit host (LAN/loopback fill) + short user token", async () => {
   const { daemon } = await boot();
   daemon.pairing.__resetMintRateForTests();

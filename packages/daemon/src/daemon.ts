@@ -259,6 +259,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     devices,
     nodeService: events.asNodeService(),
     eventDispositions: homeEventDispositions(),
+    onDeviceSeen: (deviceId) => pairing.noteSeen(deviceId),
     routerDeps: {
       config,
       startedAt,

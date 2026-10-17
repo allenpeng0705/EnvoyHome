@@ -78,5 +78,19 @@ void main() {
       final restored = decodeJoinPersist(uri)!;
       expect(restored.joinChannel, JoinChannel.link);
     });
+
+    test('link encode keeps token + lan for reconnect', () {
+      final pairing = acceptEnvoyHomePairing(
+        'envoy://pair?wsUrl=ws%3A%2F%2F127.0.0.1%3A4780%2Fws'
+        '&lanWsUrl=ws%3A%2F%2F10.0.0.2%3A4780%2Fws'
+        '&token=secretTok&ownerPublicKey=pk&ownerId=o&app=EnvoyHome',
+      )!;
+      final encoded = encodeJoinPersist(pairing);
+      final restored = decodeJoinPersist(encoded)!;
+      expect(restored.joinChannel, JoinChannel.link);
+      expect(restored.token, 'secretTok');
+      expect(restored.lanWsUrl, contains('10.0.0.2'));
+      expect(hostingCandidatesFor(restored).first.url, contains('token=secretTok'));
+    });
   });
 }

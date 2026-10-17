@@ -1,20 +1,20 @@
+import 'dart:async';
+
 import 'package:envoyhome_mobile_client/envoyhome_mobile_client.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../l10n/app_localizations.dart';
-import '../l10n/locale_controller.dart';
+import '../services/local_network_prompt.dart';
 import '../state/session_controller.dart';
 
 class PairScreen extends StatefulWidget {
   const PairScreen({
     super.key,
     required this.session,
-    required this.locales,
   });
 
   final SessionController session;
-  final LocaleController locales;
 
   @override
   State<PairScreen> createState() => _PairScreenState();
@@ -39,10 +39,21 @@ class _PairScreenState extends State<PairScreen>
   void initState() {
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
+    widget.session.addListener(_onSession);
+    // Surface iOS Local Network permission before the first pair dial.
+    unawaited(promptLocalNetworkAccessEarly());
+  }
+
+  void _onSession() {
+    if (!mounted) return;
+    if (widget.session.isConnected && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
   }
 
   @override
   void dispose() {
+    widget.session.removeListener(_onSession);
     _tabs.dispose();
     _uriCtrl.dispose();
     _endpointCtrl.dispose();
@@ -96,136 +107,61 @@ class _PairScreenState extends State<PairScreen>
     final session = widget.session;
     final err = _formError ?? session.error;
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
     return Scaffold(
-      body: DecoratedBox(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFFF0EEF8),
-              Color(0xFFE4DFF5),
-              Color(0xFFF5F0FA),
+      appBar: AppBar(
+        title: Text(l10n.shellConnect),
+      ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+            child: Text(
+              l10n.pairLede,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                height: 1.35,
+              ),
+            ),
+          ),
+          TabBar(
+            controller: _tabs,
+            isScrollable: true,
+            tabs: [
+              Tab(text: l10n.pairTabLink),
+              Tab(text: l10n.pairTabHost),
+              Tab(text: l10n.pairTabSsh),
             ],
           ),
-        ),
-        child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Image.asset(
-                        'assets/logo.png',
-                        width: 72,
-                        height: 72,
-                        filterQuality: FilterQuality.high,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      AppLocalizations.of(context).appName,
-                      style: theme.textTheme.displaySmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -0.8,
-                        color: const Color(0xFF1A1430),
-                        height: 1.05,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      AppLocalizations.of(context).pairLede,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        color: const Color(0xFF5B5678),
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-              TabBar(
-                controller: _tabs,
-                labelColor: const Color(0xFF1A1430),
-                unselectedLabelColor: const Color(0xFF7A7494),
-                indicatorColor: theme.colorScheme.primary,
-                tabs: [
-                  Tab(text: AppLocalizations.of(context).pairTabLink),
-                  Tab(text: AppLocalizations.of(context).pairTabHost),
-                  Tab(text: AppLocalizations.of(context).pairTabSsh),
-                ],
-              ),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabs,
-                  children: [
-                    _linkTab(session),
-                    _directTab(session),
-                    _sshTab(session),
-                  ],
-                ),
-              ),
-              if (err != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
-                  child: Text(
-                    err,
-                    style: TextStyle(color: theme.colorScheme.error),
-                  ),
-                ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Builder(
-                      builder: (context) {
-                        final code = widget.locales.override?.languageCode ??
-                            Localizations.localeOf(context).languageCode;
-                        final selected = supportedLocaleIds.contains(code)
-                            ? code
-                            : 'en';
-                        return InputDecorator(
-                          decoration: InputDecoration(
-                            labelText: AppLocalizations.of(context).appLanguage,
-                          ),
-                          child: DropdownButtonHideUnderline(
-                            child: DropdownButton<String>(
-                              isExpanded: true,
-                              value: selected,
-                              items: [
-                                for (final id in supportedLocaleIds)
-                                  DropdownMenuItem(
-                                    value: id,
-                                    child: Text(localeLabels[id] ?? id),
-                                  ),
-                              ],
-                              onChanged: (id) {
-                                if (id != null) widget.locales.setLocaleId(id);
-                              },
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      AppLocalizations.of(context).pairFooter,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: const Color(0xFF5B5678),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+          Expanded(
+            child: TabBarView(
+              controller: _tabs,
+              children: [
+                _linkTab(session),
+                _directTab(session),
+                _sshTab(session),
+              ],
+            ),
           ),
-        ),
+          if (err != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Text(
+                err,
+                style: TextStyle(color: theme.colorScheme.error),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+            child: Text(
+              l10n.pairFooter,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -301,7 +237,10 @@ class _PairScreenState extends State<PairScreen>
         Text(
           AppLocalizations.of(context).pairDirectHint,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF5B5678),
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.65),
               ),
         ),
         const SizedBox(height: 16),
@@ -343,7 +282,10 @@ class _PairScreenState extends State<PairScreen>
         Text(
           AppLocalizations.of(context).pairSshHint,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: const Color(0xFF5B5678),
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.65),
               ),
         ),
         const SizedBox(height: 16),

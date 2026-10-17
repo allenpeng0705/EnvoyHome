@@ -68,6 +68,24 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>EnvoyHome uses the camera to scan the pairing QR from your home Settings.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>EnvoyHome uses the microphone for voice dictation into Chat and Home chat.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>EnvoyHome uses speech recognition to turn your voice into chat text on device.</string>
+	<!-- iOS 14+: Local Network prompt when dialing home daemon on LAN (ws://192.168.x.x). -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>EnvoyHome reaches your home computer on the local Wi‑Fi to pair and chat. Allow Local Network when prompted.</string>
+	<!-- Declaring a Bonjour type helps iOS show the Local Network dialog reliably. -->
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_http._tcp.</string>
+	</array>
+	<!-- Pairing uses cleartext ws:// on the LAN; allow local networking under ATS. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

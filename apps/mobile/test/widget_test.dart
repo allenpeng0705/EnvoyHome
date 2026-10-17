@@ -4,13 +4,13 @@ import 'package:envoyhome/app.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('Pair screen shows EnvoyHome brand', (tester) async {
+  testWidgets('Unpaired shell shows connect guide', (tester) async {
     await tester.pumpWidget(const EnvoyHomeApp());
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.text('EnvoyHome'), findsWidgets);
-    expect(find.textContaining('host:port'), findsOneWidget);
-    expect(find.text('Link'), findsOneWidget);
-    expect(find.text('SSH'), findsOneWidget);
+    expect(find.text('Connect to your home'), findsOneWidget);
+    expect(find.text('Connect'), findsWidgets);
+    expect(find.text('Chat'), findsOneWidget);
   });
 }
