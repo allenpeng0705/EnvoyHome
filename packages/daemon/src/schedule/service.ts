@@ -1,6 +1,7 @@
 // Daemon ScheduleService — Design §7.4.
 
 import { randomUUID } from "node:crypto";
+import { humanCronLabel } from "./chat-card.js";
 import { nextCronExprAfter, parseCron } from "./cron-next.js";
 import { resolveScheduleFromText } from "./resolve-nl.js";
 import { ScheduleStore } from "./store.js";
@@ -10,6 +11,7 @@ import {
   ONESHOT_GRACE_MS,
   RECURRING_GRACE_MS,
   type MissPolicy,
+  type ScheduleDismissedProposal,
   type ScheduleJob,
   type SchedulePayload,
   type ScheduleProposal,
@@ -17,6 +19,10 @@ import {
   type ScheduleSpec,
 } from "./types.js";
 import type { HomePaths } from "../home-paths.js";
+import {
+  resolveReferenceNow,
+  type ClientTurnContext,
+} from "../client-context.js";
 
 export type FireHandler = (job: ScheduleJob, scheduledFor: Date) => Promise<{
   execStatus: "ok" | "error" | "skipped";
@@ -31,6 +37,10 @@ export interface ScheduleServiceOptions {
   onFire?: FireHandler;
   /** Default IANA TZ when account has none. */
   defaultTimeZone?: string;
+  /** Design §7.4 — prefer persisted account IANA TZ over host default. */
+  accountTimeZone?: (accountId: string) => Promise<string | undefined>;
+  /** Used when the client omits locale (channels, older clients). */
+  accountLocale?: (accountId: string) => Promise<string | undefined>;
   emit?: (event: string, data: Record<string, unknown>) => void;
 }
 
@@ -76,18 +86,42 @@ export class ScheduleService {
   private readonly now: () => Date;
   private onFire: FireHandler;
   private defaultTimeZone: string;
+  private accountTimeZone:
+    | ((accountId: string) => Promise<string | undefined>)
+    | undefined;
+  private accountLocale:
+    | ((accountId: string) => Promise<string | undefined>)
+    | undefined;
   private emit: ((event: string, data: Record<string, unknown>) => void) | undefined;
   /** Accounts whose jobs are loaded. */
   private watched = new Set<string>();
 
   constructor(opts: ScheduleServiceOptions) {
-    this.store = new ScheduleStore(opts.paths);
     this.now = opts.now ?? (() => new Date());
+    this.store = new ScheduleStore(opts.paths, () => this.now().getTime());
     this.onFire =
       opts.onFire ??
       (async () => ({ execStatus: "ok" as const, deliveryStatus: "none" as const }));
     this.defaultTimeZone = opts.defaultTimeZone ?? DEFAULT_TIME_ZONE;
+    this.accountTimeZone = opts.accountTimeZone;
+    this.accountLocale = opts.accountLocale;
     this.emit = opts.emit;
+  }
+
+  /** Client locale, else the account locale. Empty when neither is set. */
+  async resolveLocale(accountId: string, clientLocale?: string): Promise<string | undefined> {
+    if (clientLocale && clientLocale.trim()) return clientLocale.trim();
+    const fromAccount = await this.accountLocale?.(accountId);
+    if (fromAccount && fromAccount.trim()) return fromAccount.trim();
+    return undefined;
+  }
+
+  /** Resolve TZ: explicit arg → account → host default. */
+  async resolveTimeZone(accountId: string, override?: string): Promise<string> {
+    if (override && override.trim()) return override.trim();
+    const fromAccount = await this.accountTimeZone?.(accountId);
+    if (fromAccount && fromAccount.trim()) return fromAccount.trim();
+    return this.defaultTimeZone;
   }
 
   setFireHandler(handler: FireHandler): void {
@@ -98,10 +132,23 @@ export class ScheduleService {
     this.emit = emit;
   }
 
-  async watchAccount(accountId: string): Promise<void> {
+  async watchAccount(
+    accountId: string,
+    opts?: { reviewEnabled?: boolean; consolidateAt?: string; timeZone?: string },
+  ): Promise<void> {
     await this.store.loadAccount(accountId, this.now().getTime());
     this.watched.add(accountId);
-    await this.ensureConsolidateJob(accountId);
+    await this.ensureConsolidateJob(accountId, {
+      ...(opts?.consolidateAt !== undefined ? { consolidateAt: opts.consolidateAt } : {}),
+      ...(opts?.timeZone !== undefined ? { timeZone: opts.timeZone } : {}),
+    });
+    if (opts?.reviewEnabled === true) {
+      await this.ensureReviewJob(accountId, {
+        ...(opts.timeZone !== undefined ? { timeZone: opts.timeZone } : {}),
+      });
+    } else if (opts?.reviewEnabled === false) {
+      await this.disableSystemJob(accountId, `system:review:${accountId}`);
+    }
     this.armTimer();
   }
 
@@ -139,6 +186,63 @@ export class ScheduleService {
     });
   }
 
+  /**
+   * Nightly background review (Memory Design §4.7 / §7.4 V-CRON-10).
+   * Default 04:00 local — after consolidate.
+   */
+  async ensureReviewJob(
+    accountId: string,
+    opts?: { reviewAt?: string; timeZone?: string },
+  ): Promise<ScheduleJob> {
+    const id = `system:review:${accountId}`;
+    const existing = await this.store.getJob(accountId, id);
+    const tz = opts?.timeZone ?? this.defaultTimeZone;
+    const { hour, minute } = parseConsolidateAt(opts?.reviewAt ?? "04:00");
+    const cronExpr = `${minute} ${hour} * * *`;
+    if (existing) {
+      const same =
+        existing.spec.kind === "cron" &&
+        existing.spec.cronExpr === cronExpr &&
+        existing.spec.timeZone === tz &&
+        existing.payload.kind === "system" &&
+        existing.payload.systemJob === "review" &&
+        existing.enabled;
+      if (same) return existing;
+      existing.enabled = true;
+      existing.spec = { kind: "cron", cronExpr, timeZone: tz };
+      existing.payload = { kind: "system", systemJob: "review" };
+      existing.updatedAt = this.now().toISOString();
+      existing.nextRunAt = computeNext(existing.spec, this.now(), {
+        graceMs: RECURRING_GRACE_MS,
+        missPolicy: "skip",
+        wasMissed: false,
+      });
+      await this.store.upsertJob(existing);
+      this.armTimer();
+      return existing;
+    }
+    return this.createJob({
+      id,
+      accountId,
+      name: "Nightly memory review",
+      spec: { kind: "cron", cronExpr, timeZone: tz },
+      payload: { kind: "system", systemJob: "review" },
+      missPolicy: "skip",
+      source: "user",
+      enabled: true,
+    });
+  }
+
+  async disableSystemJob(accountId: string, jobId: string): Promise<void> {
+    const job = await this.store.getJob(accountId, jobId);
+    if (!job || job.payload.kind !== "system") return;
+    if (!job.enabled) return;
+    job.enabled = false;
+    job.nextRunAt = null;
+    job.updatedAt = this.now().toISOString();
+    await this.store.upsertJob(job);
+  }
+
   async stop(): Promise<void> {
     if (this.timer) clearTimeout(this.timer);
     this.timer = undefined;
@@ -152,35 +256,149 @@ export class ScheduleService {
     accountId: string,
     text: string,
     timeZone?: string,
-  ): Promise<ScheduleProposal | { error: string; reason: string }> {
-    const tz = timeZone ?? this.defaultTimeZone;
+    opts?: {
+      message?: string;
+      clientContext?: ClientTurnContext;
+      replacesJobId?: string;
+      sessionId?: string;
+    },
+  ): Promise<
+    | ScheduleProposal
+    | { error: string; reason: string; candidates?: string[] }
+  > {
+    const hostNow = this.now();
+    const client = opts?.clientContext;
+    const tz = await this.resolveTimeZone(accountId, timeZone ?? client?.timeZone);
+    const locale = await this.resolveLocale(accountId, client?.locale);
     const resolved = resolveScheduleFromText({
       text,
-      referenceNow: this.now(),
+      referenceNow: resolveReferenceNow(hostNow, client),
       timeZone: tz,
+      ...(locale ? { locale } : {}),
     });
     if (!resolved.ok) {
       return {
         error: resolved.detail ?? resolved.reason,
         reason: resolved.reason,
+        ...(resolved.candidates?.length ? { candidates: resolved.candidates } : {}),
       };
+    }
+    let payload = resolved.payload;
+    const msgOverride =
+      typeof opts?.message === "string" ? opts.message.trim().slice(0, 200) : "";
+    if (msgOverride && payload.kind === "notify") {
+      payload = { kind: "notify", message: msgOverride };
+    }
+    const now = this.now();
+    const missPolicy = inferMissPolicy(payload);
+    const nextRunAt = computeNext(resolved.spec, now, {
+      graceMs: resolved.spec.kind === "at" ? ONESHOT_GRACE_MS : RECURRING_GRACE_MS,
+      missPolicy,
+      wasMissed: false,
+    });
+    const replacesJobId = opts?.replacesJobId?.trim();
+    if (replacesJobId) {
+      const existing = await this.store.getJob(accountId, replacesJobId);
+      if (!existing) {
+        return { error: "unknown schedule", reason: "not_schedule" };
+      }
+      if (existing.payload.kind === "system" || existing.source === "workflow") {
+        return {
+          error: "that schedule cannot change WHEN from chat",
+          reason: "not_schedule",
+        };
+      }
     }
     const proposal: ScheduleProposal = {
       proposalId: randomUUID(),
       accountId,
       resolvedLocal: resolved.resolvedLocal,
+      ...(relativeHintFrom(now, nextRunAt, resolved.spec)
+        ? { relativeHint: relativeHintFrom(now, nextRunAt, resolved.spec)! }
+        : {}),
+      ...(nextRunAt ? { nextRunAt } : {}),
       spec: resolved.spec,
-      payload: resolved.payload,
-      name: resolved.name,
+      payload,
+      name: msgOverride || resolved.name,
       sourceText: text,
-      expiresAt: new Date(this.now().getTime() + 15 * 60_000).toISOString(),
+      expiresAt: new Date(now.getTime() + 15 * 60_000).toISOString(),
+      ...(replacesJobId ? { replacesJobId } : {}),
+      ...(opts?.sessionId?.trim() ? { sessionId: opts.sessionId.trim() } : {}),
     };
     await this.store.putProposal(proposal, this.now().getTime());
     return proposal;
   }
 
-  /** Confirm a proposal → durable job + arm. */
+  /** Cancel a live proposal → History "Not set" (canceled). */
+  async cancelProposal(
+    accountId: string,
+    proposalId: string,
+  ): Promise<ScheduleDismissedProposal> {
+    const row = await this.store.cancelProposal(accountId, proposalId, this.now().getTime());
+    if (!row) {
+      throw Object.assign(new Error("envoyhome.bad_params: unknown or expired proposal"), {
+        code: "bad_params",
+      });
+    }
+    this.emit?.("home:schedule-proposal-closed", {
+      proposalId: row.proposalId,
+      accountId,
+      status: "canceled",
+      ...(row.sessionId ? { sessionId: row.sessionId } : {}),
+    });
+    return row;
+  }
+
+  /** Notify thin clients that a proposal is waiting for Confirm/Cancel. */
+  emitProposed(p: ScheduleProposal): void {
+    this.emit?.("home:schedule-proposed", {
+      proposalId: p.proposalId,
+      accountId: p.accountId,
+      resolvedLocal: p.resolvedLocal,
+      expiresAt: p.expiresAt,
+      kind: p.spec.kind,
+      name: p.name,
+      ...(p.sessionId ? { sessionId: p.sessionId } : {}),
+      ...(p.payload.message ? { message: p.payload.message } : {}),
+    });
+  }
+
+  emitClosed(input: {
+    proposalId: string;
+    accountId: string;
+    status: "confirmed" | "canceled" | "expired";
+    sessionId?: string;
+    jobId?: string;
+  }): void {
+    this.emit?.("home:schedule-proposal-closed", {
+      proposalId: input.proposalId,
+      accountId: input.accountId,
+      status: input.status,
+      ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+      ...(input.jobId ? { jobId: input.jobId } : {}),
+    });
+  }
+
+  async listDismissed(accountId: string): Promise<ScheduleDismissedProposal[]> {
+    return this.store.listDismissed(accountId);
+  }
+
+  /** User-facing run history — hide daemon system jobs (flush/review/consolidate). */
+  async listUserReceipts(
+    accountId: string,
+    jobId?: string,
+  ): Promise<ScheduleRunReceipt[]> {
+    return (await this.store.listReceipts(accountId, jobId)).filter(
+      (r) => !String(r.jobId || "").startsWith("system:"),
+    );
+  }
+
+  /**
+   * Confirm a proposal → durable job + arm.
+   * `accountId` is checked **before** consume/create (fail-closed on mismatch).
+   */
   async confirmProposal(
+    accountId: string,
     proposalId: string,
     overrides?: {
       missPolicy?: MissPolicy;
@@ -189,14 +407,32 @@ export class ScheduleService {
       name?: string;
     },
   ): Promise<ScheduleJob> {
-    const p = await this.store.takeProposal(proposalId);
-    if (!p) {
+    const peek = this.store.getProposal(proposalId);
+    if (!peek) {
       throw Object.assign(new Error("envoyhome.bad_params: unknown or expired proposal"), {
         code: "bad_params",
       });
     }
-    if (new Date(p.expiresAt).getTime() < this.now().getTime()) {
+    if (peek.accountId !== accountId) {
+      throw Object.assign(new Error("envoyhome.bad_params: proposal account mismatch"), {
+        code: "bad_params",
+      });
+    }
+    if (new Date(peek.expiresAt).getTime() < this.now().getTime()) {
+      await this.store.dismissProposal(accountId, proposalId, "expired", this.now().getTime());
+      this.emitClosed({
+        proposalId,
+        accountId,
+        status: "expired",
+        ...(peek.sessionId ? { sessionId: peek.sessionId } : {}),
+      });
       throw Object.assign(new Error("envoyhome.bad_params: proposal expired"), {
+        code: "bad_params",
+      });
+    }
+    const p = await this.store.takeProposal(proposalId);
+    if (!p) {
+      throw Object.assign(new Error("envoyhome.bad_params: unknown or expired proposal"), {
         code: "bad_params",
       });
     }
@@ -211,15 +447,31 @@ export class ScheduleService {
       typeof overrides?.name === "string" && overrides.name.trim().length > 0
         ? overrides.name.trim().slice(0, 120)
         : p.name;
-    return this.createJob({
-      accountId: p.accountId,
-      name,
-      spec: p.spec,
-      payload,
-      missPolicy,
-      source: "user",
-      sourceText: p.sourceText,
+    const job = p.replacesJobId
+      ? await this.updateJob(p.accountId, p.replacesJobId, {
+          spec: p.spec,
+          ...(typeof overrides?.name === "string" && overrides.name.trim().length > 0
+            ? { name }
+            : {}),
+          ...(overrides?.payload ? { payload } : {}),
+        })
+      : await this.createJob({
+          accountId: p.accountId,
+          name,
+          spec: p.spec,
+          payload,
+          missPolicy,
+          source: "user",
+          sourceText: p.sourceText,
+        });
+    this.emitClosed({
+      proposalId,
+      accountId,
+      status: "confirmed",
+      jobId: job.id,
+      ...(p.sessionId ? { sessionId: p.sessionId } : {}),
     });
+    return job;
   }
 
   async createJob(input: {
@@ -267,7 +519,12 @@ export class ScheduleService {
   async updateJob(
     accountId: string,
     jobId: string,
-    patch: { enabled?: boolean; name?: string },
+    patch: {
+      enabled?: boolean;
+      name?: string;
+      spec?: ScheduleSpec;
+      payload?: SchedulePayload;
+    },
   ): Promise<ScheduleJob> {
     const job = await this.store.getJob(accountId, jobId);
     if (!job) {
@@ -275,22 +532,80 @@ export class ScheduleService {
         code: "bad_params",
       });
     }
+    const isSystem = job.payload.kind === "system";
+    const isWorkflowSynced = job.source === "workflow";
+
+    // Daemon-owned system jobs: enable-only via watchAccount / disableSystemJob — not client patches.
+    if (isSystem) {
+      const touching =
+        patch.name !== undefined ||
+        patch.spec !== undefined ||
+        patch.payload !== undefined ||
+        patch.enabled !== undefined;
+      if (touching) {
+        throw Object.assign(
+          new Error("envoyhome.bad_params: system schedule is daemon-owned"),
+          { code: "bad_params" },
+        );
+      }
+      return job;
+    }
+
+    // Workflow-synced: enable-only (V-CRON-7).
+    if (isWorkflowSynced) {
+      if (patch.name !== undefined || patch.spec !== undefined || patch.payload !== undefined) {
+        throw Object.assign(
+          new Error("envoyhome.bad_params: cannot edit workflow-synced job (enable-only)"),
+          { code: "bad_params" },
+        );
+      }
+    }
+
+    if (patch.payload !== undefined) {
+      if (patch.payload.kind === "system") {
+        throw Object.assign(
+          new Error("envoyhome.bad_params: system payload is daemon-owned"),
+          { code: "bad_params" },
+        );
+      }
+      job.payload = patch.payload;
+      job.missPolicy = inferMissPolicy(job.payload);
+    }
+    if (patch.spec !== undefined) {
+      job.spec = patch.spec;
+    }
     if (patch.enabled !== undefined) job.enabled = patch.enabled;
-    if (patch.name !== undefined) job.name = patch.name;
+    if (patch.name !== undefined) job.name = patch.name.slice(0, 120);
     job.updatedAt = this.now().toISOString();
-    if (job.enabled && !job.nextRunAt) {
+    const specChanged = patch.spec !== undefined;
+    if (job.enabled && (specChanged || !job.nextRunAt)) {
       job.nextRunAt = computeNext(job.spec, this.now(), {
         graceMs: job.spec.kind === "at" ? ONESHOT_GRACE_MS : RECURRING_GRACE_MS,
         missPolicy: job.missPolicy,
         wasMissed: false,
       });
     }
+    if (!job.enabled) job.nextRunAt = null;
     await this.store.upsertJob(job);
     this.armTimer();
     return job;
   }
 
   async removeJob(accountId: string, jobId: string): Promise<void> {
+    const job = await this.store.getJob(accountId, jobId);
+    if (!job) return;
+    if (job.payload.kind === "system") {
+      throw Object.assign(
+        new Error("envoyhome.bad_params: cannot remove system schedule"),
+        { code: "bad_params" },
+      );
+    }
+    if (job.source === "workflow") {
+      throw Object.assign(
+        new Error("envoyhome.bad_params: cannot remove workflow-synced job"),
+        { code: "bad_params" },
+      );
+    }
     await this.store.removeJob(accountId, jobId);
     this.armTimer();
   }
@@ -436,6 +751,7 @@ export class ScheduleService {
       job.lastError = skipReason;
       job.updatedAt = now.toISOString();
       await this.store.upsertJob(job);
+      const latenessMs = Math.max(0, now.getTime() - scheduledFor.getTime());
       const receipt: ScheduleRunReceipt = {
         jobId: job.id,
         accountId: job.accountId,
@@ -445,6 +761,7 @@ export class ScheduleService {
         execStatus: "skipped",
         deliveryStatus: "none",
         error: skipReason,
+        ...(latenessMs > 0 ? { latenessMs } : {}),
       };
       await this.store.appendReceipt(receipt);
       this.emit?.("home:schedule-fired", {
@@ -500,15 +817,18 @@ export class ScheduleService {
     job.updatedAt = now.toISOString();
     await this.store.upsertJob(job);
 
+    const finishedAt = this.now();
+    const latenessMs = Math.max(0, finishedAt.getTime() - scheduledFor.getTime());
     const receipt: ScheduleRunReceipt = {
       jobId: job.id,
       accountId: job.accountId,
       scheduledFor: scheduledFor.toISOString(),
       startedAt,
-      finishedAt: this.now().toISOString(),
+      finishedAt: finishedAt.toISOString(),
       execStatus,
       deliveryStatus,
       ...(error !== undefined ? { error } : {}),
+      ...(latenessMs > 0 ? { latenessMs } : {}),
     };
     await this.store.appendReceipt(receipt);
     this.emit?.("home:schedule-fired", {
@@ -553,11 +873,62 @@ export class ScheduleService {
   }
 }
 
+/** Settings and chat share one explanation, including ask-candidates. */
+export function formatProposeFailure(proposal: {
+  reason: string;
+  error: string;
+  candidates?: string[];
+}): string {
+  const why =
+    proposal.error && proposal.error !== proposal.reason ? `: ${proposal.error}` : "";
+  const cands =
+    proposal.candidates && proposal.candidates.length > 0
+      ? ` Candidates: ${proposal.candidates.join(" | ")}`
+      : "";
+  return `${proposal.reason}${why}${cands}`;
+}
+
 function inferMissPolicy(payload: SchedulePayload): MissPolicy {
-  if (payload.kind === "workflow" || payload.kind === "tool" || payload.kind === "system") {
+  if (
+    payload.kind === "workflow" ||
+    payload.kind === "tool" ||
+    payload.kind === "system" ||
+    payload.kind === "agentTurn"
+  ) {
     return "skip";
   }
   return "grace_catchup";
+}
+
+/** Human relative cadence for propose confirm preview (Design accuracy). */
+export function relativeHintFrom(
+  now: Date,
+  nextRunAt: string | null,
+  spec: ScheduleSpec,
+): string | undefined {
+  if (spec.kind === "cron" && spec.cronExpr) {
+    const label = humanCronLabel(spec.cronExpr, "en");
+    return nextRunAt
+      ? `next ${relativeFromMs(new Date(nextRunAt).getTime() - now.getTime())} · ${label}`
+      : label;
+  }
+  if (spec.kind === "every" && spec.everyMs) {
+    const mins = Math.max(1, Math.round(spec.everyMs / 60_000));
+    return `every ${mins} min`;
+  }
+  if (!nextRunAt) return undefined;
+  return relativeFromMs(new Date(nextRunAt).getTime() - now.getTime());
+}
+
+function relativeFromMs(ms: number): string {
+  if (ms < 0) return "past";
+  const mins = Math.round(ms / 60_000);
+  if (mins < 1) return "in under a minute";
+  if (mins < 60) return `in ${mins} minute${mins === 1 ? "" : "s"}`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 48) return `in ${hrs} hour${hrs === 1 ? "" : "s"}`;
+  const days = Math.round(hrs / 24);
+  return `in ${days} day${days === 1 ? "" : "s"}`;
 }
 
 /** Parse `HH:MM` (24h) → cron hour/minute. Invalid → 03:30. */

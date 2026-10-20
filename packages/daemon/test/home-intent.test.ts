@@ -131,6 +131,7 @@ async function waitForApproval(
 
 test("normalizePurpose + isSmartHomeToolName", () => {
   assert.equal(normalizePurpose("home"), "home");
+  assert.equal(normalizePurpose("schedules"), "schedules");
   assert.equal(normalizePurpose("general"), "general");
   assert.equal(normalizePurpose(undefined), "general");
   assert.equal(normalizePurpose("other"), "general");
@@ -144,6 +145,14 @@ test("resolveHomeSurface: purpose / sticky / local / off (no LLM)", () => {
   assert.equal(
     resolveHomeSurface({ purpose: "home", userText: "hello", boundObjects: bound }).reason,
     "purpose",
+  );
+  assert.equal(
+    resolveHomeSurface({
+      purpose: "schedules",
+      userText: "turn on the kitchen lamp",
+      boundObjects: bound,
+    }).homeSurface,
+    false,
   );
   assert.equal(
     resolveHomeSurface({

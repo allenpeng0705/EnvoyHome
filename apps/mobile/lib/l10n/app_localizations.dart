@@ -348,12 +348,6 @@ abstract class AppLocalizations {
   /// **'This phone is already paired. Reconnect to the home desktop, or pair again if you moved homes.'**
   String get connectGuideReconnectHint;
 
-  /// No description provided for @settingsNeedConnect.
-  ///
-  /// In en, this message translates to:
-  /// **'Connect to your home to configure LLM, Connections, Skills, and System.'**
-  String get settingsNeedConnect;
-
   /// No description provided for @shellProfilePending.
   ///
   /// In en, this message translates to:
@@ -423,7 +417,7 @@ abstract class AppLocalizations {
   /// No description provided for @navChat.
   ///
   /// In en, this message translates to:
-  /// **'Chat'**
+  /// **'Chats'**
   String get navChat;
 
   /// No description provided for @navHomeChat.
@@ -431,6 +425,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Home'**
   String get navHomeChat;
+
+  /// No description provided for @navSchedulesChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedules'**
+  String get navSchedulesChat;
 
   /// No description provided for @navSettings.
   ///
@@ -462,6 +462,12 @@ abstract class AppLocalizations {
   /// **'System'**
   String get navSystem;
 
+  /// No description provided for @navProfiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Profiles'**
+  String get navProfiles;
+
   /// No description provided for @navApprovals.
   ///
   /// In en, this message translates to:
@@ -483,8 +489,14 @@ abstract class AppLocalizations {
   /// No description provided for @settingsHubHint.
   ///
   /// In en, this message translates to:
-  /// **'Configure the home daemon from your phone. Some owner-only actions need a trusted device.'**
+  /// **'Configure the home daemon from your phone. Household Owner devices can manage profiles, workspace, and pairing.'**
   String get settingsHubHint;
+
+  /// No description provided for @settingsProfilesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Owner, workspace folders, tool policy'**
+  String get settingsProfilesSubtitle;
 
   /// No description provided for @settingsLlmSubtitle.
   ///
@@ -495,7 +507,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsConnectionsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Pairing, Home Assistant, MQTT, Channels'**
+  /// **'Pairing, Home Assistant, MQTT, Channels, Web search'**
   String get settingsConnectionsSubtitle;
 
   /// No description provided for @settingsSkillsSubtitle.
@@ -507,8 +519,422 @@ abstract class AppLocalizations {
   /// No description provided for @settingsSystemSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Shared files, Health, Grants'**
+  /// **'Profiles, Shared files, Health, Grants'**
   String get settingsSystemSubtitle;
+
+  /// No description provided for @settingsNeedConnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to your home to configure Profiles, LLM, Connections, Skills, and System.'**
+  String get settingsNeedConnect;
+
+  /// No description provided for @profilesIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Each person has a profile. The household Owner configures workspace folders and can transfer ownership.'**
+  String get profilesIntro;
+
+  /// No description provided for @profilesMemberHint.
+  ///
+  /// In en, this message translates to:
+  /// **'This device is not the household Owner — workspace is read-only here.'**
+  String get profilesMemberHint;
+
+  /// No description provided for @profilesRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get profilesRefresh;
+
+  /// No description provided for @profilesAddTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add profile'**
+  String get profilesAddTitle;
+
+  /// No description provided for @profilesOwnerBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Owner'**
+  String get profilesOwnerBadge;
+
+  /// No description provided for @profilesActiveBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Active'**
+  String get profilesActiveBadge;
+
+  /// No description provided for @profilesWorkspaceTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Workspace folders'**
+  String get profilesWorkspaceTitle;
+
+  /// No description provided for @profilesWorkspaceHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add host folders on the home machine (up to 16). The agent reaches them via workspace/<id>/… paths.'**
+  String get profilesWorkspaceHint;
+
+  /// No description provided for @profilesWorkspacePath.
+  ///
+  /// In en, this message translates to:
+  /// **'Host path'**
+  String get profilesWorkspacePath;
+
+  /// No description provided for @profilesWorkspaceBrowse.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse folders'**
+  String get profilesWorkspaceBrowse;
+
+  /// No description provided for @profilesWorkspaceBrowseHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap to browse the home machine'**
+  String get profilesWorkspaceBrowseHint;
+
+  /// No description provided for @profilesWorkspaceUnset.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set (sandbox only)'**
+  String get profilesWorkspaceUnset;
+
+  /// No description provided for @profilesWorkspaceSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Configured'**
+  String get profilesWorkspaceSet;
+
+  /// No description provided for @profilesWorkspaceWholeMachine.
+  ///
+  /// In en, this message translates to:
+  /// **'Whole machine'**
+  String get profilesWorkspaceWholeMachine;
+
+  /// No description provided for @profilesWorkspaceRo.
+  ///
+  /// In en, this message translates to:
+  /// **'Read only'**
+  String get profilesWorkspaceRo;
+
+  /// No description provided for @profilesWorkspaceRw.
+  ///
+  /// In en, this message translates to:
+  /// **'Read & write'**
+  String get profilesWorkspaceRw;
+
+  /// No description provided for @profilesWorkspaceUseRoot.
+  ///
+  /// In en, this message translates to:
+  /// **'Add computer root'**
+  String get profilesWorkspaceUseRoot;
+
+  /// No description provided for @profilesWorkspaceClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear all'**
+  String get profilesWorkspaceClear;
+
+  /// No description provided for @profilesWorkspaceRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get profilesWorkspaceRemove;
+
+  /// No description provided for @profilesWorkspaceApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get profilesWorkspaceApply;
+
+  /// No description provided for @profilesWorkspaceEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Add folder'**
+  String get profilesWorkspaceEdit;
+
+  /// No description provided for @profilesWorkspaceRootTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow whole-computer access?'**
+  String get profilesWorkspaceRootTitle;
+
+  /// No description provided for @profilesWorkspaceRootBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This lets the agent read (and write, if selected) files under the computer root via workspace/… — including from this phone.'**
+  String get profilesWorkspaceRootBody;
+
+  /// No description provided for @profilesWorkspaceRootOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow'**
+  String get profilesWorkspaceRootOk;
+
+  /// No description provided for @profilesWorkspaceMemberNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Only the household Owner can change workspace folders.'**
+  String get profilesWorkspaceMemberNote;
+
+  /// No description provided for @profilesWorkspaceCrossTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add workspace folder for another profile?'**
+  String get profilesWorkspaceCrossTitle;
+
+  /// No description provided for @profilesWorkspaceCrossBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This adds a host folder for {name}. Continue only if you intend to configure their workspace.'**
+  String profilesWorkspaceCrossBody(String name);
+
+  /// No description provided for @profilesWorkspaceDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Not visible on this device'**
+  String get profilesWorkspaceDenied;
+
+  /// No description provided for @profilesWorkspaceInactive.
+  ///
+  /// In en, this message translates to:
+  /// **'Configured but inactive (filesystem-root only applies to Owner)'**
+  String get profilesWorkspaceInactive;
+
+  /// No description provided for @profilesRename.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get profilesRename;
+
+  /// No description provided for @profilesRenameTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename profile'**
+  String get profilesRenameTitle;
+
+  /// No description provided for @profilesRenameSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get profilesRenameSave;
+
+  /// No description provided for @profilesTimeZoneUnset.
+  ///
+  /// In en, this message translates to:
+  /// **'Time zone: not set (schedules use host default)'**
+  String get profilesTimeZoneUnset;
+
+  /// No description provided for @profilesTimeZoneValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Time zone: {tz}'**
+  String profilesTimeZoneValue(String tz);
+
+  /// No description provided for @profilesTimeZoneEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Time zone'**
+  String get profilesTimeZoneEdit;
+
+  /// No description provided for @profilesTimeZoneTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Account time zone'**
+  String get profilesTimeZoneTitle;
+
+  /// No description provided for @profilesTimeZoneHint.
+  ///
+  /// In en, this message translates to:
+  /// **'IANA name, e.g. Asia/Shanghai'**
+  String get profilesTimeZoneHint;
+
+  /// No description provided for @profilesTimeZoneSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get profilesTimeZoneSave;
+
+  /// No description provided for @profilesTimeZoneDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Time zone set to {tz}'**
+  String profilesTimeZoneDone(String tz);
+
+  /// No description provided for @profilesShareLocationTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Share location with Home'**
+  String get profilesShareLocationTitle;
+
+  /// No description provided for @profilesShareLocationSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Attach approximate GPS to chat turns for schedule/context. Permission is requested once here; never on every send. Ephemeral only — not saved to memory.'**
+  String get profilesShareLocationSubtitle;
+
+  /// No description provided for @profilesShareLocationDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Location permission was not granted. Sharing stays off.'**
+  String get profilesShareLocationDenied;
+
+  /// No description provided for @profilesShareLocationOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Location sharing on for this device'**
+  String get profilesShareLocationOn;
+
+  /// No description provided for @profilesDelete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get profilesDelete;
+
+  /// No description provided for @profilesDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete profile?'**
+  String get profilesDeleteTitle;
+
+  /// No description provided for @profilesDeleteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {name}? Their sandbox and workspace config are removed. This cannot be undone.'**
+  String profilesDeleteBody(String name);
+
+  /// No description provided for @profilesDeleteConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get profilesDeleteConfirm;
+
+  /// No description provided for @profilesDeleteDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted {name}'**
+  String profilesDeleteDone(String name);
+
+  /// No description provided for @profilesDeleteOwnerBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Cannot delete the household Owner. Transfer ownership first.'**
+  String get profilesDeleteOwnerBlocked;
+
+  /// No description provided for @profilesTransferTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer household Owner?'**
+  String get profilesTransferTitle;
+
+  /// No description provided for @profilesTransferBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Make {name} the household Owner. They will control pairing, bindings, and household Settings.'**
+  String profilesTransferBody(String name);
+
+  /// No description provided for @profilesTransferConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer'**
+  String get profilesTransferConfirm;
+
+  /// No description provided for @profilesTransferDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Owner is now {name}'**
+  String profilesTransferDone(String name);
+
+  /// No description provided for @profilesTransferFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer failed: {error}'**
+  String profilesTransferFailed(String error);
+
+  /// No description provided for @profilesTransferTo.
+  ///
+  /// In en, this message translates to:
+  /// **'Transfer to {name}'**
+  String profilesTransferTo(String name);
+
+  /// No description provided for @profilesToolPolicy.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool policy'**
+  String get profilesToolPolicy;
+
+  /// No description provided for @profilesToolPolicyStandard.
+  ///
+  /// In en, this message translates to:
+  /// **'Standard'**
+  String get profilesToolPolicyStandard;
+
+  /// No description provided for @profilesToolPolicyRestricted.
+  ///
+  /// In en, this message translates to:
+  /// **'Restricted'**
+  String get profilesToolPolicyRestricted;
+
+  /// No description provided for @connMintPairing.
+  ///
+  /// In en, this message translates to:
+  /// **'Mint pairing code'**
+  String get connMintPairing;
+
+  /// No description provided for @connMintOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing code minted'**
+  String get connMintOk;
+
+  /// No description provided for @connMintUriHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan or paste this URI on the new device.'**
+  String get connMintUriHint;
+
+  /// No description provided for @connPairingOwnerOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Mint / revoke pairing requires the household Owner device.'**
+  String get connPairingOwnerOnly;
+
+  /// No description provided for @connRevokeDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke'**
+  String get connRevokeDevice;
+
+  /// No description provided for @connForgetDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Forget'**
+  String get connForgetDevice;
+
+  /// No description provided for @connRevokeConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Revoke device {id}? It will need to pair again.'**
+  String connRevokeConfirm(String id);
+
+  /// No description provided for @connForgetConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Forget device {id}? The pairing record is removed permanently.'**
+  String connForgetConfirm(String id);
+
+  /// No description provided for @connOwnerWriteOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Only the household Owner device can change this setting.'**
+  String get connOwnerWriteOnly;
+
+  /// No description provided for @connAccountsHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Household profiles'**
+  String get connAccountsHint;
 
   /// No description provided for @homeChatSessionTitle.
   ///
@@ -533,6 +959,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Ask about lights, locks, climate…'**
   String get homeChatHint;
+
+  /// No description provided for @schedulesChatSessionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedules'**
+  String get schedulesChatSessionTitle;
+
+  /// No description provided for @schedulesChatEmptyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminders'**
+  String get schedulesChatEmptyTitle;
+
+  /// No description provided for @schedulesChatEmptyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'This chat stays on reminders. Confirm a time before it arms.'**
+  String get schedulesChatEmptyHint;
+
+  /// No description provided for @schedulesChatHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Remind me…'**
+  String get schedulesChatHint;
 
   /// No description provided for @chatAttach.
   ///
@@ -750,10 +1200,292 @@ abstract class AppLocalizations {
   /// **'Channels'**
   String get connTabChannels;
 
+  /// No description provided for @connTabWebSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Web search'**
+  String get connTabWebSearch;
+
+  /// No description provided for @connTabBrowser.
+  ///
+  /// In en, this message translates to:
+  /// **'Browser'**
+  String get connTabBrowser;
+
+  /// No description provided for @browserControlLede.
+  ///
+  /// In en, this message translates to:
+  /// **'Control managed Chromium, or attach personal Chrome / remote CDP. Off by default.'**
+  String get browserControlLede;
+
+  /// No description provided for @browserControlEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable browser tool'**
+  String get browserControlEnabled;
+
+  /// No description provided for @browserControlUnattended.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow managed profile for schedules'**
+  String get browserControlUnattended;
+
+  /// No description provided for @browserControlReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get browserControlReady;
+
+  /// No description provided for @browserControlNotReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Not ready'**
+  String get browserControlNotReady;
+
+  /// No description provided for @browserControlSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get browserControlSave;
+
+  /// No description provided for @browserControlSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Browser settings saved.'**
+  String get browserControlSaved;
+
+  /// No description provided for @browserControlSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save browser settings.'**
+  String get browserControlSaveFailed;
+
+  /// No description provided for @browserControlDefaultProfile.
+  ///
+  /// In en, this message translates to:
+  /// **'Default profile'**
+  String get browserControlDefaultProfile;
+
+  /// No description provided for @browserControlProfileManaged.
+  ///
+  /// In en, this message translates to:
+  /// **'Managed (isolated)'**
+  String get browserControlProfileManaged;
+
+  /// No description provided for @browserControlProfilePersonal.
+  ///
+  /// In en, this message translates to:
+  /// **'Personal Chrome'**
+  String get browserControlProfilePersonal;
+
+  /// No description provided for @browserControlProfileRemote.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote CDP'**
+  String get browserControlProfileRemote;
+
+  /// No description provided for @browserControlElevatedWarn.
+  ///
+  /// In en, this message translates to:
+  /// **'Personal/remote can act as you on logged-in sites. Owner only; never schedules.'**
+  String get browserControlElevatedWarn;
+
+  /// No description provided for @browserControlAcknowledge.
+  ///
+  /// In en, this message translates to:
+  /// **'I understand elevated browser risk'**
+  String get browserControlAcknowledge;
+
+  /// No description provided for @browserControlPersonalEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable personal Chrome'**
+  String get browserControlPersonalEnabled;
+
+  /// No description provided for @browserControlPersonalCdp.
+  ///
+  /// In en, this message translates to:
+  /// **'Personal CDP (loopback)'**
+  String get browserControlPersonalCdp;
+
+  /// No description provided for @browserControlPersonalReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Personal CDP up'**
+  String get browserControlPersonalReady;
+
+  /// No description provided for @browserControlPersonalNotReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Personal CDP down'**
+  String get browserControlPersonalNotReady;
+
+  /// No description provided for @browserControlRemoteEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable remote CDP'**
+  String get browserControlRemoteEnabled;
+
+  /// No description provided for @browserControlRemoteCdp.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote CDP URL'**
+  String get browserControlRemoteCdp;
+
+  /// No description provided for @browserControlRemoteToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote CDP token'**
+  String get browserControlRemoteToken;
+
+  /// No description provided for @browserControlTokenSet.
+  ///
+  /// In en, this message translates to:
+  /// **'set'**
+  String get browserControlTokenSet;
+
+  /// No description provided for @browserControlTokenPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave blank to keep'**
+  String get browserControlTokenPlaceholder;
+
+  /// No description provided for @browserControlRemoteReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote CDP up'**
+  String get browserControlRemoteReady;
+
+  /// No description provided for @browserControlRemoteNotReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Remote CDP down'**
+  String get browserControlRemoteNotReady;
+
+  /// No description provided for @browserControlOwnerOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Only the household Owner device can change browser control settings.'**
+  String get browserControlOwnerOnly;
+
+  /// No description provided for @browserControlAcknowledged.
+  ///
+  /// In en, this message translates to:
+  /// **'Elevated risk acknowledged. Disable personal/remote to stop using them.'**
+  String get browserControlAcknowledged;
+
+  /// No description provided for @webSearchLede.
+  ///
+  /// In en, this message translates to:
+  /// **'Search the public web from chat. DuckDuckGo needs no key; Brave and Tavily need an Owner API key.'**
+  String get webSearchLede;
+
+  /// No description provided for @webSearchEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable web_search'**
+  String get webSearchEnabled;
+
+  /// No description provided for @webSearchProvider.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider'**
+  String get webSearchProvider;
+
+  /// No description provided for @webSearchApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'API key'**
+  String get webSearchApiKey;
+
+  /// No description provided for @webSearchApiKeyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave blank to keep the current key'**
+  String get webSearchApiKeyHint;
+
+  /// No description provided for @webSearchReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get webSearchReady;
+
+  /// No description provided for @webSearchNotReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Not ready'**
+  String get webSearchNotReady;
+
+  /// No description provided for @webSearchSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get webSearchSave;
+
+  /// No description provided for @webSearchSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Web search settings saved.'**
+  String get webSearchSaved;
+
+  /// No description provided for @webSearchSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save web search settings.'**
+  String get webSearchSaveFailed;
+
+  /// No description provided for @webSearchOwnerOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Only the Household Owner device can change web search.'**
+  String get webSearchOwnerOnly;
+
+  /// No description provided for @webSearchBrowserFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'Browser fallback (Bing/Google when API/DDG fails)'**
+  String get webSearchBrowserFallback;
+
+  /// No description provided for @webSearchBrowserFallbackHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Off by default. Attended chats still ask before the browser leg. SERP pages may CAPTCHA or block.'**
+  String get webSearchBrowserFallbackHint;
+
+  /// No description provided for @webSearchBrowserReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Playwright Chromium ready on daemon host'**
+  String get webSearchBrowserReady;
+
+  /// No description provided for @webSearchBrowserMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Playwright Chromium not installed on daemon host'**
+  String get webSearchBrowserMissing;
+
+  /// No description provided for @webSearchInstallHintNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Playwright is already part of the daemon. Download Chromium on the home computer that runs EnvoyHome (not this phone), then reopen Settings; restart the daemon if status stays missing.'**
+  String get webSearchInstallHintNote;
+
+  /// No description provided for @webSearchCopyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy install command'**
+  String get webSearchCopyHint;
+
+  /// No description provided for @webSearchUnattendedBrowser.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow browser fallback for schedules'**
+  String get webSearchUnattendedBrowser;
+
   /// No description provided for @connPairingHint.
   ///
   /// In en, this message translates to:
-  /// **'Mint and revoke phones from desktop Settings → Pair devices. This list is read-only on mobile.'**
+  /// **'Household Owner devices can mint and revoke pairing here. Members see status only.'**
   String get connPairingHint;
 
   /// No description provided for @connNoDevices.
@@ -996,6 +1728,144 @@ abstract class AppLocalizations {
   /// **'Tool name'**
   String get schedToolName;
 
+  /// No description provided for @schedKindAgent.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent'**
+  String get schedKindAgent;
+
+  /// No description provided for @schedAgentPrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Agent prompt'**
+  String get schedAgentPrompt;
+
+  /// No description provided for @schedTabRepeating.
+  ///
+  /// In en, this message translates to:
+  /// **'Repeating'**
+  String get schedTabRepeating;
+
+  /// No description provided for @schedTabOnce.
+  ///
+  /// In en, this message translates to:
+  /// **'Once'**
+  String get schedTabOnce;
+
+  /// No description provided for @schedTabHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'History'**
+  String get schedTabHistory;
+
+  /// No description provided for @schedNoneRepeating.
+  ///
+  /// In en, this message translates to:
+  /// **'No repeating schedules yet. Try “every Monday at 9am”.'**
+  String get schedNoneRepeating;
+
+  /// No description provided for @schedNoneOnce.
+  ///
+  /// In en, this message translates to:
+  /// **'No one-time reminders. Try “tomorrow at 8am”.'**
+  String get schedNoneOnce;
+
+  /// No description provided for @schedNoReceipts.
+  ///
+  /// In en, this message translates to:
+  /// **'No runs yet.'**
+  String get schedNoReceipts;
+
+  /// No description provided for @schedHistoryNotSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get schedHistoryNotSet;
+
+  /// No description provided for @schedHistoryRuns.
+  ///
+  /// In en, this message translates to:
+  /// **'Runs'**
+  String get schedHistoryRuns;
+
+  /// No description provided for @schedNoDismissed.
+  ///
+  /// In en, this message translates to:
+  /// **'No canceled or expired proposals.'**
+  String get schedNoDismissed;
+
+  /// No description provided for @schedDismissedCanceled.
+  ///
+  /// In en, this message translates to:
+  /// **'canceled'**
+  String get schedDismissedCanceled;
+
+  /// No description provided for @schedDismissedExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'expired'**
+  String get schedDismissedExpired;
+
+  /// No description provided for @schedNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get schedNext;
+
+  /// No description provided for @schedKindRepeating.
+  ///
+  /// In en, this message translates to:
+  /// **'Repeats'**
+  String get schedKindRepeating;
+
+  /// No description provided for @schedKindOnce.
+  ///
+  /// In en, this message translates to:
+  /// **'Once'**
+  String get schedKindOnce;
+
+  /// No description provided for @schedKindDaily.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily'**
+  String get schedKindDaily;
+
+  /// No description provided for @schedKindWeekdays.
+  ///
+  /// In en, this message translates to:
+  /// **'Weekdays'**
+  String get schedKindWeekdays;
+
+  /// No description provided for @schedKindWeekly.
+  ///
+  /// In en, this message translates to:
+  /// **'Weekly'**
+  String get schedKindWeekly;
+
+  /// No description provided for @schedKindMonthly.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly'**
+  String get schedKindMonthly;
+
+  /// No description provided for @schedKindYearly.
+  ///
+  /// In en, this message translates to:
+  /// **'Yearly'**
+  String get schedKindYearly;
+
+  /// No description provided for @schedKindEvery.
+  ///
+  /// In en, this message translates to:
+  /// **'Every'**
+  String get schedKindEvery;
+
+  /// No description provided for @schedDayOfMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'day {d}'**
+  String schedDayOfMonth(String d);
+
   /// No description provided for @wfEditorTitle.
   ///
   /// In en, this message translates to:
@@ -1095,7 +1965,7 @@ abstract class AppLocalizations {
   /// No description provided for @sysTabFiles.
   ///
   /// In en, this message translates to:
-  /// **'Shared files'**
+  /// **'Files'**
   String get sysTabFiles;
 
   /// No description provided for @sysTabHealth.
@@ -1187,6 +2057,318 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Message…'**
   String get chatHint;
+
+  /// No description provided for @chatThought.
+  ///
+  /// In en, this message translates to:
+  /// **'Thinking'**
+  String get chatThought;
+
+  /// No description provided for @chatNew.
+  ///
+  /// In en, this message translates to:
+  /// **'New chat'**
+  String get chatNew;
+
+  /// No description provided for @chatNewNamePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat name'**
+  String get chatNewNamePrompt;
+
+  /// No description provided for @chatNewNamePlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. Weekend plans'**
+  String get chatNewNamePlaceholder;
+
+  /// No description provided for @chatNewNameHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Name it now, or start without a name and we’ll use the first message.'**
+  String get chatNewNameHint;
+
+  /// No description provided for @chatNewSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Start without name'**
+  String get chatNewSkip;
+
+  /// No description provided for @chatNewCreate.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get chatNewCreate;
+
+  /// No description provided for @chatNewNeedName.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a name, or choose Start without name.'**
+  String get chatNewNeedName;
+
+  /// No description provided for @chatNewStart.
+  ///
+  /// In en, this message translates to:
+  /// **'Start chat'**
+  String get chatNewStart;
+
+  /// No description provided for @chatOpenArtifact.
+  ///
+  /// In en, this message translates to:
+  /// **'Open full reply'**
+  String get chatOpenArtifact;
+
+  /// No description provided for @chatRecents.
+  ///
+  /// In en, this message translates to:
+  /// **'Recents'**
+  String get chatRecents;
+
+  /// No description provided for @chatRecentsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No earlier chats.'**
+  String get chatRecentsEmpty;
+
+  /// No description provided for @chatSessionsEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No chats yet. Start a new one.'**
+  String get chatSessionsEmpty;
+
+  /// No description provided for @chatUntitled.
+  ///
+  /// In en, this message translates to:
+  /// **'Untitled chat'**
+  String get chatUntitled;
+
+  /// No description provided for @chatRenameAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get chatRenameAction;
+
+  /// No description provided for @chatRenamePrompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat name'**
+  String get chatRenamePrompt;
+
+  /// No description provided for @chatRenameDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat renamed.'**
+  String get chatRenameDone;
+
+  /// No description provided for @chatRenameEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Name can\'t be empty.'**
+  String get chatRenameEmpty;
+
+  /// No description provided for @chatRenameNeedSession.
+  ///
+  /// In en, this message translates to:
+  /// **'Send a message first, then rename.'**
+  String get chatRenameNeedSession;
+
+  /// No description provided for @chatBusyTurn.
+  ///
+  /// In en, this message translates to:
+  /// **'Wait for the current reply to finish (or cancel it).'**
+  String get chatBusyTurn;
+
+  /// No description provided for @chatEmptyAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty chat'**
+  String get chatEmptyAction;
+
+  /// No description provided for @chatEmptyConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty this chat?'**
+  String get chatEmptyConfirmTitle;
+
+  /// No description provided for @chatEmptyConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'All messages in this thread will be removed. The chat itself stays.'**
+  String get chatEmptyConfirmBody;
+
+  /// No description provided for @chatTrashMenu.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat actions'**
+  String get chatTrashMenu;
+
+  /// No description provided for @chatArchiveAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive chat'**
+  String get chatArchiveAction;
+
+  /// No description provided for @chatUnarchiveAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore to Chats'**
+  String get chatUnarchiveAction;
+
+  /// No description provided for @chatUnarchiveDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat restored.'**
+  String get chatUnarchiveDone;
+
+  /// No description provided for @chatArchivedOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Archived'**
+  String get chatArchivedOpen;
+
+  /// No description provided for @chatTabActive.
+  ///
+  /// In en, this message translates to:
+  /// **'Chats'**
+  String get chatTabActive;
+
+  /// No description provided for @chatTabArchived.
+  ///
+  /// In en, this message translates to:
+  /// **'Archived'**
+  String get chatTabArchived;
+
+  /// No description provided for @homeFolderTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose folder'**
+  String get homeFolderTitle;
+
+  /// No description provided for @homeFolderSelect.
+  ///
+  /// In en, this message translates to:
+  /// **'Select'**
+  String get homeFolderSelect;
+
+  /// No description provided for @homeFolderDrives.
+  ///
+  /// In en, this message translates to:
+  /// **'Drives'**
+  String get homeFolderDrives;
+
+  /// No description provided for @homeFolderComputer.
+  ///
+  /// In en, this message translates to:
+  /// **'Computer'**
+  String get homeFolderComputer;
+
+  /// No description provided for @homeFolderHome.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get homeFolderHome;
+
+  /// No description provided for @homeFolderParent.
+  ///
+  /// In en, this message translates to:
+  /// **'Parent folder'**
+  String get homeFolderParent;
+
+  /// No description provided for @homeFolderNoSubfolders.
+  ///
+  /// In en, this message translates to:
+  /// **'No subfolders'**
+  String get homeFolderNoSubfolders;
+
+  /// No description provided for @chatArchivedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Archived chats'**
+  String get chatArchivedTitle;
+
+  /// No description provided for @chatArchivedBack.
+  ///
+  /// In en, this message translates to:
+  /// **'Back to chats'**
+  String get chatArchivedBack;
+
+  /// No description provided for @chatArchivedEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No archived chats.'**
+  String get chatArchivedEmpty;
+
+  /// No description provided for @chatRemoveAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete chat'**
+  String get chatRemoveAction;
+
+  /// No description provided for @chatArchiveConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Archive this chat?'**
+  String get chatArchiveConfirmTitle;
+
+  /// No description provided for @chatArchiveConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'It leaves the Chats list but stays on disk. Open Archived to restore or delete. Archive does not erase messages.'**
+  String get chatArchiveConfirmBody;
+
+  /// No description provided for @chatRemoveConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this chat?'**
+  String get chatRemoveConfirmTitle;
+
+  /// No description provided for @chatRemoveConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Permanently delete this chat and all its messages. This cannot be undone.'**
+  String get chatRemoveConfirmBody;
+
+  /// No description provided for @chatRemoveDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat deleted.'**
+  String get chatRemoveDone;
+
+  /// No description provided for @chatNoSession.
+  ///
+  /// In en, this message translates to:
+  /// **'No active chat session yet.'**
+  String get chatNoSession;
+
+  /// No description provided for @chatDeleteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not delete that message on the server.'**
+  String get chatDeleteFailed;
+
+  /// No description provided for @chatDeleteMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete message'**
+  String get chatDeleteMessage;
+
+  /// No description provided for @chatCopyMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy message'**
+  String get chatCopyMessage;
+
+  /// No description provided for @chatCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied'**
+  String get chatCopied;
+
+  /// No description provided for @chatCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get chatCancel;
 
   /// No description provided for @chatSubscribeFailed.
   ///
@@ -1479,31 +2661,31 @@ abstract class AppLocalizations {
   /// No description provided for @artifactsTitle.
   ///
   /// In en, this message translates to:
-  /// **'Artifacts'**
+  /// **'Files'**
   String get artifactsTitle;
 
   /// No description provided for @artifactsHint.
   ///
   /// In en, this message translates to:
-  /// **'Signed links from the home daemon. Tap to open.'**
+  /// **'Browse folders this profile can access over your home connection. Open in-app, Share/Save, or Open in browser when a signed link is available.'**
   String get artifactsHint;
 
   /// No description provided for @artifactsNeedAccount.
   ///
   /// In en, this message translates to:
-  /// **'Set an account to list artifacts.'**
+  /// **'Set an account to browse files.'**
   String get artifactsNeedAccount;
 
   /// No description provided for @artifactsEmptyTitle.
   ///
   /// In en, this message translates to:
-  /// **'No artifacts yet'**
+  /// **'No folders yet'**
   String get artifactsEmptyTitle;
 
   /// No description provided for @artifactsEmptyHint.
   ///
   /// In en, this message translates to:
-  /// **'Pull to refresh after the agent produces a file.'**
+  /// **'Pull to refresh. Workspace appears when configured for this profile.'**
   String get artifactsEmptyHint;
 
   /// No description provided for @artifactsUrlCopied.
@@ -1517,6 +2699,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open failed: {error}'**
   String artifactsOpenFailed(String error);
+
+  /// No description provided for @artifactsTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'This file is larger than the 8 MB in-app open limit. Ask the agent for a smaller export, or open it on the home machine.'**
+  String get artifactsTooLarge;
+
+  /// No description provided for @artifactsRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get artifactsRefresh;
+
+  /// No description provided for @artifactsRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get artifactsRetry;
+
+  /// No description provided for @artifactsBinaryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'This file type isn’t previewable here. Use Share / Save to open it in another app, or ask the home agent for a text or markdown export.'**
+  String get artifactsBinaryHint;
+
+  /// No description provided for @artifactsShare.
+  ///
+  /// In en, this message translates to:
+  /// **'Share / Save'**
+  String get artifactsShare;
+
+  /// No description provided for @artifactsShareFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not share: {error}'**
+  String artifactsShareFailed(String error);
+
+  /// No description provided for @artifactsCopyLink.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy signed link'**
+  String get artifactsCopyLink;
+
+  /// No description provided for @artifactsLinkCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed link copied'**
+  String get artifactsLinkCopied;
+
+  /// No description provided for @artifactsCopyLinkFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not copy link'**
+  String get artifactsCopyLinkFailed;
+
+  /// No description provided for @artifactsOpenInBrowser.
+  ///
+  /// In en, this message translates to:
+  /// **'Open in browser'**
+  String get artifactsOpenInBrowser;
+
+  /// No description provided for @artifactsOpenInBrowserFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open in browser'**
+  String get artifactsOpenInBrowserFailed;
+
+  /// No description provided for @filesParent.
+  ///
+  /// In en, this message translates to:
+  /// **'Parent'**
+  String get filesParent;
+
+  /// No description provided for @filesRoots.
+  ///
+  /// In en, this message translates to:
+  /// **'Roots'**
+  String get filesRoots;
+
+  /// No description provided for @filesEmptyFolder.
+  ///
+  /// In en, this message translates to:
+  /// **'This folder is empty'**
+  String get filesEmptyFolder;
+
+  /// No description provided for @chatOpenFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Open {name}'**
+  String chatOpenFile(String name);
 
   /// No description provided for @chatPendingApprovals.
   ///

@@ -270,6 +270,66 @@ test("args_from resolves step refs into tool args", async () => {
   assert.deepEqual(seen[0], { place: "Paris" });
 });
 
+test("llm prompt interpolates {{step.id.field}} from JSON tool output", async () => {
+  const seenPrompts: string[] = [];
+  const exportArgs: Record<string, unknown>[] = [];
+  const def = compileWorkflowGraph({
+    id: "doc_sum",
+    match: { keywords: ["summarize document"] },
+    nodes: [
+      {
+        id: "extract",
+        type: "tool",
+        name: "extract_document",
+        args: { sourcePath: "documents/report.docx" },
+      },
+      {
+        id: "summarize",
+        type: "llm_summarize",
+        prompt: "Summarize:\n{{step.extract.text}}",
+        out: "summary",
+      },
+      {
+        id: "export",
+        type: "tool",
+        name: "export_document",
+        args: { format: "docx", title: "Summary" },
+        args_from: { markdown: "step.summarize" },
+      },
+    ],
+    edges: [
+      { from: "extract", to: "summarize" },
+      { from: "summarize", to: "export" },
+    ],
+  });
+  const results = await executeWorkflow(def, {
+    tool: async (name, args) => {
+      if (name === "extract_document") {
+        return JSON.stringify({
+          uri: "output/extracts/report.md",
+          extractChars: 12,
+          extractor: "anydoc-v1",
+          sourcePath: "documents/report.docx",
+          text: "Quarterly budget notes",
+        });
+      }
+      if (name === "export_document") {
+        exportArgs.push(args);
+        return JSON.stringify({ uri: "output/exports/summary.docx", bytes: 1, format: "docx" });
+      }
+      throw new Error(`unexpected tool ${name}`);
+    },
+    llm: async (prompt) => {
+      seenPrompts.push(prompt);
+      return "- Budget was fine";
+    },
+  });
+  assert.equal(results.every((r) => r.ok), true);
+  assert.match(seenPrompts[0]!, /Quarterly budget notes/);
+  assert.equal(exportArgs[0]?.markdown, "- Budget was fine");
+  assert.equal(exportArgs[0]?.format, "docx");
+});
+
 test("YAML workflow file loads", async () => {
   const dir = await mkdtemp(join(tmpdir(), "eh-wf-yaml-"));
   try {

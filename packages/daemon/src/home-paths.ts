@@ -6,6 +6,8 @@ import { join } from "node:path";
 export interface HomePaths {
   readonly stateDir: string;
   readonly daemonJson: string;
+  /** Household Owner id — Design §4.1.1 (`ownerAccountId`). */
+  readonly householdJson: string;
   readonly accountsDir: string;
   readonly shareDir: string;
   readonly workflowsDir: string;
@@ -18,6 +20,10 @@ export interface HomePaths {
   readonly objectsJson: string;
   readonly bindingsJson: string;
   readonly channelsJson: string;
+  /** Household web search config — Design §9.5f (`web-search.json`). */
+  readonly webSearchJson: string;
+  /** Household browser control config — Design §9.5g (`browser-control.json`). */
+  readonly browserControlJson: string;
   /** Local llama.cpp / engine assets (Design §8.5) — never in the app bundle. */
   readonly localEngineDir: string;
   readonly localEngineRuntimeDir: string;
@@ -44,6 +50,7 @@ export function homePaths(stateDir: string): HomePaths {
   return {
     stateDir,
     daemonJson: join(stateDir, "daemon.json"),
+    householdJson: join(stateDir, "household.json"),
     accountsDir,
     shareDir: join(stateDir, "share"),
     workflowsDir: join(stateDir, "workflows"),
@@ -55,6 +62,8 @@ export function homePaths(stateDir: string): HomePaths {
     objectsJson: join(stateDir, "objects.json"),
     bindingsJson: join(stateDir, "paired-devices", "bindings.json"),
     channelsJson: join(stateDir, "channels.json"),
+    webSearchJson: join(stateDir, "web-search.json"),
+    browserControlJson: join(stateDir, "browser-control.json"),
     localEngineDir: join(stateDir, "local-engine"),
     localEngineRuntimeDir: join(stateDir, "local-engine", "runtime"),
     localEngineModelsDir: join(stateDir, "local-engine", "models"),

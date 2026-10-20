@@ -32,6 +32,7 @@ import { SkillsStore } from "./skills-store.js";
 import { deriveTrust, type TrustContext } from "./taint.js";
 import type { ProvenanceTrust } from "./provenance.js";
 import { stampProvenance, provenanceLine } from "./provenance.js";
+import { DEFAULT_IDENTITY_MD } from "./agent-identity.js";
 
 export type RememberTarget = "profile" | "l2" | "l3" | "auto";
 
@@ -268,6 +269,7 @@ export class MemoryFacade {
     return buildStandingInject({
       profile: loaded.profile,
       memoryMd: loaded.memoryMd,
+      identityMd: loaded.identityMd,
       todayContent: days.todayContent,
       yesterdayContent: days.yesterdayContent,
       generation: loaded.generation,
@@ -277,6 +279,66 @@ export class MemoryFacade {
         : {}),
       ...(opts?.caps !== undefined ? { caps: opts.caps } : {}),
     });
+  }
+
+  async getIdentity(accountId: string): Promise<{ markdown: string }> {
+    const id = this.assertAccount(accountId);
+    const markdown = await this.store.getIdentity(id);
+    return { markdown: markdown.trim() ? markdown : DEFAULT_IDENTITY_MD };
+  }
+
+  async setIdentity(accountId: string, markdown: string): Promise<{ markdown: string }> {
+    const id = this.assertAccount(accountId);
+    const next = await this.store.setIdentity(id, markdown);
+    const inject = await this.buildStandingInject(id);
+    this.notifyRefresh(id, inject.generation);
+    return { markdown: next };
+  }
+
+  /**
+   * After a successful chat turn: propose PendingLearns for user profile + IDENTITY.md
+   * when reviewEnabled (Memory Design §7 background review — heuristic v1).
+   */
+  async afterTurnEnrich(
+    accountId: string,
+    opts: { userText: string; turnId?: string; now?: Date },
+  ): Promise<{ proposed: number }> {
+    const id = this.assertAccount(accountId);
+    const settings = this.settingsFor(id);
+    if (!settings.reviewEnabled) return { proposed: 0 };
+    if (this.localModelBusy) return { proposed: 0 };
+
+    const { proposeAfterTurnEnrichment } = await import("./agent-identity.js");
+    const loaded = await this.store.load(id);
+    const { proposals } = proposeAfterTurnEnrichment({
+      userText: opts.userText,
+      identityMd: loaded.identityMd,
+    });
+    let proposed = 0;
+    for (const p of proposals) {
+      try {
+        const kind =
+          p.kind === "identity_append"
+            ? ("identity_append" as const)
+            : p.kind === "profile_patch"
+              ? ("profile_patch" as const)
+              : ("memory_append" as const);
+        await this.proposeLearn(id, {
+          kind,
+          targetPath: p.targetPath,
+          payload: p.payload,
+          summary: p.summary,
+          trust: "agent",
+          ...(p.profileKey !== undefined ? { profileKey: p.profileKey } : {}),
+          ...(opts.turnId !== undefined ? { sourceTurnId: opts.turnId } : {}),
+          ...(opts.now !== undefined ? { now: opts.now } : {}),
+        });
+        proposed += 1;
+      } catch {
+        /* queue full / busy — skip */
+      }
+    }
+    return { proposed };
   }
 
   /** home.listMemory — echoes the caps contract (V-MEM-18 / V-MEM-22). */
@@ -297,6 +359,16 @@ export class MemoryFacade {
     const days = this.store.todayYesterday(loaded, opts?.now);
 
     const notes = [
+      {
+        path: "IDENTITY.md",
+        rawChars: inject.identity.rawChars,
+        injectChars: inject.identity.injectChars,
+        truncated: inject.identity.truncated,
+        injectBudget: inject.identity.injectBudget,
+        rawSoftCap: inject.identity.rawSoftCap,
+        sectionsOmitted: [] as string[],
+        ...(opts?.includeContent ? { content: loaded.identityMd } : {}),
+      },
       {
         path: "MEMORY.md",
         rawChars: inject.memory.rawChars,
@@ -461,6 +533,7 @@ export class MemoryFacade {
     let current = "";
     if (opts.targetPath === "profile.json") current = JSON.stringify(loaded.profile);
     else if (opts.targetPath === "MEMORY.md") current = loaded.memoryMd;
+    else if (opts.targetPath === "IDENTITY.md") current = loaded.identityMd;
     else if (opts.targetPath.startsWith("skills/")) {
       const name = opts.targetPath.replace(/^skills\//, "").replace(/\.md$/, "");
       current = (await this.skills.read(id, name)) ?? "";
@@ -504,6 +577,8 @@ export class MemoryFacade {
       current = JSON.stringify(loaded.profile);
     } else if (learn.targetPath === "MEMORY.md") {
       current = loaded.memoryMd;
+    } else if (learn.targetPath === "IDENTITY.md") {
+      current = loaded.identityMd;
     } else if (learn.targetPath.startsWith("memory/")) {
       const date = learn.targetPath.replace(/^memory\//, "").replace(/\.md$/, "");
       current = loaded.dailies.get(date) ?? "";
@@ -515,7 +590,9 @@ export class MemoryFacade {
     const currentDigest = baseDigest(learn.targetPath, current);
     if (currentDigest !== learn.baseDigest) {
       const stillApplies =
-        learn.kind === "memory_append" || learn.kind === "skill_create"
+        learn.kind === "memory_append" ||
+        learn.kind === "identity_append" ||
+        learn.kind === "skill_create"
           ? !current.includes(learn.payload)
           : learn.kind === "profile_patch";
       if (!stillApplies) {
@@ -537,8 +614,12 @@ export class MemoryFacade {
         source: "learn_accept",
         trust: learn.trust,
       });
+    } else if (learn.kind === "identity_append") {
+      await this.store.appendIdentity(id, learn.payload);
     } else if (learn.kind === "memory_append" || learn.kind === "memory_edit") {
-      if (learn.targetPath === "MEMORY.md") {
+      if (learn.targetPath === "IDENTITY.md") {
+        await this.store.appendIdentity(id, learn.payload);
+      } else if (learn.targetPath === "MEMORY.md") {
         await this.store.appendMemory(id, stamped, "## Standing");
       } else {
         await this.store.appendDaily(id, stamped, now);
@@ -787,4 +868,18 @@ export function __resetMemoryForTests(): void {
   __resetWriterLocksForTests();
 }
 
-export { INJECT_BUDGET, RAW_SOFT_CAP, STANDING_DUTY_LINE };
+export {
+  INJECT_BUDGET,
+  RAW_SOFT_CAP,
+  STANDING_DUTY_LINE,
+  PRODUCT_IDENTITY_PROLOGUE,
+} from "./bootstrap-inject.js";
+
+export {
+  DEFAULT_IDENTITY_MD,
+  PRODUCT_IDENTITY_FLOOR,
+  PRODUCT_IDENTITY_MARKER,
+  IDENTITY_STANDING_RESERVE,
+  IDENTITY_INJECT_BUDGET,
+  proposeAfterTurnEnrichment,
+} from "./agent-identity.js";

@@ -193,11 +193,91 @@ class EnvoyHomeSession {
     return _call('home.openSession', params);
   }
 
+  Future<Map<String, dynamic>> listSessions({
+    required String accountId,
+    bool includeArchived = false,
+  }) {
+    final params = <String, dynamic>{'accountId': accountId};
+    if (includeArchived) params['includeArchived'] = true;
+    return _call('home.listSessions', params);
+  }
+
+  Future<Map<String, dynamic>> clearTranscript({
+    required String accountId,
+    required String sessionId,
+  }) =>
+      _call('home.clearTranscript', {
+        'accountId': accountId,
+        'sessionId': sessionId,
+      });
+
+  Future<Map<String, dynamic>> deleteTranscriptMessages({
+    required String accountId,
+    required String sessionId,
+    required List<String> messageIds,
+  }) =>
+      _call('home.deleteTranscriptMessages', {
+        'accountId': accountId,
+        'sessionId': sessionId,
+        'messageIds': messageIds,
+      });
+
+  Future<Map<String, dynamic>> archiveSession({
+    required String accountId,
+    required String sessionId,
+  }) =>
+      _call('home.archiveSession', {
+        'accountId': accountId,
+        'sessionId': sessionId,
+      });
+
+  Future<Map<String, dynamic>> unarchiveSession({
+    required String accountId,
+    required String sessionId,
+  }) =>
+      _call('home.unarchiveSession', {
+        'accountId': accountId,
+        'sessionId': sessionId,
+      });
+
+  Future<Map<String, dynamic>> removeSession({
+    required String accountId,
+    required String sessionId,
+  }) =>
+      _call('home.removeSession', {
+        'accountId': accountId,
+        'sessionId': sessionId,
+      });
+
+  Future<Map<String, dynamic>> renameSession({
+    required String accountId,
+    required String sessionId,
+    required String title,
+  }) =>
+      _call('home.renameSession', {
+        'accountId': accountId,
+        'sessionId': sessionId,
+        'title': title,
+      });
+
+  Future<Map<String, dynamic>> getIdentity({required String accountId}) =>
+      _call('home.getIdentity', {'accountId': accountId});
+
+  Future<Map<String, dynamic>> setIdentity({
+    required String accountId,
+    required String markdown,
+  }) =>
+      _call('home.setIdentity', {
+        'accountId': accountId,
+        'markdown': markdown,
+      });
+
   Future<Map<String, dynamic>> sendMessage({
     required String accountId,
     required String sessionId,
     required String text,
     List<Map<String, dynamic>>? media,
+    Map<String, dynamic>? clientContext,
   }) async {
     final params = <String, dynamic>{
       'accountId': accountId,
@@ -205,6 +285,9 @@ class EnvoyHomeSession {
       'text': text,
     };
     if (media != null && media.isNotEmpty) params['media'] = media;
+    if (clientContext != null && clientContext.isNotEmpty) {
+      params['clientContext'] = clientContext;
+    }
     return _call('home.sendMessage', params);
   }
 
@@ -319,6 +402,17 @@ class EnvoyHomeSession {
     return _call('home.listArtifacts', params);
   }
 
+  /// File Explore — one-level browse (Design §9.5d / V-OUT-4).
+  /// Empty [path] returns synthetic roots.
+  Future<Map<String, dynamic>> listSandboxEntries({
+    required String accountId,
+    String? path,
+  }) async {
+    final params = <String, dynamic>{'accountId': accountId};
+    if (path != null) params['path'] = path;
+    return _call('home.listSandboxEntries', params);
+  }
+
   Future<Map<String, dynamic>> getArtifactUrl({
     required String accountId,
     required String path,
@@ -328,6 +422,16 @@ class EnvoyHomeSession {
         'accountId': accountId,
         'path': path,
         'ttlSec': ttlSec,
+      });
+
+  /// Pull artifact over the paired home.* session (no public HTTPS required).
+  Future<Map<String, dynamic>> getArtifactContent({
+    required String accountId,
+    required String path,
+  }) =>
+      _call('home.getArtifactContent', {
+        'accountId': accountId,
+        'path': path,
       });
 
   Future<Map<String, dynamic>> listProviders({String? accountId}) async {
@@ -456,6 +560,56 @@ class EnvoyHomeSession {
     if (config != null) params['config'] = config;
     if (secrets != null) params['secrets'] = secrets;
     return _call('home.setChannelConfig', params);
+  }
+
+  /// Design §9.5f — household web_search config (Owner-scope).
+  Future<Map<String, dynamic>> getWebSearchConfig() =>
+      _call('home.getWebSearchConfig', {});
+
+  Future<Map<String, dynamic>> setWebSearchConfig({
+    bool? enabled,
+    String? provider,
+    String? apiKey,
+    String? fallback,
+    List<String>? browserEngines,
+    bool? unattendedBrowser,
+  }) async {
+    final params = <String, dynamic>{};
+    if (enabled != null) params['enabled'] = enabled;
+    if (provider != null) params['provider'] = provider;
+    if (apiKey != null) params['apiKey'] = apiKey;
+    if (fallback != null) params['fallback'] = fallback;
+    if (browserEngines != null) params['browserEngines'] = browserEngines;
+    if (unattendedBrowser != null) params['unattendedBrowser'] = unattendedBrowser;
+    return _call('home.setWebSearchConfig', params);
+  }
+
+  /// Design §9.5g — household browser control (Owner-scope).
+  Future<Map<String, dynamic>> getBrowserControlConfig() =>
+      _call('home.getBrowserControlConfig', {});
+
+  Future<Map<String, dynamic>> setBrowserControlConfig({
+    bool? enabled,
+    bool? unattendedEnabled,
+    String? defaultProfile,
+    bool? personalEnabled,
+    String? personalCdpEndpoint,
+    bool? remoteEnabled,
+    String? remoteCdpUrl,
+    String? remoteToken,
+    bool? acknowledgeElevated,
+  }) async {
+    final params = <String, dynamic>{};
+    if (enabled != null) params['enabled'] = enabled;
+    if (unattendedEnabled != null) params['unattendedEnabled'] = unattendedEnabled;
+    if (defaultProfile != null) params['defaultProfile'] = defaultProfile;
+    if (personalEnabled != null) params['personalEnabled'] = personalEnabled;
+    if (personalCdpEndpoint != null) params['personalCdpEndpoint'] = personalCdpEndpoint;
+    if (remoteEnabled != null) params['remoteEnabled'] = remoteEnabled;
+    if (remoteCdpUrl != null) params['remoteCdpUrl'] = remoteCdpUrl;
+    if (remoteToken != null) params['remoteToken'] = remoteToken;
+    if (acknowledgeElevated != null) params['acknowledgeElevated'] = acknowledgeElevated;
+    return _call('home.setBrowserControlConfig', params);
   }
 
   Future<Map<String, dynamic>> enableChannel({required String id}) =>
@@ -663,12 +817,14 @@ class EnvoyHomeSession {
     required String accountId,
     required String text,
     String? timeZone,
+    Map<String, dynamic>? clientContext,
   }) async {
     final params = <String, dynamic>{
       'accountId': accountId,
       'text': text,
     };
     if (timeZone != null) params['timeZone'] = timeZone;
+    if (clientContext != null) params['clientContext'] = clientContext;
     return _call('home.proposeSchedule', params);
   }
 
@@ -690,13 +846,32 @@ class EnvoyHomeSession {
   Future<Map<String, dynamic>> updateSchedule({
     required String accountId,
     required String jobId,
-    required bool enabled,
-  }) =>
-      _call('home.updateSchedule', {
-        'accountId': accountId,
-        'jobId': jobId,
-        'enabled': enabled,
-      });
+    bool? enabled,
+    String? name,
+    Map<String, dynamic>? spec,
+    Map<String, dynamic>? payload,
+  }) async {
+    final params = <String, dynamic>{
+      'accountId': accountId,
+      'jobId': jobId,
+    };
+    if (enabled != null) params['enabled'] = enabled;
+    if (name != null) params['name'] = name;
+    if (spec != null) params['spec'] = spec;
+    if (payload != null) params['payload'] = payload;
+    return _call('home.updateSchedule', params);
+  }
+
+  Future<Map<String, dynamic>> listScheduleReceipts({
+    required String accountId,
+    String? jobId,
+    int? limit,
+  }) async {
+    final params = <String, dynamic>{'accountId': accountId};
+    if (jobId != null && jobId.isNotEmpty) params['jobId'] = jobId;
+    if (limit != null) params['limit'] = limit;
+    return _call('home.listScheduleReceipts', params);
+  }
 
   Future<Map<String, dynamic>> runSchedule({
     required String accountId,
@@ -734,6 +909,18 @@ class EnvoyHomeSession {
 
   Future<Map<String, dynamic>> listAccounts() => _call('home.listAccounts', {});
 
+  Future<Map<String, dynamic>> getHouseholdOwner() =>
+      _call('home.getHouseholdOwner', {});
+
+  Future<Map<String, dynamic>> transferHouseholdOwner({
+    required String toAccountId,
+    bool confirm = true,
+  }) =>
+      _call('home.transferHouseholdOwner', {
+        'toAccountId': toAccountId,
+        'confirm': confirm,
+      });
+
   Future<Map<String, dynamic>> createAccount({
     required String displayName,
     String? accountId,
@@ -746,6 +933,115 @@ class EnvoyHomeSession {
     if (locale != null && locale.isNotEmpty) params['locale'] = locale;
     return _call('home.createAccount', params);
   }
+
+  Future<Map<String, dynamic>> updateAccount({
+    required String accountId,
+    String? displayName,
+    String? locale,
+    String? timeZone,
+    String? toolPolicy,
+  }) async {
+    final params = <String, dynamic>{'accountId': accountId};
+    if (displayName != null) params['displayName'] = displayName;
+    if (locale != null) params['locale'] = locale;
+    if (timeZone != null) params['timeZone'] = timeZone;
+    if (toolPolicy != null) params['toolPolicy'] = toolPolicy;
+    return _call('home.updateAccount', params);
+  }
+
+  Future<Map<String, dynamic>> deleteAccount({
+    required String accountId,
+    bool confirm = true,
+    bool force = false,
+  }) =>
+      _call('home.deleteAccount', {
+        'accountId': accountId,
+        'confirm': confirm,
+        'force': force,
+      });
+
+  Future<Map<String, dynamic>> getWorkspace({required String accountId}) =>
+      _call('home.getWorkspace', {'accountId': accountId});
+
+  Future<Map<String, dynamic>> setWorkspace({
+    required String accountId,
+    required String hostPath,
+    required String mode,
+    String? id,
+  }) {
+    final params = <String, dynamic>{
+      'accountId': accountId,
+      'hostPath': hostPath,
+      'mode': mode,
+    };
+    if (id != null) params['id'] = id;
+    return _call('home.setWorkspace', params);
+  }
+
+  /// Add or update one host folder mount (keeps other mounts).
+  Future<Map<String, dynamic>> upsertWorkspaceMount({
+    required String accountId,
+    required String hostPath,
+    required String mode,
+    String? id,
+  }) {
+    final params = <String, dynamic>{
+      'accountId': accountId,
+      'hostPath': hostPath,
+      'mode': mode,
+    };
+    if (id != null) params['id'] = id;
+    return _call('home.upsertWorkspaceMount', params);
+  }
+
+  Future<Map<String, dynamic>> removeWorkspaceMount({
+    required String accountId,
+    required String id,
+  }) =>
+      _call('home.removeWorkspaceMount', {
+        'accountId': accountId,
+        'id': id,
+      });
+
+  Future<Map<String, dynamic>> clearWorkspace({required String accountId}) =>
+      _call('home.clearWorkspace', {'accountId': accountId});
+
+  /// Owner-scope — home machine roots for workspace folder picker.
+  Future<Map<String, dynamic>> getHomeFsInfo() =>
+      _call('home.getHomeFsInfo', {});
+
+  /// Owner-scope — list one absolute directory (dirsOnly defaults true on daemon).
+  Future<Map<String, dynamic>> listHomeFsEntries({
+    String? path,
+    bool dirsOnly = true,
+  }) async {
+    final params = <String, dynamic>{'dirsOnly': dirsOnly};
+    if (path != null) params['path'] = path;
+    return _call('home.listHomeFsEntries', params);
+  }
+
+  Future<Map<String, dynamic>> mintPairing({
+    required String deviceLabel,
+    List<String>? accountIds,
+    String? host,
+    String? lanHost,
+    String? token,
+    bool? fresh,
+  }) async {
+    final params = <String, dynamic>{'deviceLabel': deviceLabel};
+    if (accountIds != null) params['accountIds'] = accountIds;
+    if (host != null && host.isNotEmpty) params['host'] = host;
+    if (lanHost != null && lanHost.isNotEmpty) params['lanHost'] = lanHost;
+    if (token != null && token.isNotEmpty) params['token'] = token;
+    if (fresh != null) params['fresh'] = fresh;
+    return _call('home.mintPairing', params);
+  }
+
+  Future<Map<String, dynamic>> revokePairedDevice({required String deviceId}) =>
+      _call('home.revokePairedDevice', {'deviceId': deviceId});
+
+  Future<Map<String, dynamic>> forgetPairedDevice({required String deviceId}) =>
+      _call('home.forgetPairedDevice', {'deviceId': deviceId});
 
   Future<Map<String, dynamic>> sendTestPush({String? accountId}) async {
     final params = <String, dynamic>{};

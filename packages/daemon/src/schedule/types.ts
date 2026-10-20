@@ -2,7 +2,14 @@
 
 export type ScheduleKind = "at" | "every" | "cron";
 
-export type SchedulePayloadKind = "notify" | "workflow" | "tool" | "system";
+export type SchedulePayloadKind =
+  | "notify"
+  | "workflow"
+  | "tool"
+  | "system"
+  | "agentTurn";
+
+export type AgentTurnToolPolicy = "standard" | "restricted";
 
 export interface SchedulePayload {
   kind: SchedulePayloadKind;
@@ -15,6 +22,10 @@ export interface SchedulePayload {
   toolArgs?: Record<string, unknown>;
   /** system job: consolidate | flush | review */
   systemJob?: "consolidate" | "flush" | "review";
+  /** agentTurn — frozen prompt (Design §7.4 V-CRON-12). */
+  prompt?: string;
+  toolPolicyPreset?: AgentTurnToolPolicy;
+  maxToolRounds?: number;
 }
 
 export interface ScheduleSpec {
@@ -58,13 +69,46 @@ export interface ScheduleProposal {
   accountId: string;
   /** Resolved local display e.g. 2026-10-10 08:00 Asia/Shanghai */
   resolvedLocal: string;
+  /** Human relative from propose-time clock, e.g. "in 17 minutes". */
+  relativeHint?: string;
+  /** First fire ISO from frozen spec (preview; same math as tick). */
+  nextRunAt?: string;
   spec: ScheduleSpec;
   payload: SchedulePayload;
   name: string;
   sourceText: string;
   /** ISO when proposal expires (unconfirmed). */
   expiresAt: string;
+  /** When set, confirm updates this job's WHEN instead of creating another job. */
+  replacesJobId?: string;
+  /** Chat session that offered this proposal (optional). */
+  sessionId?: string;
 }
+
+/**
+ * Canceled or expired proposal kept for Settings History ("Not set").
+ * Confirm arms a job instead — not archived here.
+ */
+export interface ScheduleDismissedProposal {
+  proposalId: string;
+  accountId: string;
+  status: "canceled" | "expired";
+  resolvedLocal: string;
+  name: string;
+  kind: ScheduleSpec["kind"];
+  closedAt: string;
+  expiresAt: string;
+  message?: string;
+  sourceText?: string;
+  timeZone?: string;
+  cronExpr?: string;
+  everyMs?: number;
+  whenInstant?: string;
+  sessionId?: string;
+}
+
+/** Cap for History "Not set" rows (same order of magnitude as receipts). */
+export const DISMISSED_PROPOSALS_CAP = 100;
 
 export interface ScheduleRunReceipt {
   jobId: string;
@@ -75,6 +119,8 @@ export interface ScheduleRunReceipt {
   execStatus: "ok" | "error" | "skipped";
   deliveryStatus: "delivered" | "not-delivered" | "none" | "unknown";
   error?: string;
+  /** startedAt - scheduledFor when positive (ms); for Doctor / accuracy signals. */
+  latenessMs?: number;
 }
 
 /** Defaults */

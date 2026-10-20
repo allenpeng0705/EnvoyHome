@@ -57,13 +57,59 @@ export interface MethodSpec {
 
 const emptyParams = obj({});
 
+const pendingScheduleConfirm = obj(
+  {
+    proposalId: str({ minLength: 1 }),
+    resolvedLocal: str({ minLength: 1 }),
+    createdAt: iso(),
+    expiresAt: iso(),
+    message: str(),
+    name: str(),
+  },
+  ["proposalId", "resolvedLocal", "createdAt"],
+);
+
 const sessionTail = obj(
-  { sessionId: str({ minLength: 1 }), title: str(), updatedAt: iso() },
+  {
+    sessionId: str({ minLength: 1 }),
+    title: str(),
+    purpose: enumOf("general", "home", "schedules"),
+    /** Set for channel/hatch inbound — Chats UI hides these (not user-created). */
+    channel: str(),
+    archivedAt: iso(),
+    /** Transcript line count — UI hides empty shells the user never messaged. */
+    messageCount: int({ minimum: 0 }),
+    updatedAt: iso(),
+    /** Unarmed schedule offer waiting for Confirm / Cancel on this session. */
+    pendingSchedule: pendingScheduleConfirm,
+  },
   ["sessionId", "updatedAt"],
 );
 
+const dismissedSchedule = obj(
+  {
+    proposalId: str({ minLength: 1 }),
+    status: enumOf("canceled", "expired"),
+    resolvedLocal: str({ minLength: 1 }),
+    name: str(),
+    kind: enumOf("at", "every", "cron"),
+    closedAt: iso(),
+    expiresAt: iso(),
+    message: str(),
+    timeZone: str({ minLength: 1 }),
+  },
+  ["proposalId", "status", "resolvedLocal", "name", "kind", "closedAt"],
+);
+
 const account = obj(
-  { accountId: str({ minLength: 1 }), displayName: str({ minLength: 1 }), createdAt: iso() },
+  {
+    accountId: str({ minLength: 1 }),
+    displayName: str({ minLength: 1 }),
+    createdAt: iso(),
+    locale: str(),
+    timeZone: str({ minLength: 1 }),
+    toolPolicy: enumOf("standard", "restricted"),
+  },
   ["accountId", "displayName", "createdAt"],
 );
 
@@ -251,6 +297,7 @@ const injectProfiles = obj(
 
 const pendingLearnKind = enumOf(
   "profile_patch",
+  "identity_append",
   "memory_append",
   "memory_edit",
   "skill_create",
@@ -487,9 +534,9 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
   /* A.2 pairing ------------------------------------------------------------ */
   "home.mintPairing": {
     group: "pairing",
-    scope: "loopback-owner",
+    scope: "owner-scope",
     paramsOptional: false,
-    summary: "Mint a pairing URI + device (loopback only, rate-limited)",
+    summary: "Mint a pairing URI + device (Owner-scope, rate-limited; Design §4.1.1)",
     params: obj(
       {
         deviceLabel: str({ minLength: 1 }),
@@ -546,25 +593,25 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
   },
   "home.revokePairedDevice": {
     group: "pairing",
-    scope: "loopback-owner",
+    scope: "owner-scope",
     paramsOptional: false,
-    summary: "Revoke a device credential (drops live sessions)",
+    summary: "Revoke a device credential (drops live sessions; Owner-scope)",
     params: obj({ deviceId: str({ minLength: 1 }) }, ["deviceId"]),
     result: obj({ ok: bool() }, ["ok"]),
   },
   "home.forgetPairedDevice": {
     group: "pairing",
-    scope: "loopback-owner",
+    scope: "owner-scope",
     paramsOptional: false,
-    summary: "Forget a device record without keeping an audit row",
+    summary: "Forget a device record without keeping an audit row (Owner-scope)",
     params: obj({ deviceId: str({ minLength: 1 }) }, ["deviceId"]),
     result: obj({ ok: bool() }, ["ok"]),
   },
   "home.setDeviceAccounts": {
     group: "pairing",
-    scope: "loopback-owner",
+    scope: "owner-scope",
     paramsOptional: false,
-    summary: "Rebind a paired device to accounts without re-pairing",
+    summary: "Rebind a paired device to accounts without re-pairing (Owner-scope)",
     params: obj({ deviceId: str({ minLength: 1 }), accountIds: arr(str({ minLength: 1 })) }, [
       "deviceId",
       "accountIds",
@@ -613,9 +660,9 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
   },
   "home.sendTestPush": {
     group: "pairing",
-    scope: "loopback-owner",
+    scope: "owner-scope",
     paramsOptional: true,
-    summary: "Send a test APNs/FCM alert to registered device(s) (operator check)",
+    summary: "Send a test APNs/FCM alert to registered device(s) (Owner-scope)",
     params: obj({
       deviceId: str({ minLength: 1 }),
       title: str(),
@@ -631,7 +678,12 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     paramsOptional: false,
     summary: "Create an account",
     params: obj(
-      { accountId: str({ minLength: 1, pattern: "^[a-z0-9][a-z0-9_-]*$" }), displayName: str({ minLength: 1 }), locale: str() },
+      {
+        accountId: str({ minLength: 1, pattern: "^[a-z0-9][a-z0-9_-]*$" }),
+        displayName: str({ minLength: 1 }),
+        locale: str(),
+        timeZone: str({ minLength: 1 }),
+      },
       ["displayName"],
     ),
     result: obj({ account }, ["account"]),
@@ -646,11 +698,18 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
   },
   "home.updateAccount": {
     group: "accounts",
-    scope: "owner-scope",
+    scope: "account-scoped",
     paramsOptional: false,
-    summary: "Update display name / locale / tool-policy preset",
+    summary:
+      "Update display name / locale / timeZone (seat-or-Owner); toolPolicy Owner-only (§4.1.1)",
     params: obj(
-      { accountId: str({ minLength: 1 }), displayName: str(), locale: str(), toolPolicy: enumOf("standard", "restricted") },
+      {
+        accountId: str({ minLength: 1 }),
+        displayName: str(),
+        locale: str(),
+        timeZone: str({ minLength: 1 }),
+        toolPolicy: enumOf("standard", "restricted"),
+      },
       ["accountId"],
     ),
     result: obj({ account }, ["account"]),
@@ -665,6 +724,220 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
       ["accountId", "confirm"],
     ),
     result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.getHouseholdOwner": {
+    group: "accounts",
+    scope: "account-scoped",
+    paramsOptional: true,
+    summary: "Read the household Owner account id (Design §4.1.1)",
+    params: emptyParams,
+    result: obj(
+      { ownerAccountId: str({ minLength: 1 }), displayName: str() },
+      ["ownerAccountId"],
+    ),
+  },
+  "home.transferHouseholdOwner": {
+    group: "accounts",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Transfer household Owner to another account (Design §4.1.1)",
+    params: obj(
+      { toAccountId: str({ minLength: 1 }), confirm: bool() },
+      ["toAccountId", "confirm"],
+    ),
+    result: obj({ ownerAccountId: str({ minLength: 1 }) }, ["ownerAccountId"]),
+  },
+  "home.getWorkspace": {
+    group: "accounts",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary:
+      "Read host workspace folder mounts for a profile (Design §4.2.1 multi-folder)",
+    params: obj({ accountId: str({ minLength: 1 }) }, ["accountId"]),
+    result: obj(
+      {
+        configured: bool(),
+        mounts: arr(
+          obj(
+            {
+              id: str({ minLength: 1 }),
+              displayPath: str(),
+              mode: enumOf("ro", "rw"),
+              filesystemRoot: bool(),
+              active: bool(),
+            },
+            ["id", "displayPath", "mode", "filesystemRoot", "active"],
+          ),
+        ),
+        /** Legacy singular — primary/first mount when configured. */
+        mode: enumOf("ro", "rw"),
+        displayPath: str(),
+        filesystemRoot: bool(),
+        active: bool(),
+      },
+      ["configured", "mounts"],
+    ),
+  },
+  "home.setWorkspace": {
+    group: "accounts",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary:
+      "Replace workspace with one host folder (Owner-scope; Design §4.2.1). Prefer upsertWorkspaceMount to add.",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        hostPath: str({ minLength: 1 }),
+        mode: enumOf("ro", "rw"),
+        id: str({ minLength: 1 }),
+      },
+      ["accountId", "hostPath", "mode"],
+    ),
+    result: obj(
+      {
+        configured: bool(),
+        mounts: arr(
+          obj(
+            {
+              id: str({ minLength: 1 }),
+              displayPath: str(),
+              mode: enumOf("ro", "rw"),
+              filesystemRoot: bool(),
+              active: bool(),
+            },
+            ["id", "displayPath", "mode", "filesystemRoot", "active"],
+          ),
+        ),
+        mode: enumOf("ro", "rw"),
+        displayPath: str(),
+        filesystemRoot: bool(),
+        active: bool(),
+      },
+      ["configured", "mounts", "mode", "displayPath"],
+    ),
+  },
+  "home.upsertWorkspaceMount": {
+    group: "accounts",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary:
+      "Add or update one named host folder mount (Owner-scope; Design §4.2.1 multi-folder)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        hostPath: str({ minLength: 1 }),
+        mode: enumOf("ro", "rw"),
+        id: str({ minLength: 1 }),
+      },
+      ["accountId", "hostPath", "mode"],
+    ),
+    result: obj(
+      {
+        configured: bool(),
+        mounts: arr(
+          obj(
+            {
+              id: str({ minLength: 1 }),
+              displayPath: str(),
+              mode: enumOf("ro", "rw"),
+              filesystemRoot: bool(),
+              active: bool(),
+            },
+            ["id", "displayPath", "mode", "filesystemRoot", "active"],
+          ),
+        ),
+        mode: enumOf("ro", "rw"),
+        displayPath: str(),
+        filesystemRoot: bool(),
+        active: bool(),
+      },
+      ["configured", "mounts"],
+    ),
+  },
+  "home.removeWorkspaceMount": {
+    group: "accounts",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Remove one workspace folder mount by id (Owner-scope; Design §4.2.1)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        id: str({ minLength: 1 }),
+      },
+      ["accountId", "id"],
+    ),
+    result: obj(
+      {
+        configured: bool(),
+        mounts: arr(
+          obj(
+            {
+              id: str({ minLength: 1 }),
+              displayPath: str(),
+              mode: enumOf("ro", "rw"),
+              filesystemRoot: bool(),
+              active: bool(),
+            },
+            ["id", "displayPath", "mode", "filesystemRoot", "active"],
+          ),
+        ),
+        mode: enumOf("ro", "rw"),
+        displayPath: str(),
+        filesystemRoot: bool(),
+        active: bool(),
+      },
+      ["configured", "mounts"],
+    ),
+  },
+  "home.clearWorkspace": {
+    group: "accounts",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Clear all host workspace folder mounts (Owner-scope; Design §4.2.1)",
+    params: obj({ accountId: str({ minLength: 1 }) }, ["accountId"]),
+    result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.getHomeFsInfo": {
+    group: "accounts",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary:
+      "Home-machine FS roots + homeDir for workspace folder picker (Owner-scope; peer EnvoyMesh getHomeFsInfo)",
+    params: emptyParams,
+    result: obj(
+      {
+        platform: enumOf("darwin", "linux", "win32", "other"),
+        pathSep: str({ minLength: 1 }),
+        homeDir: str({ minLength: 1 }),
+        roots: arr(str()),
+      },
+      ["platform", "pathSep", "homeDir", "roots"],
+    ),
+  },
+  "home.listHomeFsEntries": {
+    group: "accounts",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary:
+      "List one absolute directory on the home machine (Owner-scope; workspace picker)",
+    params: obj({ path: str(), dirsOnly: bool() }, []),
+    result: obj(
+      {
+        path: str({ minLength: 1 }),
+        parent: str(),
+        entries: arr(
+          obj(
+            {
+              name: str({ minLength: 1 }),
+              kind: enumOf("dir", "file"),
+              path: str({ minLength: 1 }),
+            },
+            ["name", "kind", "path"],
+          ),
+        ),
+      },
+      ["path", "entries"],
+    ),
   },
   "home.setBinding": {
     group: "accounts",
@@ -703,9 +976,9 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
   },
   "home.listBindings": {
     group: "accounts",
-    scope: "owner-scope",
+    scope: "account-scoped",
     paramsOptional: true,
-    summary: "List bindings (echoes the binding flags)",
+    summary: "List bindings (seat-or-Owner; Design §4.1.1)",
     params: obj({ accountId: str(), deviceId: str() }),
     result: obj({ bindings: arr(any("binding record")) }, ["bindings"]),
   },
@@ -764,14 +1037,14 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     group: "chat",
     scope: "account-scoped",
     paramsOptional: false,
-    summary: "Open a chat session (optional purpose=home for Home chat)",
+    summary: "Open a chat session (purpose general, home, or schedules)",
     params: obj(
       {
         accountId: str({ minLength: 1 }),
         agentId: str(),
         title: str(),
         channel: str(),
-        purpose: enumOf("general", "home"),
+        purpose: enumOf("general", "home", "schedules"),
       },
       ["accountId"],
     ),
@@ -781,7 +1054,10 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         accountId: str({ minLength: 1 }),
         agentId: str(),
         createdAt: iso(),
-        purpose: enumOf("general", "home"),
+        purpose: enumOf("general", "home", "schedules"),
+        /** Present when client passed title on open (locks first-message auto-title). */
+        title: str(),
+        titleSource: enumOf("auto", "user"),
       },
       ["sessionId", "accountId", "agentId", "createdAt"],
     ),
@@ -790,7 +1066,8 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     group: "chat",
     scope: "account-scoped",
     paramsOptional: false,
-    summary: "Send a turn (streams via turn events); optional media[] from home.uploadChatMedia",
+    summary:
+      "Send a turn (streams via turn events); optional media[] from home.uploadChatMedia; optional clientContext (Design §7.4)",
     params: obj(
       {
         accountId: str({ minLength: 1 }),
@@ -804,11 +1081,29 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
               fileName: str(),
               mimeType: str(),
               bytes: int({ minimum: 0 }),
+              extractUri: str({ minLength: 1 }),
+              extractor: str(),
+              extractChars: int({ minimum: 0 }),
             },
             ["kind", "uri"],
           ),
         ),
         clientTurnId: str(),
+        /** Thin-client now/TZ/locale/location — ephemeral turn only (2026-10-19m). */
+        clientContext: obj({
+          clientNow: iso(),
+          timeZone: str({ minLength: 1 }),
+          locale: str({ minLength: 1 }),
+          location: obj(
+            {
+              lat: num(),
+              lon: num(),
+              accuracyM: num({ minimum: 0 }),
+              at: iso(),
+            },
+            ["lat", "lon"],
+          ),
+        }),
       },
       ["accountId", "sessionId", "text"],
     ),
@@ -827,7 +1122,7 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     scope: "account-scoped",
     paramsOptional: false,
     summary:
-      "Upload a chat attachment into the account sandbox (uploads/); returns media uri for home.sendMessage",
+      "Upload a chat attachment into the account sandbox (uploads/); Office/PDF get GFM extractUri (§9.5a)",
     params: obj(
       {
         accountId: str({ minLength: 1 }),
@@ -844,6 +1139,10 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         fileName: str({ minLength: 1 }),
         mimeType: str(),
         bytes: int({ minimum: 0 }),
+        /** Sandbox-relative GFM sidecar from anydoc (§9.5a). */
+        extractUri: str({ minLength: 1 }),
+        extractor: str({ minLength: 1 }),
+        extractChars: int({ minimum: 0 }),
       },
       ["kind", "uri", "fileName", "bytes"],
     ),
@@ -879,9 +1178,101 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     group: "chat",
     scope: "account-scoped",
     paramsOptional: false,
-    summary: "List sessions for an account",
-    params: obj({ accountId: str({ minLength: 1 }) }, ["accountId"]),
+    summary: "List sessions for an account (archived hidden unless includeArchived)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        includeArchived: bool(),
+      },
+      ["accountId"],
+    ),
     result: obj({ sessions: arr(sessionTail) }, ["sessions"]),
+  },
+  "home.clearTranscript": {
+    group: "chat",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Empty the current session transcript (keeps the session id)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        sessionId: str({ minLength: 1 }),
+      },
+      ["accountId", "sessionId"],
+    ),
+    result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.deleteTranscriptMessages": {
+    group: "chat",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Delete one or more messages from a session transcript by messageId",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        sessionId: str({ minLength: 1 }),
+        messageIds: arr(str({ minLength: 1 }), { minItems: 1 }),
+      },
+      ["accountId", "sessionId", "messageIds"],
+    ),
+    result: obj({ ok: bool(), removed: int({ minimum: 0 }) }, ["ok", "removed"]),
+  },
+  "home.archiveSession": {
+    group: "chat",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Archive a chat session (hide from Recents; keep transcript on disk)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        sessionId: str({ minLength: 1 }),
+      },
+      ["accountId", "sessionId"],
+    ),
+    result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.unarchiveSession": {
+    group: "chat",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Restore an archived chat session to the Chats list",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        sessionId: str({ minLength: 1 }),
+      },
+      ["accountId", "sessionId"],
+    ),
+    result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.removeSession": {
+    group: "chat",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Permanently delete a chat session and its transcript",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        sessionId: str({ minLength: 1 }),
+      },
+      ["accountId", "sessionId"],
+    ),
+    result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.renameSession": {
+    group: "chat",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Set a chat session display title (locks out first-message auto-title)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        sessionId: str({ minLength: 1 }),
+        title: str({ minLength: 1, maxLength: 120 }),
+      },
+      ["accountId", "sessionId", "title"],
+    ),
+    result: obj({ ok: bool(), title: str() }, ["ok", "title"]),
   },
 
   /* A.5 approvals & grants ------------------------------------------------- */
@@ -911,17 +1302,17 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
   },
   "home.listGrants": {
     group: "approvals",
-    scope: "owner-scope",
+    scope: "account-scoped",
     paramsOptional: true,
-    summary: "List durable auto-approve grants",
+    summary: "List durable auto-approve grants (seat-or-Owner; Design §4.1.1)",
     params: obj({ accountId: str() }),
     result: obj({ grants: arr(grant) }, ["grants"]),
   },
   "home.revokeGrant": {
     group: "approvals",
-    scope: "owner-scope",
+    scope: "account-scoped",
     paramsOptional: false,
-    summary: "Revoke a grant",
+    summary: "Revoke a grant (seat-or-Owner; Design §4.1.1)",
     params: obj({ id: str({ minLength: 1 }) }, ["id"]),
     result: obj({ ok: bool() }, ["ok"]),
   },
@@ -1002,6 +1393,187 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     result: obj(
       { channel: obj({ id: str(), enabled: bool(), healthy: bool() }, ["id", "enabled", "healthy"]) },
       ["channel"],
+    ),
+  },
+  "home.getWebSearchConfig": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary:
+      "Household web_search config (enabled, provider, fallback, browserRuntime, …) — Design §9.5f/§9.5f.1; never returns the API key",
+    params: emptyParams,
+    result: obj(
+      {
+        enabled: bool(),
+        provider: enumOf("duckduckgo", "brave", "tavily"),
+        hasApiKey: bool(),
+        ready: bool(),
+        fallback: enumOf("none", "browser"),
+        browserEngines: arr(enumOf("bing", "google")),
+        unattendedBrowser: bool(),
+        browserRuntime: enumOf("ready", "missing"),
+        browserInstallHint: str(),
+        unavailableReason: str(),
+        updatedAt: str(),
+      },
+      [
+        "enabled",
+        "provider",
+        "hasApiKey",
+        "ready",
+        "fallback",
+        "browserEngines",
+        "unattendedBrowser",
+        "browserRuntime",
+        "browserInstallHint",
+      ],
+    ),
+  },
+  "home.setWebSearchConfig": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary:
+      "Set household web_search enable/provider/fallback and optional API key (Owner-scope; Design §9.5f/§9.5f.1)",
+    params: obj(
+      {
+        enabled: bool(),
+        provider: enumOf("duckduckgo", "brave", "tavily"),
+        /** Write-only; omit to leave unchanged; empty string clears. */
+        apiKey: str(),
+        fallback: enumOf("none", "browser"),
+        browserEngines: arr(enumOf("bing", "google")),
+        unattendedBrowser: bool(),
+      },
+      [],
+    ),
+    result: obj(
+      {
+        enabled: bool(),
+        provider: enumOf("duckduckgo", "brave", "tavily"),
+        hasApiKey: bool(),
+        ready: bool(),
+        fallback: enumOf("none", "browser"),
+        browserEngines: arr(enumOf("bing", "google")),
+        unattendedBrowser: bool(),
+        browserRuntime: enumOf("ready", "missing"),
+        browserInstallHint: str(),
+        unavailableReason: str(),
+        updatedAt: str(),
+      },
+      [
+        "enabled",
+        "provider",
+        "hasApiKey",
+        "ready",
+        "fallback",
+        "browserEngines",
+        "unattendedBrowser",
+        "browserRuntime",
+        "browserInstallHint",
+      ],
+    ),
+  },
+  "home.getBrowserControlConfig": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary:
+      "Household browser control config (managed/personal/remote) — Design §9.5g/§9.5g.1",
+    params: emptyParams,
+    result: obj(
+      {
+        enabled: bool(),
+        unattendedEnabled: bool(),
+        ready: bool(),
+        browserRuntime: enumOf("ready", "missing"),
+        browserInstallHint: str(),
+        defaultProfile: enumOf("managed", "personal", "remote"),
+        personalEnabled: bool(),
+        personalCdpEndpoint: str(),
+        personalReady: bool(),
+        remoteEnabled: bool(),
+        remoteCdpUrl: str(),
+        hasRemoteToken: bool(),
+        remoteReady: bool(),
+        elevatedAcknowledged: bool(),
+        unavailableReason: str(),
+        updatedAt: str(),
+      },
+      [
+        "enabled",
+        "unattendedEnabled",
+        "ready",
+        "browserRuntime",
+        "browserInstallHint",
+        "defaultProfile",
+        "personalEnabled",
+        "personalCdpEndpoint",
+        "personalReady",
+        "remoteEnabled",
+        "remoteCdpUrl",
+        "hasRemoteToken",
+        "remoteReady",
+        "elevatedAcknowledged",
+      ],
+    ),
+  },
+  "home.setBrowserControlConfig": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary:
+      "Set browser control + elevated profiles (Owner-scope; Design §9.5g/§9.5g.1)",
+    params: obj(
+      {
+        enabled: bool(),
+        unattendedEnabled: bool(),
+        defaultProfile: enumOf("managed", "personal", "remote"),
+        personalEnabled: bool(),
+        personalCdpEndpoint: str(),
+        remoteEnabled: bool(),
+        remoteCdpUrl: str(),
+        /** Write-only; omit to leave; empty clears. */
+        remoteToken: str(),
+        acknowledgeElevated: bool(),
+      },
+      [],
+    ),
+    result: obj(
+      {
+        enabled: bool(),
+        unattendedEnabled: bool(),
+        ready: bool(),
+        browserRuntime: enumOf("ready", "missing"),
+        browserInstallHint: str(),
+        defaultProfile: enumOf("managed", "personal", "remote"),
+        personalEnabled: bool(),
+        personalCdpEndpoint: str(),
+        personalReady: bool(),
+        remoteEnabled: bool(),
+        remoteCdpUrl: str(),
+        hasRemoteToken: bool(),
+        remoteReady: bool(),
+        elevatedAcknowledged: bool(),
+        unavailableReason: str(),
+        updatedAt: str(),
+      },
+      [
+        "enabled",
+        "unattendedEnabled",
+        "ready",
+        "browserRuntime",
+        "browserInstallHint",
+        "defaultProfile",
+        "personalEnabled",
+        "personalCdpEndpoint",
+        "personalReady",
+        "remoteEnabled",
+        "remoteCdpUrl",
+        "hasRemoteToken",
+        "remoteReady",
+        "elevatedAcknowledged",
+      ],
     ),
   },
   "home.startDemoHa": {
@@ -1801,16 +2373,43 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
               nextRunAt: iso(),
               lastStatus: enumOf("ok", "error", "skipped"),
               source: enumOf("user", "workflow"),
-              payloadKind: enumOf("notify", "workflow", "tool", "system"),
+              payloadKind: enumOf("notify", "workflow", "tool", "system", "agentTurn"),
               message: str(),
               workflowId: str({ minLength: 1 }),
               toolName: str({ minLength: 1 }),
+              prompt: str(),
+              /** Additive — for Schedules UI Repeating/Once labels (Design §7.4). */
+              timeZone: str({ minLength: 1 }),
+              cronExpr: str({ minLength: 1 }),
+              everyMs: num({ minimum: 1 }),
+              whenInstant: iso(),
             },
             ["id", "name", "enabled", "kind", "source", "payloadKind"],
           ),
         ),
+        /** Additive — canceled/expired proposals for History "Not set". */
+        dismissed: arr(dismissedSchedule),
       },
       ["jobs"],
+    ),
+  },
+  "home.cancelScheduleProposal": {
+    group: "schedules",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Cancel an unarmed schedule proposal (archives as canceled; Design §7.4)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        proposalId: str({ minLength: 1 }),
+      },
+      ["accountId", "proposalId"],
+    ),
+    result: obj(
+      {
+        dismissed: dismissedSchedule,
+      },
+      ["dismissed"],
     ),
   },
   "home.proposeSchedule": {
@@ -1823,6 +2422,21 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         accountId: str({ minLength: 1 }),
         text: str({ minLength: 1 }),
         timeZone: str({ minLength: 1 }),
+        /** Optional thin-client now/TZ/locale (same shape as home.sendMessage). */
+        clientContext: obj({
+          clientNow: iso(),
+          timeZone: str({ minLength: 1 }),
+          locale: str({ minLength: 1 }),
+          location: obj(
+            {
+              lat: num(),
+              lon: num(),
+              accuracyM: num({ minimum: 0 }),
+              at: iso(),
+            },
+            ["lat", "lon"],
+          ),
+        }),
       },
       ["accountId", "text"],
     ),
@@ -1830,6 +2444,8 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
       {
         proposalId: str({ minLength: 1 }),
         resolvedLocal: str({ minLength: 1 }),
+        relativeHint: str({ minLength: 1 }),
+        nextRunAt: iso(),
         kind: enumOf("at", "every", "cron"),
         whenInstant: iso(),
         cronExpr: str(),
@@ -1852,11 +2468,14 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         name: str({ minLength: 1 }),
         payload: obj(
           {
-            kind: enumOf("notify", "workflow", "tool"),
+            kind: enumOf("notify", "workflow", "tool", "agentTurn"),
             message: str(),
             workflowId: str({ minLength: 1 }),
             toolName: str({ minLength: 1 }),
             toolArgs: any("tool args object"),
+            prompt: str({ minLength: 1 }),
+            toolPolicyPreset: enumOf("standard", "restricted"),
+            maxToolRounds: int({ minimum: 1, maximum: 5 }),
           },
           ["kind"],
         ),
@@ -1881,7 +2500,7 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     group: "schedules",
     scope: "account-scoped",
     paramsOptional: false,
-    summary: "Create a structured schedule job (notify/workflow/tool; Design §7.4)",
+    summary: "Create a structured schedule job (notify/workflow/tool/agentTurn; Design §7.4)",
     params: obj(
       {
         accountId: str({ minLength: 1 }),
@@ -1898,11 +2517,14 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         ),
         payload: obj(
           {
-            kind: enumOf("notify", "workflow", "tool"),
+            kind: enumOf("notify", "workflow", "tool", "agentTurn"),
             message: str(),
             workflowId: str({ minLength: 1 }),
             toolName: str({ minLength: 1 }),
             toolArgs: any("tool args object"),
+            prompt: str({ minLength: 1 }),
+            toolPolicyPreset: enumOf("standard", "restricted"),
+            maxToolRounds: int({ minimum: 1, maximum: 5 }),
           },
           ["kind"],
         ),
@@ -1927,12 +2549,37 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     group: "schedules",
     scope: "account-scoped",
     paramsOptional: false,
-    summary: "Enable/disable a schedule job",
+    summary:
+      "Patch a schedule job (enabled/name/spec/payload; Design §7.4 V-CRON-7)",
     params: obj(
       {
         accountId: str({ minLength: 1 }),
         jobId: str({ minLength: 1 }),
         enabled: bool(),
+        name: str({ minLength: 1 }),
+        spec: obj(
+          {
+            kind: enumOf("at", "every", "cron"),
+            whenInstant: iso(),
+            everyMs: int({ minimum: 1 }),
+            cronExpr: str({ minLength: 1 }),
+            timeZone: str({ minLength: 1 }),
+          },
+          ["kind", "timeZone"],
+        ),
+        payload: obj(
+          {
+            kind: enumOf("notify", "workflow", "tool", "agentTurn"),
+            message: str(),
+            workflowId: str({ minLength: 1 }),
+            toolName: str({ minLength: 1 }),
+            toolArgs: any("tool args object"),
+            prompt: str({ minLength: 1 }),
+            toolPolicyPreset: enumOf("standard", "restricted"),
+            maxToolRounds: int({ minimum: 1, maximum: 5 }),
+          },
+          ["kind"],
+        ),
       },
       ["accountId", "jobId"],
     ),
@@ -1948,6 +2595,48 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         ),
       },
       ["job"],
+    ),
+  },
+  "home.listScheduleReceipts": {
+    group: "schedules",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "List recent schedule run receipts (Design §7.4 V-CRON-8)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        jobId: str({ minLength: 1 }),
+        limit: int({ minimum: 1, maximum: 200 }),
+      },
+      ["accountId"],
+    ),
+    result: obj(
+      {
+        receipts: arr(
+          obj(
+            {
+              jobId: str({ minLength: 1 }),
+              accountId: str({ minLength: 1 }),
+              scheduledFor: iso(),
+              startedAt: iso(),
+              finishedAt: iso(),
+              execStatus: enumOf("ok", "error", "skipped"),
+              deliveryStatus: enumOf("delivered", "not-delivered", "none", "unknown"),
+              error: str(),
+            },
+            [
+              "jobId",
+              "accountId",
+              "scheduledFor",
+              "startedAt",
+              "finishedAt",
+              "execStatus",
+              "deliveryStatus",
+            ],
+          ),
+        ),
+      },
+      ["receipts"],
     ),
   },
   "home.removeSchedule": {
@@ -2070,11 +2759,64 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
       ["artifacts"],
     ),
   },
+  "home.listSandboxEntries": {
+    group: "artifacts",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary:
+      "File Explore: one-level browse of sandbox tops + R3-effective workspace/ (refuse share/)",
+    params: obj({ accountId: str({ minLength: 1 }), path: str() }, ["accountId"]),
+    result: obj(
+      {
+        path: str(),
+        parent: str(),
+        roots: arr(str()),
+        entries: arr(
+          obj(
+            {
+              name: str({ minLength: 1 }),
+              kind: enumOf("dir", "file"),
+              path: str({ minLength: 1 }),
+              size: int({ minimum: 0 }),
+              modifiedAt: iso(),
+            },
+            ["name", "kind", "path"],
+          ),
+        ),
+      },
+      ["path", "roots", "entries"],
+    ),
+  },
+  "home.getArtifactContent": {
+    group: "artifacts",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary:
+      "Fetch artifact bytes over home.* (sandbox or workspace/…; mesh open — no publicBaseUrl required)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        path: str({ minLength: 1 }),
+      },
+      ["accountId", "path"],
+    ),
+    result: obj(
+      {
+        path: str({ minLength: 1 }),
+        mimeType: str({ minLength: 1 }),
+        encoding: enumOf("utf8", "base64"),
+        text: str(),
+        base64: str(),
+        bytes: int({ minimum: 0 }),
+      },
+      ["path", "mimeType", "encoding", "bytes"],
+    ),
+  },
   "home.getArtifactUrl": {
     group: "artifacts",
     scope: "account-scoped",
     paramsOptional: false,
-    summary: "Mint a signed artifact URL (TTL clamped to 86400)",
+    summary: "Mint a signed artifact URL (TTL clamped to 86400; optional LAN/public open)",
     params: obj(
       { accountId: str({ minLength: 1 }), path: str({ minLength: 1 }), ttlSec: int({ minimum: 0 }) },
       ["accountId", "path"],
@@ -2140,6 +2882,28 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
       ["accountId"],
     ),
     result: obj({ profile }, ["profile"]),
+  },
+  "home.getIdentity": {
+    group: "memory",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Read the editable assistant IDENTITY.md persona",
+    params: obj({ accountId: str({ minLength: 1 }) }, ["accountId"]),
+    result: obj({ markdown: str() }, ["markdown"]),
+  },
+  "home.setIdentity": {
+    group: "memory",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Replace the editable assistant IDENTITY.md persona",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        markdown: str({ maxLength: 20_000 }),
+      },
+      ["accountId", "markdown"],
+    ),
+    result: obj({ markdown: str() }, ["markdown"]),
   },
   "home.listMemory": {
     group: "memory",
@@ -2338,6 +3102,7 @@ export function isKnownMethod(method: string): boolean {
 /** The valid PendingLearn `kind` enum — asserted against Design A.9 by test. */
 export const PENDING_LEARN_KINDS = [
   "profile_patch",
+  "identity_append",
   "memory_append",
   "memory_edit",
   "skill_create",

@@ -4,7 +4,7 @@
 import type { ChannelService } from "./channels/service.js";
 import type { ObjectRecord } from "./object-registry.js";
 
-export type SessionPurpose = "general" | "home";
+export type SessionPurpose = "general" | "home" | "schedules";
 
 /** Sticky window after a confirmed home turn (Design §5.7.8). */
 export const HOME_STICKY_TURNS_DEFAULT = 3;
@@ -102,7 +102,8 @@ export async function isSmartHomeReady(channels: ChannelService): Promise<boolea
 }
 
 export function normalizePurpose(raw: unknown): SessionPurpose {
-  return raw === "home" ? "home" : "general";
+  if (raw === "home" || raw === "schedules") return raw;
+  return "general";
 }
 
 type BoundDevicePick = Pick<ObjectRecord, "displayName" | "sourceId" | "class"> & {
@@ -120,6 +121,8 @@ export function resolveHomeSurface(input: {
   boundObjects: ReadonlyArray<BoundDevicePick>;
 }): { homeSurface: boolean; reason: "purpose" | "sticky" | "local" | "off" } {
   if (input.purpose === "home") return { homeSurface: true, reason: "purpose" };
+  // Schedules chat stays off the home tool surface (Design §7.4).
+  if (input.purpose === "schedules") return { homeSurface: false, reason: "off" };
   if ((input.stickyHomeTurnsRemaining ?? 0) > 0) {
     return { homeSurface: true, reason: "sticky" };
   }
@@ -655,7 +658,7 @@ export function consumeStickyTurn(
   remaining: number | undefined,
   reason: "purpose" | "sticky" | "local" | "off",
 ): number | undefined {
-  if (purpose === "home") return remaining; // purpose sessions don't need sticky
+  if (purpose === "home" || purpose === "schedules") return remaining;
   if (reason === "local") return HOME_STICKY_TURNS_DEFAULT;
   if (reason === "sticky" && (remaining ?? 0) > 0) {
     const next = (remaining ?? 0) - 1;

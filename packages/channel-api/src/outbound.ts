@@ -9,12 +9,32 @@ export interface RawRefOwner {
 
 /**
  * Event-source plugins may only notify — never actuate through outbound (§5.3.1).
+ * Chat plugins: coerce any `link` tier to `markdown` (Design §9.5 — no home HTTPS).
  */
 export function normalizeOutbound(kind: ChannelKind, msg: OutboundMessage): OutboundMessage {
-  if (kind === "event-source" && msg.kind === undefined) {
-    return { ...msg, kind: "notify" };
+  const raw = msg as OutboundMessage & {
+    format?: string;
+    artifactUrl?: unknown;
+    artifactPath?: unknown;
+  };
+  // Channels never open home artifacts over HTTPS (no public IP on most desktops).
+  const format: OutboundMessage["format"] =
+    raw.format === "plain" ? "plain" : raw.format === "markdown" || raw.format === "link"
+      ? "markdown"
+      : raw.format === undefined
+        ? undefined
+        : "markdown";
+  const next: OutboundMessage = {
+    accountId: msg.accountId,
+    text: msg.text,
+    ...(msg.rawRef !== undefined ? { rawRef: msg.rawRef } : {}),
+    ...(format !== undefined ? { format } : {}),
+    ...(msg.kind !== undefined ? { kind: msg.kind } : {}),
+  };
+  if (kind === "event-source" && next.kind === undefined) {
+    return { ...next, kind: "notify" };
   }
-  return msg;
+  return next;
 }
 
 /**

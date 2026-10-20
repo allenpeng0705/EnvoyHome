@@ -11,6 +11,7 @@ import 'chat_tab.dart';
 import 'connections_screen.dart';
 import 'llm_screen.dart';
 import 'pair_screen.dart';
+import 'profiles_screen.dart';
 import 'settings_hub.dart';
 import 'skills_screen.dart';
 import 'system_screen.dart';
@@ -34,7 +35,7 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-  /// Phone: Chat / Home? / Settings. Tablet: Chat / Home? / LLM / Connections / Skills / System.
+  /// Phone: Chat / Home? / Settings. Tablet: Chat / Home? / Profiles / LLM / Connections / Skills / System.
   int _tab = 0;
   bool _haHomeReady = false;
   final _accountCtrl = TextEditingController();
@@ -95,19 +96,34 @@ class _HomeShellState extends State<HomeShell> {
               ((st['config'] as Map)['baseUrl']?.toString().isNotEmpty ?? false));
       if (!mounted) return;
       setState(() {
+        final wasReady = _haHomeReady;
         _haHomeReady = ready;
-        if (!_haHomeReady && _isOnHomeTab) {
-          _tab = 0;
+        // Home chat is inserted at index 1 when HA becomes ready — remap selection.
+        if (!wasReady && ready) {
+          if (_tab >= 1) _tab = _tab + 1;
+        } else if (wasReady && !ready) {
+          if (_tab == 1) {
+            _tab = 0;
+          } else if (_tab > 1) {
+            _tab = _tab - 1;
+          }
         }
       });
     } catch (_) {
-      if (mounted) setState(() => _haHomeReady = false);
+      if (mounted) {
+        setState(() {
+          final wasReady = _haHomeReady;
+          _haHomeReady = false;
+          if (wasReady) {
+            if (_tab == 1) {
+              _tab = 0;
+            } else if (_tab > 1) {
+              _tab = _tab - 1;
+            }
+          }
+        });
+      }
     }
-  }
-
-  bool get _isOnHomeTab {
-    if (!_haHomeReady) return false;
-    return _tab == 1;
   }
 
   void _onPushTap(Map<String, dynamic> data) {
@@ -228,6 +244,12 @@ class _HomeShellState extends State<HomeShell> {
         onRequestConnect: connected ? null : _requestConnect,
         onRequestPairAgain: connected ? null : _openPairing,
       ),
+      ChatTab(
+        session: session,
+        purpose: 'schedules',
+        onRequestConnect: connected ? null : _requestConnect,
+        onRequestPairAgain: connected ? null : _openPairing,
+      ),
       if (connected && _haHomeReady) ChatTab(session: session, purpose: 'home'),
       Navigator(
         key: _settingsNav,
@@ -250,6 +272,11 @@ class _HomeShellState extends State<HomeShell> {
         icon: const Icon(Icons.chat_bubble_outline),
         selectedIcon: const Icon(Icons.chat_bubble),
         label: l10n.navChat,
+      ),
+      NavigationDestination(
+        icon: const Icon(Icons.event_outlined),
+        selectedIcon: const Icon(Icons.event),
+        label: l10n.navSchedulesChat,
       ),
       if (connected && _haHomeReady)
         NavigationDestination(
@@ -276,6 +303,12 @@ class _HomeShellState extends State<HomeShell> {
           onRequestConnect: _requestConnect,
           onRequestPairAgain: _openPairing,
         ),
+        ChatTab(
+          session: session,
+          purpose: 'schedules',
+          onRequestConnect: _requestConnect,
+          onRequestPairAgain: _openPairing,
+        ),
         _SettingsPane(
           child: SettingsHub(
             session: session,
@@ -287,8 +320,10 @@ class _HomeShellState extends State<HomeShell> {
     }
     return [
       ChatTab(session: session, purpose: 'general'),
+      ChatTab(session: session, purpose: 'schedules'),
       if (_haHomeReady) ChatTab(session: session, purpose: 'home'),
       // Nested navigator so each Settings section can push editors.
+      _SettingsPane(child: ProfilesScreen(session: session)),
       _SettingsPane(child: LlmScreen(session: session)),
       _SettingsPane(child: ConnectionsScreen(session: session)),
       _SettingsPane(child: SkillsScreen(session: session)),
@@ -306,6 +341,11 @@ class _HomeShellState extends State<HomeShell> {
           label: Text(l10n.navChat),
         ),
         NavigationRailDestination(
+          icon: const Icon(Icons.event_outlined),
+          selectedIcon: const Icon(Icons.event),
+          label: Text(l10n.navSchedulesChat),
+        ),
+        NavigationRailDestination(
           icon: const Icon(Icons.settings_outlined),
           selectedIcon: const Icon(Icons.settings),
           label: Text(l10n.navSettings),
@@ -318,12 +358,22 @@ class _HomeShellState extends State<HomeShell> {
         selectedIcon: const Icon(Icons.chat_bubble),
         label: Text(l10n.navChat),
       ),
+      NavigationRailDestination(
+        icon: const Icon(Icons.event_outlined),
+        selectedIcon: const Icon(Icons.event),
+        label: Text(l10n.navSchedulesChat),
+      ),
       if (_haHomeReady)
         NavigationRailDestination(
           icon: const Icon(Icons.home_outlined),
           selectedIcon: const Icon(Icons.home),
           label: Text(l10n.navHomeChat),
         ),
+      NavigationRailDestination(
+        icon: const Icon(Icons.people_outline),
+        selectedIcon: const Icon(Icons.people),
+        label: Text(l10n.navProfiles),
+      ),
       NavigationRailDestination(
         icon: const Icon(Icons.smart_toy_outlined),
         selectedIcon: const Icon(Icons.smart_toy),

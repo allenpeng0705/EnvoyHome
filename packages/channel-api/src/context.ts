@@ -12,6 +12,11 @@ export interface OutboundMessage {
   accountId: string;
   text: string;
   rawRef?: string;
+  /**
+   * Design §9.5 / §5.3.3 — chat plugins: `plain` | `markdown` only.
+   * Daemon coerces `link` → `markdown` (no publicBaseUrl / HTTPS to home).
+   */
+  format?: "plain" | "markdown";
   /** Notification-only for event-source — never actuation. */
   kind?: "notify" | "reply";
 }

@@ -6,6 +6,7 @@ import { join, basename } from "node:path";
 import { MemoryFacade } from "@envoyhome/memory";
 import {
   AccountStore,
+  HouseholdStore,
   BindingStore,
   DaemonLogger,
   DeviceCredentialStore,
@@ -33,6 +34,8 @@ import {
 import { ChannelService } from "../dist/channels/service.js";
 import { ActuationService } from "../dist/actuation-service.js";
 import { ArtifactService } from "../dist/artifacts.js";
+import { WebSearchService } from "../dist/web-search.js";
+import { BrowserControlService } from "../dist/browser-control.js";
 import { PushTokenStore } from "../dist/push-tokens.js";
 import { ScheduleService } from "../dist/schedule/service.js";
 import { SkillService } from "../dist/skills.js";
@@ -166,6 +169,7 @@ async function makeRouterDeps(stateDir: string): Promise<RouterDeps> {
     onShutdown: () => undefined,
     packageVersion: "0.0.0-test",
     accounts,
+    household: new HouseholdStore(stateDir),
     bindings,
     pairing,
     memory: new MemoryFacade({ stateDir }),
@@ -178,6 +182,8 @@ async function makeRouterDeps(stateDir: string): Promise<RouterDeps> {
     schedules: new ScheduleService({ paths }),
     skills: new SkillService(paths),
     artifacts: new ArtifactService(paths, () => "http://127.0.0.1:1"),
+    webSearch: new WebSearchService(paths),
+    browserControl: new BrowserControlService(paths),
     actuations: new ActuationService(paths),
     pushTokens: new PushTokenStore(paths),
     push: {

@@ -73,8 +73,9 @@
       }
     }
   },
-  "navChat": "聊天",
+  "navChat": "对话",
   "navHomeChat": "Home",
+  "navSchedulesChat": "日程",
   "navSettings": "Settings",
   "navLlm": "LLM",
   "navConnections": "Connections",
@@ -87,11 +88,15 @@
   "settingsLlmSubtitle": "Models, Local, Routing, Memory",
   "settingsConnectionsSubtitle": "Pairing, Home Assistant, MQTT, Channels",
   "settingsSkillsSubtitle": "Skills, Workflows, Schedules",
-  "settingsSystemSubtitle": "Shared files, Health, Grants",
+  "settingsSystemSubtitle": "Profiles, Shared files, Health, Grants",
   "homeChatSessionTitle": "Phone home chat",
   "homeChatEmptyTitle": "Talk to your home",
   "homeChatEmptyHint": "Smart-home tools stay available here. Approvals still gate actuations.",
   "homeChatHint": "Ask about lights, locks, climate…",
+  "schedulesChatSessionTitle": "日程",
+  "schedulesChatEmptyTitle": "提醒",
+  "schedulesChatEmptyHint": "这个对话专注提醒。时间会在启用前确认。",
+  "schedulesChatHint": "提醒我…",
   "chatAttach": "Attach",
   "chatAttachTooMany": "At most {n} files",
   "@chatAttachTooMany": {
@@ -159,6 +164,53 @@
   "connTabHa": "Home Assistant",
   "connTabMqtt": "MQTT",
   "connTabChannels": "Channels",
+  "connTabWebSearch": "网页搜索",
+  "connTabBrowser": "浏览器",
+  "browserControlLede": "让对话控制托管 Chromium 标签页。默认关闭。不是个人 Chrome。",
+  "browserControlEnabled": "启用 browser 工具",
+  "browserControlUnattended": "允许计划任务使用",
+  "browserControlReady": "就绪",
+  "browserControlNotReady": "未就绪",
+  "browserControlSave": "保存",
+  "browserControlSaved": "浏览器设置已保存。",
+  "browserControlSaveFailed": "无法保存浏览器设置。",
+  "browserControlDefaultProfile": "Default profile",
+  "browserControlProfileManaged": "Managed (isolated)",
+  "browserControlProfilePersonal": "Personal Chrome",
+  "browserControlProfileRemote": "Remote CDP",
+  "browserControlElevatedWarn": "Personal/remote can act as you on logged-in sites. Owner only; never schedules.",
+  "browserControlAcknowledge": "I understand elevated browser risk",
+  "browserControlPersonalEnabled": "Enable personal Chrome",
+  "browserControlPersonalCdp": "Personal CDP (loopback)",
+  "browserControlPersonalReady": "Personal CDP up",
+  "browserControlPersonalNotReady": "Personal CDP down",
+  "browserControlRemoteEnabled": "Enable remote CDP",
+  "browserControlRemoteCdp": "Remote CDP URL",
+  "browserControlRemoteToken": "Remote CDP token",
+  "browserControlTokenSet": "set",
+  "browserControlTokenPlaceholder": "Leave blank to keep",
+  "browserControlRemoteReady": "Remote CDP up",
+  "browserControlRemoteNotReady": "Remote CDP down",
+  "browserControlOwnerOnly": "Only the household Owner device can change browser control settings.",
+  "browserControlAcknowledged": "Elevated risk acknowledged. Disable personal/remote to stop using them.",
+  "webSearchLede": "在对话中搜索公开网页。DuckDuckGo 无需密钥；Brave / Tavily 需要 Owner 配置密钥。",
+  "webSearchEnabled": "启用 web_search",
+  "webSearchProvider": "提供商",
+  "webSearchApiKey": "API 密钥",
+  "webSearchApiKeyHint": "留空则保留现有密钥",
+  "webSearchReady": "就绪",
+  "webSearchNotReady": "未就绪",
+  "webSearchSave": "保存",
+  "webSearchSaved": "网页搜索设置已保存。",
+  "webSearchSaveFailed": "无法保存网页搜索设置。",
+  "webSearchOwnerOnly": "仅家庭 Owner 设备可修改网页搜索。",
+  "webSearchBrowserFallback": "浏览器回退（API/DDG 失败时用 Bing/Google）",
+  "webSearchBrowserFallbackHint": "默认关闭。对话中进入浏览器回退仍会询问。SERP 页面可能验证码或拦截。",
+  "webSearchBrowserReady": "守护进程主机上 Playwright Chromium 已就绪",
+  "webSearchBrowserMissing": "守护进程主机上未安装 Playwright Chromium",
+  "webSearchInstallHintNote": "Playwright 已随守护进程提供。请在运行 EnvoyHome 的家庭电脑上下载 Chromium（不要在手机上），然后重新打开设置；若状态仍显示未安装，请重启守护进程。",
+  "webSearchCopyHint": "复制安装命令",
+  "webSearchUnattendedBrowser": "允许计划任务使用浏览器回退",
   "connPairingHint": "Mint and revoke phones from desktop Settings → Pair devices. This list is read-only on mobile.",
   "connNoDevices": "No paired devices listed.",
   "connEnabled": "Enabled",
@@ -207,6 +259,34 @@
   "schedKindTool": "Tool",
   "schedWorkflowId": "Workflow id",
   "schedToolName": "Tool name",
+  "schedKindAgent": "Agent",
+  "schedAgentPrompt": "Agent prompt",
+  "schedTabRepeating": "重复",
+  "schedTabOnce": "一次",
+  "schedTabHistory": "历史",
+  "schedNoneRepeating": "暂无重复日程。可试「每周一上午9点」。",
+  "schedNoneOnce": "暂无一次性提醒。可试「明天上午8点」。",
+  "schedNoReceipts": "暂无运行记录。",
+  "schedHistoryNotSet": "未设置",
+  "schedHistoryRuns": "运行记录",
+  "schedNoDismissed": "暂无已取消或已过期的提议。",
+  "schedDismissedCanceled": "已取消",
+  "schedDismissedExpired": "已过期",
+  "schedNext": "下次",
+  "schedKindRepeating": "重复",
+  "schedKindOnce": "一次",
+  "schedKindDaily": "每天",
+  "schedKindWeekdays": "工作日",
+  "schedKindWeekly": "每周",
+  "schedKindMonthly": "每月",
+  "schedKindYearly": "每年",
+  "schedKindEvery": "每",
+  "schedDayOfMonth": "{d}号",
+  "@schedDayOfMonth": {
+    "placeholders": {
+      "d": { "type": "String" }
+    }
+  },
   "wfEditorTitle": "Workflow",
   "wfEnable": "Enable",
   "wfDisable": "Disable",
@@ -223,7 +303,7 @@
   "wfDrafted": "Draft applied",
   "wfSaved": "Saved",
   "wfRan": "Run started",
-  "sysTabFiles": "Shared files",
+  "sysTabFiles": "文件",
   "sysTabHealth": "Health",
   "sysTabGrants": "Grants",
   "sysTestPush": "Send test push",
@@ -246,6 +326,49 @@
   "chatEmptyTitle": "给家庭智能体发消息",
   "chatEmptyHint": "回合在家庭守护进程上运行。需要许可时，允许/拒绝会出现在这里。",
   "chatHint": "消息…",
+  "chatThought": "思考过程",
+  "chatNew": "新对话",
+  "chatNewNamePrompt": "对话名称",
+  "chatNewNamePlaceholder": "例如：周末计划",
+  "chatNewNameHint": "现在命名，或不命名直接开始（将用第一条消息作为标题）。",
+  "chatNewSkip": "不命名开始",
+  "chatNewCreate": "创建",
+  "chatNewNeedName": "请输入名称，或选择「不命名开始」。",
+  "chatNewStart": "开始对话",
+  "chatOpenArtifact": "打开完整回复",
+  "chatRecents": "最近",
+  "chatSessionsEmpty": "暂无对话。开始一个新对话吧。",
+  "chatRecentsEmpty": "暂无更早的对话。",
+  "chatUntitled": "未命名对话",
+  "chatRenameAction": "重命名",
+  "chatRenamePrompt": "对话名称",
+  "chatRenameDone": "已重命名。",
+  "chatRenameEmpty": "名称不能为空。",
+  "chatRenameNeedSession": "请先发送一条消息，再重命名。",
+  "chatBusyTurn": "请等待当前回复完成（或取消）。",
+  "chatEmptyAction": "清空对话",
+  "chatEmptyConfirmTitle": "清空此对话？",
+  "chatEmptyConfirmBody": "将删除本线程中的全部消息，对话本身保留。",
+  "chatTrashMenu": "对话操作",
+  "chatArchiveAction": "归档对话",
+  "chatUnarchiveAction": "恢复到对话列表",
+  "chatUnarchiveDone": "已恢复对话。",
+  "chatArchivedOpen": "已归档",
+  "chatArchivedTitle": "已归档对话",
+  "chatArchivedBack": "返回对话列表",
+  "chatArchivedEmpty": "没有已归档的对话。",
+  "chatRemoveAction": "删除对话",
+  "chatArchiveConfirmTitle": "归档此对话？",
+  "chatArchiveConfirmBody": "会从「对话」列表消失，但仍保留在磁盘上。可打开「已归档」恢复或删除。归档不会抹掉消息。",
+  "chatRemoveConfirmTitle": "删除此对话？",
+  "chatRemoveConfirmBody": "永久删除此对话及其全部消息。此操作不可撤销。",
+  "chatRemoveDone": "对话已删除。",
+  "chatNoSession": "尚无活动对话。",
+  "chatDeleteFailed": "服务器未能删除该消息。",
+  "chatCopyMessage": "复制消息",
+  "chatCopied": "已复制",
+  "chatDeleteMessage": "删除消息",
+  "chatCancel": "取消",
   "chatSubscribeFailed": "订阅失败：{error}",
   "@chatSubscribeFailed": {
     "placeholders": {
@@ -350,16 +473,36 @@
       }
     }
   },
-  "artifactsTitle": "产物",
-  "artifactsHint": "来自家庭守护进程的签名链接。点按打开。",
-  "artifactsNeedAccount": "请先选择资料以列出产物。",
-  "artifactsEmptyTitle": "还没有产物",
-  "artifactsEmptyHint": "智能体生成文件后下拉刷新。",
+  "artifactsTitle": "文件",
+  "artifactsHint": "浏览此资料可访问的文件夹。可在应用内打开、分享/保存，或在有签名链接时用浏览器打开。",
+  "artifactsNeedAccount": "请先选择账户以浏览文件。",
+  "artifactsEmptyTitle": "暂无文件夹",
+  "artifactsEmptyHint": "下拉刷新。若已为此资料配置工作区，将显示 workspace。",
   "artifactsUrlCopied": "无法打开 — 已复制 URL",
   "artifactsOpenFailed": "打开失败：{error}",
+  "artifactsRefresh": "刷新",
+  "artifactsRetry": "重试",
+  "artifactsBinaryHint": "此文件类型暂不支持预览。可用「分享/保存」在其他应用中打开，或请家庭智能体导出为文本或 Markdown。",
   "@artifactsOpenFailed": {
     "placeholders": {
       "error": {
+        "type": "String"
+      }
+    }
+  },
+  "artifactsShare": "分享 / 保存",
+  "artifactsShareFailed": "无法分享：{error}",
+  "@artifactsShareFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatOpenFile": "打开 {name}",
+  "@chatOpenFile": {
+    "placeholders": {
+      "name": {
         "type": "String"
       }
     }
@@ -371,5 +514,166 @@
         "type": "int"
       }
     }
-  }
+  },
+  "navProfiles": "Profiles",
+  "settingsProfilesSubtitle": "Owner, workspace folders, tool policy",
+  "profilesIntro": "Each person has a profile. The household Owner configures workspace folders and can transfer ownership.",
+  "profilesMemberHint": "This device is not the household Owner — workspace is read-only here.",
+  "profilesRefresh": "Refresh",
+  "profilesAddTitle": "Add profile",
+  "profilesOwnerBadge": "Owner",
+  "profilesActiveBadge": "Active",
+  "profilesWorkspaceTitle": "Workspace folders",
+  "profilesWorkspaceHint": "每个资料仅一个主机文件夹。浏览选择即可；智能体通过 workspace/… 访问。",
+  "profilesWorkspacePath": "Host path",
+  "profilesWorkspaceUnset": "Not set (sandbox only)",
+  "profilesWorkspaceSet": "Configured",
+  "profilesWorkspaceWholeMachine": "Whole machine",
+  "profilesWorkspaceRo": "Read only",
+  "profilesWorkspaceRw": "Read & write",
+  "profilesWorkspaceUseRoot": "Add computer root",
+  "profilesWorkspaceClear": "Clear all",
+  "profilesWorkspaceRemove": "Remove",
+  "profilesWorkspaceApply": "Add",
+  "profilesWorkspaceEdit": "Add folder",
+  "profilesWorkspaceRootTitle": "Allow whole-computer access?",
+  "profilesWorkspaceRootBody": "This lets the agent read (and write, if selected) files under the computer root via workspace/… — including from this phone.",
+  "profilesWorkspaceRootOk": "Allow",
+  "profilesWorkspaceMemberNote": "Only the household Owner can change workspace folders.",
+  "profilesTransferTitle": "Transfer household Owner?",
+  "profilesTransferBody": "Make {name} the household Owner. They will control pairing, bindings, and household Settings.",
+  "@profilesTransferBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "profilesTransferConfirm": "Transfer",
+  "profilesTransferDone": "Owner is now {name}",
+  "@profilesTransferDone": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "profilesTransferFailed": "Transfer failed: {error}",
+  "@profilesTransferFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "profilesTransferTo": "Transfer to {name}",
+  "@profilesTransferTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "profilesToolPolicy": "Tool policy",
+  "profilesToolPolicyStandard": "Standard",
+  "profilesToolPolicyRestricted": "Restricted",
+  "connMintPairing": "Mint pairing code",
+  "connMintOk": "Pairing code minted",
+  "connMintUriHint": "Scan or paste this URI on the new device.",
+  "connPairingOwnerOnly": "Mint / revoke pairing requires the household Owner device.",
+  "connRevokeDevice": "Revoke",
+  "connForgetDevice": "Forget",
+  "connAccountsHint": "Household profiles",
+  "profilesWorkspaceCrossTitle": "Add workspace folder for another profile?",
+  "profilesWorkspaceCrossBody": "This adds a host folder for {name}. Continue only if you intend to configure their workspace.",
+  "@profilesWorkspaceCrossBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "profilesWorkspaceDenied": "Not visible on this device",
+  "profilesWorkspaceInactive": "Configured but inactive (filesystem-root only applies to Owner)",
+  "profilesRename": "Rename",
+  "profilesRenameTitle": "Rename profile",
+  "profilesRenameSave": "Save",
+  "profilesTimeZoneUnset": "时区：未设置（日程使用主机默认）",
+  "profilesTimeZoneValue": "时区：{tz}",
+  "@profilesTimeZoneValue": {
+    "placeholders": {
+      "tz": { "type": "String" }
+    }
+  },
+  "profilesTimeZoneEdit": "时区",
+  "profilesTimeZoneTitle": "账户时区",
+  "profilesTimeZoneHint": "IANA 名称，例如 Asia/Shanghai",
+  "profilesTimeZoneSave": "保存",
+  "profilesTimeZoneDone": "时区已设为 {tz}",
+  "@profilesTimeZoneDone": {
+    "placeholders": {
+      "tz": { "type": "String" }
+    }
+  },
+  "profilesShareLocationTitle": "与 Home 共享位置",
+  "profilesShareLocationSubtitle": "在聊天回合中附带大致 GPS，供日程/上下文使用。仅在此处请求一次系统权限，发送消息时不再弹窗。仅本回合注入，不写入记忆。",
+  "profilesShareLocationDenied": "未获得定位权限，共享保持关闭。",
+  "profilesShareLocationOn": "已在本设备开启位置共享",
+  "profilesDelete": "Delete",
+  "profilesDeleteTitle": "Delete profile?",
+  "profilesDeleteBody": "Delete {name}? Their sandbox and workspace config are removed. This cannot be undone.",
+  "@profilesDeleteBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "profilesDeleteConfirm": "Delete",
+  "profilesDeleteDone": "Deleted {name}",
+  "@profilesDeleteDone": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "profilesDeleteOwnerBlocked": "Cannot delete the household Owner. Transfer ownership first.",
+  "connRevokeConfirm": "Revoke device {id}? It will need to pair again.",
+  "@connRevokeConfirm": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "connForgetConfirm": "Forget device {id}? The pairing record is removed permanently.",
+  "@connForgetConfirm": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "connOwnerWriteOnly": "Only the household Owner device can change this setting.",
+  "artifactsTooLarge": "This file is larger than the 8 MB in-app open limit. Ask the agent for a smaller export, or open it on the home machine.",
+  "artifactsCopyLink": "Copy signed link",
+  "artifactsLinkCopied": "Signed link copied",
+  "artifactsCopyLinkFailed": "Could not copy link",
+  "artifactsOpenInBrowser": "在浏览器中打开",
+  "artifactsOpenInBrowserFailed": "无法在浏览器中打开",
+  "filesParent": "上级",
+  "filesRoots": "根目录",
+  "filesEmptyFolder": "此文件夹为空",
+  "profilesWorkspaceBrowse": "浏览文件夹",
+  "profilesWorkspaceBrowseHint": "点按浏览家庭电脑上的文件夹",
+  "chatTabActive": "聊天",
+  "chatTabArchived": "已归档",
+  "homeFolderTitle": "选择文件夹",
+  "homeFolderSelect": "选择",
+  "homeFolderDrives": "磁盘",
+  "homeFolderComputer": "此电脑",
+  "homeFolderHome": "主目录",
+  "homeFolderParent": "上级文件夹",
+  "homeFolderNoSubfolders": "没有子文件夹"
 }

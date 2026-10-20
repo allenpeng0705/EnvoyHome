@@ -5,7 +5,7 @@ Living plan for **active** EnvoyHome build work. Style aligned with EnvoyMesh [`
 | Field | Value |
 |-------|-------|
 | **Role** | Subordinate to [`EnvoyHome-Design.md`](EnvoyHome-Design.md) and [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Design.md). **Design wins.** |
-| **Last updated** | 2026-10-16l |
+| **Last updated** | 2026-10-18ad |
 | **Owner** | Allen Peng |
 | **G6** | **Accepted 2026-10-09** for Plan text matching Design `2026-10-08f` (with G1) |
 
@@ -134,6 +134,8 @@ Tag `v1.0.0` when (1)–(8) are honestly `[x]` including bar 1’s e2e bar you c
 |------|--------|--------|
 | Desktop quality (beyond B12 scaffold) | `[~]` | §10.1 nav + V-UX-6 UI; live HA inventory operator |
 | EnvoyMesh mobile thin client | `[~]` | §19.2 — chat/approvals/artifacts + push |
+| Profile workspace folders (host mounts outside sandbox) | `[~]` | Design §4.2.1 — up to 16 named mounts; Owner sets (incl. `/`); `workspace/<id>/…` jail; V-SEC-13/14/20 |
+| Household Owner account | `[x]` | Design §4.1.1 — exclusive Owner bind; R1/R4 deferred; seat-or-Owner grants; V-SEC-15…21 |
 | Privacy Mode RPC (+ smart-home egress) | `[ ]` | §19.4, V-P2-PRIV-* |
 | Automation authoring UX | `[ ]` | §19.8 |
 | First-party IM set (Telegram + Discord + Slack + Feishu + DingTalk + WeCom) | `[ ]` | Design §5.0 `2026-10-16c` — after mobile solid |
@@ -407,6 +409,15 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-SEC-6 | **B12** | Settings creates account + binding with no raw config edit |
 | V-SEC-11 | **B14** | an account-scoped caller cannot read another account's object names (`home.listSources`, `getChannelStatus.unboundSources`) |
 | V-SEC-12 | **B2** | the HTTP hatch resolves the account from a binding; a client-supplied `accountId` cannot open a turn for an unbound account |
+| V-SEC-13 | **post-v1** | workspace path jail (Design §4.2.1): no escape from `hostPath`; raw absolutes refused; unset ⇒ `workspace/…` fails |
+| V-SEC-14 | **post-v1** | workspace set/clear refused for non-Owner devices; household Owner (or loopback) may set any profile |
+| V-SEC-15 | **post-v1** | exactly one `ownerAccountId`; first account = Owner; delete Owner without transfer fails; transfer leaves one Owner |
+| V-SEC-16 | **post-v1** | non-Owner device cannot Owner-scope; Owner-bound device can over mesh; `ownerTrusted` alone insufficient |
+| V-SEC-17 | **post-v1** | member list/revoke own grants only; Owner may revoke any seat’s grant |
+| V-SEC-18 | **post-v1** | member `updateAccount` own displayName/locale OK; `toolPolicy` Owner-only |
+| V-SEC-19 | **post-v1** | Owner dual-bind refused (`owner_bind_exclusive`) |
+| V-SEC-20 | **post-v1** | filesystem-root workspace only for Owner seat |
+| V-SEC-21 | **post-v1** | member paired memory `untrusted`; Owner-seat paired `owner` |
 | V-CH-1 | **B7** | Telegram demo + HTTP hatch share one inbound/outbound contract |
 | V-CH-2 | **B7** | unknown sender denied/paired |
 | V-CH-3 | **B7** | outbound cannot target another account's thread via `rawRef` spoofing |
@@ -465,7 +476,23 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-LEARN-2 | **B8** | background review: skills always pending; L1/L2 pending by default |
 | V-LEARN-3 | **B8** | provenance recorded on flush/consolidate/learn writes |
 | V-SKILL-1 | **B10** | install + verify before skill tools are available |
-| V-OUT-1 | **B11** | replay after TTL → 403; long artifact → summary + openable URL |
+| V-OUT-1 | **B11** | replay after TTL → 403; long artifact → summary + openable URL / mesh path |
+| V-OUT-2 | **B11** | getArtifactContent opens cited workspace/… (jail); listArtifacts sandbox-only; stat-before-read 8 MiB |
+| V-OUT-3 | **B11** | write_file echoes chip-ready normalized path; steer documents/output/knowledge |
+| V-OUT-4 | **B11** | listSandboxEntries: sandbox tops + R3-effective workspace/; refuse share/ + inactive workspace; parent stays in root; entry cap |
+| V-OUT-5 | **B11** | list_dir / search_files: read-tier builtins; **turn-profile jail only**; share/ refuse; search depth/visit/hit caps; fence + catalogue |
+| V-OUT-6 | **B11** | web_search: DDG zero-config; Brave/Tavily key gate; attendedAllow; unattended grant; restricted deny; result cap |
+| V-OUT-7 | **B11** | web_search browser fallback: Settings opt-in; Bing→Google; attended ask; caps; missing Chromium → install hint (no silent download) |
+| V-OUT-8 | **B11** | browser control tool: Owner opt-in; Playwright managed session; SSRF; snapshot/act; attended ask; restricted/unattended gates |
+| V-OUT-9 | **B11** | browser personal profile: Owner-only; ack; loopback CDP; never unattended; summary tag |
+| V-OUT-10 | **B11** | browser remote profile: Owner-only; ack; cdpUrl+secret; never unattended; summary tag |
+| V-UX-12b | **B9** | Mobile Schedules: `jobs` key; desktop parity badges/argChoices/receipts |
+| V-CRON-7 | **B9** | updateSchedule name/spec/payload; workflow-synced refuse; no system payload |
+| V-CRON-8 | **B9** | listScheduleReceipts capped receipts |
+| V-CRON-9 | **B9** | chat schedule tool propose/confirm/list; confirm asks; propose no arm |
+| V-CRON-10 | **B9** | system flush/review fire; ensureReviewJob when reviewEnabled |
+| V-CRON-11 | **B9** | chat propose verbatim WHEN; refuse invented specs; confirm shows resolvedLocal |
+| V-CRON-12 | **B9** | agentTurn payload fire with frozen prompt; elevated browser denied on schedule |
 | V-UX-1 | **B12** | new account + channel bind without raw config edit |
 | V-UX-2 | **B12** | view/revoke pairings, pending approvals, grants in the UI |
 | V-UX-3 | **B12** | Telegram enable + token via Settings only |
@@ -709,6 +736,25 @@ If you need to change the answer to "in what order we build," edit this doc and 
 
 | Date | Change |
 |------|--------|
+| 2026-10-19k | **§7.4 accuracy high-impact:** no silent clock invent; account IANA TZ; NL corpus (this/next, in-N-days, 半, noon). Aligns Design `2026-10-19k`. |
+| 2026-10-19j | **§7.4 follow-through:** `maxToolRounds` reserved (v1 single-cycle); schedule propose `resolvedLocal` humanized in harness + thin clients; V-CRON-12 elevated glue. Aligns Design `2026-10-19j`. |
+| 2026-10-19i | **§7.4 authoring accuracy + restricted agentTurn:** V-CRON-11/12. Aligns Design `2026-10-19i`. |
+| 2026-10-19h | **§7.4 schedules enhancement C:** mobile parity, updateSchedule, receipts, chat `schedule` tool, flush/review fire. V-UX-12b, V-CRON-7…10. Aligns Design `2026-10-19h`. |
+| 2026-10-19g | **Browser harden:** redirect SSRF, rate-limit split, summary/catalogue/Doctor/UX. Aligns Design `2026-10-19g`. |
+| 2026-10-19f | **§9.5g.1 elevated browser profiles:** personal + remote CDP; V-OUT-9/10. Aligns Design `2026-10-19f`. |
+| 2026-10-19e | **§9.5g browser control:** OpenClaw-adapted builtin `browser` tool; V-OUT-8. Aligns Design `2026-10-19e`. |
+| 2026-10-19d | **§9.5f.1 dependency clarify:** `playwright` npm driver on `@envoyhome/daemon`; Chromium via Owner `npx playwright install chromium`. Aligns Design `2026-10-19d`. |
+| 2026-10-19c | **§9.5f.1 browser SERP fallback:** opt-in Bing→Google headless; V-OUT-7. Aligns Design `2026-10-19c`. Implemented: Settings toggle; Doctor warn; attended mid-tool ask. |
+| 2026-10-19b | **§9.5f web_search:** household Owner config + DDG/Brave/Tavily + V-OUT-6. Aligns Design `2026-10-19b`. |
+| 2026-10-19a | **§9.5e list/search tools:** `list_dir` / `search_files` builtins + V-OUT-5. Aligns Design `2026-10-19a`. |
+| 2026-10-18ai | **§10.1 System → Profiles:** first System tab + refined manage-profiles UX; mobile nests Profiles under System. Aligns Design `2026-10-18ai`. |
+| 2026-10-18ah | **§4.2.1 multi-folder:** mounts[] + upsert/remove RPCs; desktop/mobile add-folder UX; jail `workspace/<id>/…`. Aligns Design `2026-10-18ah`. |
+| 2026-10-18af | **§9.5d File Explore:** `home.listSandboxEntries` + V-OUT-4; mobile Files browser. Aligns Design `2026-10-18af`. |
+| 2026-10-18ad | **§9.5d harden:** getArtifactContent stat-before-read; write_file chip-ready path. Aligns Design `2026-10-18ad`. |
+| 2026-10-18ac | **§9.5d handoff:** workspace open-by-path; write_file path echo; share/ deferred. V-OUT-2/3. Aligns Design `2026-10-18ac`. |
+| 2026-10-18ab | **Mobile Settings:** Profiles + workspace + Owner pairing mint/revoke. Aligns Design `2026-10-18ab`. |
+| 2026-10-18aa | **§4.1.1 / §4.2.1 review fixes:** R3 runtime+transfer, Doctor exclusive-bind, seat-or-Owner getWorkspace. Aligns Design `2026-10-18aa`. |
+| 2026-10-18z | **§4.1.1 Household Owner:** daemon + protocol + desktop Settings; V-SEC-15…21 green. Aligns Design `2026-10-18z`. |
 | 2026-10-16l | **B14 / §5.7.3:** Household device bind — any profile may use bound objects; Shared UI dropped; V-HA-7/14 rewritten. Aligns Design `2026-10-16l`. |
 | 2026-10-16k | **B14 / V-UX-6:** Object bind/flags/journal on Connections → HA and MQTT (channel-filtered); Skills Smart home tab removed. Aligns Design `2026-10-16k`. |
 | 2026-10-14b | **Product / B10:** Skills UI shows a sample `SKILL.md` (how to write). Aligns Design `2026-10-14b`. |

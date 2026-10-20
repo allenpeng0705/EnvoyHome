@@ -75,7 +75,24 @@ export class ApprovalSink {
       }
     }
 
-    if (!requiresAttendedApproval(spec, origin, this.deps.toolPolicy)) {
+    // Ask on confirm and on chat mutations (enable / remove / rename). Propose and list stay auto-allowed.
+    let needAsk = requiresAttendedApproval(spec, origin, this.deps.toolPolicy);
+    if (req.tool === "schedule") {
+      const action =
+        req.args &&
+        typeof req.args === "object" &&
+        !Array.isArray(req.args) &&
+        typeof (req.args as Record<string, unknown>).action === "string"
+          ? String((req.args as Record<string, unknown>).action).trim().toLowerCase()
+          : "";
+      needAsk =
+        action === "confirm" ||
+        action === "remove" ||
+        action === "enable" ||
+        action === "rename";
+    }
+
+    if (!needAsk) {
       return "allowed";
     }
 
@@ -88,6 +105,44 @@ export class ApprovalSink {
       risk: spec.risk as RiskTier,
       origin,
       ...(req.summary !== undefined ? { summary: req.summary } : {}),
+    });
+    this.deps.onApprovalNeeded?.(pending);
+
+    if (!this.deps.waitForAnswer) {
+      return "pending";
+    }
+    const decision = await this.deps.waitForAnswer(pending.id);
+    return decision === "allow" ? "allowed" : "denied";
+  }
+
+  /**
+   * Design §9.5f.1 — browser SERP fallback mid-tool ask.
+   * Attended: always prompt (ignores web_search attendedAllow).
+   * Unattended: allowed here when caller already verified grant + unattendedBrowser.
+   */
+  async authorizeBrowserSearchFallback(req: ToolDispatchRequest): Promise<ApprovalDecision> {
+    const origin = this.deps.policy.origin;
+    if (origin === "unattended") {
+      return "allowed";
+    }
+
+    if (!execPolicyAllows(origin, this.deps.toolPolicy)) {
+      return "denied";
+    }
+
+    const summary =
+      req.summary && req.summary.trim()
+        ? req.summary.trim()
+        : "browser search fallback";
+    const pending = await this.deps.store.createApproval({
+      accountId: req.accountId,
+      agentId: req.agentId,
+      turnId: req.turnId,
+      tool: req.tool,
+      argsDigest: this.digest({ ...(req.args as object), _browserFallback: true }),
+      risk: "network",
+      origin,
+      summary,
     });
     this.deps.onApprovalNeeded?.(pending);
 

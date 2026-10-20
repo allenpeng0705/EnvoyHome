@@ -5,15 +5,23 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { registerResetHook } from "@envoyhome/test-utils";
 import {
+  PRODUCT_IDENTITY_MARKER,
+  PRODUCT_IDENTITY_PROLOGUE,
+} from "@envoyhome/memory";
+import {
   ApprovalSink,
   ApprovalStore,
   ProviderHandle,
   appendTranscriptLine,
   canonicalDigest,
+  coalesceAssistantByTurnId,
+  countTranscriptLines,
   dispatchTool,
   newTurnId,
   readTranscript,
+  readTranscriptEnsuringMessageIds,
   runTurn,
+  updateTranscript,
   writeTranscript,
   type HistoryMessage,
   type PendingApproval,
@@ -21,8 +29,15 @@ import {
   type TurnDeps,
   type TurnOrigin,
 } from "@envoyhome/harness-host";
-import { resolveSandboxPath, safeJoin } from "./fs-jail.js";
+import { isFilesystemRoot, resolveSandboxPath, safeJoin } from "./fs-jail.js";
 import type { HomePaths } from "./home-paths.js";
+import { listSandboxDir, searchSandboxFiles } from "./sandbox-fs-browse.js";
+import type { WebSearchService } from "./web-search.js";
+import {
+  browserDefaultProfileForOrigin,
+  type BrowserControlService,
+} from "./browser-control.js";
+import type { ScheduleService } from "./schedule/service.js";
 import type { WorkflowStore } from "./workflows.js";
 import {
   compileWorkflowGraph,
@@ -31,6 +46,11 @@ import {
   type WorkflowDef,
   type WorkflowStepResult,
 } from "@envoyhome/workflows";
+import {
+  classifyOutputFormat,
+  shouldSpillThinClientLink,
+  summarizeForLinkBubble,
+} from "./output-format.js";
 import type { SessionStore } from "./sessions.js";
 import type { ProviderStore } from "./providers-store.js";
 import type { HarnessStore } from "./harness-store.js";
@@ -51,6 +71,11 @@ import {
 } from "@envoyhome/memory";
 import type { ProductEmit } from "./product-events.js";
 import { PolicyStore, PrivacyModeStore } from "./policy-store.js";
+import { formatSchedulesChatCard } from "./schedule/chat-card.js";
+import { isScheduleAffirmation, isScheduleDenial } from "./schedule/affirm.js";
+import { formatScheduleIntentOffer } from "./schedule/intent-offer.js";
+import { resolveScheduleFromText } from "./schedule/resolve-nl.js";
+import { resolveReferenceNow } from "./client-context.js";
 import type { SkillService } from "./skills.js";
 import type { ChannelService } from "./channels/service.js";
 import type { ActuationService } from "./actuation-service.js";
@@ -106,6 +131,28 @@ registerResetHook(() => {
   finished.clear();
 });
 
+function sessionHasActiveTurn(sessionId: string): boolean {
+  for (const t of active.values()) {
+    if (t.sessionId === sessionId) return true;
+  }
+  return false;
+}
+
+function refuseIfTurnActive(sessionId: string): void {
+  if (!sessionHasActiveTurn(sessionId)) return;
+  throw Object.assign(
+    new Error("envoyhome.bad_params: session has an active turn — wait or cancel first"),
+    { code: "bad_params" },
+  );
+}
+
+/** Every turn system prompt must lead with EnvoyHome identity (not the model brand). */
+function withProductIdentity(standing: string | undefined): string {
+  const body = (standing ?? "").trim();
+  if (body.includes(PRODUCT_IDENTITY_MARKER)) return body;
+  return body ? `${PRODUCT_IDENTITY_PROLOGUE}\n\n${body}` : PRODUCT_IDENTITY_PROLOGUE;
+}
+
 function deriveOrigin(callerKind: string, explicit?: TurnOrigin): TurnOrigin {
   if (explicit) return explicit;
   if (callerKind === "event-source" || callerKind === "unattended") return "unattended";
@@ -114,7 +161,7 @@ function deriveOrigin(callerKind: string, explicit?: TurnOrigin): TurnOrigin {
 
 function transcriptToHistory(lines: Record<string, unknown>[]): HistoryMessage[] {
   const out: HistoryMessage[] = [];
-  for (const line of lines) {
+  for (const line of coalesceAssistantByTurnId(lines)) {
     const role = String(line.role ?? "");
     const text =
       typeof line.text === "string"
@@ -183,6 +230,11 @@ export class TurnService {
   readonly privacyMode: PrivacyModeStore;
   private emit: ProductEmit = () => undefined;
   private onComplete: ((info: TurnCompleteInfo) => void | Promise<void>) | undefined;
+  /** Household Owner id for R3 workspace effectiveness (Design §4.1.1). */
+  private getOwnerAccountId: () => string | null = () => null;
+  private webSearch: WebSearchService | null = null;
+  private browserControl: BrowserControlService | null = null;
+  private schedules: ScheduleService | null = null;
 
   constructor(
     private readonly paths: HomePaths,
@@ -210,12 +262,135 @@ export class TurnService {
     this.onComplete = handler;
   }
 
+  setOwnerAccountIdLookup(fn: () => string | null): void {
+    this.getOwnerAccountId = fn;
+  }
+
+  setWebSearch(svc: WebSearchService): void {
+    this.webSearch = svc;
+  }
+
+  setBrowserControl(svc: BrowserControlService): void {
+    this.browserControl = svc;
+  }
+
+  setSchedules(svc: ScheduleService): void {
+    this.schedules = svc;
+  }
+
   async getTranscript(accountId: string, sessionId: string): Promise<Record<string, unknown>[]> {
     const session = await this.sessions.get(accountId, sessionId);
     if (!session) {
       throw Object.assign(new Error("envoyhome.bad_params: unknown session"), { code: "bad_params" });
     }
-    return readTranscript(this.sessions.sessionDir(accountId, sessionId));
+    // Locked migrate+read: messageIds + coalesce-by-turnId persisted (mobile/desktop hydrate).
+    return readTranscriptEnsuringMessageIds(this.sessions.sessionDir(accountId, sessionId));
+  }
+
+  /** Empty the transcript; keep the session id (Home chat single-session + general Empty). */
+  async clearTranscript(accountId: string, sessionId: string): Promise<{ ok: true }> {
+    const session = await this.sessions.get(accountId, sessionId);
+    if (!session) {
+      throw Object.assign(new Error("envoyhome.bad_params: unknown session"), { code: "bad_params" });
+    }
+    refuseIfTurnActive(sessionId);
+    await updateTranscript(this.sessions.sessionDir(accountId, sessionId), () => []);
+    await this.sessions.touch(accountId, sessionId);
+    return { ok: true };
+  }
+
+  /** Delete transcript lines by messageId (synthetic legacy ids included). */
+  async deleteTranscriptMessages(
+    accountId: string,
+    sessionId: string,
+    messageIds: string[],
+  ): Promise<{ ok: true; removed: number }> {
+    const session = await this.sessions.get(accountId, sessionId);
+    if (!session) {
+      throw Object.assign(new Error("envoyhome.bad_params: unknown session"), { code: "bad_params" });
+    }
+    refuseIfTurnActive(sessionId);
+    const want = new Set(messageIds.filter((id) => typeof id === "string" && id.length > 0));
+    if (want.size === 0) {
+      throw Object.assign(new Error("envoyhome.bad_params: messageIds required"), {
+        code: "bad_params",
+      });
+    }
+    let removed = 0;
+    await updateTranscript(this.sessions.sessionDir(accountId, sessionId), (lines) => {
+      // If UI deletes a coalesced assistant bubble, drop every chunk with that turnId.
+      const turnIdsToDrop = new Set<string>();
+      for (const line of lines) {
+        const id = String(line.messageId ?? "");
+        if (!want.has(id)) continue;
+        if (line.role === "assistant" && typeof line.turnId === "string" && line.turnId) {
+          turnIdsToDrop.add(line.turnId);
+        }
+      }
+      const kept: Record<string, unknown>[] = [];
+      removed = 0;
+      for (const line of lines) {
+        const id = String(line.messageId ?? "");
+        const turnId = typeof line.turnId === "string" ? line.turnId : "";
+        if (
+          want.has(id) ||
+          (line.role === "assistant" && turnId && turnIdsToDrop.has(turnId))
+        ) {
+          removed += 1;
+          continue;
+        }
+        kept.push(line);
+      }
+      return kept;
+    });
+    await this.sessions.touch(accountId, sessionId);
+    return { ok: true, removed };
+  }
+
+  async archiveSession(accountId: string, sessionId: string): Promise<{ ok: true }> {
+    refuseIfTurnActive(sessionId);
+    const meta = await this.sessions.archive(accountId, sessionId);
+    if (!meta) {
+      throw Object.assign(new Error("envoyhome.bad_params: unknown session"), { code: "bad_params" });
+    }
+    return { ok: true };
+  }
+
+  async unarchiveSession(accountId: string, sessionId: string): Promise<{ ok: true }> {
+    refuseIfTurnActive(sessionId);
+    const meta = await this.sessions.unarchive(accountId, sessionId);
+    if (!meta) {
+      throw Object.assign(new Error("envoyhome.bad_params: unknown session"), { code: "bad_params" });
+    }
+    return { ok: true };
+  }
+
+  async removeSession(accountId: string, sessionId: string): Promise<{ ok: true }> {
+    const session = await this.sessions.get(accountId, sessionId);
+    if (!session) {
+      throw Object.assign(new Error("envoyhome.bad_params: unknown session"), { code: "bad_params" });
+    }
+    refuseIfTurnActive(sessionId);
+    await this.sessions.remove(accountId, sessionId);
+    return { ok: true };
+  }
+
+  /** Set display title; marks titleSource=user so first-message auto-title won't overwrite. */
+  async renameSession(
+    accountId: string,
+    sessionId: string,
+    title: string,
+  ): Promise<{ ok: true; title: string }> {
+    const session = await this.sessions.get(accountId, sessionId);
+    if (!session) {
+      throw Object.assign(new Error("envoyhome.bad_params: unknown session"), { code: "bad_params" });
+    }
+    const next = title.trim().replace(/\s+/g, " ").slice(0, 120);
+    if (!next) {
+      throw Object.assign(new Error("envoyhome.bad_params: title required"), { code: "bad_params" });
+    }
+    await this.sessions.patchMeta(accountId, sessionId, { title: next, titleSource: "user" });
+    return { ok: true, title: next };
   }
 
   /**
@@ -231,10 +406,12 @@ export class TurnService {
     contextTokens?: number;
     origin: TurnOrigin;
     callerKind: string;
+    /** Explicit binding trust (Design §4.1.1 R5); falls back by origin/callerKind. */
+    memoryTrust?: "owner" | "agent" | "untrusted";
   }): Promise<{ history: HistoryMessage[]; flushed: boolean; compacted: boolean }> {
     const sessionDir = this.sessions.sessionDir(input.accountId, input.sessionId);
     const meta = await this.sessions.get(input.accountId, input.sessionId);
-    let lines = await readTranscript(sessionDir);
+    let lines = coalesceAssistantByTurnId(await readTranscript(sessionDir));
     const compactionCount = meta?.compactionCount ?? 0;
     const alreadyFlushedThisCycle =
       meta?.memoryFlushCompactionCount !== undefined &&
@@ -255,8 +432,15 @@ export class TurnService {
       return { history: transcriptToHistory(lines), flushed, compacted };
     }
 
+    const bindingTrust =
+      input.memoryTrust ??
+      (input.origin === "unattended"
+        ? "agent"
+        : input.callerKind === "loopback-owner"
+          ? "owner"
+          : "untrusted");
     const trust = deriveTrust({
-      bindingTrust: input.origin === "unattended" ? "agent" : "owner",
+      bindingTrust,
       ...(input.callerKind === "event-source" ? { channelKind: "event-source" as const } : {}),
     });
 
@@ -350,19 +534,49 @@ export class TurnService {
       agentId: meta.agentId,
       createdAt: meta.createdAt,
       purpose: meta.purpose ?? "general",
+      ...(meta.title ? { title: meta.title } : {}),
+      ...(meta.titleSource ? { titleSource: meta.titleSource } : {}),
     };
   }
 
-  async listSessions(accountId: string): Promise<Record<string, unknown>> {
-    const sessions = await this.sessions.list(accountId);
-    return {
-      sessions: sessions.map((s) => ({
+  async clearPendingScheduleConfirm(accountId: string, sessionId: string): Promise<void> {
+    await this.sessions.patchMeta(accountId, sessionId, { pendingScheduleConfirm: null });
+  }
+
+  async listSessions(
+    accountId: string,
+    opts?: { includeArchived?: boolean },
+  ): Promise<Record<string, unknown>> {
+    const sessions = await this.sessions.list(accountId, opts);
+    const out: Record<string, unknown>[] = [];
+    for (const s of sessions) {
+      const messageCount = await countTranscriptLines(
+        this.sessions.sessionDir(accountId, s.sessionId),
+      );
+      const pending = s.pendingScheduleConfirm;
+      out.push({
         sessionId: s.sessionId,
         ...(s.title !== undefined ? { title: s.title } : {}),
         ...(s.purpose !== undefined ? { purpose: s.purpose } : {}),
+        ...(s.channel !== undefined ? { channel: s.channel } : {}),
+        ...(s.archivedAt !== undefined ? { archivedAt: s.archivedAt } : {}),
+        messageCount,
         updatedAt: s.updatedAt,
-      })),
-    };
+        ...(pending
+          ? {
+              pendingSchedule: {
+                proposalId: pending.proposalId,
+                resolvedLocal: pending.resolvedLocal,
+                createdAt: pending.createdAt,
+                ...(pending.expiresAt ? { expiresAt: pending.expiresAt } : {}),
+                ...(pending.message ? { message: pending.message } : {}),
+                ...(pending.name ? { name: pending.name } : {}),
+              },
+            }
+          : {}),
+      });
+    }
+    return { sessions: out };
   }
 
   async sendMessage(input: {
@@ -371,6 +585,8 @@ export class TurnService {
     text: string;
     clientTurnId?: string;
     callerKind: string;
+    /** Memory Design §13 binding trust for flush/compact (Design §4.1.1 R5). */
+    memoryTrust?: "owner" | "agent" | "untrusted";
     /** Test hook: run tool plan without model. */
     plannedTools?: Array<{ tool: string; args: unknown; summary?: string }>;
     completionText?: string;
@@ -387,18 +603,42 @@ export class TurnService {
     }>;
     /** True when the turn carries media attachments (Design §8.3 forceLocalForMedia). */
     hasMedia?: boolean;
+    /** Design §7.4 / 2026-10-19m — thin-client now/TZ/locale/location. */
+    clientContext?: import("./client-context.js").ClientTurnContext;
   }): Promise<TurnWireResult> {
     const session = await this.sessions.get(input.accountId, input.sessionId);
     if (!session) {
       throw Object.assign(new Error("envoyhome.bad_params: unknown session"), { code: "bad_params" });
     }
     const media = input.media ?? [];
-    const { appendMediaToUserText } = await import("./chat-media.js");
-    const textForTurn = appendMediaToUserText(input.text, media);
+    const { appendMediaToUserText, enrichMediaExtracts } = await import("./chat-media.js");
+    const enriched = await enrichMediaExtracts(this.paths, input.accountId, media);
+    const textForTurn = appendMediaToUserText(input.text, enriched);
     if (!textForTurn.trim()) {
       throw Object.assign(new Error("envoyhome.bad_params: text or media required"), {
         code: "bad_params",
       });
+    }
+    // ChatGPT-style: name from the first user message (or attachment) unless renamed.
+    const priorLines = await readTranscript(
+      this.sessions.sessionDir(input.accountId, input.sessionId),
+    );
+    if (priorLines.length === 0 && session.titleSource !== "user") {
+      const fromText = input.text.trim().replace(/\s+/g, " ").slice(0, 60);
+      const fromMedia =
+        !fromText && media.length > 0
+          ? String(media[0]?.fileName || media[0]?.uri || "Attached files")
+              .trim()
+              .replace(/\s+/g, " ")
+              .slice(0, 60)
+          : "";
+      const title = fromText || fromMedia;
+      if (title) {
+        await this.sessions.patchMeta(input.accountId, input.sessionId, {
+          title,
+          titleSource: "auto",
+        });
+      }
     }
     const hasMedia = media.length > 0 || input.hasMedia === true;
     const turnId = newTurnId();
@@ -449,6 +689,68 @@ export class TurnService {
   }
 
   /**
+   * ScheduleService system:review — heuristic PendingLearn from latest session user text.
+   * Skips cleanly when reviewEnabled is off or local model is busy (MemoryFacade).
+   */
+  async runScheduledMemoryReview(accountId: string): Promise<{ proposed: number }> {
+    const sessions = await this.sessions.list(accountId);
+    const recent = sessions.slice(0, 5);
+    let userText = "";
+    for (const meta of recent) {
+      try {
+        const lines = await readTranscript(
+          this.sessions.sessionDir(accountId, meta.sessionId),
+        );
+        for (let i = lines.length - 1; i >= 0; i--) {
+          if (lines[i]?.role === "user") {
+            const t = String(lines[i]?.text ?? "").trim();
+            if (t) {
+              userText = t;
+              break;
+            }
+          }
+        }
+        if (userText) break;
+      } catch {
+        /* skip broken session */
+      }
+    }
+    if (!userText) return { proposed: 0 };
+    return this.memory.afterTurnEnrich(accountId, { userText });
+  }
+
+  /**
+   * ScheduleService system:flush — soft-flush durable items from recent open sessions
+   * when flushEnabled (turn-bound remains primary; this runs only if a flush job exists).
+   */
+  async runScheduledMemoryFlush(accountId: string): Promise<{ flushedSessions: number }> {
+    const pol = await this.policy.get(accountId);
+    if (!pol.flushEnabled) return { flushedSessions: 0 };
+    const sessions = await this.sessions.list(accountId);
+    let flushedSessions = 0;
+    for (const meta of sessions.slice(0, 8)) {
+      try {
+        const sessionDir = this.sessions.sessionDir(accountId, meta.sessionId);
+        const lines = coalesceAssistantByTurnId(await readTranscript(sessionDir));
+        const flushItems = flushItemsFromOldestHalf(lines);
+        if (flushItems.length === 0) continue;
+        const result = await this.memory.flush(accountId, flushItems, {
+          trust: "agent",
+        });
+        if (
+          !result.skipped &&
+          (result.directWrites.length > 0 || result.pendingLearnIds.length > 0)
+        ) {
+          flushedSessions += 1;
+        }
+      } catch {
+        /* V-MEM-8: flush failure must not break the schedule tick */
+      }
+    }
+    return { flushedSessions };
+  }
+
+  /**
    * ScheduleService fire path: single catalogue tool under §4.4 (unattended / grants).
    */
   async runScheduledTool(
@@ -492,6 +794,62 @@ export class TurnService {
       workflow,
       origin: "unattended",
     });
+    return { turnId, sessionId: session.sessionId };
+  }
+
+  /**
+   * ScheduleService fire path: restricted agentTurn (Design §7.4 V-CRON-12).
+   * Frozen prompt only — never re-parses WHEN. Elevated browser denied via unattended gates.
+   */
+  async runScheduledAgentTurn(
+    accountId: string,
+    opts: {
+      prompt: string;
+      toolPolicyPreset?: "standard" | "restricted";
+      maxToolRounds?: number;
+    },
+  ): Promise<{ turnId: string; sessionId: string }> {
+    const prompt = opts.prompt.trim();
+    if (!prompt) {
+      throw Object.assign(new Error("envoyhome.bad_params: agentTurn prompt required"), {
+        code: "bad_params",
+      });
+    }
+    const session = await this.sessions.open({
+      accountId,
+      title: `schedule:agentTurn`,
+    });
+    const turnId = newTurnId();
+    const abort = new AbortController();
+    active.set(turnId, {
+      accountId,
+      sessionId: session.sessionId,
+      abort,
+      approvalWaiters: new Map(),
+    });
+    this.emit("home:turn-started", {
+      turnId,
+      sessionId: session.sessionId,
+      accountId,
+      agentId: session.agentId,
+      route: "harness",
+      at: new Date().toISOString(),
+    });
+    void this.runTurnBackground({
+      accountId,
+      sessionId: session.sessionId,
+      text: prompt,
+      turnId,
+      agentId: session.agentId,
+      abort,
+      callerKind: "schedule",
+      origin: "unattended",
+      memoryTrust: "agent",
+      toolPolicyOverride: opts.toolPolicyPreset ?? "restricted",
+    });
+    // Design 2026-10-19j — maxToolRounds validated/stored on the job; reserved
+    // until a multi-round harness tool loop exists (then MUST enforce ≤ stored cap).
+    void opts.maxToolRounds;
     return { turnId, sessionId: session.sessionId };
   }
 
@@ -552,6 +910,7 @@ export class TurnService {
     channel?: string;
     rawRef?: string;
     completionText?: string;
+    memoryTrust?: "owner" | "agent" | "untrusted";
   }): Promise<TurnWireResult> {
     const session = await this.sessions.open({
       accountId: input.accountId,
@@ -567,6 +926,7 @@ export class TurnService {
       ...(input.channel !== undefined ? { channel: input.channel } : {}),
       ...(input.rawRef !== undefined ? { rawRef: input.rawRef } : {}),
       ...(input.completionText !== undefined ? { completionText: input.completionText } : {}),
+      ...(input.memoryTrust !== undefined ? { memoryTrust: input.memoryTrust } : {}),
     });
   }
 
@@ -578,13 +938,49 @@ export class TurnService {
   private workflowDispatchExtras(input: {
     accountId: string;
     origin: TurnOrigin;
-  }): Pick<TurnDeps, "httpFetchImpl" | "extraToolImpl"> {
+    approval?: ApprovalSink;
+    ctx?: TurnContext;
+    clientContext?: import("./client-context.js").ClientTurnContext;
+  }): Pick<
+    TurnDeps,
+    "httpFetchImpl" | "extraToolImpl" | "browserDefaultProfile" | "peekScheduleProposal"
+  > {
     const origin: "attended" | "unattended" =
       input.origin === "unattended" ? "unattended" : "attended";
     return {
       httpFetchImpl: workflowHttpFetch as typeof fetch,
-      extraToolImpl: (tool, args) =>
-        runExtendedWorkflowTool({
+      browserDefaultProfile: (() => {
+        let configured: string | undefined;
+        if (origin !== "unattended" && this.browserControl) {
+          try {
+            configured = this.browserControl.resolveProfile({});
+          } catch {
+            configured = undefined;
+          }
+        }
+        return browserDefaultProfileForOrigin(origin, configured);
+      })(),
+      peekScheduleProposal: (proposalId) => {
+        const p = this.schedules?.store.getProposal(proposalId);
+        // Fail closed: never surface another account's resolvedLocal in the ask card.
+        if (!p || p.accountId !== input.accountId) return undefined;
+        return {
+          resolvedLocal: p.resolvedLocal,
+          kind: p.spec.kind,
+          ...(p.payload.message ? { message: p.payload.message } : {}),
+          ...(p.payload.kind === "agentTurn" && p.payload.prompt
+            ? { prompt: p.payload.prompt }
+            : {}),
+          ...(p.replacesJobId ? { replacesJobId: p.replacesJobId } : {}),
+        };
+      },
+      extraToolImpl: async (tool, args) => {
+        const mounts = await this.accounts.getWorkspaceMountRefs(
+          input.accountId,
+          this.getOwnerAccountId(),
+        );
+        const primary = mounts[0];
+        return runExtendedWorkflowTool({
           tool,
           args,
           skills: this.skills,
@@ -593,8 +989,97 @@ export class TurnService {
           accountId: input.accountId,
           origin,
           actuations: this.actuations,
-        }),
+          workspaceMounts: mounts,
+          workspaceRoot: primary?.hostPath ?? null,
+          workspaceMode: primary?.mode ?? null,
+          webSearch: this.webSearch,
+          browserControl: this.browserControl,
+          schedules: this.schedules,
+          workflows: this.workflows,
+          ...(input.clientContext ? { clientContext: input.clientContext } : {}),
+          ...(input.ctx?.session_id ? { sessionId: input.ctx.session_id } : {}),
+          ownerAccountId: this.getOwnerAccountId(),
+          authorizeBrowserFallback:
+            input.approval && input.ctx
+              ? async ({ engines }) => {
+                  const decision = await input.approval!.authorizeBrowserSearchFallback({
+                    accountId: input.ctx!.account_id,
+                    agentId: input.ctx!.agent_id,
+                    turnId: input.ctx!.turn_id,
+                    tool: "web_search",
+                    args: { ...args, _browserFallback: true, engines },
+                    summary: `browser search fallback (${engines.join("→")})`,
+                  });
+                  return decision === "allowed";
+                }
+              : async () => origin === "unattended",
+        });
+      },
     };
+  }
+
+  /** Design §4.2.1 — stamp workspace fields on TurnContext (R3-effective). */
+  private async workspaceStamp(accountId: string): Promise<{
+    workspace_root: string | null;
+    workspace_mode: "ro" | "rw" | null;
+    workspace_mounts: Array<{ id: string; host_path: string; mode: "ro" | "rw" }>;
+  }> {
+    const mounts = await this.accounts.getWorkspaceMountRefs(
+      accountId,
+      this.getOwnerAccountId(),
+    );
+    if (mounts.length === 0) {
+      return { workspace_root: null, workspace_mode: null, workspace_mounts: [] };
+    }
+    const primary = mounts[0]!;
+    return {
+      workspace_root: primary.hostPath,
+      workspace_mode: primary.mode,
+      workspace_mounts: mounts.map((m) => ({
+        id: m.id,
+        host_path: m.hostPath,
+        mode: m.mode,
+      })),
+    };
+  }
+
+  /** Prompt cue so the model uses `workspace/…` when host folders are configured. */
+  private withWorkspaceInject(
+    standing: string,
+    workspace: {
+      workspace_root: string | null;
+      workspace_mode: "ro" | "rw" | null;
+      workspace_mounts: Array<{ id: string; host_path: string; mode: "ro" | "rw" }>;
+    },
+  ): string {
+    const mounts = workspace.workspace_mounts;
+    if (mounts.length === 0) return standing;
+    const lines =
+      mounts.length === 1
+        ? (() => {
+            const m = mounts[0]!;
+            const mode = m.mode === "rw" ? "read-write" : "read-only";
+            const rootNote = isFilesystemRoot(m.host_path)
+              ? " (whole-machine root)"
+              : "";
+            return [
+              `- One host folder is configured${rootNote} with **${mode}** access.`,
+              `- Reach it via \`workspace/…\` (single-folder flat paths) or \`workspace/${m.id}/…\`.`,
+            ];
+          })()
+        : [
+            `- ${mounts.length} host folders are configured. Use \`workspace/<mountId>/…\` (never raw absolute OS paths).`,
+            ...mounts.map((m) => {
+              const mode = m.mode === "rw" ? "rw" : "ro";
+              const rootNote = isFilesystemRoot(m.host_path) ? " [whole-machine]" : "";
+              return `- \`${m.id}\`${rootNote} (${mode})`;
+            }),
+          ];
+    const block = `## Host workspace
+${lines.join("\n")}
+- For files the human should open in Shared files, prefer \`documents/\` or \`output/\` under the private sandbox; cite \`workspace/…\` when writing on the host so Open chips still work.
+- The private sandbox remains under \`documents/\`, \`output/\`, \`knowledge/\`, and \`uploads/\`.`;
+    return standing.trimEnd() + "\n\n" + block;
   }
 
   /**
@@ -634,6 +1119,20 @@ export class TurnService {
       ? `${input.standingInject}\n\n${card}`
       : card;
     return { homeSurface: true, standingInject };
+  }
+
+  /**
+   * Design §5.7.8 — workflows are always a home surface: standing + identity +
+   * the same bound-object card HomeChat gets (opaque handles, never a full dump).
+   */
+  private async standingInjectWithBoundCard(
+    accountId: string,
+    standingText: string,
+  ): Promise<string> {
+    const base = withProductIdentity(standingText);
+    const boundForAccount = await this.channels.objects.list({ bound: true });
+    const card = buildBoundObjectCard(boundForAccount, accountId);
+    return `${base}\n\n${card}`;
   }
 
   /**
@@ -775,6 +1274,9 @@ export class TurnService {
       status: info.status,
       at: new Date().toISOString(),
     });
+    if (info.status === "ok") {
+      void this.maybeAfterTurnEnrich(info);
+    }
     if (this.onComplete) {
       try {
         await this.onComplete(info);
@@ -783,6 +1285,29 @@ export class TurnService {
       }
     }
     active.delete(info.turnId);
+  }
+
+  /** Heuristic PendingLearn proposals for user profile + IDENTITY.md (reviewEnabled). */
+  private async maybeAfterTurnEnrich(info: TurnCompleteInfo): Promise<void> {
+    try {
+      const lines = await readTranscript(
+        this.sessions.sessionDir(info.accountId, info.sessionId),
+      );
+      let userText = "";
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (lines[i]?.role === "user") {
+          userText = String(lines[i]?.text ?? "");
+          break;
+        }
+      }
+      if (!userText.trim()) return;
+      await this.memory.afterTurnEnrich(info.accountId, {
+        userText,
+        turnId: info.turnId,
+      });
+    } catch {
+      /* enrichment must never fail the turn */
+    }
   }
 
   /**
@@ -808,7 +1333,22 @@ export class TurnService {
       forceLocal,
       text,
     );
-    const completed = await provider.complete({ messages });
+    const { inject } = await this.buildStandingInjectFor(
+      accountId,
+      this.injectTurnActive({ accountId, forceLocal }),
+    );
+    const standing = withProductIdentity(inject.text);
+    const headed: Array<{ role: "system" | "user" | "assistant"; content: string }> =
+      messages[0]?.role === "system"
+        ? [
+            {
+              role: "system",
+              content: `${standing}\n\n${messages[0].content}`,
+            },
+            ...messages.slice(1),
+          ]
+        : [{ role: "system", content: standing }, ...messages];
+    const completed = await provider.complete({ messages: headed });
     return completed.text;
   }
 
@@ -871,15 +1411,23 @@ export class TurnService {
         forceLocal,
       }),
     );
+    const standingWithCard = await this.standingInjectWithBoundCard(
+      input.accountId,
+      inject.text,
+    );
 
+    const workspace = await this.workspaceStamp(input.accountId);
     const ctx: TurnContext = {
       account_id: input.accountId,
       agent_id: session.agentId,
       session_id: session.sessionId,
       turn_id: turnId,
       sandbox_root: sandboxRoot,
+      workspace_root: workspace.workspace_root,
+      workspace_mode: workspace.workspace_mode,
+      workspace_mounts: workspace.workspace_mounts,
       origin,
-      standing_inject: inject.text,
+      standing_inject: this.withWorkspaceInject(standingWithCard, workspace),
       policy_snapshot: {
         origin,
         tool_policy: toolPolicy,
@@ -904,7 +1452,12 @@ export class TurnService {
       provider,
       approval: approvalSink,
       fs: this.sandboxFs(input.accountId),
-      ...this.workflowDispatchExtras({ accountId: input.accountId, origin }),
+      ...this.workflowDispatchExtras({
+        accountId: input.accountId,
+        origin,
+        approval: approvalSink,
+        ctx,
+      }),
     };
 
     try {
@@ -922,7 +1475,7 @@ export class TurnService {
         llm: async (prompt) => {
           const completed = await provider.complete({
             messages: [
-              ...(inject.text ? [{ role: "system" as const, content: inject.text }] : []),
+              { role: "system" as const, content: standingWithCard },
               { role: "user" as const, content: prompt },
             ],
           });
@@ -975,9 +1528,14 @@ export class TurnService {
       mimeType?: string;
       bytes?: number;
     }>;
+    /** Design §7.4 / 2026-10-19m — must not drop on keyword→workflow route. */
+    clientContext?: import("./client-context.js").ClientTurnContext;
   }): Promise<void> {
     const record = active.get(input.turnId);
     if (!record) return;
+
+    const { formatClientContextInject } = await import("./client-context.js");
+    const clientCtxInject = formatClientContextInject(input.clientContext);
 
     const account = await this.accounts.get(input.accountId);
     const toolPolicy = account?.toolPolicy ?? "standard";
@@ -1011,15 +1569,28 @@ export class TurnService {
         ...(pickedWf !== undefined ? { pickedProviderId: pickedWf } : {}),
       }),
     );
+    const standingBase = clientCtxInject
+      ? inject.text
+        ? `${inject.text}\n\n${clientCtxInject}`
+        : clientCtxInject
+      : inject.text;
+    const standingWithCard = await this.standingInjectWithBoundCard(
+      input.accountId,
+      standingBase,
+    );
 
+    const workspace = await this.workspaceStamp(input.accountId);
     const ctx: TurnContext = {
       account_id: input.accountId,
       agent_id: input.agentId,
       session_id: input.sessionId,
       turn_id: input.turnId,
       sandbox_root: sandboxRoot,
+      workspace_root: workspace.workspace_root,
+      workspace_mode: workspace.workspace_mode,
+      workspace_mounts: workspace.workspace_mounts,
       origin,
-      standing_inject: inject.text,
+      standing_inject: this.withWorkspaceInject(standingWithCard, workspace),
       policy_snapshot: {
         origin,
         tool_policy: toolPolicy,
@@ -1055,7 +1626,13 @@ export class TurnService {
       provider,
       approval: approvalSink,
       fs: this.sandboxFs(input.accountId),
-      ...this.workflowDispatchExtras({ accountId: input.accountId, origin }),
+      ...this.workflowDispatchExtras({
+        accountId: input.accountId,
+        origin,
+        approval: approvalSink,
+        ctx,
+        ...(input.clientContext ? { clientContext: input.clientContext } : {}),
+      }),
     };
 
     let replyText = "";
@@ -1075,7 +1652,7 @@ export class TurnService {
         llm: async (prompt) => {
           const completed = await provider.complete({
             messages: [
-              ...(inject.text ? [{ role: "system" as const, content: inject.text }] : []),
+              { role: "system" as const, content: standingWithCard },
               { role: "user" as const, content: prompt },
             ],
           });
@@ -1083,6 +1660,7 @@ export class TurnService {
         },
       });
       replyText = results.map((r) => `${r.type}:${r.ok ? "ok" : r.detail}`).join("; ") || "workflow finished";
+      const format = classifyOutputFormat(replyText, { prefer: "plain" });
       this.emit("home:turn-delta", {
         turnId: input.turnId,
         sessionId: input.sessionId,
@@ -1090,10 +1668,12 @@ export class TurnService {
         agentId: input.agentId,
         kind: "text",
         text: replyText,
+        format,
       });
       await appendTranscriptLine(sessionDir, {
         role: "assistant",
         text: replyText,
+        format,
         at: new Date().toISOString(),
         turnId: input.turnId,
         route: "workflow",
@@ -1124,12 +1704,15 @@ export class TurnService {
     turnId: string;
     abort: AbortController;
     callerKind: string;
+    memoryTrust?: "owner" | "agent" | "untrusted";
     plannedTools?: Array<{ tool: string; args: unknown; summary?: string }>;
     completionText?: string;
     origin?: TurnOrigin;
     channel?: string;
     rawRef?: string;
     hasMedia?: boolean;
+    /** Schedule agentTurn may force restricted/standard over account default. */
+    toolPolicyOverride?: "standard" | "restricted";
     media?: Array<{
       kind: "image" | "audio" | "video" | "file";
       uri: string;
@@ -1137,12 +1720,18 @@ export class TurnService {
       mimeType?: string;
       bytes?: number;
     }>;
+    /** Design §7.4 / 2026-10-19m. */
+    clientContext?: import("./client-context.js").ClientTurnContext;
   }): Promise<void> {
     const record = active.get(input.turnId);
     if (!record) return;
 
+    const { formatClientContextInject } = await import("./client-context.js");
+    const clientCtxInject = formatClientContextInject(input.clientContext);
+
     const account = await this.accounts.get(input.accountId);
-    const toolPolicy = account?.toolPolicy ?? "standard";
+    const toolPolicy =
+      input.toolPolicyOverride ?? account?.toolPolicy ?? "standard";
     const origin = deriveOrigin(input.callerKind, input.origin);
     const forceLocal = await this.resolveForceLocal(
       input.accountId,
@@ -1184,21 +1773,35 @@ export class TurnService {
       }),
     );
 
+    const standingWithClient = clientCtxInject
+      ? inject.text
+        ? `${inject.text}\n\n${clientCtxInject}`
+        : clientCtxInject
+      : inject.text;
+
     const home = await this.resolveHomeTurnSurface({
       accountId: input.accountId,
       sessionId: input.sessionId,
       userText: input.text,
-      standingInject: inject.text,
+      standingInject: standingWithClient,
     });
+    let standingForTurn = home.standingInject;
+    const turnMeta = await this.sessions.get(input.accountId, input.sessionId);
+    if (normalizePurpose(turnMeta?.purpose) === "schedules" && this.schedules) {
+      const jobs = await this.schedules.store.listJobs(input.accountId);
+      const card = formatSchedulesChatCard(jobs);
+      standingForTurn = standingForTurn ? `${standingForTurn}\n\n${card}` : card;
+    }
 
     const { history } = await this.maintainSessionWindow({
       accountId: input.accountId,
       sessionId: input.sessionId,
       turnId: input.turnId,
       newUserText: input.text,
-      standingInjectText: home.standingInject,
+      standingInjectText: standingForTurn,
       origin,
       callerKind: input.callerKind,
+      ...(input.memoryTrust !== undefined ? { memoryTrust: input.memoryTrust } : {}),
       ...(contextTokens !== undefined ? { contextTokens } : {}),
     });
 
@@ -1250,21 +1853,106 @@ export class TurnService {
       }
     }
 
+    let preparedSchedule:
+      | {
+          proposalId: string;
+          resolvedLocal: string;
+          createdAt: string;
+          expiresAt?: string;
+          message?: string;
+          name?: string;
+        }
+      | undefined;
+    let scheduleOfferShown = false;
+    if (this.schedules && plannedTools === undefined) {
+      const sessionMeta = await this.sessions.get(input.accountId, input.sessionId);
+      const pending = sessionMeta?.pendingScheduleConfirm;
+      const replyZh = /[\u4e00-\u9fff]/.test(
+        `${input.text}\n${pending?.resolvedLocal ?? ""}`,
+      );
+      if (pending && isScheduleDenial(input.text)) {
+        try {
+          await this.schedules.cancelProposal(input.accountId, pending.proposalId);
+        } catch {
+          /* already gone / expired — still clear session */
+        }
+        await this.sessions.patchMeta(input.accountId, input.sessionId, {
+          pendingScheduleConfirm: null,
+        });
+        plannedTools = [];
+        completionText =
+          completionText ?? (replyZh ? "好的，已取消这个提醒。" : "Okay — cancelled that reminder.");
+      } else if (pending && isScheduleAffirmation(input.text)) {
+        plannedTools = [
+          {
+            tool: "schedule",
+            args: { action: "confirm", proposalId: pending.proposalId },
+            summary: `Arm schedule at ${pending.resolvedLocal}`,
+          },
+        ];
+        completionText =
+          completionText ??
+          (replyZh
+            ? `已设置：${pending.resolvedLocal}。`
+            : `Set: ${pending.resolvedLocal}.`);
+      }
+    }
+    if (this.schedules && plannedTools === undefined && !isScheduleAffirmation(input.text)) {
+      try {
+        const proposal = await this.schedules.proposeFromText(
+          input.accountId,
+          input.text,
+          input.clientContext?.timeZone,
+          {
+            sessionId: input.sessionId,
+            ...(input.clientContext ? { clientContext: input.clientContext } : {}),
+          },
+        );
+        if (!("error" in proposal)) {
+          preparedSchedule = {
+            proposalId: proposal.proposalId,
+            resolvedLocal: proposal.resolvedLocal,
+            createdAt: new Date().toISOString(),
+            expiresAt: proposal.expiresAt,
+            name: proposal.name,
+            ...(proposal.payload.message ? { message: proposal.payload.message } : {}),
+          };
+        }
+      } catch {
+        /* offer path still works without a stored proposal */
+      }
+    }
+
+    const workspace = await this.workspaceStamp(input.accountId);
     const ctx: TurnContext = {
       account_id: input.accountId,
       agent_id: input.agentId,
       session_id: input.sessionId,
       turn_id: input.turnId,
       sandbox_root: sandboxRoot,
+      workspace_root: workspace.workspace_root,
+      workspace_mode: workspace.workspace_mode,
+      workspace_mounts: workspace.workspace_mounts,
       origin,
-      standing_inject: home.standingInject,
+      standing_inject: this.withWorkspaceInject(
+        withProductIdentity(standingForTurn),
+        workspace,
+      ),
       policy_snapshot: {
         origin,
         tool_policy: toolPolicy,
         model_mode: this.providers.modeForAccount(input.accountId),
         homeSurface: home.homeSurface,
+        schedulesSurface: normalizePurpose(turnMeta?.purpose) === "schedules",
       },
     };
+
+    const offerTz = this.schedules
+      ? await this.schedules.resolveTimeZone(input.accountId, input.clientContext?.timeZone)
+      : "UTC";
+    const offerLocale = this.schedules
+      ? await this.schedules.resolveLocale(input.accountId, input.clientContext?.locale)
+      : input.clientContext?.locale;
 
     const approvalSink = new ApprovalSink({
       store: this.approvals,
@@ -1296,7 +1984,13 @@ export class TurnService {
         provider,
         approval: approvalSink,
         fs: this.sandboxFs(input.accountId),
-        ...this.workflowDispatchExtras({ accountId: input.accountId, origin }),
+        ...this.workflowDispatchExtras({
+          accountId: input.accountId,
+          origin,
+          approval: approvalSink,
+          ctx,
+          ...(input.clientContext ? { clientContext: input.clientContext } : {}),
+        }),
         ...(completionText !== undefined ? { completionText } : {}),
         ...(toolLoop
           ? {
@@ -1321,8 +2015,41 @@ export class TurnService {
               },
             }
           : {}),
+        ...(this.schedules
+          ? {
+              scheduleIntentOffer: (userText: string) => {
+                try {
+                  const resolved = resolveScheduleFromText({
+                    text: userText,
+                    referenceNow: resolveReferenceNow(new Date(), input.clientContext),
+                    timeZone: offerTz,
+                    ...(offerLocale ? { locale: offerLocale } : {}),
+                  });
+                  const offer = formatScheduleIntentOffer(
+                    resolved,
+                    `${userText}\n${offerLocale ?? ""}`,
+                  );
+                  if (offer && preparedSchedule) scheduleOfferShown = true;
+                  return offer;
+                } catch {
+                  return undefined;
+                }
+              },
+            }
+          : {}),
       };
       let toolsDispatched = false;
+      let scheduleArmed = false;
+      let capturedSchedule:
+        | {
+            proposalId: string;
+            resolvedLocal: string;
+            createdAt: string;
+            expiresAt?: string;
+            message?: string;
+            name?: string;
+          }
+        | undefined;
       for await (const ev of runTurn({
         userText: input.text,
         history,
@@ -1335,8 +2062,37 @@ export class TurnService {
           break;
         }
         if (ev.kind === "tool_call") toolsDispatched = true;
+        if (ev.kind === "tool_result" && ev.tool === "schedule" && ev.text) {
+          try {
+            const j = JSON.parse(ev.text) as {
+              proposalId?: unknown;
+              resolvedLocal?: unknown;
+              armed?: unknown;
+              updated?: unknown;
+            };
+            if (j.armed === true || j.updated === true) scheduleArmed = true;
+            else if (typeof j.proposalId === "string" && j.proposalId.trim()) {
+              const peek = this.schedules?.store.getProposal(j.proposalId.trim());
+              capturedSchedule = {
+                proposalId: j.proposalId.trim(),
+                resolvedLocal:
+                  typeof j.resolvedLocal === "string"
+                    ? j.resolvedLocal
+                    : (peek?.resolvedLocal ?? ""),
+                createdAt: new Date().toISOString(),
+                ...(peek?.expiresAt ? { expiresAt: peek.expiresAt } : {}),
+                ...(peek?.name ? { name: peek.name } : {}),
+                ...(peek?.payload.message ? { message: peek.payload.message } : {}),
+              };
+            }
+          } catch {
+            /* non-JSON schedule result */
+          }
+        }
         if (ev.kind === "text" && ev.text) {
           replyText += ev.text;
+          // Classify on the cumulative reply so early chunks stay consistent with the final tier.
+          const format = classifyOutputFormat(replyText);
           this.emit("home:turn-delta", {
             turnId: input.turnId,
             sessionId: input.sessionId,
@@ -1344,10 +2100,12 @@ export class TurnService {
             agentId: input.agentId,
             kind: "text",
             text: ev.text,
+            format,
           });
           await appendTranscriptLine(sessionDir, {
             role: "assistant",
             text: ev.text,
+            format,
             at: new Date().toISOString(),
             turnId: input.turnId,
           });
@@ -1366,6 +2124,42 @@ export class TurnService {
           pendingHomeProposal: null,
         });
       }
+      if (this.schedules) {
+        if (scheduleArmed) {
+          await this.sessions.patchMeta(input.accountId, input.sessionId, {
+            pendingScheduleConfirm: null,
+          });
+        } else if (capturedSchedule) {
+          await this.sessions.patchMeta(input.accountId, input.sessionId, {
+            pendingScheduleConfirm: capturedSchedule,
+          });
+          const live = this.schedules.store.getProposal(capturedSchedule.proposalId);
+          if (live) this.schedules.emitProposed(live);
+        } else if (scheduleOfferShown && preparedSchedule) {
+          await this.sessions.patchMeta(input.accountId, input.sessionId, {
+            pendingScheduleConfirm: preparedSchedule,
+          });
+          const live = this.schedules.store.getProposal(preparedSchedule.proposalId);
+          if (live) this.schedules.emitProposed(live);
+        }
+      }
+      // Thin-client (desktop/mobile) long replies → link + artifactPath (mesh open).
+      // IM channel turns keep full markdown in transcript + outbound (no home HTTPS).
+      if (
+        status === "ok" &&
+        !input.abort.signal.aborted &&
+        replyText &&
+        shouldSpillThinClientLink(replyText) &&
+        !(input.channel && input.channel !== "hatch")
+      ) {
+        await this.spillThinClientLinkReply({
+          accountId: input.accountId,
+          sessionId: input.sessionId,
+          turnId: input.turnId,
+          sessionDir,
+          replyText,
+        });
+      }
       await this.sessions.touch(input.accountId, input.sessionId);
     } catch {
       status = "error";
@@ -1381,6 +2175,54 @@ export class TurnService {
         ...(input.rawRef !== undefined ? { rawRef: input.rawRef } : {}),
       });
     }
+  }
+
+  /**
+   * Design §9.5 — write full reply under files/output/replies/, collapse transcript to
+   * `link` + `artifactPath` so EnvoyHome mobile opens via home.getArtifactContent.
+   */
+  private async spillThinClientLinkReply(input: {
+    accountId: string;
+    sessionId: string;
+    turnId: string;
+    sessionDir: string;
+    replyText: string;
+  }): Promise<void> {
+    const relPath = `output/replies/${input.turnId}.md`;
+    const abs = safeJoin(this.paths.accountFiles(input.accountId), relPath);
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, input.replyText, "utf8");
+    const summary = summarizeForLinkBubble(input.replyText);
+    await updateTranscript(input.sessionDir, (lines) => {
+      const out: Record<string, unknown>[] = [];
+      let replaced = false;
+      for (const line of lines) {
+        if (line.role === "assistant" && line.turnId === input.turnId) {
+          if (replaced) continue;
+          out.push({
+            ...line,
+            text: summary,
+            format: "link",
+            artifactPath: relPath,
+          });
+          replaced = true;
+          continue;
+        }
+        out.push(line);
+      }
+      return out;
+    });
+    // Live clients merge by turnId — replace bubble text with summary + path.
+    this.emit("home:turn-delta", {
+      turnId: input.turnId,
+      sessionId: input.sessionId,
+      accountId: input.accountId,
+      agentId: "default",
+      kind: "text",
+      text: summary,
+      format: "link",
+      artifactPath: relPath,
+    });
   }
 
   cancelTurn(turnId: string): boolean {
@@ -1475,29 +2317,58 @@ export class TurnService {
   /**
    * Sandbox fs for tool nodes. Creates parent dirs on write so paths like
    * `notes/foo.txt` work on a fresh account (demo workflows).
+   * Resolves `workspace/…` under the account's optional host root (§4.2.1).
    */
   private sandboxFs(accountId: string): TurnDeps["fs"] {
     const accountFilesRoot = this.paths.accountFiles(accountId);
     const shareRoot = this.paths.shareDir;
+    const resolvePath = async (rel: string, write: boolean) => {
+      const mounts = await this.accounts.getWorkspaceMountRefs(
+        accountId,
+        this.getOwnerAccountId(),
+      );
+      const primary = mounts[0];
+      return resolveSandboxPath({
+        accountFilesRoot,
+        shareRoot,
+        path: rel,
+        write,
+        workspaceMounts: mounts,
+        workspaceRoot: primary?.hostPath ?? null,
+        workspaceMode: primary?.mode ?? null,
+      });
+    };
+    const browseWs = async () => {
+      const mounts = await this.accounts.getWorkspaceMountRefs(
+        accountId,
+        this.getOwnerAccountId(),
+      );
+      const primary = mounts[0];
+      return {
+        accountFilesRoot,
+        shareRoot,
+        workspaceMounts: mounts,
+        workspaceRoot: primary?.hostPath ?? null,
+        workspaceMode: primary?.mode ?? null,
+      };
+    };
     return {
       writeFile: async (rel: string, content: string) => {
-        const resolved = resolveSandboxPath({
-          accountFilesRoot,
-          shareRoot,
-          path: rel,
-          write: true,
-        });
+        const resolved = await resolvePath(rel, true);
         await mkdir(dirname(resolved.absolute), { recursive: true });
         await writeFile(resolved.absolute, content, "utf8");
       },
       readFile: async (rel: string) => {
-        const resolved = resolveSandboxPath({
-          accountFilesRoot,
-          shareRoot,
-          path: rel,
-          write: false,
-        });
+        const resolved = await resolvePath(rel, false);
         return readFile(resolved.absolute, "utf8");
+      },
+      listDir: async (rel: string) => {
+        const result = await listSandboxDir(await browseWs(), rel);
+        return JSON.stringify(result);
+      },
+      searchFiles: async (opts) => {
+        const result = await searchSandboxFiles(await browseWs(), opts);
+        return JSON.stringify(result);
       },
     };
   }

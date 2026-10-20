@@ -51,6 +51,7 @@ export function snapshotsEqual(a: FileSnapshot, b: FileSnapshot): boolean {
 export interface StandingSnapshots {
   profile: FileSnapshot;
   memory: FileSnapshot;
+  identity: FileSnapshot;
   /** Keyed by YYYY-MM-DD */
   dailies: Map<string, FileSnapshot>;
 }
@@ -59,6 +60,7 @@ export function emptyStandingSnapshots(): StandingSnapshots {
   return {
     profile: { path: "", mtimeMs: 0, hash: "", exists: false },
     memory: { path: "", mtimeMs: 0, hash: "", exists: false },
+    identity: { path: "", mtimeMs: 0, hash: "", exists: false },
     dailies: new Map(),
   };
 }
@@ -72,6 +74,7 @@ export function standingChanged(
 ): boolean {
   if (!snapshotsEqual(previous.profile, next.profile)) return true;
   if (!snapshotsEqual(previous.memory, next.memory)) return true;
+  if (!snapshotsEqual(previous.identity, next.identity)) return true;
   const keys = new Set([...previous.dailies.keys(), ...next.dailies.keys()]);
   for (const k of keys) {
     const a = previous.dailies.get(k) ?? {

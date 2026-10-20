@@ -10,6 +10,7 @@ import { SubscriptionRegistry } from "./events.js";
 import { startWsHost, type HostHandle } from "./host.js";
 import { startHttpHatch } from "./http.js";
 import { AccountStore } from "./accounts.js";
+import { HouseholdStore } from "./household.js";
 import { BindingStore } from "./bindings.js";
 import { PairingStore } from "./pairing.js";
 import {
@@ -42,6 +43,8 @@ import { WorkflowStore } from "./workflows.js";
 import { WorkflowStepTemplateStore } from "./workflow-step-templates.js";
 import { SkillService } from "./skills.js";
 import { ArtifactService } from "./artifacts.js";
+import { WebSearchService } from "./web-search.js";
+import { BrowserControlService } from "./browser-control.js";
 import { ProductEventBus, homeEventDispositions } from "./product-events.js";
 import { ScheduleService } from "./schedule/service.js";
 import { LocalEngineService } from "./local-engine/service.js";
@@ -54,6 +57,7 @@ export interface RunningDaemon {
   logger: DaemonLogger;
   devices: DeviceCredentialStore;
   accounts: AccountStore;
+  household: HouseholdStore;
   bindings: BindingStore;
   pairing: PairingStore;
   memory: MemoryFacade;
@@ -66,6 +70,8 @@ export interface RunningDaemon {
   schedules: ScheduleService;
   skills: SkillService;
   artifacts: ArtifactService;
+  webSearch: import("./web-search.js").WebSearchService;
+  browserControl: BrowserControlService;
   actuations: ActuationService;
   pushTokens: PushTokenStore;
   push: PushDispatcher;
@@ -101,6 +107,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   const logger = new DaemonLogger();
   const devices = new DeviceCredentialStore();
   const accounts = new AccountStore(config.stateDir);
+  const household = new HouseholdStore(config.stateDir);
   const bindings = new BindingStore(config.stateDir, devices);
   const pairing = new PairingStore(config.stateDir, devices, bindings);
   const memory = new MemoryFacade({ stateDir: config.stateDir });
@@ -133,7 +140,24 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   const workflowStepTemplates = new WorkflowStepTemplateStore(paths);
   const skills = new SkillService(paths);
   const artifacts = new ArtifactService(paths, () => config.publicBaseUrl);
+  artifacts.setWorkspaceLookup(async (accountId) => {
+    const mounts = await accounts.getWorkspaceMountRefs(
+      accountId,
+      household.getOwnerAccountId(),
+    );
+    if (mounts.length === 0) return null;
+    const primary = mounts[0]!;
+    return {
+      mounts,
+      hostPath: primary.hostPath,
+      mode: primary.mode,
+    };
+  });
   const actuations = new ActuationService(paths);
+  const webSearch = new WebSearchService(paths);
+  await webSearch.load();
+  const browserControl = new BrowserControlService(paths);
+  await browserControl.load();
   const pushTokens = new PushTokenStore(paths);
   ensureSmarthomeToolSpecsRegistered();
   const demoHa = new DemoHaService();
@@ -150,13 +174,25 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     channels,
     actuations,
   );
+  turns.setOwnerAccountIdLookup(() => household.getOwnerAccountId());
+  turns.setWebSearch(webSearch);
+  turns.setBrowserControl(browserControl);
   const events = new ProductEventBus();
   localEngine.setEmit((event, data) => events.emit(event, data));
   const schedules = new ScheduleService({
     paths,
     defaultTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+    accountTimeZone: async (accountId) => {
+      const rec = await accounts.get(accountId);
+      return rec?.timeZone;
+    },
+    accountLocale: async (accountId) => {
+      const rec = await accounts.get(accountId);
+      return rec?.locale;
+    },
     emit: (event, data) => events.emit(event, data),
   });
+  turns.setSchedules(schedules);
   const push = new PushDispatcher(pushTokens, config.stateDir, logger);
   await push.init();
   // Notify → EnvoyMesh super channel: live WS (`home:schedule-fired`) + APNs/FCM wake.
@@ -182,12 +218,34 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       await turns.runScheduledWorkflow(job.accountId, job.payload.workflowId);
       return { execStatus: "ok", deliveryStatus: "none" };
     }
+    if (job.payload.kind === "agentTurn" && job.payload.prompt) {
+      await turns.runScheduledAgentTurn(job.accountId, {
+        prompt: job.payload.prompt,
+        ...(job.payload.toolPolicyPreset
+          ? { toolPolicyPreset: job.payload.toolPolicyPreset }
+          : {}),
+        ...(job.payload.maxToolRounds !== undefined
+          ? { maxToolRounds: job.payload.maxToolRounds }
+          : {}),
+      });
+      return { execStatus: "ok", deliveryStatus: "none" };
+    }
+    if (job.payload.kind === "agentTurn") {
+      return {
+        execStatus: "error",
+        deliveryStatus: "none",
+        error: "agentTurn payload missing prompt",
+      };
+    }
     if (job.payload.kind === "system") {
       const sys = job.payload.systemJob ?? "consolidate";
       if (sys === "consolidate") {
         await memory.compactMemory(job.accountId, { trust: "agent" });
+      } else if (sys === "review") {
+        await turns.runScheduledMemoryReview(job.accountId);
+      } else if (sys === "flush") {
+        await turns.runScheduledMemoryFlush(job.accountId);
       }
-      // flush/review stay turn-bound until a dedicated clock path is Normative.
       return { execStatus: "ok", deliveryStatus: "none" };
     }
     if (job.payload.kind === "tool" && job.payload.toolName) {
@@ -216,9 +274,10 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   });
   turns.setEmit(events.emit);
   channels.attachTurns(turns, turns.privacyMode);
-  // Sync workflow schedules for known accounts
+  // Sync workflow schedules for known accounts (+ review job when enabled)
   for (const a of await accounts.list()) {
-    await schedules.watchAccount(a.accountId);
+    const pol = await turns.policy.get(a.accountId);
+    await schedules.watchAccount(a.accountId, { reviewEnabled: pol.reviewEnabled });
     const defs = workflows.mergedForAccount(a.accountId);
     await schedules.syncWorkflowSchedules(
       a.accountId,
@@ -232,9 +291,14 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
 
   await mkdir(config.stateDir, { recursive: true });
   await accounts.ensureLayout();
+  await household.load();
   // Load durable paired-devices hashes into the credential store (B4).
   await pairing.list();
-  const knownAccounts = (await accounts.list()).map((a) => a.accountId);
+  const knownAccountRows = await accounts.list();
+  const knownAccounts = knownAccountRows.map((a) => a.accountId);
+  await household.fixMissingOwner(knownAccountRows);
+  // R3: drop stale whole-machine workspaces on non-Owner seats (e.g. after crash mid-transfer).
+  await accounts.clearNonOwnerFilesystemRoots(household.getOwnerAccountId());
   await actuations.reconcileAll(knownAccounts);
 
   let stopping = false;
@@ -286,6 +350,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       subscriptions,
       packageVersion,
       accounts,
+      household,
       bindings,
       pairing,
       memory,
@@ -298,6 +363,8 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       schedules,
       skills,
       artifacts,
+      webSearch,
+      browserControl,
       actuations,
       pushTokens,
       push,
@@ -357,6 +424,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     ws.stop();
   });
   stoppers.push(() => schedules.stop());
+  stoppers.push(() => browserControl.shutdown());
 
   const mesh: MeshHostHandle = {
     status: meshStatus,
@@ -406,6 +474,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     logger,
     devices,
     accounts,
+    household,
     bindings,
     pairing,
     memory,
@@ -418,6 +487,8 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     schedules,
     skills,
     artifacts,
+    webSearch,
+    browserControl,
     actuations,
     pushTokens,
     push,

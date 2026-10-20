@@ -5,8 +5,9 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../state/session_controller.dart';
 import 'artifacts_tab.dart';
+import 'profiles_screen.dart';
 
-/// System: Shared files | Health | Grants.
+/// System: Profiles | Shared files | Health | Grants (Design §10.1).
 class SystemScreen extends StatelessWidget {
   const SystemScreen({super.key, required this.session});
 
@@ -16,12 +17,14 @@ class SystemScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: Text(l10n.navSystem),
           bottom: TabBar(
+            isScrollable: true,
             tabs: [
+              Tab(text: l10n.navProfiles),
               Tab(text: l10n.sysTabFiles),
               Tab(text: l10n.sysTabHealth),
               Tab(text: l10n.sysTabGrants),
@@ -30,6 +33,7 @@ class SystemScreen extends StatelessWidget {
         ),
         body: TabBarView(
           children: [
+            ProfilesScreen(session: session, embedded: true),
             ArtifactsTab(session: session),
             _DoctorTab(session: session),
             _GrantsTab(session: session),

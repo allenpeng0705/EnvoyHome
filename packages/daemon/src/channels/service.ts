@@ -18,6 +18,7 @@ import {
 } from "../demo-cleanup.js";
 import { ObjectRegistry } from "../object-registry.js";
 import { ChannelStateStore } from "./state.js";
+import { classifyOutputFormat, formatForChannelOutbound } from "../output-format.js";
 import type { TurnCompleteInfo, TurnService, TurnWireResult } from "../turn-service.js";
 import type { PrivacyModeStore } from "../policy-store.js";
 
@@ -251,6 +252,7 @@ export class ChannelService {
       callerKind: "hatch",
       origin: "attended",
       channel: "hatch",
+      memoryTrust: "untrusted",
     });
     return {
       turnId: result.turnId,
@@ -273,6 +275,7 @@ export class ChannelService {
     origin: "attended" | "unattended";
     channel: string;
     rawRef?: string;
+    memoryTrust?: "owner" | "agent" | "untrusted";
   }): Promise<TurnWireResult> {
     if (!this.turns) {
       // Pre-attach (tests that only exercise binding gates).
@@ -290,6 +293,7 @@ export class ChannelService {
       origin: input.origin,
       channel: input.channel,
       ...(input.rawRef !== undefined ? { rawRef: input.rawRef } : {}),
+      ...(input.memoryTrust !== undefined ? { memoryTrust: input.memoryTrust } : {}),
     });
   }
 
@@ -325,6 +329,7 @@ export class ChannelService {
         callerKind: "channel",
         origin: "attended",
         channel: event.channel,
+        memoryTrust: binding.trustedChannel ? "agent" : "untrusted",
         ...(event.rawRef !== undefined ? { rawRef: event.rawRef } : {}),
       });
       return { accepted: true, sessionId: turn.sessionId };
@@ -348,6 +353,7 @@ export class ChannelService {
         callerKind: "event-source",
         origin: "unattended",
         channel: event.channel,
+        memoryTrust: "untrusted",
         ...(event.rawRef !== undefined ? { rawRef: event.rawRef } : {}),
       });
       return { accepted: true, sessionId: turn.sessionId };
@@ -364,9 +370,12 @@ export class ChannelService {
       // Event-source: notification-only outbound optional later; never reply as actuation.
       return;
     }
+    // Design §9.5: IM channels never get `link` / home HTTPS — markdown (or plain) body only.
+    const thin = classifyOutputFormat(info.replyText);
     await this.deliverOutbound(info.channel, {
       accountId: info.accountId,
       text: info.replyText,
+      format: formatForChannelOutbound(thin),
       kind: "reply",
       ...(info.rawRef !== undefined ? { rawRef: info.rawRef } : {}),
     });

@@ -18,7 +18,8 @@ export interface SidecarInboundRequest {
 export interface SidecarInboundResponse {
   turnId: string;
   text: string;
-  format: "markdown" | "plain" | "link";
+  /** Hatch / sync reply — channels never use `link` (§9.5). */
+  format: "markdown" | "plain";
   accepted?: boolean;
   accountId?: string;
 }

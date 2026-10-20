@@ -4,7 +4,7 @@
 |-------|--------|
 | **Document** | Dedicated Normative design for the **memory + learning** subsystem |
 | **Status** | Living draft |
-| **Last updated** | 2026-10-13 (model-aware inject profiles) |
+| **Last updated** | 2026-10-18 (Owner risk resolution — member paired `untrusted`) |
 | **Parent** | [`EnvoyHome-Design.md`](EnvoyHome-Design.md) — product-wide ground truth |
 | **Summary in parent** | Design §9 |
 | **Peer research** | [`analysis/peer-memory-systems.md`](analysis/peer-memory-systems.md) |
@@ -18,6 +18,10 @@
 
 | Date | Change |
 |------|--------|
+| 2026-10-18w | **§13 trust:** Member paired turns are `untrusted` (Design §4.1.1 R5 resolved). `owner` = loopback or exclusive-Owner device acting as `ownerAccountId`. `trustedChannel` IM remains `agent`. |
+| 2026-10-18v | **§13 trust derivation:** superseded by `2026-10-18w` for member paired trust. |
+| 2026-10-18i | **§4.2 / §4.2.1 identity reserve:** brand floor + editable persona sit **outside** the L1–L3 package; `IDENTITY_STANDING_RESERVE` is subtracted before scaling L1–L3 under `MAX_FRACTION` / `CEILING_TOTAL`. `home.listMemory` reports identity `injectChars` as the full composed block. Additive learn kind `identity_append`. Account `displayName` injects as L1 `name` when no name fact exists. |
+| 2026-10-18h | **IDENTITY.md:** editable assistant persona + after-turn heuristic PendingLearns (profile + identity); inject brand floor + persona. |
 | 2026-10-13s | **§8 durable cues:** drop bare `I am`/`I'm` and cue-less bullets; keep anchored prefs/identity/diet/family/timezone only. Questions without durable cues stay out. |
 | 2026-10-13q | **§8 soft-flush fix:** soft-only preview uses soft-threshold budget (not compact); oldest-half durable fallback; unknown-context byte-force uses fixed 512-token keep window; durable cues drop bare always/never. |
 | 2026-10-13p | **§8 hardening:** do not burn flush cycle when `flushEnabled` skips or soft flush finds no durable lines; flush filter rejects sensitive/tool/chatter; byte-force flush+compact same turn; `home:session-compacted` separate from consolidate; workflow turns do not run L0 pressure (no full history window). |
@@ -138,7 +142,8 @@ Standing memory is **scarce by design**. Inject caps follow OpenClaw’s proven 
 
 | Asset | **Baseline** `injectBudget` (chars) | `rawSoftCap` (file on disk) | Action on crossing `rawSoftCap` |
 |-------|-------------------------------------|------------------------------|----------------------------------|
-| L1 `profile.json` | **4000** (OpenClaw `USER.md` hard ceiling) | **20 000** | Doctor issue `memory.profile_raw_oversize`; consolidate proposes supersede/removal. Never auto-delete a fact. |
+| Identity (brand floor + `IDENTITY.md` persona) | Floor **always**; persona body **3000** (`IDENTITY_INJECT_BUDGET`). Composed block reported as `injectChars`. | **20 000** (persona file) | Truncate persona for inject; disk kept. Reserve `IDENTITY_STANDING_RESERVE` before scaling L1–L3 (§4.2.1). |
+| L1 `profile.json` | **4000** (OpenClaw `USER.md` hard ceiling) | **20 000** | Doctor issue `memory.profile_raw_oversize`; consolidate proposes supersede/removal. Never auto-delete a fact. Account `displayName` injects as `name` when no name fact exists. |
 | L2 `MEMORY.md` | **20 000** (OpenClaw per-file `bootstrapMaxChars`) | **40 000** | **Consolidate rewrites L2** (merge duplicates, retire stale entries to L3/COMPACT). At 2× cap → Doctor `memory.memory_raw_oversize` severity=warn. |
 | L3 daily (today + yesterday) | **20 000 combined** (OpenClaw per-file cap applied to the combined daily inject) | **10 000 per file** | Older days stay on disk but leave the inject window; past 20 000 → Doctor issue. |
 | COMPACT.md | not injected | **20 000 chars or 20 entries** | Rotate to `memory/compact/` (§9 rule 6). |
@@ -200,20 +205,22 @@ Constants (characters; v1 token→char stand-in):
 |--------|------:|------|
 | `CHARS_PER_TOKEN` | **4** | `contextChars = contextTokens × 4` |
 | `OPENCLAW_L1` / `L2` / `L3` | **4000 / 20 000 / 20 000** | Target package (= §4.2 baseline); L1 mirrors OpenClaw `USER_BOOTSTRAP_MAX_CHARS` |
-| `BASELINE_TOTAL` | **44 000** | 4000+20000+20000 |
-| `CEILING_TOTAL` | **60 000** | OpenClaw `bootstrapTotalMaxChars` (standing three-asset sum is already ≤ 44k) |
-| `MAX_FRACTION` | **0.20** | Affordability: total standing inject ≤ 20% of `contextChars` |
-| `HARD_MIN_TOTAL` | **6 000** | Fallback package when **local** `contextTokens` is unknown; never used to inflate above `affordable` |
+| `BASELINE_TOTAL` | **44 000** | 4000+20000+20000 (L1–L3 only) |
+| `IDENTITY_STANDING_RESERVE` | floor + persona wrapper + **3000** | Always reserved before scaling L1–L3 |
+| `CEILING_TOTAL` | **60 000** | OpenClaw `bootstrapTotalMaxChars` (identity + L1–L3 ≤ ceiling) |
+| `MAX_FRACTION` | **0.20** | Affordability: **identity + L1–L3** ≤ 20% of `contextChars` |
+| `HARD_MIN_TOTAL` | **6 000** | Fallback **L1–L3** package when **local** `contextTokens` is unknown; never used to inflate above `affordable` |
 
 ```text
 contextChars = contextTokens * CHARS_PER_TOKEN
-affordable   = floor(contextChars * MAX_FRACTION)
+affordableStanding = floor(contextChars * MAX_FRACTION)
 if contextTokens unknown/invalid:
-  cloud → OpenClaw package; local → split(HARD_MIN_TOTAL)
-else if affordable >= BASELINE_TOTAL:
+  cloud → OpenClaw L1–L3 package; local → split(HARD_MIN_TOTAL)   # identity still reserved at inject
+else if affordableStanding >= BASELINE_TOTAL + IDENTITY_STANDING_RESERVE:
   use OpenClaw package exactly: l1=4000, l2=20000, l3=20000
 else:
-  total = min(affordable, BASELINE_TOTAL, CEILING_TOTAL)   # never > affordable
+  affordableL123 = max(0, affordableStanding - IDENTITY_STANDING_RESERVE)
+  total = min(affordableL123, BASELINE_TOTAL, CEILING_TOTAL - IDENTITY_STANDING_RESERVE)
   # split with OpenClaw ratios 4 : 20 : 20:
   l1 = floor(total * 4000 / 44000)
   l2 = floor(total * 20000 / 44000)
@@ -393,7 +400,8 @@ Optional backend only. See **Design §19.7** + [memory-tree-and-autofetch.md](an
 
 ```text
 <data>/accounts/<accountId>/
-  profile.json              # L1
+  IDENTITY.md               # Editable assistant persona (inject after brand floor)
+  profile.json              # L1 (user facts)
   MEMORY.md                 # L2
   memory/
     YYYY-MM-DD.md           # L3
@@ -641,12 +649,17 @@ Screen **`memory`** — this is the authoritative list; Design §10.1's `memory`
 | Origin of the write | `trust` |
 |---------------------|---------|
 | Loopback owner-window session (`home.*` over loopback, no device token) | `owner` |
-| A paired device with `ownerTrusted: true` (Design Appendix A.3) | `owner` |
+| Attended turn on an **exclusive-Owner** paired device (`accountIds = [ownerAccountId]`) acting as that seat (Design §4.1.1) | `owner` |
+| Attended turn on any **member** paired device (non-Owner seat) | `untrusted` — Design §4.1.1 R5 resolved; standing writes need PendingLearn or explicit user remember |
 | Scheduled/unattended daemon jobs: consolidate, flush, scheduled review | `agent` |
 | A turn submitted by a user over a transport whose binding is `trustedChannel: true` (Design Appendix A.3; surfaced as `policy.json` → `trustedChannels[]`, Design §8.3) | `agent` |
-| A turn submitted over any other channel binding (Telegram DM, HTTP hatch, sidecar) | `untrusted` |
-| **Any turn originating from a `kind: "event-source"` channel** (MQTT, Home Assistant) | `untrusted` — always, even for the owner's own devices (Design §5.7.4 rule 2) |
+| A turn submitted over any other channel binding (Telegram DM, HTTP hatch, sidecar) without `trustedChannel` | `untrusted` |
+| **Any turn originating from a `kind: "event-source"` channel** (MQTT, Home Assistant) | `untrusted` — always, even for the Owner’s own devices (Design §5.7.4 rule 2) |
 | Anything a backend ingests (`backend_ingest`) | `untrusted` until reviewed |
+
+**Rationale.** Pairing authenticates transport, not memory trust for members. Owner-seat exclusive devices and loopback earn `owner`; opt-in IM `trustedChannel` earns `agent`; everyone else stays `untrusted` until a human accepts a learn. Owner dual-bind is forbidden (Design §4.1.1).
+
+Deprecated: `ownerTrusted` on a device binding **MUST NOT** produce `trust: "owner"` by itself (Design §4.1.1).
 
 **Result-level taint (Normative).** Trust is not purely a property of the turn: a write that includes spans derived from a `sensitive`-classified tool result (Design §4.3 — secrets, presence/occupancy/lock/camera state) is `untrusted` **for those spans**, even if the surrounding turn is `owner`. Otherwise "Alice asked whether the door was locked, then said remember" launders presence into L2. Tools declaring a `sensitive` class MUST mark their results, and flush/consolidate MUST honour `taintSpans`.
 

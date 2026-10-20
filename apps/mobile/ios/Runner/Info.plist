@@ -68,6 +68,8 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>EnvoyHome uses the camera to scan the pairing QR from your home Settings.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>EnvoyHome can use your location for this chat turn only (local weather and context). It is not stored as lasting memory.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>EnvoyHome uses the microphone for voice dictation into Chat and Home chat.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

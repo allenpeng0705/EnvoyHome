@@ -100,6 +100,57 @@ export function assertPublicHttpsUrl(raw: string): URL {
   return url;
 }
 
+/** True when an IPv4 address is loopback / private / link-local / unspecified. */
+export function isBlockedIpv4(a: number, b: number, c: number, d: number): boolean {
+  if (![a, b, c, d].every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) return false;
+  if (a === 10 || a === 127 || a === 0) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  return false;
+}
+
+/**
+ * Parse dotted, decimal, octal-ish, or short IPv4 host forms used in SSRF bypasses
+ * (e.g. 2130706433, 127.1, 0x7f.0.0.1). Returns null if not an IPv4-like host.
+ */
+export function parseIpv4Like(hostname: string): [number, number, number, number] | null {
+  const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (/^\d+$/.test(h)) {
+    const n = Number(h);
+    if (!Number.isSafeInteger(n) || n < 0 || n > 0xffffffff) return null;
+    return [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+  }
+  if (!/^[\d.]+$/.test(h) && !/^0x[0-9a-f.]+$/i.test(h) && !h.includes(".")) {
+    return null;
+  }
+  // Hex dotted: 0x7f.0.0.1
+  if (/^0x/i.test(h) || h.includes("0x")) {
+    const parts = h.split(".");
+    if (parts.length === 4 && parts.every((p) => /^(0x)?[0-9a-f]+$/i.test(p))) {
+      const nums = parts.map((p) => parseInt(p, p.toLowerCase().startsWith("0x") ? 16 : 10));
+      if (nums.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) {
+        return nums as [number, number, number, number];
+      }
+    }
+  }
+  const dotted = h.split(".");
+  if (dotted.length === 4 && dotted.every((p) => /^\d+$/.test(p))) {
+    const nums = dotted.map((p) => Number(p));
+    if (nums.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) {
+      return nums as [number, number, number, number];
+    }
+  }
+  // Short forms: 127.1 → 127.0.0.1; 127.0.1 → 127.0.0.1
+  if (dotted.length >= 2 && dotted.length <= 3 && dotted.every((p) => /^\d+$/.test(p))) {
+    const nums = dotted.map((p) => Number(p));
+    if (!nums.every((n) => Number.isInteger(n) && n >= 0 && n <= 255)) return null;
+    if (dotted.length === 2) return [nums[0]!, 0, 0, nums[1]!];
+    return [nums[0]!, nums[1]!, 0, nums[2]!];
+  }
+  return null;
+}
+
 export function isBlockedHostname(hostname: string): boolean {
   const h = hostname.toLowerCase().replace(/^\[|\]$/g, "");
   if (
@@ -111,13 +162,9 @@ export function isBlockedHostname(hostname: string): boolean {
   ) {
     return true;
   }
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) {
-    const [a, b] = h.split(".").map((x) => Number(x));
-    if (a === 10 || a === 127 || a === 0) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    return false;
+  const ipv4 = parseIpv4Like(h);
+  if (ipv4) {
+    return isBlockedIpv4(...ipv4);
   }
   if (h.includes(":")) {
     if (h === "::1" || h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80")) {

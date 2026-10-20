@@ -5,7 +5,7 @@
 | **Document** | Single all-in-one design for EnvoyHome |
 | **Role** | Ground truth for **implementation** and **verification** |
 | **Status** | Living draft — refine in place; bump changelog |
-| **Last updated** | 2026-10-16 (household device bind) |
+| **Last updated** | 2026-10-19 (client turn context + multi-locale WHEN) |
 | **Not** | A port of HomeClaw; a clone of Hermes / OpenClaw / OpenHuman |
 
 **How to use this doc**
@@ -22,6 +22,60 @@
 
 | Date | Change |
 |------|--------|
+| 2026-10-20e | **Fix (§7.4 / V-UX-12):** Settings Schedules **History → Runs** hides `system:*` receipts (consolidate/review/flush). Doctor still reads the full store. No wire bump. |
+| 2026-10-20d | **Product (§7.4 / V-UX-12):** Chat shows a Confirm/Cancel **schedule card** for an unarmed proposal (timeout fails closed — expire, never auto-arm). Canceled and expired proposals stay listed under Settings Schedules **History → Not set** (additive `listSchedules.dismissed` + `home.cancelScheduleProposal`). Confirm still requires an explicit tap. No wire bump. |
+| 2026-10-20c | **Fix (§7.4):** Cron proposals quote a human WHEN (`每周一 09:00`) instead of the raw expression. A `schedule` JSON object inside the reply (including a thinking block, fields beside `tool`) is dispatched as a propose. A short yes (`请设置` / confirm) arms the session's pending proposal without another model pass; a short no clears it. Confirm still asks before the write. No wire bump. |
+| 2026-10-20b | **Harden (§7.4):** Schedules chat runs only the `schedule` tool. Chat can `reschedule` / `enable` / `remove` / `rename` (confirm or ask before the write; WHEN still NL-only; reschedule updates the same job). `home.proposeSchedule` errors include the explanation and candidates. NL locale falls back to the account locale. If a normal turn skips schedule tools and the resolver already sees a schedule, the reply offers to set it (no second model, nothing armed). Job lists use a human WHEN. No wire bump. |
+| 2026-10-20 | **Product (§7.4 / V-UX-13):** Dedicated **Schedules chat** (`purpose: "schedules"`), one session per profile, same shell pattern as Home chat. Each turn injects a short job list and a schedule-tool instruction. Home tools stay off on that surface. Resolver still owns WHEN. Additive enum value on `home.openSession` — no `protocolApiVersion` bump. |
+| 2026-10-19n | **Product (§10.1 / V-UX-12):** Settings Schedules lists split **Repeating** (`cron`/`every`) · **Once** (`at`) · **History** (receipts). Additive `listSchedules` fields `timeZone` / `cronExpr` / `everyMs` / `whenInstant` for human WHEN. No wire bump. |
+| 2026-10-19m | **Normative (§7.4 / §3 chat):** Additive optional `clientContext` on `home.sendMessage` / `home.proposeSchedule` — `{ clientNow?, timeZone?, locale?, location? }` from thin clients (mobile preferred). Daemon MAY use `clientNow`/`timeZone` for NL `referenceNow` when skew ≤ 5 min vs host; else host clock + account TZ. `location` (lat/lon) is **ephemeral turn inject only** — mobile Profiles “Share location with Home” requests OS permission once; chat send only attaches coords when that pref is on **and** permission is already granted (never prompt per send); never auto LearnQueue / L1–L2. Monthly/yearly NL must include an explicit day (never invent the 1st); DOM/month-day parsers + ask candidates + tomorrow/this|next weekday cover **all product UI locales** (en/zh/de/fr/it/ja/ko). Reminder honesty soft-offers/claims/disclaimers likewise. Schedule NL packs cover the same relative calendar concepts (day±N, month/year ahead, every day/week/month/year/weekend) — not ZH-only. No wire bump. |
+| 2026-10-19l | **Harden (§7.4 accuracy backlog):** Validate cron/IANA at write; propose preview `relativeHint`+`nextRunAt`; receipts `latenessMs`; Doctor `accounts.timezone_unset` / `schedule.late_fire`; chat reminder honesty guard (no invent WHEN); NL EN+ZH expand (quarter/差一刻/下下周/date/weekend/candidates) + DST civil-hole → `ambiguous`; Settings Profiles set/show account TZ; harden `cron-next` (no croner dep). No wire bump. |
+| 2026-10-19k | **Harden (§7.4 accuracy):** No silent 08:00/09:00 on clock-less day/weekday/recurring (ask `missing_time`); period-of-day (morning/tonight) still counts as user WHEN. Persist account IANA `timeZone` (`home.createAccount` / `updateAccount`); propose prefers account TZ over host. NL corpus: this vs next weekday, in-N-days, 半, noon/midnight. Never LLM-fill WHEN. |
+| 2026-10-19j | **Clarify (§7.4 `agentTurn`):** `maxToolRounds` (≤ 5) is validated/stored at confirm for forward-compat; v1 fire is a single model→tools→reply cycle — the cap is reserved until a multi-round harness loop lands and MUST then be enforced. Thin clients / harness surface `resolvedLocal` without raw propose JSON. |
+| 2026-10-19i | **Enhance (§7.4):** Chat authoring accuracy (verbatim propose; refuse invented WHEN specs; confirm surfaces `resolvedLocal`) + restricted fire-time `agentTurn` payload (frozen prompt; miss=skip; elevated browser never). V-CRON-11 / V-CRON-12. No wire bump. |
+| 2026-10-19h | **Enhance (§7.4 schedules):** Mobile parity (V-UX-12b); `updateSchedule` patches name/spec/payload (V-CRON-7); `listScheduleReceipts` (V-CRON-8); chat builtin `schedule` propose/confirm/list (V-CRON-9); system flush/review fire + ensureReviewJob (V-CRON-10). No wire bump. |
+| 2026-10-19g | **Harden (§9.5g/g.1):** Navigate SSRF covers redirects; interactive `browser` shares concurrency not SERP rate; approval summary uses household defaultProfile; catalogue Owner-aware for elevated; screenshot 5 MiB; managed persistent context; §10.1 Connections lists Web search + Browser. No wire bump. |
+| 2026-10-19f | **Normative (§9.5g.1 elevated browser profiles):** Profiles `managed` \| `personal` \| `remote`. Personal = local CDP attach; remote = Owner `cdpUrl` + secret. Elevated = Owner-account turns only; never unattended; Settings acknowledge required. V-OUT-9 / V-OUT-10. No wire bump. |
+| 2026-10-19e | **Normative (§9.5g browser control):** OpenClaw-adapted builtin `browser` tool (`action` enum) via managed Playwright Chromium. Owner opt-in; network risk; attended ask; SSRF on navigate/open; V-OUT-8. Elevated profiles land in §9.5g.1. No wire bump. |
+| 2026-10-19d | **Clarify (§9.5f.1 dependency):** npm `playwright` driver is a `@envoyhome/daemon` dependency; **Chromium binaries** remain Owner opt-in (`npx playwright install chromium`), never silent-downloaded. Install hint is Chromium-only. No wire bump. |
+| 2026-10-19c | **Normative (§9.5f browser SERP fallback):** Opt-in headless Bing→Google SERP scrape when the primary provider fails or returns zero hits. Default `fallback: none`. Fixed SERP URLs only; Settings shows ready/missing + **install guidance** when Chromium missing; hard caps; browser leg **attended ask**; unattended browser off unless Owner `unattendedBrowser` + grant. Soft-fail on CAPTCHA/block. V-OUT-7. No wire bump. |
+| 2026-10-19b | **Normative (§9.5f web search):** Builtin `web_search` (risk `network`, grantable). Household Owner config: enable + provider `duckduckgo` (default, no key) \| `brave` \| `tavily` (+ secret). Attended + enabled → allow (no prompt); unattended → grant; `restricted` → deny. Fixed provider hosts only. RPCs `home.getWebSearchConfig` / `home.setWebSearchConfig`. V-OUT-6. No wire bump. |
+| 2026-10-19a | **Normative (§9.5e list/search tools):** Builtin `list_dir` / `search_files` (risk `read`) through the **turn profile’s** path jail only (`accounts/<accountId>/files/` + that profile’s R3-effective `workspace/` mounts) — never another profile’s sandbox or raw host paths. Caps so whole-machine `workspace/` cannot hang. Fence-safe; in `home.listWorkflowTools`. V-OUT-5. No wire bump. |
+| 2026-10-18ai | **Product (§10.1 System → Profiles):** Desktop **System** first tab is **Profiles** (create/rename/delete, Owner transfer, multi-folder workspace). Top-bar “Manage profiles…” and legacy `accounts` deep-link there. Mobile Settings hub nests Profiles as System’s first tab (same IA). No wire bump. |
+| 2026-10-18ah | **Normative (§4.2.1 multi-folder):** Up to **16** named host mounts per profile (`workspace.json` → `{ mounts: [{ id, hostPath, mode, updatedAt }] }`; legacy singular migrates on read). Tool paths `workspace/<mountId>/…`; single-mount keeps flat `workspace/…` legacy. Additive `home.upsertWorkspaceMount` / `home.removeWorkspaceMount`; `getWorkspace` returns `mounts[]` (+ legacy singular fields). V-SEC-13/14/20 unchanged (R3 per mount). No wire bump. |
+| 2026-10-18ag | **Product (§4.2.1 workspace picker):** Additive Owner-scope `home.getHomeFsInfo` / `home.listHomeFsEntries` (absolute host paths; peer EnvoyMesh) so mobile can browse and select workspace folders. Chat list: New = `+`; Chats \| Archived top tabs. No wire bump. |
+| 2026-10-18af | **Normative (§9.5d File Explore):** Additive `home.listSandboxEntries` — intentional one-level browse of profile-reachable virtual roots (`documents/`/`output/`/`knowledge/`/`uploads/` + R3-effective `workspace/`); empty path → synthetic roots; refuse `share/` and inactive workspace. Distinct from `listArtifacts` (no host tree dump). Mobile System → Files folder browser: open / Share-Save / Open in browser (signed URL sandbox-only). V-OUT-4. No wire bump. |
+| 2026-10-18ae | **Align (§4.2.1 / §9.5d / A.7):** Doc matches shipped code — `getWorkspace` **seat-or-Owner** + wire `{ configured, mode?, displayPath?, filesystemRoot?, active? }` (`active` = R3-effective); tools + `getArtifactContent` use effective workspace (non-Owner `/` ⇒ unset at runtime); `getArtifactContent` / chips refuse `share/`; `getArtifactUrl` + Copy link **sandbox-only** (no `workspace/`); `listArtifacts` ignores `sessionId`; `write_file` echo also collapses `//`. No wire bump. |
+| 2026-10-18ab | **Product (mobile Settings):** Profiles hub (Owner badge, transfer, workspace paste/root, tool policy) + Owner pairing mint/revoke on Connections. Aligns §10.1 `accounts` / `account.detail` mobile workspace. |
+| 2026-10-18aa | **Fix (§4.1.1 / §4.2.1):** R3 enforced on transfer + turn stamp/resolve (`getWorkspaceEffective`); transfer clears non-Owner filesystem-root workspaces and exclusive-binds new Owner; `getWorkspace` seat-or-Owner; Doctor Fix for `owner_bind_exclusive` / missing Owner / stale root; `fixMissingOwner` by `createdAt`. |
+| 2026-10-18z | **Implementation (§4.1.1):** Household Owner landed — `HouseholdStore`, exclusive-bind, seat-or-Owner grants/bindings/`updateAccount`, workspace root Owner-seat only, `memoryTrustForTurn` (V-SEC-15…21), desktop Owner badge + transfer. R1/R4 still deferred. |
+| 2026-10-18ad | **Normative (§9.5d harden):** `home.getArtifactContent` MUST `stat` (or equivalent) **before** reading — refuse non-regular files and enforce the 8 MiB cap without loading the whole object (whole-machine `workspace/` / device nodes must not hang or OOM the daemon). `write_file` echoed paths MUST be chip-ready (strip leading `./` and `/`, unify separators) so Open chips match. V-OUT-2/3 tightened. No wire bump. |
+| 2026-10-18ac | **Normative (§9.5d / §4.2):** Thin-client **open-by-path** for `workspace/…` via `home.getArtifactContent` + chat chips (same jail as tools; 8 MiB). `listArtifacts` stays sandbox-only (no host tree scan). `write_file` results echo path; steer human-visible files to `documents/`/`output/`/`knowledge/`. Household `share/` product (list/UI/`shareWrite` in turns) **deferred** — jail refuse remains (V-SEC-4). Optional Copy signed link in thin UI when `publicBaseUrl` set. No wire bump. |
+| 2026-10-18y | **Normative (§4.1.1):** **Defer R1 and R4** — no stolen-phone gates; no recovery-code RPCs in v1. Keep R2 exclusive-bind, R3 `/` only for Owner seat, R5 member memory `untrusted`. Break-glass for lockout = host/OS loopback only. V-SEC-23 withdrawn. |
+| 2026-10-18x | **Normative (§4.1.1):** R1 out of scope; R4 recovery codes — superseded by `2026-10-18y` (R4 deferred; codes removed). |
+| 2026-10-18w | **Normative (§4.1.1 risk resolution):** R2–R5 mitigations. Owner-sensitive loopback for mint/secrets superseded by `2026-10-18x` (R1 out of scope). |
+| 2026-10-18v | **Normative (§4.1.1 Household Owner):** Exactly one profile is the household **Owner** (`ownerAccountId`). **Owner-scope** = loopback ∨ exclusive Owner-bound device (mobile OK); replaces `ownerTrusted`. Seat-or-Owner for grants / listBindings / `updateAccount` fields. Superseded in part by `2026-10-18w` risk resolution. V-SEC-15…18. Implementation deferred. |
+| 2026-10-18u | **Normative (§4.2.1 profile workspace root):** Each account MAY have one optional **workspace root** — a host folder outside `files/` (project dir **or the whole machine**, e.g. `/` / `C:\`). Tools reach it only via virtual prefix `workspace/…` through the path jail (never raw host paths from the model). Configure gate superseded by §4.1.1 Owner (`2026-10-18v`). |
+| 2026-10-18t | **Normative (§9.5d thin-client file open):** `home.listArtifacts` recursively lists under `output/` / `documents/` / `knowledge/` / `uploads/` (exports/extracts/replies appear). EnvoyHome mobile Share/Save + desktop Download of mesh-fetched bytes (docx/pdf/…); chat surfaces open chips for sandbox paths in assistant text. No public URL / no wire bump. |
+| 2026-10-18s | **Normative (§7 prompt templates + doc workflow):** LLM steps interpolate `{{step.id}}` / `{{step.id.field}}`; JSON tool results flatten fields (e.g. `extract_document.text`). Enables extract → summarize → export workflows. Settings howto gains **Document summarize** sample. No wire bump. |
+| 2026-10-18r | **Normative (§9.5c document extract tool):** Builtin tool `extract_document` runs §9.5a anydoc/UTF-8 extract on a sandbox `sourcePath` and writes GFM under `files/output/extracts/` (risk `write`, grantable). Fence-safe with `export_document`. Chat-upload extract (§9.5a) unchanged. No cloud OCR; no wire bump. |
+| 2026-10-18q | **Normative (§9.5b document export):** Builtin tool `export_document` writes Markdown → `docx` \| `xlsx` \| `csv` \| `pdf` under `files/output/exports/` (risk `write`, grantable). Pure JS — no Pandoc/LibreOffice. Complements one-way §9.5a anydoc extract (not a round-trip). Deferred: pptx/odt/epub. No `protocolApiVersion` bump (catalogue discovery). |
+| 2026-10-18p | **Normative (§9.5a full anydoc set):** Chat extract covers **every** `@firecrawl/anydoc` format: Word (`.doc`/`.docx`/`.docm`), PowerPoint (`.ppt`/`.pps`/`.pot`/`.pptx`/`.pptm`/`.ppsx`/`.ppsm`), Excel (`.xls`/`.xlsx`/`.xlsm`/`.xlsb`), OpenDocument (`.odt`/`.ods`/`.odp`), `.rtf`, `.epub`, `.csv`, `.pdf`. CSV prefers anydoc table GFM with UTF-8 fallback. Plain `.md`/`.txt`/`.json`/`.log` stay native UTF-8. No cloud OCR; no wire bump. |
+| 2026-10-18o | **Normative (§9.5a chat doc extract):** Chat attachments that are Office/PDF (and plain text) are preprocessed to GFM before the model turn — Adapt EnvoyMesh Phase 57 `@firecrawl/anydoc`. Original kept under `uploads/`; sidecar `*.extract.md`; turn text inlines capped GFM (24k chars). Additive `extractUri` / `extractor` / `extractChars` on `home.uploadChatMedia`. No cloud OCR; no `protocolApiVersion` bump. |
+| 2026-10-18n | **Fix (§9.5 thin-client spill + hydrate):** Long thin-client replies (≥2500 chars) spill to `output/replies/<turnId>.md` with transcript `format: link` + `artifactPath`; live clients replace (not append) on spill delta. Transcript migrate **persists** coalesce-by-`turnId`; delete of a coalesced assistant drops all sibling chunks; model history uses coalesced lines. Chat channels unchanged (full markdown outbound). No wire bump. |
+| 2026-10-18m | **Normative (§9.5 audience split):** Thin clients (EnvoyHome desktop/mobile over paired `home.*`) open long replies via `link` + `artifactPath` → `home.getArtifactContent` in-app (EnvoyMesh `libraryRead` peer — **no public IP**). Chat channel plugins (Telegram/…) get `plain` \| `markdown` only — never `link` / never home HTTPS. Additive `home.getArtifactContent`; `artifactPath` on turn deltas. No `protocolApiVersion` bump. |
+| 2026-10-18l | **Product (§9.5 output tiers wired):** `home:turn-delta` text events carry `format` (`plain` \| `markdown`; workflow prefers `plain`). Transcript lines persist `format`. Desktop + mobile Chat render markdown (sanitized) and support `link` + `artifactUrl` when present. No `protocolApiVersion` bump. |
+| 2026-10-18k | **Product (New-chat optional name):** **New chat** may set a title immediately (`home.openSession` + `title` → `titleSource: user`). Leave blank → first-message auto-title as before. Session still mint-on-first-send. Desktop + mobile. No wire bump. |
+| 2026-10-18j | **Product (Archived chats UI):** Chats rail / mobile list gain an **Archived** view (`listSessions` + `includeArchived`). Additive `home.unarchiveSession` restores to the active list (open archived = unarchive). No `protocolApiVersion` bump. |
+| 2026-10-18i | **Fix (standing inject gaps):** Identity reserved in §4.2.1 L1–L3 derivation; `listMemory` reports full identity inject chars; workflow homeSurface appends bound-object card; `completeForAccount` prepends standing+identity; account create seeds `IDENTITY.md`; L1 inject includes account `displayName` when no name fact; additive `identity_append` PendingLearn kind; §6.1 + Home-chat visibility (HA **or** MQTT) wording aligned. No `protocolApiVersion` bump. |
+| 2026-10-18h | **Product (editable IDENTITY.md):** Per-account `IDENTITY.md` is the editable EnvoyHome persona (Settings → Memory). Inject = immutable brand floor + persona body + L1–L3. Additive `home.getIdentity` / `home.setIdentity`. When Memory **Review** is on, successful turns heuristically propose PendingLearns for user profile + identity style/name cues. No wire bump. |
+| 2026-10-18g | **Product identity in chat:** Standing inject always leads with an EnvoyHome identity prologue — the assistant must identify as EnvoyHome, never as the underlying model brand (MiniMax / GPT / Claude / …). Applied on every harness + workflow LLM call. No wire bump. |
+| 2026-10-18f | **Fix (Chat history races):** Turn events apply only to the open `sessionId` (desktop + mobile Home/Chats). Transcript append/migrate/clear/delete serialized under a per-session lock; clear/delete/archive/remove refused while a turn is active. Media-only first sends auto-title from the file name. Early transcript hydrate for durable `messageId`s. No wire bump. |
+| 2026-10-18e | **Product (Chat titles):** General chats auto-title from the first user message; `home.renameSession` lets the user edit and locks out later auto-title (`titleSource: user`). Desktop: click chrome title or rail pencil. Mobile: tap title or ⋯ → Rename. No wire bump. |
+| 2026-10-18d | **Product (Chats list hygiene):** List only user-messaged general sessions (`messageCount > 0`); hide schedule / hatch / channel-inbound / `workflow-test` shells. Optional `channel` on session list rows. New chat does not mint until first send; empty shells pruned. Collapsible rail; quieter UI. No wire bump. |
+| 2026-10-18c | **Product (Chats list):** Sidebar **Chat → Chats**. General Chats uses a ChatGPT-style session rail (**New chat** + list; archive/delete on hover). Mobile opens a list-first Chats screen then a thread. Removes Recents dropdown. Home chat unchanged (single session). No wire bump. |
+| 2026-10-18b | **Product (Chat trash / archive):** Trash opens Empty / Archive / Delete-chat. Additive `home.archiveSession` + `home.removeSession`; Recents hide archived. Fix message delete (persist durable `messageId`s; stable legacy ids). Trash icon on desktop + mobile. No `protocolApiVersion` bump. |
+| 2026-10-18 | **Product (Chat sessions UX):** General Chat supports **New chat** + **Recents** (multi-session); Home chat stays **one session per profile**. Both surfaces gain **Empty chat** (clear transcript in place) and per-bubble **Delete** (by `messageId`). Additive `home.clearTranscript` / `home.deleteTranscriptMessages`; transcript lines carry `messageId` (legacy rows get synthetic ids on read). Desktop + mobile. No `protocolApiVersion` bump. |
 | 2026-10-17 | **Product (mobile §10.1 IA):** Flutter thin client mirrors desktop Settings map — phone bottom nav **Chat · Home (HA-gated) · Settings hub**; tablet rail. Settings hub → LLM (Models/Local+HF·GGUF/Routing/Memory), Connections (Pairing status/HA/MQTT/Channels), Skills (Skills/Workflows AI-draft+YAML/Schedules), System (Artifacts/Doctor/Grants). Chat/Home gain attach (`uploadChatMedia`) + OS speech dictation + session persistence. Ignores OS service, pairing mint/revoke, provider secret vault. No wire bump. |
 | 2026-10-16t | **Product (Chat voice discoverability):** Mic control is always shown. With Web Speech it dictating; without it (or on click-before-support), toast + `title` explain OS dictation (Windows Win+H / macOS Dictation). Fixes unreachable Win+H hint after composer copy was removed. |
 | 2026-10-16s | **Product (Chat composer hints):** Remove always-on attach/voice copy under the composer. Caps and sandbox note appear on Attach hover + toast when files are added; errors stay toasts. Voice OS note stays on the mic button `title`. |
@@ -314,7 +368,7 @@ Match EnvoyCoder/`host-bridge` intent: the daemon **is** the peer the phone dial
 | EnvoyHome Local spawn (`llama-server`) | **18792** `/v1` | Home-owned OpenAI-compat sidecar (§8.5); never Mesh `:18790` |
 | Ollama (BYO) | **11434** `/v1` | `home.enableOllama`; not installed by Home (§8.5) |
 
-Public base URL for artifacts/thin clients: `daemon.publicBaseUrl` (LAN, Tailscale, or tunnel). Mesh dial does not require a public HTTP URL but rich `link` artifacts do for WebView open.
+Public base URL: `daemon.publicBaseUrl` (LAN, Tailscale, or tunnel) — **optional** for signed HTTP artifact URLs (§4.1b). Primary thin-client open is mesh/paired: `home.getArtifactContent` (§9.5). Most home desktops have **no public IP**; do not require HTTPS reachability for EnvoyHome mobile or for IM channel replies.
 
 ---
 
@@ -347,29 +401,29 @@ Public base URL for artifacts/thin clients: `daemon.publicBaseUrl` (LAN, Tailsca
 | `home.meshStatus` | `{ kind: hosting \| attached \| no-node \| … }` |
 | `home.getServiceStatus` / `installService` / `uninstallService` / `restartService` | OS service (schemas: Appendix A.1) |
 | `home.shutdown` | Graceful stop (schema: Appendix A.1) |
-| `home.getDaemonLog` | Tail logs, owner scope (schema: Appendix A.1) |
+| `home.getDaemonLog` | Tail logs, **loopback-owner** (schema: Appendix A.1) |
 
-### 3.3 Pairing methods (Normative — loopback-only on home)
+### 3.3 Pairing methods (Normative — §4.1.1)
 
 | Method | Role |
 |--------|------|
-| `home.mintPairing` | Mint token + `envoy://pair?…` (deviceLabel, host, lanHost, …) |
-| `home.listPairedDevices` | Public rows only — **never** return raw tokens |
-| `home.revokePairedDevice` | Persist revoke + kill live WS/mesh streams |
-| `home.forgetPairedDevice` | Cleanup revoked row |
+| `home.mintPairing` | Mint token + `envoy://pair?…` — **Owner-scope** |
+| `home.listPairedDevices` | Public rows only — **never** return raw tokens — Owner-scope |
+| `home.revokePairedDevice` | Persist revoke + kill live WS/mesh streams — Owner-scope |
+| `home.forgetPairedDevice` | Cleanup revoked row — Owner-scope |
 | `home.registerPushToken` | Register APNs (iOS) or FCM (Android) alert token for this paired device |
 | `home.unregisterPushToken` | Drop the push token for this paired device |
-| `home.sendTestPush` | Loopback-owner: fire a test alert to registered device(s) |
+| `home.sendTestPush` | Owner-scope: fire a test alert to registered device(s) |
 
 Semantics (adapt EnvoyCoder):
 
 - **A device credential authenticates the transport, not an account.** `home.mintPairing` mints a *device* credential for a named device. Which household account(s) that device may act for is a separate, daemon-owned fact — §4.1.
 - Remote WS requires `?token=`; fail closed. The mesh-host transport presents the same device credential (§3.3.1).
-- Paired phone/laptop = **owner-device scope**: not a lesser principal *for the accounts it is bound to*, and it needs no second lesser token. It is **not** a master key over every account on the daemon.
+- Paired phone/laptop = **bound-device scope**: not a lesser principal *for the accounts it is bound to*. Household admin requires **exclusive** bind to `ownerAccountId` (§4.1.1).
 - **Account choice is bounded by bindings.** Turn/session methods take `accountId` (or `agentId`); the daemon MUST reject with `envoyhome.account_not_bound` unless a `(deviceId → accountId)` binding exists (§4.1, Appendix A.3). A device bound to exactly one account may omit `accountId` and the daemon resolves it. A device bound to none may act only through an explicit loopback owner-window session.
-- No calendar TTL on the device credential; valid until revoke (home) or forget (client). The **mint** step is loopback-only and rate-limited (§4.4).
+- No calendar TTL on the device credential; valid until revoke (home) or forget (client). **Mint** is **Owner-scope** and rate-limited (§4.4).
 - Thin paired home: **direct** WS to remote daemon; do not proxy RPC through local daemon.  
-- Mint/revoke/forget/`setDeviceAccounts` only from home machine owner window (**loopback-owner**, §4.3.1). **`home.listPairedDevices` is owner-scope** (§4.3.1): loopback **or** an `ownerTrusted: true` device — not loopback-only. Binding or unbinding a `deviceId` (§4.1) is likewise owner-scope.
+- Mint/revoke/forget/`setDeviceAccounts`/list are **Owner-scope** (exclusive Owner device or loopback). OS service / shutdown remain **loopback-owner**.
 
 ### 3.3.1 Transport parity and authorization (Normative — B1/B2)
 
@@ -378,28 +432,28 @@ Three transports carry `home.*`: the local/LAN WebSocket host (reuse-host), the 
 1. **Authenticate the transport first.** Every inbound session resolves to a `deviceId` (or to `loopback-owner`) before any product method runs. WS carries the device token as `?token=`; the mesh transport carries the same credential on the mesh session. A remote session with no valid device credential is refused with `envoyhome.auth: missing_token` and closed.
 2. **Then resolve the account** (§4.1). A valid device credential never grants access to an account the device is not bound to.
 3. **Ordering is load-bearing.** Authentication precedes *every* method, including the transport's own `on`/`off` event subscription. `on` before auth is a bug the family shipped — `../EnvoyMesh/packages/host-connect/src/ws-server.ts:1098-1104`. Verification: V-RPC-2, V-RPC-5.
-4. **No method is reachable over mesh that is not reachable over WS**, other than the §3.3 loopback-only pairing methods, which are refused on *both* remote transports.
+4. **No method is reachable over mesh that is not reachable over WS**, other than **loopback-owner** methods (§4.3.1), which are refused on *both* remote transports.
 5. **Mesh identity ≠ device credential.** The mesh transport additionally rejects a peer that is not a bond/pair member *of this daemon*; a valid mesh identity belonging to another home is not a credential for this home. Verification: V-RPC-5, V-SEC-7.
 
 ### 3.4 Domain method groups (Normative catalogue — names locked; fields evolve)
 
 | Group | Methods (initial) | Notes |
 |-------|-------------------|--------|
-| **Accounts** | `home.listAccounts`, `home.createAccount`, `home.updateAccount`, `home.deleteAccount` | Settings-first |
-| **Bindings** | `home.listBindings`, `home.setBinding`, `home.removeBinding` | IM sender **or** `deviceId` → account (+ agent); §4.1 |
-| **Devices** | `home.mintPairing`, `home.listPairedDevices`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts` | Mint/revoke/forget/`setDeviceAccounts` = **loopback-owner**; `listPairedDevices` = **owner-scope** (§4.3.1 is authoritative). `setDeviceAccounts` rebinds a device without re-pairing |
-| **Sessions / chat** | `home.listSessions`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript` | Core chat path; `accountId` bounded by device binding. `uploadChatMedia` stores attachments under the account sandbox for `sendMessage.media[]` |
-| **Approvals** | `home.listApprovals`, `home.answerApproval`, `home.listGrants`, `home.revokeGrant` | Durable gates + grants (§4.4) |
-| **Channels** | `home.listChannels`, `home.enableChannel`, `home.disableChannel`, `home.getChannelStatus`, `home.setChannelConfig`, `home.startDemoHa`, `home.getDemoHaStatus`, `home.stopDemoHa`, `home.startDemoMqtt`, `home.getDemoMqttStatus`, `home.stopDemoMqtt` | Control plane; `setChannelConfig` stores non-secret config + write-only secrets (A.6). Demo start/status are account-scoped; demo stop is owner-scope |
+| **Accounts** | `home.listAccounts`, `home.createAccount`, `home.updateAccount`, `home.deleteAccount`, `home.getHouseholdOwner`, `home.transferHouseholdOwner`, `home.getWorkspace`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig` | Settings-first; transfer = Owner-scope; workspace rules §4.2.1 / §4.1.1; web search §9.5f; browser §9.5g |
+| **Bindings** | `home.listBindings`, `home.setBinding`, `home.removeBinding` | IM sender **or** `deviceId` → account (+ agent); set/remove = **Owner-scope**; list = seat-or-Owner; Owner exclusive-bind (§4.1.1) |
+| **Devices** | `home.mintPairing`, `home.listPairedDevices`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts` | Mint/revoke/list/rebind = Owner-scope (§4.1.1). Machine lifecycle = loopback-owner |
+| **Sessions / chat** | `home.listSessions`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.clearTranscript`, `home.deleteTranscriptMessages`, `home.archiveSession`, `home.unarchiveSession`, `home.removeSession`, `home.renameSession` | Core chat path; `accountId` bounded by device binding. `uploadChatMedia` stores attachments under the account sandbox for `sendMessage.media[]`. Clear/delete edit the transcript; archive soft-hides; unarchive restores; remove deletes the session dir; rename sets display title |
+| **Approvals** | `home.listApprovals`, `home.answerApproval`, `home.listGrants`, `home.revokeGrant` | Durable gates + grants (§4.4); grants list/revoke = seat-or-Owner (§4.1.1) |
+| **Channels** | `home.listChannels`, `home.enableChannel`, `home.disableChannel`, `home.getChannelStatus`, `home.setChannelConfig`, `home.startDemoHa`, `home.getDemoHaStatus`, `home.stopDemoHa`, `home.startDemoMqtt`, `home.getDemoMqttStatus`, `home.stopDemoMqtt` | Config + enable/disable = Owner-scope. Demo start/status account-scoped; demo stop Owner-scope |
 | **Smart-home objects** | `home.listSources`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations` | §5.7.3/§5.7.7 — registry is **owner-scope** to write; objects are reached through **tools**, never a device/state API. `listSources` returns the **household** registry (Design `2026-10-16l`) |
 | **Harness** | `home.listHarnesses`, `home.setHarness` | Per agent/default |
 | **Models** | `home.listProviders`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.getUsage` | provider pool + EnvoyHome Local / Ollama engine (§8.5) + default + placement + opt-in switch (B6/§8) |
 | **Static workflows** | `home.listWorkflows`, `home.getWorkflow`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.runWorkflow`, `home.listWorkflowTools`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.listWorkflowStepTemplates`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate` | DAG procedures (linear `steps[]` = single path); §7 |
-| **Schedules** | `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule` | Daemon clock jobs (§7.4); NL propose→confirm + structured put |
+| **Schedules** | `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts` | Daemon clock jobs (§7.4); NL propose→confirm + structured put; run history |
 | **Skills** | `home.listSkills`, `home.searchClawHubSkills`, `home.installSkill`, `home.removeSkill`, `home.verifySkill` | AgentSkills / ClawHub path |
-| **Profile / memory** | `home.getProfile`, `home.updateProfile`, `home.recall`, `home.forget`, `home.listMemory`, `home.setMemorySettings`, `home.compactMemory` | Account-scoped |
+| **Profile / memory** | `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.recall`, `home.forget`, `home.listMemory`, `home.setMemorySettings`, `home.compactMemory` | Account-scoped |
 | **Learning** | `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn` | Gated skill/memory patches (§9.3) |
-| **Artifacts** | `home.listArtifacts`, `home.getArtifactUrl` | Signed links |
+| **Artifacts** | `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl` | Mesh-first bytes + folder browse + optional signed HTTP (§9.5 / §4.1b) |
 | **Doctor** | `home.doctor`, `home.doctorFix` | Config migrations |
 
 ### 3.5 Events (Normative initial set)
@@ -486,16 +540,17 @@ One home daemon (one brain)
 | **device_id** | Stable id of one paired thin client (`home.hello` → `client.id`); survives re-pairing only if the client keeps its id |
 | **binding** | Maps `channel_identity` **or** `device_id` → `account_id` (+ optional `agent_id`) |
 | **agent_id** | Logical assistant persona / specialist |
-| **device** | Paired thin client; owner-device for RPC, and **bounded to its bound accounts** (see below) |
+| **device** | Paired thin client; transport principal, **bounded to its bound accounts** (see below) |
+| **household Owner** | Exactly one `account_id` that may administer the home (§4.1.1) |
 
 **Device → account binding (Normative — B1).** This closes the ambiguity between "owner-device scope" (§3.3) and per-account isolation (V-SEC-1):
 
 1. A device credential authenticates the **transport**; it does **not** authorize an account.
 2. Turn and session methods (`home.openSession`, `home.sendMessage`, `home.getTranscript`, `home.listSessions`) require an `accountId` **that the calling `deviceId` is bound to**. Otherwise the daemon fails closed with `envoyhome.account_not_bound: …`.
 3. Exactly one binding for a device ⇒ the client MAY omit `accountId`; the daemon resolves it. Two or more ⇒ the client MUST send it and the daemon MUST reject an unbound value.
-4. Zero bindings ⇒ the device may reach only `home.hello`, `home.health`, `home.meshStatus`, `home.subscribe`, `home.registerPushToken`, `home.unregisterPushToken`, and (if it is the owner device) the §3.3 pairing methods. It cannot open sessions or send turns for any account.
-5. Bindings are daemon-owned and owner-scope to change: `home.setBinding` with `deviceId` (Appendix A.3) or `home.mintPairing` with `accountIds` (Appendix A.2). **The client never supplies its own binding.**
-6. Loopback owner window sessions are the only principal not bounded this way; they may act for any account (that is what "owner" means in §4.6).
+4. Zero bindings ⇒ the device may reach only `home.hello`, `home.health`, `home.meshStatus`, `home.subscribe`, `home.registerPushToken`, `home.unregisterPushToken`. It cannot open sessions, send turns, or call Owner-scope methods.
+5. Bindings are daemon-owned and **Owner-scope** to change (§4.1.1): `home.setBinding` with `deviceId` (Appendix A.3) or `home.mintPairing` with `accountIds` (Appendix A.2). **The client never supplies its own binding.**
+6. **Loopback** sessions (home-machine Settings window) may act for any account and always satisfy Owner-scope and loopback-owner methods — they are the break-glass / first-boot principal, not a second household Owner seat.
 
 Verification: V-SEC-7; abuse case 7 in §4.6.
 
@@ -503,7 +558,104 @@ Verification: V-SEC-7; abuse case 7 in §4.6.
 
 **v1 agent UX (Q10 closed):** each account has exactly one **default** agent (`agent_id = "default"`). Bindings may store `agentId` for forward compatibility; Settings does not expose multi-agent roster in v1. Multi-agent UI = later phase.
 
+### 4.1.1 Household Owner (Normative)
+
+**Product intent.** One person runs the house: add profiles, pair phones, wire channels and models, set workspace roots (including whole-machine for the Owner seat), and hand that role to someone else — from the **Owner’s paired phone** or desktop. Members use chat, their own memory (via PendingLearn when untrusted), and their own sandbox — they must not reconfigure the household.
+
+**Storage.** Daemon state (e.g. `daemon.json` or `household.json`) holds:
+
+```text
+ownerAccountId: "<account_id>"   // exactly one; always set when ≥1 account exists
+```
+
+**Bootstrap.**
+
+1. Creating the **first** account (almost always on **loopback**) sets `ownerAccountId` to that account.
+2. Creating further accounts does **not** change Owner.
+3. Deleting the Owner account is refused (`envoyhome.owner_delete_forbidden`) until `home.transferHouseholdOwner` succeeds.
+4. A daemon with accounts but a missing/invalid `ownerAccountId` is a Doctor issue; Fix sets Owner to the oldest remaining account (deterministic) and never invents a second Owner.
+5. **First remote pair:** usually `home.mintPairing` from loopback, binding the new device **exclusively** to `ownerAccountId`. Further devices may be minted from loopback **or** an exclusive-Owner device (Owner-scope).
+
+**Who is “acting as Owner” (authorization predicate).**
+
+```text
+isHouseholdOwner(caller) ≔
+    caller.kind = loopback-owner
+ OR (caller.kind = device
+     ∧ caller.accountIds = [ownerAccountId])   // exclusive bind — length 1
+```
+
+- The Owner’s phone satisfies Owner-scope **only if** it is bound to **exactly** `ownerAccountId` (no other seats on that device).
+- A member device never gets Owner-scope; an old `ownerTrusted: true` bit is ignored.
+- Loopback always may Owner-scope and machine lifecycle methods.
+
+**Owner exclusive-bind (Normative — resolves R2).**
+
+1. `home.mintPairing` / `home.setDeviceAccounts` / `home.setBinding` (device form) **MUST refuse** (`envoyhome.owner_bind_exclusive`) if `ownerAccountId ∈ accountIds` and `accountIds` is not exactly `[ownerAccountId]`.
+2. Doctor Fix rewrites illegal legacy dual-binds by dropping non-Owner seats from that device (operator confirm) or by clearing Owner from the device — never silently keep both.
+3. Product consequence: the Owner admin phone does **not** also chat as Bob; Bob needs his own paired device (or IM binding).
+
+**Seat-or-Owner predicate** (self-serve seat admin; Owner may also act cross-seat):
+
+```text
+mayActForSeat(caller, accountId) ≔
+    caller.kind = loopback-owner
+ OR (caller.kind = device ∧ accountId ∈ caller.accountIds)
+ OR isHouseholdOwner(caller)
+```
+
+Used by `home.listGrants`, `home.revokeGrant`, `home.listBindings`, and field rules on `home.updateAccount` (§4.3.1).
+
+**`home.updateAccount` field rules (Normative).**
+
+| Field | Who may set |
+|-------|-------------|
+| `displayName`, `locale` | `mayActForSeat(caller, accountId)` |
+| `toolPolicy` | **Owner-scope** (`isHouseholdOwner`) — else `envoyhome.owner_required` |
+
+**Transfer (Normative).**
+
+| Method | Scope | Behaviour |
+|--------|-------|-----------|
+| `home.getHouseholdOwner` | account-scoped | `{ ownerAccountId, displayName? }` |
+| `home.transferHouseholdOwner` | **Owner-scope** | `{ toAccountId, confirm: true }` → exactly one Owner afterward |
+
+No co-owner in v1.
+
+**Deprecation of `ownerTrusted`.** Binding + exclusive-Owner rule + seat acted as (memory) replace it. Wire field MAY remain as a no-op.
+
+**Break-glass.** Physical/OS access to the home machine → loopback Settings (full Owner-scope + machine lifecycle). No remote recovery-code path in v1 (R4 deferred).
+
+#### What only Owner may configure (Settings / RPC)
+
+| Area | Owner-scope (mobile OK) | Member (seat / seat-or-Owner) | Loopback-owner only |
+|------|-------------------------|-------------------------------|---------------------|
+| **Profiles** | Create / delete; any `toolPolicy`; rename any seat; **transfer Owner** | List + who is Owner; own name/locale; own profile / IDENTITY | — |
+| **Workspace** | `set`/`clear` for any seat; `/` **only** for Owner seat (confirm); never `/` for members | `get` + use `workspace/…` | Folder picker = desktop UX aid |
+| **Pairing** | Mint / revoke / forget / list / `setDeviceAccounts` / test push | Use device; push register | — |
+| **IM bindings** | `set` / `remove` | `list` own seats | — |
+| **Channels / secrets** | Enable/disable; `setChannelConfig`; `setProviderSecret`; stop demos | Read status; start demos | — |
+| **Smart-home** | Source bind; `listActuations` | Home chat + approvals; `listSources`; own grants | — |
+| **Models / skills / workflows** | Providers, secrets, local engine, skills, workflows library | Own routing; list/run workflow | — |
+| **This machine** | — | — | Service lifecycle; shutdown; daemon log |
+
+**Mobile UX.** Owner phone: full household Settings (pair, secrets, transfer). Member phone: seat Settings only. Desktop loopback: same + machine lifecycle.
+
+#### Risks — resolution status (Normative)
+
+| Risk | Status | Notes |
+|------|--------|-------|
+| **R1 Stolen Owner phone** | **Deferred** | Not designing for this threat now. |
+| **R2 Dual-bound Owner+member** | **Resolved** | Forbidden (`envoyhome.owner_bind_exclusive`). |
+| **R3 Cross-seat `/` workspace** | **Resolved** | Filesystem/volume root only when `accountId = ownerAccountId`; else `envoyhome.workspace_root_owner_only`. Runtime: tools + `getArtifactContent` use the **effective** root (non-Owner `/` ignored ⇒ `workspace/…` fails closed). Transfer / Doctor clear stale non-Owner roots. |
+| **R4 Owner lockout** | **Deferred** | No recovery-code RPCs in v1. Break-glass = host/OS loopback only. |
+| **R5 Member memory `agent`** | **Resolved** | Member paired turns are memory `untrusted`; Owner seat + loopback + `trustedChannel` stronger (Memory §13). |
+
+Verification: V-SEC-14…21 (V-SEC-22/23 withdrawn).
+
 ### 4.1b Artifact URL signing (Normative — Q9 closed)
+
+**Primary open path for EnvoyHome thin clients is not HTTP.** Prefer `home.getArtifactContent` over the paired `home.*` session (§9.5) — same reason EnvoyMesh Feed uses `libraryRead` / in-app Browser: the home machine usually has no public IP. Signed URLs remain for optional LAN/tunnel share and Doctor checks.
 
 `home.getArtifactUrl` returns `{ url, expiresAt }`, where:
 
@@ -541,16 +693,17 @@ token   = base64url(payload) + "." + base64url(sig)
       learns/                     # pending / accepted / rejected PendingLearn
       memory-backend/             # L5/L6 plugin state (Memory Design §6)
       sessions/                   # transcripts
-      files/                      # sandbox root for tools
+      files/                      # sandbox root for tools (always present)
         documents/
         output/
         knowledge/
+      workspace.json              # optional host workspace root (§4.2.1) — path + mode; absent = unset
       skills/                     # optional per-account overlays
       approvals/<approvalId>.json # durable pending approvals (§4.4)
       grants/<grantId>.json       # durable auto-approve grants (§4.4)
       actuations/<actuationId>.json # actuation journal: intent before dispatch, outcome after (§5.7.7)
       policy.json                 # per-account policy — ONE schema, defined in §8.3 (tool preset, mix rules, privacy/egress, trust lists, memory caps)
-  share/                          # ONLY intentional cross-account files
+  share/                          # intentional cross-account files — **product deferred** (v1: jail requires shareWrite; turns never grant it; no list/UI). V-SEC-4 remains.
   workflows/                      # static workflow definitions (global or per-account)
   skills/                         # system / installed skills
   providers/                      # model backend config (no secrets in git)
@@ -559,9 +712,47 @@ token   = base64url(payload) + "." + base64url(sig)
   objects.json                    # smart-home object registry: source→account, class, shared, neverUnattended (§5.7.3)
 ```
 
-Tools resolve paths only under `accounts/<account_id>/files/` or explicit `share/` with policy.
+Tools resolve paths under `accounts/<account_id>/files/`, optional **`workspace/`** (§4.2.1), or explicit `share/` with policy — never arbitrary host paths asserted by the model. Agents MUST NOT target `share/` until the deferred household-share product ships; human-visible sandbox files SHOULD live under `documents/`, `output/`, or `knowledge/` so Shared files + Open chips find them.
 
 **Credential storage:** `paired-devices/` holds **hashes** of device credentials (verify-on-present, never reversible) plus each device's `accountIds` binding. Precedents: EnvoyCoder keeps roster + token hashes in one state file (`../EnvoyCoder/packages/host-bridge/src/index.ts`); OpenHuman's `PairingGuard` stores SHA-256 hashes with a 5-attempt / 5-minute lockout (`../openhuman/src/openhuman/security/pairing.rs:16-36`). Raw tokens are never written to `daemon.json`, logs, or `home.listPairedDevices` output.
+
+### 4.2.1 Profile workspace folders (Normative — invent; adapt OpenClaw workspace *intent*, not soft cwd)
+
+**Problem.** The default sandbox (`files/`) is private and portable under the product state tree. Operators also need the agent to reach **host folders outside that tree** — one or more project directories, a photo library, **and** (intentionally) **the whole machine** so a paired phone can drive file tools across the computer. HomeClaw keeps everyone under one `homeclaw_root`; OpenClaw’s agent **workspace** is a soft cwd (absolutes can leave the host when sandbox is off). EnvoyHome needs the *product* outcome without a soft jail.
+
+**Product intent — “whole computer from the Owner seat”:** The Owner may mount the filesystem root for **`accountId = ownerAccountId` only** (§4.1.1 R3) — desktop or Owner phone — alongside other narrow folders. Tools use `workspace/<mountId>/…` (or flat `workspace/…` when exactly one mount). Member seats may receive **narrow** host folders via Owner-scope RPCs, never `/`.
+
+**Rule (named mounts per account):**
+
+| Field | Value |
+|-------|--------|
+| **Cardinality** | Zero to **16** named mounts per `accountId` (`MAX_WORKSPACE_MOUNTS`) |
+| **On disk** | `accounts/<accountId>/workspace.json` — `{ "mounts": [{ "id", "hostPath", "mode", "updatedAt" }] }`; file absent / empty ⇒ unset. Legacy singular `{ hostPath, mode, updatedAt }` **migrates on read** to one mount (id from basename) |
+| **Tool path** | Virtual prefix **`workspace/<mountId>/…`**. With a **single** effective mount, bare `workspace/…` (no id) still resolves under that mount (legacy transcripts). Raw `/Users/…` or `C:\…` from tools is **refused** even when a mount is `/` |
+| **Jail** | Same chokepoint family as `safeJoin` per mount: resolve under `realpath(hostPath)`, reject `..`, symlink escape, and paths that leave that mount (V-SEC-13). A mount of `/` still uses this chokepoint |
+| **Mode** | Per mount: `ro` = read/list; `rw` = write/edit (still subject to §4.3 `write` / ask / grants — **not** a bypass) |
+| **TurnContext** | Stamp **R3-effective** `workspace_mounts[]` plus legacy `workspace_root` / `workspace_mode` (first effective mount) beside `sandbox_root`. Same effective mounts gate `home.getArtifactContent` / File Explore (§9.5d) |
+| **Configured vs effective** | Configured mounts may include a filesystem-root on a non-Owner seat until cleared; **effective** drops those mounts for tools / Open (R3). Transfer + Doctor Fix `household.workspace_root_non_owner` clear stale roots |
+| **Default** | Unset. Agent stays in `files/` only. Unset / no effective mounts ⇒ any `workspace/…` tool or Open path fails closed |
+
+**Who may configure (Normative — §4.1.1):**
+
+1. **`home.setWorkspace`** (replace with one folder), **`home.upsertWorkspaceMount`**, **`home.removeWorkspaceMount`**, **`home.clearWorkspace`** are **Owner-scope**. Members cannot change any profile’s workspace.
+2. **Filesystem / volume root** `hostPath` is allowed only when `accountId = ownerAccountId`; otherwise `envoyhome.workspace_root_owner_only` (resolves R3).
+3. Clients MUST confirm filesystem-root grants and cross-seat (non-root) workspace targets. Desktop/mobile **Add folder** uses upsert (does not wipe other mounts).
+4. **`home.getWorkspace`** is **seat-or-Owner** (`mayActForSeat`). Wire: `{ configured, mounts: [{ id, displayPath, mode, filesystemRoot, active }], mode?, displayPath?, filesystemRoot?, active? }` — singular fields mirror the primary/first mount; `active` is false when that mount is R3-ineffective.
+5. The model / chat text is **never** authorization to change mounts.
+
+**Not in v1:** Docker binds, OpenClaw `workspaceAccess` container mounts, or treating workspace as the turn cwd for absolute paths.
+
+**Contrast:**
+
+| Peer | Shape | EnvoyHome choice |
+|------|--------|------------------|
+| HomeClaw | Everything under one `homeclaw_root/{user}/` | Keep `files/` as default; optional *extra* named host mounts per account |
+| OpenClaw | Soft agent workspace + optional sandbox | Hard jail + virtual `workspace/<id>/` prefix; Owner configures (mobile OK) |
+
+Verification: V-SEC-13, V-SEC-14, V-SEC-20; Settings on `account.detail` (§10.1).
 
 ### 4.3 Tool risk tiers (Normative adapt)
 
@@ -571,11 +762,13 @@ Tools resolve paths only under `accounts/<account_id>/files/` or explicit `share
 
 | Scope | Methods | Rule |
 |-------|---------|------|
-| **loopback-owner** | `home.mintPairing`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts`, `home.sendTestPush`, `home.getDaemonLog`, `home.shutdown`, `home.getServiceStatus`, `home.installService`, `home.uninstallService`, `home.restartService` | Only from the home machine owner window — never over the mesh, never from a paired device (§3.3). |
-| **owner-scope** | `home.setBinding`, `home.removeBinding`, `home.listBindings`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listGrants`, `home.revokeGrant`, `home.listActuations`, `home.listPairedDevices`, `home.createAccount`, `home.updateAccount`, `home.deleteAccount`, `home.enableChannel`, `home.disableChannel`, `home.setChannelConfig`, `home.stopDemoHa`, `home.stopDemoMqtt`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.searchClawHubSkills`, `home.installSkill`, `home.verifySkill`, `home.removeSkill`, `home.setHarness`, `home.doctorFix`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate` | Loopback owner window **or** an owner-bound device (`ownerTrusted: true`, Appendix A.3). A member-bound device is refused. This row is **authoritative for grants and the actuation journal** — a member device may not list either. |
-| **account-scoped** | bootstrap/negotiation: `home.hello`, `home.health`, `home.subscribe`, `home.meshStatus`, `home.registerPushToken`, `home.unregisterPushToken`. Reads of shared catalogs: `home.listAccounts`, `home.listChannels`, `home.getChannelStatus`, `home.listHarnesses`, `home.listProviders`, `home.listWorkflows`, `home.getWorkflow`, `home.listSkills`, `home.doctor`, `home.listWorkflowStepTemplates`, `home.getDemoHaStatus`, `home.getDemoMqttStatus`, `home.listSources` (household object registry — Design `2026-10-16l`). Own-account data: `home.getUsage`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.listArtifacts`, `home.getArtifactUrl`, `home.getProfile`, `home.updateProfile`, `home.listMemory`, `home.setMemorySettings`, `home.recall`, `home.forget`, `home.compactMemory`, `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.listSessions`, `home.listApprovals`, `home.answerApproval`, `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.runWorkflow`, `home.listWorkflowTools`, `home.startDemoHa`, `home.startDemoMqtt` | Any authenticated device bound to that account (§4.1). Zero-binding devices may still call bootstrap methods including push register/unregister. A method that appears in **none** of the three rows is a spec bug, not an implicit allow — `scripts/docs-lint.mjs` fails the build if a catalogued method is missing here. |
+| **loopback-owner** | `home.getDaemonLog`, `home.shutdown`, `home.getServiceStatus`, `home.installService`, `home.uninstallService`, `home.restartService` | Only from the home machine Settings window — never over mesh, never from a paired device. Host OS / process lifecycle. |
+| **owner-scope** | `home.mintPairing`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts`, `home.listPairedDevices`, `home.sendTestPush`, `home.transferHouseholdOwner`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig`, `home.setBinding`, `home.removeBinding`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations`, `home.createAccount`, `home.deleteAccount`, `home.enableChannel`, `home.disableChannel`, `home.setChannelConfig`, `home.stopDemoHa`, `home.stopDemoMqtt`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.searchClawHubSkills`, `home.installSkill`, `home.verifySkill`, `home.removeSkill`, `home.setHarness`, `home.doctorFix`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate` | **`isHouseholdOwner(caller)`** (§4.1.1): loopback **or** device with `accountIds = [ownerAccountId]`. Mobile OK. `setWorkspace` filesystem root only for Owner seat (R3). |
+| **account-scoped** | bootstrap/negotiation: `home.hello`, `home.health`, `home.subscribe`, `home.meshStatus`, `home.registerPushToken`, `home.unregisterPushToken`. Reads of shared catalogs: `home.listAccounts`, `home.listChannels`, `home.getChannelStatus`, `home.listHarnesses`, `home.listProviders`, `home.listWorkflows`, `home.getWorkflow`, `home.listSkills`, `home.doctor`, `home.listWorkflowStepTemplates`, `home.getDemoHaStatus`, `home.getDemoMqttStatus`, `home.listSources` (household object registry — Design `2026-10-16l`), `home.getHouseholdOwner`. Seat-or-Owner (§4.1.1 `mayActForSeat`): `home.listGrants`, `home.revokeGrant`, `home.listBindings`, `home.updateAccount` (field rules: `toolPolicy` still Owner-only), `home.getWorkspace`. Own-account data: `home.getUsage`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.listMemory`, `home.setMemorySettings`, `home.recall`, `home.forget`, `home.compactMemory`, `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.clearTranscript`, `home.deleteTranscriptMessages`, `home.archiveSession`, `home.unarchiveSession`, `home.removeSession`, `home.renameSession`, `home.listSessions`, `home.listApprovals`, `home.answerApproval`, `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts`, `home.runWorkflow`, `home.listWorkflowTools`, `home.startDemoHa`, `home.startDemoMqtt` | Default: device bound to that account (§4.1). **Seat-or-Owner** as §4.1.1. Zero-binding devices may still call bootstrap methods including push register/unregister. A method that appears in **none** of the three rows is a spec bug — `scripts/docs-lint.mjs` fails the build if a catalogued method is missing here. |
 
-A method's scope is **transport-independent** (§3.3.1): a member-bound device gets the same answer over WS and over mesh.
+A method's scope is **transport-independent** (§3.3.1), except loopback-owner methods which are refused on both remote transports. Owner-scope over mesh requires an **exclusive** Owner-bound device.
+
+**Seat-or-Owner detail (Normative).** For the five methods named in the account-scoped row above: list-grants filters by caller seats (Owner may omit or pass any seat); revoke-grant loads the row and requires `mayActForSeat` on its `accountId`; list-bindings filters the same way and never authorizes set/remove; update-account field rules are in §4.1.1 (`toolPolicy` still `isHouseholdOwner`); get-workspace requires `mayActForSeat` and returns configured vs R3-`active` (§4.2.1).
 
 #### 4.3.2 Tool disposition — what happens when the agent calls a tool
 
@@ -667,11 +860,11 @@ Two durable, per-account records. Both are files under `accounts/<id>/approvals/
 | Unattended use | An unattended turn may run an `exec`/`network`/`admin` action **iff** a matching, unexpired grant exists (V-SEC-8) |
 | **The safety class is not grant-satisfiable — enforced at use, not only at creation** | §5.7.2's safety class (`lock`/`alarm`/`garage`/`gate`/`valve` classes, unlock/open services, script-scene-button indirection unless allow-listed, unlisted MQTT topics, and anything marked `neverUnattended`) MUST require an attended approval **every time**. The refusal happens **at dispatch as well as at creation**, because a creation-time check cannot see what a digest will match later. Errors: `envoyhome.actuation_never_unattended: …` (creation and dispatch). Verification: V-HA-5, V-HA-11. |
 | **Claim atomically (does not consume)** | Immediately before dispatch the daemon **claims** the grant with a compare-and-swap on its record (`claimedBy: <actuationId>`), then re-validates after any approval pause. Claiming does **not** delete the grant: a live grant keeps permitting later calls, as A.5's `expiresAt: null` ("until revoked") requires. This is what makes V-SEC-8 ("a matching unexpired grant permits it without a new prompt") consistent with V-HA-12 ("cannot actuate after revoke"). A grant that expired or was revoked between check and effect MUST NOT actuate (`envoyhome.grant_expired: …`). Verification: V-HA-12. |
-| Bounds | Grants are `admin`-tier: list/revoke from the owner window (`home.listGrants`, `home.revokeGrant`); Settings shows them next to pending approvals |
+| Bounds | Grants are `admin`-tier to **create** (`answerApproval` on own turns). **List/revoke** use seat-or-Owner (§4.1.1 / §4.3.1): a member revokes own grants; the household Owner may revoke any seat’s grants. |
 | Default | `expiresAt: null` (until revoked) is a deliberate operator choice; a TTL is offered in the UI. There is no implicit grant |
 | **Approvals state their target** | A pending approval carries a daemon-rendered `summary` (resolved object display name + action + desired state + owning account) alongside `argsDigest`, and `home.answerApproval` MUST echo the `argsDigest` it was shown or be rejected (`envoyhome.approval_mismatch: …`). A human must never be asked to approve a bare tool name. Verification: V-UX-7 |
 
-**Pin loopback-only write paths.** `home.mintPairing` and binding changes are rate-limited (a simple backoff on repeated calls from the same principal); a failed mint must not degrade into an unscoped credential.
+**Pin Owner-scope pairing.** `home.mintPairing` and binding changes are rate-limited; a failed mint must not degrade into an unscoped credential. Machine lifecycle RPCs stay loopback-only (§4.3.1).
 
 **Precedent for this shape:** OpenHuman's `ApprovalGate` persists pending approvals to SQLite, parks the turn on a TTL (10 min), publishes an approval event, and fails closed when a turn's origin is unknown (`../openhuman/src/openhuman/approval/gate.rs:1-33,51`; `AgentTurnOrigin`). EnvoyHome adopts the *durability + TTL + fail-closed* properties and adds the grant record.
 
@@ -693,13 +886,24 @@ Two durable, per-account records. Both are files under `accounts/<id>/approvals/
 | V-SEC-10 | A grant for an `admin`/`sensitive` tool with a `null` or short digest is refused (`envoyhome.grant_too_broad`), and a grant's digest commits to a resolved object + desired state |
 | V-SEC-11 | Smart-home object registry is **household-scoped** (any profile may list bound/unbound sources on this EnvoyHome). Account sandboxes for memory/files/sessions still apply elsewhere |
 | V-SEC-12 | The HTTP hatch resolves the account from a binding; a client-supplied `accountId` cannot open a turn for an account the caller is not bound to |
+| V-SEC-13 | With a workspace root set, `workspace/../…` and symlink escapes leave `hostPath` fail closed; raw absolute host paths in tool args are refused; with workspace unset, `workspace/…` fails closed |
+| V-SEC-14 | `home.setWorkspace` / `home.clearWorkspace` from a **member** device (not bound to `ownerAccountId`) are refused; household Owner (mobile or desktop) or loopback may set any profile’s host path |
+| V-SEC-15 | Exactly one `ownerAccountId`; first account becomes Owner; delete Owner without transfer fails; `transferHouseholdOwner` leaves exactly one Owner |
+| V-SEC-16 | A device bound only to a non-Owner account cannot call Owner-scope methods; a device with `accountIds = [ownerAccountId]` can (over WS and mesh); `ownerTrusted` alone does not grant Owner-scope |
+| V-SEC-17 | Member device may `listGrants` / `revokeGrant` for **own** seats only; cannot revoke another seat’s grant; Owner (or loopback) may revoke any |
+| V-SEC-18 | Member `updateAccount` may set own `displayName`/`locale` and is refused for `toolPolicy`; Owner may set `toolPolicy` (and any seat’s name/locale) |
+| V-SEC-19 | Mint/`setDeviceAccounts`/device `setBinding` that would bind `ownerAccountId` with any other account fails `envoyhome.owner_bind_exclusive` |
+| V-SEC-20 | `setWorkspace` with filesystem/volume root refused unless `accountId = ownerAccountId`; tools / `getArtifactContent` use R3-effective root (stale non-Owner `/` inert); transfer/Doctor clear stale roots |
+| V-SEC-21 | Member paired turn memory provenance is `untrusted`; Owner-seat paired turn is `owner` (Memory §13) |
 
 ### 4.6 Threat model (Normative)
 
 | Actor / asset | Trust assumption | Controls |
 |---------------|------------------|----------|
 | **Host owner / OS admin** | Fully trusted for disk/process | Document: sandbox ≠ anti-host; recommend disk encryption |
-| **Paired owner device** | Trusted for transport; **bounded to its bound accounts** | Device token on WS + mesh (§3.3.1); device→account binding (§4.1); revoke kills sessions; mint loopback-only + rate-limited |
+| **Household Owner account** | Trusted for household Settings | Exactly one `ownerAccountId` (§4.1.1); exclusive-Owner devices may Owner-scope over mesh; R1/R4 deferred |
+| **Paired Owner device** | Full Owner-scope over WS/mesh | Exclusive bind only |
+| **Paired member device** | Trusted for transport; **bounded to its bound accounts** | No Owner-scope; seat-or-Owner for own grants/bindings; memory `untrusted` (R5); revoke kills sessions |
 | **Household account B** | Untrusted vs account A | Path jail, scoped DB, binding checks, no shared sessions |
 | **Unknown IM sender** | Untrusted | Deny or pairing; never silent agent |
 | **Unpaired / foreign mesh peer** | Untrusted | Mesh session has no device credential or belongs to another home → refused before any product method (§3.3.1 rule 5) |
@@ -733,7 +937,11 @@ Two durable, per-account records. Both are files under `accounts/<id>/approvals/
 17. A workflow tries `light.toggle` on an unattended turn → refused `envoyhome.actuation_non_idempotent`; automations express desired state (V-HA-16).  
 18. Alice calls `home.listSources` → sees the household object registry (bound + unbound for Settings). Memory/files remain account-scoped (V-SEC-11 for non-object stores).  
 19. A `home:turn-delta` subscriber that is not the originating client receives a smart-home `tool_result` → object state is redacted (V-HA-17).
-
+20. Bob’s phone calls `home.setWorkspace` → refused; Alice’s exclusive-Owner phone may set workspace over mesh; `/` only for Owner seat (V-SEC-14, V-SEC-20).
+21. Bob’s phone `revokeGrant` on Alice’s grant id → refused; Bob may revoke grants for `accountId=bob` only (V-SEC-17).
+22. Bob’s phone `updateAccount { toolPolicy: "restricted" }` → `envoyhome.owner_required`; Bob may change own `displayName` (V-SEC-18).
+23. `setDeviceAccounts` with `accountIds: [owner, bob]` → `envoyhome.owner_bind_exclusive` (V-SEC-19).
+24. Bob paired chat flush → memory `trust: "untrusted"`; Alice Owner-seat paired chat → `owner` (V-SEC-21).
 ---
 
 ## 5. Channels (Normative)
@@ -900,13 +1108,12 @@ ChannelContext {
   "threadId": "…",
   "rawRef": "opaque from inbound",
   "text": "…",
-  "format": "plain"|"markdown"|"link",
-  "media": [],
-  "artifactUrl": "optional"
+  "format": "plain"|"markdown",
+  "media": []
 }
 ```
 
-Plugin maps `format` to platform limits (e.g. Telegram MarkdownV2 / link preview). Must not send to a `rawRef` belonging to another binding.
+Plugin maps `format` to platform limits (e.g. Telegram MarkdownV2). **Must not** use `link` or a home `artifactUrl` — IM clients cannot reach a typical desktop daemon over HTTPS (no public IP). Long replies stay **markdown (or plain) body in the message**. Daemon coerces any mistaken `link` → `markdown` before `send`. Must not send to a `rawRef` belonging to another binding.
 
 #### 5.3.4 Load models (two supported)
 
@@ -1282,7 +1489,7 @@ Dedicated Home chat is the **high-recall, low-cost** path for deliberate home ta
 
 - `home.openSession` MAY accept `purpose?: "general" | "home"` (default `"general"`).  
 - Desktop **Home chat** opens (or reuses) a session with `purpose: "home"`.  
-- **Visibility (Normative UX):** the Home chat nav entry MUST be **hidden** while the `homeassistant` channel is not both **configured** (baseUrl + access token) and **enabled**. Entry is the sidebar **Home chat** item (Devices panels do not duplicate a “Talk to home” button). Opening `purpose: "home"` via RPC when HA is unavailable MUST fail closed with a clear error (e.g. `envoyhome.tool_unavailable` / bad_params), not a blank chat that cannot act.  
+- **Visibility (Normative UX):** the Home chat nav entry MUST be **hidden** while **neither** Home Assistant nor MQTT is both **configured** and **enabled** (ready). Entry is the sidebar **Home chat** item (Devices panels do not duplicate a “Talk to home” button). Opening `purpose: "home"` via RPC when no smart-home channel is ready MUST fail closed with a clear error (e.g. `envoyhome.tool_unavailable` / bad_params), not a blank chat that cannot act.  
 - `TurnContext.policy_snapshot` (or equivalent) MUST carry the effective home-surface flag so the harness catalogue and inject builder stay deterministic.  
 - Discovery via `home.hello.methods[]`; **no** `protocolApiVersion` bump.
 
@@ -1313,7 +1520,8 @@ TurnContext {
   // Daemon-owned prologue (§2.2) — daemon builds these; harness MUST NOT re-load
   account_id, agent_id, session_id
   messages[]                  // session transcript (post-compaction window)
-  standing_inject             // L1 profile + L2 MEMORY.md [+ L3 today/yesterday] summary
+  standing_inject             // brand floor + IDENTITY.md persona + L1 profile + L2 MEMORY.md
+                              //   [+ L3 today/yesterday] (+ bound-object card on homeSurface)
                               //   with truncation + recall/session_search duty line
   tools[]                     // resolved tool catalogue (account skills + tools; sandbox-filtered)
   policy_snapshot             // risk tiers + per-account overrides + channel/turn metadata
@@ -1469,8 +1677,9 @@ Rules:
 - **There is no intent classifier in v1** — §8.3 makes typed triage an optional plugin and Q3 closed it out of core. `match.intents` is reserved and MUST be ignored unless a triage provider is configured. Verification: V-DAG-1, V-DAG-2, V-DAG-5.
 - **Load order (Q4 closed):** global `workflows/*.yml` first, then `accounts/<id>/workflows/*.yml` overlays (same `id` replaces global).  
 - `llm_fill` / `llm_summarize` are narrow calls — not open tool loops — and go through the daemon's `provider_handle`, so they obey the account's provider mode and mix rules (§8). Node kinds stay the closed set: `llm_fill` \| `tool` \| `llm_summarize` (`kind` is accepted as an alias for `type`; `tool:` is accepted as an alias for tool `name`).
+- **Prompt / args templates (Normative):** `llm_*` `prompt` strings may interpolate `{{step.<nodeId>}}`, `{{step.<nodeId>.<field>}}`, or `{{<outKey>}}` from prior node outputs. Tool `args_from` uses the same `step.*` refs. When a tool returns JSON, top-level string/number/boolean fields are also recorded as `nodeId.field` (e.g. `extract_document` → `{{step.extract.text}}` / `args_from: { markdown: step.summarize }`). This is how Office/PDF → Markdown → summarize → export chains work in workflows (§9.5b / §9.5c).
 - **Reusable LLM step templates (Normative):** users may save prompt-centric templates (id, label, `nodeType` ∈ {`llm_fill`,`llm_summarize`}, prompt, optional `out`) under global `workflows/step-templates.json` or account `accounts/<id>/workflow-step-templates.json` (account overlays same `id`). Templates do **not** add runtime node kinds — applying one inserts a normal `llm_*` node (optional UI `label`). Labels are purpose names (e.g. “Extract JSON”), not new kinds; **Custom step…** / **Save as step** write the **global** library by default so **Your steps** can reuse them in any workflow later; asks for name + prompt (defaults `nodeType` to `llm_fill`; change in inspector if needed). **Custom step…** also offers **Refine with AI** on the prompt via `home.draftWorkflowPrompt` (goal = step name when set). Skills still extend **tools** only. RPCs: `home.listWorkflowStepTemplates`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate`. Settings **Add step ▾** lists built-in Fill/Summarize blanks, **Custom step…**, and saved templates; inspector also offers **Refine with AI** and **Save as step**.
-- A `tool` node is a real tool call: `name` MUST appear in `home.listWorkflowTools` (builtins, verified `skill:<id>`, or HA/MQTT decls). Unknown names are refused at put (`workflow.unknown_tool`). Runtime still goes through the account sandbox and §4.3/§4.4 — **a workflow is not an approval bypass.** Unavailable integrations fail closed (`envoyhome.tool_unavailable`). Verification: V-DAG-3.
+- A `tool` node is a real tool call: `name` MUST appear in `home.listWorkflowTools` (builtins, verified `skill:<id>`, or HA/MQTT decls). Unknown names are refused at put (`workflow.unknown_tool`). Runtime still goes through the account sandbox and §4.3/§4.4 — **a workflow is not an approval bypass.** Unavailable integrations fail closed (`envoyhome.tool_unavailable`). Verification: V-DAG-3. Builtin document tools `extract_document` / `export_document` (§9.5b/c), list/search `list_dir` / `search_files` (§9.5e), `web_search` (§9.5f), and `browser` (§9.5g) are in that catalogue.
 - Authoring: Settings dual-mode (**Diagram** DAG canvas \| **YAML**; YAML is Normative on disk) / `home.putWorkflow` / `home.validateWorkflow` / `home.setWorkflowEnabled` / `home.removeWorkflow` / `home.listWorkflowTools`; attended drafts via `home.draftWorkflow` (NL → YAML, never writes; optional `currentYaml` to revise) and `home.draftWorkflowPrompt` (refine LLM node prompt) from **New** / Edit; step templates via `home.listWorkflowStepTemplates` / `home.putWorkflowStepTemplate` / `home.removeWorkflowStepTemplate`; reload via `home.reloadWorkflows`; attended test via `home.runWorkflow`. Optional node `x`/`y` are UI layout hints ignored by the executor.
 
 ### 7.3 Verification
@@ -1494,28 +1703,47 @@ Rules:
 
 **Accuracy (Normative):**
 1. Fire path never re-parses natural language — only structured jobs.
-2. Chat create resolves WHEN once against frozen `referenceNow` + account IANA TZ; prior turns are ignored for WHEN.
-3. `home.proposeSchedule` returns a proposal (`resolvedLocal`, spec); **`home.confirmSchedule` arms the timer** (optional `payload` / `name` replace the proposal’s notify default — for workflow/tool authoring). **`home.putSchedule`** creates a structured job without a proposal. Ambiguous/missing time → ask, never guess. User payloads are `notify` | `workflow` | `tool` only (`system` is daemon-owned).
+2. Chat create resolves WHEN once against frozen `referenceNow` + **account IANA TZ** (persisted on the account; client `clientContext.timeZone` MAY override for that turn; never process-local alone); prior turns are ignored for WHEN. `referenceNow` is daemon clock, or `clientContext.clientNow` when present and within **5 min** of host (else host — refuse silent trust of skewed phones). Clock-less day/weekday/recurring → `missing_time` (ask) — do **not** invent 08:00/09:00. Period-of-day words the user said (`morning` / `早上` / `tonight` / `晚上` / noon / midnight) are explicit WHEN. Relative calendar NL (day±N, next/after-next month/year, every day/week/month/year/weekend) MUST be understood via **locale phrase packs for every product UI locale** (en/zh/de/fr/it/ja/ko), selected by `clientContext.locale` else account `locale` else `en` — never LLM-invent WHEN.
+3. `home.proposeSchedule` returns a proposal (`resolvedLocal`, spec); **`home.confirmSchedule` arms the timer** (optional `payload` / `name` replace the proposal’s notify default — for workflow/tool/`agentTurn` authoring). **`home.putSchedule`** creates a structured job without a proposal. Ambiguous/missing time → ask, never guess. User payloads are `notify` | `workflow` | `tool` | `agentTurn` (`system` is daemon-owned).
 4. Advance `nextRunAt` at **dispatch** (not completion) to prevent double-fire.
-5. Miss: grace then next future for notify; **skip** missed ticks for actuation-capable workflow/tool jobs.
+5. Miss: grace then next future for notify; **skip** missed ticks for actuation-capable workflow/tool/`agentTurn` jobs.
 6. Exec status ≠ delivery status on run receipts; auto-disable after **5** consecutive exec errors.
+7. **Chat propose (Normative — `2026-10-19i`):** The model MUST pass user WHEN text to `schedule` propose (optional notify `message`); it MUST NOT invent `whenInstant` / `cronExpr` / `everyMs` in the fence — those fields are refused. On `ambiguous` / `missing_time` / `not_schedule`, ask; never invent a time. Confirm ask / reply MUST surface **`resolvedLocal`** (+ TZ) before arm.
 
-**Payloads:** `notify` · `workflow` · `tool` (catalogue + §4.4 grants) · `system` (consolidate/flush/review). Optional restricted agentTurn is Phase 2.
+**Payloads:** `notify` · `workflow` · `tool` (catalogue + §4.4 grants) · `agentTurn` (restricted unattended harness turn) · `system` (consolidate/flush/review).
+
+**`agentTurn` (Normative — `2026-10-19i` / `2026-10-19j`):** Frozen at confirm: `prompt` (capped), `toolPolicyPreset` ∈ {`standard`,`restricted`} (default `restricted`), optional `maxToolRounds` (≤ 5; validated + stored). Fire: `origin: unattended`, ephemeral session, frozen prompt only — **no** resolve-nl. **v1 harness cycle:** one model→tools→reply; `maxToolRounds` is **reserved** until a multi-round tool loop exists — then the stored cap MUST be enforced (fail closed above the cap). Tools under §4.4 grants; `browser` only when grant + `unattendedEnabled` + profile **`managed`** (unattended turns force managed default). Elevated (`personal`/`remote`) browser **never** on schedules (V-OUT-9/10).
+
+**Propose visibility (Normative — `2026-10-19j` / `2026-10-19l`):** Chat propose tool output MAY stay structured for the model, but the harness turn text and thin-client bubbles MUST surface **`resolvedLocal`** in plain language — never dump raw propose JSON as the user-visible body. Propose MAY also include additive **`relativeHint`** / **`nextRunAt`** (preview from the same `computeNext` math as arm). If the assistant promises a reminder without a `schedule` propose, the harness MUST append a short honesty disclaimer (does not invent WHEN).
 
 **Notify delivery (Normative):** `notify` is delivered on the **EnvoyMesh super channel** — live paired thin clients receive `home:schedule-fired`; registered phones additionally get APNs/FCM. `deliveryStatus` is `delivered` when at least one of those paths succeeds, else `not-delivered`. IM ChannelPlugins are optional extra outlets, not the default.
 
-**Consolidate clock:** each watched account gets a durable system job `system:consolidate:<accountId>` at `consolidateAt` (default `03:30` local, Memory Design §9), fired through ScheduleService.
+**Consolidate / review clock:** each watched account gets `system:consolidate:<accountId>` at `consolidateAt` (default `03:30` local, Memory Design §9). When `reviewEnabled`, also `system:review:<accountId>` (nightly). Flush remains primarily mid-session (Memory Design §8); a scheduled `system:flush` job MAY exist and MUST execute when fired.
+
+**Chat-native (Normative — `2026-10-19h` / `2026-10-19i`):** Builtin tool `schedule` with `action`: `propose` \| `confirm` \| `list` (risk `write`, grantable). Same propose→confirm arming as Settings RPCs; attended ask on `confirm` (summary includes `resolvedLocal`); never silent-arm. Confirm MAY set `payload.kind: agentTurn` when the user asked for a recurring agent task; WHEN still from propose/resolver.
+
+**`home.updateSchedule`:** MAY patch `enabled`, `name`, `spec`, and user `payload` (`notify`\|`workflow`\|`tool`\|`agentTurn`). Refuse `system` payload from clients; refuse spec/payload edits on `source: workflow` synced jobs (enable-only). Spec change recomputes `nextRunAt`.
+
+**`home.listScheduleReceipts`:** Returns capped receipts from the account `schedules.json` (optional `jobId` filter).
 
 **Verification**
 
 | ID | Criterion |
 |----|-----------|
 | V-CRON-1 | Fake clock: due job fires; one-shot disables after fire |
-| V-CRON-2 | EN+ZH paraphrase corpus → identical `whenInstant` under fixed `referenceNow`+TZ |
+| V-CRON-2 | Multi-locale paraphrase corpus (product UI locales) → identical `whenInstant` under fixed `referenceNow`+TZ |
+| V-CRON-13 | `clientContext.clientNow` within skew used for NL; beyond skew → host clock |
+| V-CRON-14 | `clientContext.location` injects turn-only; never auto-writes standing memory |
 | V-CRON-3 | Propose without confirm does not fire |
 | V-CRON-4 | Missed admin/workflow job with `missPolicy=skip` does not catch-up-actuate |
 | V-CRON-5 | IANA TZ + DST: next cron after spring-forward progresses |
 | V-CRON-6 | `home:schedule-fired` emitted with jobId + status |
+| V-CRON-7 | `updateSchedule` patches name/spec/payload; workflow-synced refuse spec/payload; system payload refused |
+| V-CRON-8 | `listScheduleReceipts` returns capped receipts |
+| V-CRON-9 | Chat `schedule` confirm asks; propose alone does not arm |
+| V-CRON-10 | System flush/review fire paths; ensureReviewJob when reviewEnabled |
+| V-CRON-11 | Chat propose refuses invented WHEN specs; confirm surfaces `resolvedLocal` |
+| V-CRON-12 | `agentTurn` fires with frozen prompt; elevated browser denied on schedule |
 
 ---
 
@@ -1776,13 +2004,252 @@ All scoped by `accountId`. Unattended jobs cannot call exec/network.
 
 ### 9.5 Output tiers (Normative adapt HomeClaw)
 
-| Format | When | Client |
-|--------|------|--------|
-| `plain` | Short | bubble |
-| `markdown` | Medium | rendered chat |
-| `link` | Long / layout | summary + signed artifact URL (`home.getArtifactUrl`) |
+| Format | When | Who |
+|--------|------|-----|
+| `plain` | Short prose / workflow summaries | All surfaces — escaped text |
+| `markdown` | Medium or long structured replies (lists, code, headings) | All surfaces — sanitized MD in Chat; **required** for chat channel plugins on complex replies |
+| `link` | Long / layout **for EnvoyHome thin clients only** | Summary bubble + open `artifactPath` via `home.getArtifactContent` in-app (EnvoyMesh Feed Browser / `libraryRead` peer). Optional `artifactUrl` (§4.1b) when `publicBaseUrl` is reachable — never required |
 
-Daemon serves artifacts with **account-bound** signed tokens (§4.1b). Thin clients open via WebView/browser; must reach `publicBaseUrl` (LAN/mesh/public URL).
+**Audience split (Normative):**
+
+1. **EnvoyHome desktop / mobile** (paired over EnvoyMesh / `home.*` WS): may use `link` + `artifactPath`. Open in-app over the control plane — **no public IP / HTTPS to the home daemon**. Long thin-client replies (≥2500 chars) are **spilled** to `accounts/<id>/files/output/replies/<turnId>.md` with transcript `format: "link"` + `artifactPath` (summary in the bubble; full body via `home.getArtifactContent`).
+2. **Other chat channels** (Telegram, Discord, Slack, Feishu, …): `plain` \| `markdown` only. Daemon must **not** emit `link` or home HTTPS artifact URLs on channel outbound — those URLs are unreachable from the phone's IM client when the desktop has no public IP. Put the full reply (or a truncated markdown body) in `OutboundMessage.text`.
+
+Daemon classifies harness text into `plain` \| `markdown` on each `home:turn-delta` (and persists `format` on the transcript line); after a thin-client turn, long replies are rewritten to `link` + `artifactPath`. `getTranscript` coalesces assistant chunks by `turnId`. Clients that receive legacy rows without `format` may re-classify locally. Channel outbound always maps through `formatForChannelOutbound` (`link` → `markdown`).
+
+### 9.5a Chat document extract (Normative — Adapt EnvoyMesh Phase 57)
+
+Office / spreadsheet / presentation / PDF / EPUB attachments are **not** friendly raw LLM input. On `home.uploadChatMedia`, the daemon:
+
+1. Stores the **original** under `accounts/<accountId>/files/uploads/`.
+2. Runs **`@firecrawl/anydoc`** (peer EnvoyMesh `extractVaultDocumentText`) for **the full anydoc surface** (must stay in sync with `@firecrawl/anydoc` README):
+   - Word: `.doc`, `.docx`, `.docm`
+   - PowerPoint: `.ppt`, `.pps`, `.pot`, `.pptx`, `.pptm`, `.ppsx`, `.ppsm`
+   - Excel: `.xls`, `.xlsx`, `.xlsm`, `.xlsb`
+   - OpenDocument: `.odt`, `.ods`, `.odp`
+   - Other: `.rtf`, `.epub`, `.csv`, `.pdf`
+   Plain `.md` / `.markdown` / `.txt` / `.json` / `.log` are read as UTF-8 (no anydoc). `.csv` prefers anydoc (table GFM) and falls back to UTF-8 if conversion fails. Extractor id: `anydoc-v1`.
+3. Writes a sidecar `uploads/<stem>.extract.md` and returns optional `extractUri` / `extractor` / `extractChars` on the upload result.
+4. On `home.sendMessage`, the turn prologue inlines a **capped** GFM excerpt (**24_000** chars). If truncated, the prompt notes that `read_file` on the extract path has the remainder. Images / audio / video are not extracted. HTML is **out of scope** for anydoc (Mesh uses a legacy HTML strip; EnvoyHome does not in v1).
+
+**Keep originals** for human download and tools. **No cloud OCR** in v1 — scanned / image-only PDFs that anydoc rejects surface as “extract unavailable” (original still attached). Full Library/RAG corpus materialize is out of this Normative (chat attach only).
+
+### 9.5b Document export (Normative)
+
+§9.5a is **one-way** (Office → GFM). When the user wants a downloadable Office-ish file from assistant Markdown, the harness exposes a **builtin** tool (not a skill):
+
+| Field | Value |
+|-------|--------|
+| **Tool** | `export_document` |
+| **Risk** | `write`, `grantable: true` (same class as `write_file`) |
+| **v1 `format`** | `docx` \| `xlsx` \| `csv` \| `pdf` |
+| **Input** | Inline `markdown` **or** sandbox-relative `sourcePath` (`.md` / `.txt`) |
+| **Output** | Under `accounts/<id>/files/output/exports/` only (default `output/exports/<stem>-<id>.<ext>`); result `{ uri, bytes, mimeType, format }` |
+| **Engine** | Pure JS (`docx` / `exceljs` / `pdfkit`) — **no** Pandoc, LibreOffice, or cloud OCR |
+| **Caps** | Markdown ≤ 2 MiB; output ≤ 8 MiB |
+
+Fidelity is **content/structure** (headings, lists, tables, emphasis) — not print-perfect layout. Deferred: `pptx`, `odt`, `epub`, legacy `.doc`/`.xls`. Do **not** overwrite the original upload in place. Skills may teach *when* to call the tool; the converter itself stays core.
+
+### 9.5c Document extract tool (Normative)
+
+§9.5a auto-extracts **chat attachments**. For files already in the account sandbox (documents, share, prior exports), the harness exposes a **builtin** tool:
+
+| Field | Value |
+|-------|--------|
+| **Tool** | `extract_document` |
+| **Risk** | `write`, `grantable: true` (writes GFM; same class as `export_document`) |
+| **Input** | Sandbox-relative `sourcePath` with an extractable extension (§9.5a anydoc + native text) |
+| **Output** | Under `accounts/<id>/files/output/extracts/` only (default `output/extracts/<stem>-<id>.md`); result `{ uri, extractChars, extractor, sourcePath }` |
+| **Engine** | Same as §9.5a (`extractDocumentText` / `anydoc-v1`) — **no** cloud OCR |
+| **Caps** | Source ≤ 8 MiB; refuse non-extractable types |
+
+Chat-upload sidecars under `uploads/*.extract.md` stay as specified in §9.5a. Pair with §9.5b: extract → edit in Markdown → export. Fence-safe on every chat turn (with `read_file` / `write_file` / `list_dir` / `search_files` / `export_document`).
+
+**Workflows:** both tools appear in `home.listWorkflowTools`. Typical chain — `extract_document` → `llm_summarize` with `{{step.extract.text}}` → optional `export_document` via `args_from: { markdown: step.summarize }` (§7 prompt templates). Result JSON includes capped `text` for the LLM step; full GFM remains at `uri`.
+
+### 9.5e Sandbox list / search tools (Normative)
+
+Agents need **list** and **search** without escalating to `exec`. Both are harness builtins through the same path jail as `read_file` / `write_file` (§4.2 / §4.2.1). Thin-client File Explore (`listSandboxEntries`, §9.5d) stays a UI RPC — these tools are for the model turn.
+
+**Profile scope (Normative).** A turn for account `A` MAY only list/search under **`A`’s** reachability: `accounts/<A>/files/…` and **`A`’s R3-effective** workspace mounts (`workspace/…`). It MUST NOT see another profile’s `files/`, another profile’s mounts, or raw host paths asserted by the model. Same chokepoint as File Explore / `getArtifactContent` (V-HAR-6 / V-SEC-13 / V-OUT-5).
+
+| Field | `list_dir` | `search_files` |
+|-------|------------|----------------|
+| **Risk** | `read`, `grantable: false` | `read`, `grantable: false` |
+| **Input** | `path?` (virtual; empty → synthetic tops) | `pattern` (required); `path?`; `maxDepth?` |
+| **Behaviour** | One-level directory listing; multi-mount `workspace/` lists mount ids first | Basename **glob** (`*` / `?`) or case-insensitive **substring** when no meta chars; BFS under `path` (or default tops + R3-effective `workspace/`) |
+| **Refuse** | `share/` (deferred household share); inactive `workspace/`; other-account paths | Same |
+| **Caps** | ≤500 entries; skip `.` / `..` and hidden names | Default depth **4**, max **8**; ≤**100** hits; ≤**2000** visited dirs; skip hidden dirs, `node_modules`, `.git` |
+| **Output** | JSON `{ path, roots, entries[{ name, kind, path, size? }], truncated? }` | JSON `{ pattern, path, hits[{ name, kind, path }], truncated?, visited? }` |
+
+Fence-safe on every chat turn. Both appear in `home.listWorkflowTools`. Prefer `list_dir` / `search_files` over `exec find` / `ls` (V-OUT-5).
+
+### 9.5f Web search (Normative)
+
+Household agents need current web results without `exec` or arbitrary `http_fetch`. Adapt HomeClaw/`OpenClaw` `web_search`: one builtin, provider + optional API key, normalized `{ title, url, description }` rows — not a plugin zoo and not Tavily extract/crawl.
+
+| Field | Value |
+|-------|--------|
+| **Tool** | `web_search` |
+| **Risk** | `network`, `grantable: true` |
+| **Args** | `query` (required); `count?` (1–10, default 5) |
+| **Output** | JSON `{ provider, results: [{ title, url, description }], error?, fallback?, engine? }` capped ≤ ~20 000 chars |
+| **Timeout (primary)** | 15 s |
+| **Providers (v1)** | `duckduckgo` (default, no key) \| `brave` \| `tavily` |
+| **Hosts (primary)** | Fixed provider API/HTML hosts only — never a model-supplied search URL (SSRF stays on `http_fetch`) |
+
+**Config (Normative — household Owner).** On disk `web-search.json`:
+
+```json
+{
+  "enabled": true,
+  "provider": "duckduckgo",
+  "fallback": "none",
+  "browserEngines": ["bing", "google"],
+  "unattendedBrowser": false,
+  "updatedAt": "…"
+}
+```
+
+Plus secret file for API key (channel-secret pattern). Additive Owner-scope `home.getWebSearchConfig` / `home.setWebSearchConfig` (fields additive). Defaults: `enabled: true`, `provider: duckduckgo`, **`fallback: "none"`**, `browserEngines: ["bing","google"]` (Bing first), `unattendedBrowser: false`. Brave/Tavily require a non-empty key or the **primary** path is unavailable (`envoyhome.tool_unavailable`) — DuckDuckGo remains usable without a key.
+
+**Disposition — primary path (Normative — `2026-10-19b`):**
+- Attended + enabled + provider ready → **allow without prompt** (`ToolSpec.attendedAllow`)
+- Unattended → matching **grant** required
+- Account `toolPolicy: restricted` → **deny**
+- Disabled or primary not ready → catalogue `available: false` when no usable path remains (if only Brave is selected without a key and fallback is `none`, unavailable)
+
+Not sandbox-fence. Appears in `home.listWorkflowTools`. Settings: Connections → Web search (desktop); slim Owner entry on mobile. V-OUT-6.
+
+#### 9.5f.1 Browser SERP fallback (Normative — `2026-10-19c`)
+
+**Intent.** API / DDG HTML search is primary. An optional **free** headless Chromium path MAY scrape Bing (then Google) SERP HTML when the primary path fails — Owner opt-in only. This is **not** a general browser agent and **not** the default.
+
+**Peer filter.** HomeClaw separates `web_search` (API) from Playwright `browser_*`. EnvoyHome **adapts** Playwright only as a **search fallback**, **rejects** using headless Google/Bing as the sole search path, and **rejects** free navigation / CAPTCHA solving inside `web_search`.
+
+**When it runs (Normative).** All of:
+1. `enabled === true` and `fallback === "browser"`.
+2. Primary attempt finished with **no usable hits**: thrown/`error` set **or** `results.length === 0`.
+3. Chromium/Playwright **available** on the host (else skip with `error` naming the missing runtime — do not crash the daemon).
+4. Policy allows the **browser leg** (§ disposition below).
+
+**Engine order (Normative).** Use `browserEngines` in order; default `["bing","google"]`. **Bing first** (typically less hostile than Google for automated SERPs). Stop at the first engine that yields ≥1 organic hit. If all engines fail (empty, timeout, CAPTCHA/challenge page, navigation error), return primary error (if any) plus a clear fallback error — **no retry loop**.
+
+**Fixed SERP URLs only (Normative).** The browser MAY open only:
+
+| Engine | URL template (query URL-encoded) |
+|--------|----------------------------------|
+| `bing` | `https://www.bing.com/search?q={query}` |
+| `google` | `https://www.google.com/search?q={query}&hl=en` |
+
+Refuse any other navigation (no ads, related searches, consent interstitial click-through beyond dismissing an obvious cookie banner if a single known selector exists — otherwise treat cookie walls as failure). No model-supplied URL. No persistent logged-in profiles; ephemeral context per call.
+
+**Parse (Normative).** Extract organic results only: `title`, absolute `url` (unwrap tracking redirects where cheap), `description`/snippet. Cap at `min(count, 8)` for the browser leg. Ignore ads, side panels, “People also ask,” and knowledge panels as hit sources.
+
+**Runtime & caps (Normative):**
+
+| Cap | Value |
+|-----|--------|
+| Concurrency | **1** household-wide browser search at a time (queue or refuse with busy error) |
+| Timeout | **20 s** wall clock for the whole browser leg (both engines share the budget) |
+| Rate limit | ≤ **1** browser fallback / **10 s** per household (additional calls skip fallback) |
+| Downloads | Block image/font/media where the automation API allows |
+| Process | Kill browser on abort / timeout; no orphan Chromium |
+| Dependency | The npm **`playwright` driver** is a `@envoyhome/daemon` dependency (so `import("playwright")` resolves). **Chromium browser binaries** remain Owner opt-in (`npx playwright install chromium`) — not bundled, never silent-downloaded. Missing browsers MUST NOT break primary search |
+
+**Disposition — browser leg (Normative — stricter than primary):**
+- **Attended:** even when primary used `attendedAllow`, entering the browser fallback MUST **ask** (approval summary MUST say “browser search fallback” + engine). Deny → return primary failure only.
+- **Unattended:** browser fallback **off** unless `unattendedBrowser === true` **and** a matching `web_search` grant exists; otherwise skip fallback.
+- **`restricted`:** deny entire `web_search` (unchanged).
+
+**Output fields (additive):** `fallback: "none"|"browser"`, `engine?: "bing"|"google"` when fallback produced hits or attempted; keep `provider` as the **primary** provider id. Prefer honest errors: `captcha_or_block`, `timeout`, `browser_busy`, `runtime_missing`.
+
+**Settings (Normative — optional + install guide).** Connections → Web search:
+1. **Toggle off by default** — “Browser fallback (Bing/Google when API/DDG fails)”. Owner may enable without installing Chromium first; saving `fallback: "browser"` while runtime is missing is allowed, but the UI MUST show **Not ready** and MUST NOT imply search already uses the browser.
+2. **`getWebSearchConfig` additive fields:** `browserRuntime: "ready" | "missing"`, `browserInstallHint` (platform-appropriate one-liner, e.g. `npx playwright install chromium` / documented daemon path). Never expose binary paths that escape the product docs.
+3. When `browserRuntime === "missing"` and the toggle is on (or the user turns it on): show a **copyable install hint** + short note that after install they reopen Settings / restart the daemon if needed; link or text to Design/help is enough — no silent download of Chromium without Owner action.
+4. Best-effort warning: SERP pages may CAPTCHA/block; prefer Brave/Tavily when quality matters.
+
+**Doctor.** MAY issue warn when `fallback === "browser"` and `browserRuntime === "missing"` (fix: clear hint or set `fallback` back to `none`). No auto-install Fix that downloads browsers without confirmation.
+
+**Non-goals (this subsection).** Free navigation / click / form-fill — those live in **§9.5g** `browser`, not inside `web_search`. Solving CAPTCHAs; storing Google cookies; using this fallback as the only search path; SerpAPI/CSE as substitutes (deferred keyed providers).
+
+Verification: **V-OUT-7**.
+
+### 9.5g Browser control (Normative — `2026-10-19e`)
+
+Household agents need to navigate and interact with pages beyond SERP scrape. **Adapt** OpenClaw’s single `browser` tool + snapshot→ref→act loop; **reject** sandbox-off defaults and **ungated** personal-session attach. Gated personal/remote profiles: **§9.5g.1**.
+
+| Field | Value |
+|-------|--------|
+| **Tool** | `browser` |
+| **Risk** | `network`, `grantable: true` (no `attendedAllow` — every attended call asks) |
+| **Args** | `action` (required) + action-specific fields (`url`, `targetId`, `ref`, `kind`, `text`, …) |
+| **v1 actions** | `doctor` \| `status` \| `start` \| `stop` \| `tabs` \| `open` \| `focus` \| `close` \| `navigate` \| `snapshot` \| `screenshot` \| `act` \| `text` |
+| **`act.kind`** | `click` \| `type` \| `select` \| `drag` (refs from prior `snapshot`) |
+| **Runtime** | Default: managed headless Chromium via Playwright on the **daemon host**. Elevated profiles: §9.5g.1 |
+| **Config** | `browser-control.json` — see §9.5g.1 for full shape; defaults `enabled: false`, `unattendedEnabled: false`, `defaultProfile: "managed"` |
+
+**Disposition (Normative):**
+- Catalogue `available` when `enabled` and the **default** profile is ready (managed → Chromium; personal/remote → §9.5g.1).
+- Attended → ApprovalSink ask; summary MUST include action + profile (+ URL or targetId).
+- Unattended → matching grant **and** `unattendedEnabled === true` **and** resolved profile is `managed`; else deny/skip. Elevated profiles never run unattended (§9.5g.1).
+- `restricted` → deny.
+- Missing Chromium (managed) → soft-fail with install hint (same as §9.5f.1); never silent download.
+
+**SSRF / isolation (Normative):** `open` / `navigate` MUST reject non-`http(s)`, link-local, and metadata IPs (same family as `http_fetch`) on the **initial URL and every subsequent request/redirect** (route guard + final-URL re-check). Managed: Playwright persistent context under `stateDir/browser-profiles/<accountId>/managed` — not the Owner’s daily Chrome. Household-wide **concurrency 1** with the SERP browser leg (shared busy mutex; the §9.5f.1 **10 s SERP rate limit does not apply** to interactive `browser` actions). Action timeout ≤ 30 s; `text`/`snapshot` capped (`maxChars` ≤ 40 000); screenshots under `output/browser/` capped at **5 MiB**. CDP endpoints are **Owner-config only** — never from tool args. Doctor MAY warn when enabled and managed Chromium is missing while the default profile needs it.
+
+**RPCs:** Owner-scope additive `home.getBrowserControlConfig` / `home.setBrowserControlConfig`. Settings: Connections → Browser (desktop + mobile Owner). Optional prompt-only skill `browser-automation` teaches the act loop — **not** a substitute for the builtin. Tool arg `profile` optional; default = household `defaultProfile`.
+
+**Deferred:** `requests` / `errors` / `emulate`; Chrome extension relay; OpenClaw gateway control-service; arbitrary named profile maps; CAPTCHA solving; dashboards widget.
+
+Verification: **V-OUT-8** (managed); **V-OUT-9** / **V-OUT-10** (§9.5g.1).
+
+### 9.5g.1 Elevated browser profiles (Normative — `2026-10-19f`)
+
+Beside managed Chromium, the Owner MAY enable two elevated profiles that reuse logged-in sessions or a remote always-on browser. **Adapt** OpenClaw’s profile idea; **reject** extension relay and Chrome DevTools MCP as v1 dependencies.
+
+| Profile | Runtime | Use |
+|---------|---------|-----|
+| `managed` | Playwright `chromium.launch` (isolated under state) | Default; schedules OK when `unattendedEnabled` |
+| `personal` | Playwright `connectOverCDP` to Owner **local** CDP endpoint (Chrome remote debugging) | Daily Chrome tabs / Amazon/bank logged-in state |
+| `remote` | Playwright `connectOverCDP` to Owner `cdpUrl` (+ optional token secret) | Always-on box / Browserless-class host |
+
+**Config file** (`browser-control.json`):
+`{ enabled, unattendedEnabled, defaultProfile: "managed"|"personal"|"remote", personal: { enabled, cdpEndpoint }, remote: { enabled, cdpUrl }, elevatedAcknowledgedAt?, updatedAt }`
+
+**Secret:** `secrets/browser_remote_cdp_token.secret` — write-only via `setBrowserControlConfig.remoteToken`; never returned by get (only `hasRemoteToken`).
+
+**Hard gates (Normative):**
+1. Enabling `personal.enabled` or `remote.enabled` (or setting `defaultProfile` to either) requires a prior **Owner acknowledge** (`acknowledgeElevated: true` sets `elevatedAcknowledgedAt`) — Settings must show that the agent can act as the Owner on logged-in sites.
+2. Elevated profile turns: **Household Owner account only** (`accountId === ownerAccountId`). Other seats may only use `managed`.
+3. Elevated profiles **refuse unattended** origin always (even if `unattendedEnabled`).
+4. Personal `cdpEndpoint` MUST be loopback-only (`127.0.0.1` / `localhost` / `::1`). Remote `cdpUrl` is Owner-typed (LAN/Browserless OK) but MUST refuse cloud-metadata / link-local (`169.254.0.0/16`, `metadata.google.internal`); never agent-supplied. Prefer token in secret file over credentials-in-URL. Elevated acknowledge is **write-once** in Settings (show “acknowledged”; do not imply uncheck revokes without disabling personal/remote).
+5. Attended approval summary MUST tag profile, e.g. `browser navigate [personal] https://…`.
+6. `status` / public config expose `personalReady` / `remoteReady` (soft CDP probe) without leaking tokens.
+
+**Deferred within elevated:** Chrome extension relay; multi arbitrary named profiles beyond these three; auto-launching daily Chrome with debugging flags.
+
+Verification: **V-OUT-9** (personal), **V-OUT-10** (remote).
+
+### 9.5d Thin-client file open (Normative)
+
+Exported / extracted / spilled files live under the account sandbox (`output/exports`, `output/extracts`, `output/replies`, plus `documents` / `knowledge` / `uploads`). They are **not** required to have a public HTTPS URL.
+
+**Open-by-path vs list (Normative — `2026-10-18ac` / `ae`):** `home.getArtifactContent` and chat Open chips MAY open a cited **`workspace/…`** path through the same path jail as tools (§4.2.1; **R3-effective** root; 8 MiB). **`home.listArtifacts` MUST NOT recurse the host workspace** (whole-machine roots must never appear as a Shared-files tree). Prefer sandbox tops for durable handoffs that should show in Shared files; cite `workspace/…` when the user asked for a host location so Open still works. **`share/`** is refused on list and open until the deferred household-share product ships.
+
+| Surface | Behaviour |
+|---------|-----------|
+| **`home.listArtifacts`** | Recursively lists files under `output/`, `documents/`, `knowledge/`, `uploads/` only (sandbox; nested exports appear). Never lists `workspace/` or `share/`. Optional `sessionId` is accepted for wire compat and **ignored** |
+| **`home.listSandboxEntries`** | **File Explore** — one-level browse of profile-reachable virtual paths (`2026-10-18af`). Empty `path` → synthetic roots (`documents`/`output`/`knowledge`/`uploads` + `workspace` when R3-effective). Else list that directory through the same jail as tools. **Refuse** `share/` and inactive `workspace/`. Caps: skip `.`/`..` and non-dir/file entries; ≤500 entries; no symlink escape. Distinct from `listArtifacts` (no recursive host dump) |
+| **`home.getArtifactContent`** | Mesh/paired bytes (utf8 or base64) for sandbox-relative paths **or** `workspace/…` (R3-effective jail). **Refuse** `share/`. **Cap 8 MiB:** `stat` size + regular-file type **before** reading bytes — fail closed on directories, device nodes, and oversize (`2026-10-18ad`) |
+| **`home.getArtifactUrl`** | Signed HTTP mint is **sandbox-only** — refuse `workspace/…` (and `share/`). Thin UI Copy link / Open in browser only when path is sandbox and `publicBaseUrl` is reachable / non-loopback |
+| **EnvoyHome mobile** | System → **Files** folder browser (`listSandboxEntries`) + chat path chips → in-app viewer; **Share / Save**; **Open in browser** when signed URL available (sandbox only) |
+| **EnvoyHome desktop** | Same mesh open; **Download** from fetched bytes; optional Copy signed link via `home.getArtifactUrl` for sandbox paths only. Folder browser UI deferred (RPC ready) |
+| **Chat UI** | When assistant text mentions `output/…`, `documents/…`, `knowledge/…`, `uploads/…`, or `workspace/…` (prefer backtick paths; Unicode OK), thin clients show an **Open** chip → `home.getArtifactContent` |
+| **`write_file` handoff** | Tool results MUST echo a **chip-ready** path in backticks (normalize: strip leading `./` and `/`, unify `\` → `/`, collapse `//`) so Open chips fire; catalogue samples use `documents/` or `output/` (`2026-10-18ad`) |
+
+IM channel plugins stay on §9.5 audience split — they never receive home HTTPS artifact links. Pairing with the home daemon is how the phone gets the file.
 
 ### 9.6 Verification
 
@@ -1817,7 +2284,16 @@ Canonical memory IDs live in [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Des
 | V-LEARN-3 | Provenance on flush/consolidate/learn writes |
 | V-UX-MEM-1 | Settings: view, pending learns (with stale badge), compact, On disk / In prompt + cloud/local inject packages (Memory Design §4.2.1), flush/review toggles, active backend |
 | V-SKILL-1 | Install + verify before skill tools available |
-| V-OUT-1 | Long artifact → summary + openable URL on phone |
+| V-OUT-1 | Long artifact → summary + openable URL / mesh `artifactPath` on phone |
+| V-OUT-2 | `getArtifactContent` opens cited `workspace/…` (jail + R3-effective); refuses `share/`; `listArtifacts` sandbox-only (never host/`share/`); size/type checked before read (8 MiB; regular file only); `getArtifactUrl` sandbox-only |
+| V-OUT-3 | `write_file` echoes a chip-ready path (normalized `./`/`/`/`\`/`//`); human-visible writes steered to `documents/`/`output/`/`knowledge/` |
+| V-OUT-4 | `listSandboxEntries` lists sandbox tops + R3-effective `workspace/`; refuses `share/` and inactive workspace; parent never escapes the browsed root; entry cap |
+| V-OUT-5 | `list_dir` / `search_files` are `read`-tier builtins through the **turn profile’s** path jail only (not another account’s `files/` or mounts); empty `list_dir` → synthetic tops; search depth/visit/hit caps; `share/` refused; fence-safe + catalogue |
+| V-OUT-6 | `web_search`: enabled DuckDuckGo works without a key; Brave/Tavily without key → unavailable; attended allow (no ask); unattended without grant denied; restricted denied; result JSON capped; fixed provider hosts only |
+| V-OUT-7 | Browser SERP fallback: default off (Settings toggle); runs only after primary empty/error; Bing before Google; fixed SERP URLs; attended ask for browser leg; unattended browser requires `unattendedBrowser`+grant; missing Chromium soft-fails + Settings/Doctor **install hint**; concurrency/timeout/rate caps; no free navigation; no silent Chromium download |
+| V-OUT-8 | Builtin `browser` (§9.5g): Owner-disabled by default; catalogue available when managed Chromium ready **or** (Owner + elevated ready); attended ask (summary tags resolved profile incl. household default); unattended needs grant+`unattendedEnabled`+managed; restricted deny; navigate/open SSRF incl. redirects; snapshot/act; concurrency 1 with SERP (no SERP rate on browser); soft-fail missing Chromium + install hint |
+| V-OUT-9 | Elevated `personal` (§9.5g.1): acknowledge required; Owner-account only; never unattended; loopback CDP only; connectOverCDP; approval summary tags `[personal]`; CDP endpoint never from tool args |
+| V-OUT-10 | Elevated `remote` (§9.5g.1): acknowledge required; Owner-account only; never unattended; Owner `cdpUrl` + optional secret; connectOverCDP; approval summary tags `[remote]`; CDP URL never from tool args |
 
 **IDs owned by §5.7 (smart home), listed here for one-place lookup — the range is V-HA-1 … V-HA-24:** V-HA-1 … V-HA-20 (§5.7.6 table through Approvals summary), V-HA-21 … V-HA-24 (§5.7.8 NL control), and V-CH-8/V-CH-9 (§5.6). They are memory-adjacent only in that V-HA-8 constrains what may enter standing memory.
 
@@ -1831,18 +2307,18 @@ YAML/JSON export is secondary. Desktop Settings is a **single window** with a le
 
 | Nav id | Screen | Primary actions |
 |--------|--------|-----------------|
-| `accounts` | Account list | Create / rename / delete; open detail |
-| `account.detail` | One account | Display name, locale, tool policy preset, default harness |
-| `connections` | Connections (tabs) | **Pair devices** (`pairing`): QR / mint / phones assign+revoke. **Home Assistant** (`homeassistant`) / **MQTT** (`mqtt`): hub config + demos **plus** channel-scoped device bind/flags (§5.7.3). **Channels** (`channels`): optional Telegram + sender→profile links. Legacy `bindings` deep-links to `channels`; legacy `smarthome` → Home Assistant tab. |
-| `chat` | Chat + approval inbox | Loopback turns; **pending tool/actuation approvals** Allow/Deny inline (V-UX-7); toast + auto-focus Chat on `home:approval-needed`. **Home-intent routing** (§5.7.8): general sessions omit `ha_*`/`mqtt_*` unless the turn is home-related. |
-| `homeChat` | Home chat | Dedicated smart-home session (`purpose: "home"`): bound-object card + `ha_*`/`mqtt_*` always available; same Approvals gate. Entry from the sidebar. Not a second brain — same daemon/harness. **Hidden until Home Assistant is configured and enabled** (`homeassistant` channel: baseUrl + access token saved, then Enable) — do not show an empty Home chat when HA is absent. MQTT-only homes use Workflows / MQTT bind until HA is connected. |
+| `accounts` | *(legacy deep-link)* | Opens **System → Profiles** — create / delete (**Owner**); Owner badge; **Transfer ownership** (§4.1.1); workspace mounts (§4.2.1). Members see list read-mostly |
+| `account.detail` | *(in System → Profiles cards)* | Own **display name / locale** (seat-or-Owner); **tool policy** Owner-only; **Workspace folders** (§4.2.1 multi-mount): Owner adds/removes from desktop **or** mobile; members see status only |
+| `connections` | Connections (tabs) | **Pair devices** (`pairing`): QR / mint (Owner phone or desktop); revoke/list/rebind. **Home Assistant** / **MQTT**: config + enable + bind/flags Owner-scope. **Channels**: enable + `setChannelConfig` Owner-scope. **Web search** (§9.5f/§9.5f.1): provider + browser SERP fallback. **Browser** (§9.5g/§9.5g.1): managed Chromium + elevated personal/remote profiles (Owner ack). Legacy `bindings` → `channels`; legacy `smarthome` → HA tab. |
+| `chat` | Chats + approval inbox | Loopback turns; **ChatGPT-style session rail** (New chat + list; archive/delete); trash menu (**Empty** / **Archive** / **Delete chat**) + per-message copy/delete; **pending tool/actuation approvals** Allow/Deny inline (V-UX-7); toast + auto-focus Chats on `home:approval-needed`. **Home-intent routing** (§5.7.8): general sessions omit `ha_*`/`mqtt_*` unless the turn is home-related. |
+| `homeChat` | Home chat | Dedicated smart-home session (`purpose: "home"`): **one session per profile** (reuse, no New/Recents); trash menu (**Empty** / **Delete chat**) + per-message delete; bound-object card + `ha_*`/`mqtt_*` always available; same Approvals gate. Entry from the sidebar. Not a second brain — same daemon/harness. **Hidden until Home Assistant is configured and enabled** (`homeassistant` channel: baseUrl + access token saved, then Enable) — do not show an empty Home chat when HA is absent. MQTT-only homes use Workflows / MQTT bind until HA is connected. |
 | `llm` | LLM (tabs) | **Model Provider** (`models`, default): provider pool. **Local Model** (`local`): EnvoyHome Local / Ollama (§8.5). **Routing** (`routing`): Cloud / Local only / Smart Routing. **Memory** (`memory`): standing notes; On disk / In prompt; cloud vs local inject packages (Memory Design §4.2.1); pending learns; compact; flush/review. Harness UI hidden (envoy-harness default). Legacy ids deep-link to the tab. |
 | `automation` | Skills (tabs) | Sidebar label **Skills** (view id remains `automation`). **Skills** (`skills`): how-to sample `SKILL.md` + install path / ClawHub search+install / URL; verify; remove. **Workflows** (`workflows`): list-first New/Edit, **Who can use this**, Diagram\|YAML dual editor (DAG canvas + YAML), multi-line NL draft/revise (`home.draftWorkflow` + optional `currentYaml`) + per-node Refine prompt, **Available tools** picker (`home.listWorkflowTools` + Insert sample), validate/save, test-run, collapsed howto. **Schedules** (`jobs` tab id — deep-link/legacy): NL WHEN resolve + create Reminder / Workflow / Tool (`home.proposeSchedule` → `home.confirmSchedule` with payload, or `home.putSchedule`); unified list with Workflow badge for YAML-synced jobs; enable/run/remove (no remove on synced). Object bind is **not** a Skills tab — see Connections HA/MQTT. Legacy `skills`/`workflows`/`jobs` deep-link to the tab; legacy `smarthome` → Connections → Home Assistant. |
-| `system` | System (tabs) | **Shared files** (`artifacts`): open signed link. **Health check** (`doctor`): issues + Fix / migrate dry-run. **This machine** (`advanced`): `publicBaseUrl`; ports (4780/4781); OS service; **grants** list + revoke. Legacy ids deep-link to the tab. |
+| `system` | System (tabs) | **Profiles** (`accounts` / first tab): household seats, Owner transfer, workspace folders (§4.2.1). **Files** (`artifacts`): folder browser via `home.listSandboxEntries` (sandbox + effective `workspace/`); open in-app / Share-Save / Open in browser (signed URL sandbox-only). **Health check** (`doctor`): issues + Fix / migrate dry-run. **This machine** (`advanced`): `publicBaseUrl`; ports (4780/4781); OS service; **grants** list + revoke. Legacy `accounts`/`artifacts`/`doctor`/`advanced` deep-link to the tab. |
 
 ### 10.2 Critical flows (must work without YAML)
 
-1. **Add household member:** Profiles → Create → Connections → Channels → link Telegram sender (or wait for pairing prompt).  
+1. **Add household member:** System → Profiles → Add → Connections → Channels → link Telegram sender (or wait for pairing prompt).  
 2. **Pair phone:** Connections → Pair devices → Mint → scan QR → phone `home.hello` succeeds.  
 3. **Approve exec:** Chat shows the pending approval → Allow once → turn resumes.  
 4. **Enable Telegram:** Connections → Channels → paste bot token (autosaves and enables) → link sender to profile.  
@@ -1868,7 +2344,9 @@ YAML/JSON export is secondary. Desktop Settings is a **single window** with a le
 | V-UX-9 | Workflows editor supports Diagram \| YAML dual mode; diagram ↔ YAML round-trips without losing nodes/edges; YAML remains what `home.putWorkflow` writes |
 | V-UX-10 | `home.draftWorkflow` returns validated YAML without writing (create or revise via optional `currentYaml`); invalid/unknown-tool drafts fail closed; `home.draftWorkflowPrompt` returns a non-empty prompt for llm nodes; Settings New/Edit Draft/Revise with AI + Diagram remount after draft |
 | V-UX-11 | User can create a reusable LLM step from Add step ▾ or Save as step on a node, see it under Your steps, and insert it as `llm_fill`/`llm_summarize` (runtime kinds unchanged) |
-| V-UX-12 | Schedules tab: create Reminder / Workflow / Tool (NL WHEN + confirm payload or `home.putSchedule`); list shows `payloadKind` and Workflow badge for YAML-synced jobs; no remove on synced; no debug JSON dumps |
+| V-UX-12 | Schedules tab: create Reminder / Workflow / Tool (NL WHEN + confirm payload or `home.putSchedule`); list split **Repeating** (`cron`/`every`) · **Once** (`at`) · **History** (runs + **Not set** canceled/expired proposals); shows human WHEN + `payloadKind` and Workflow badge for YAML-synced jobs; no remove on synced; no debug JSON dumps; chat Confirm/Cancel card for unarmed proposals (expire ≠ arm) |
+| V-UX-12b | Mobile Schedules: reads `jobs` from `listSchedules`; parity with V-UX-12 (Repeating/Once/History, badge, no remove synced, tool argChoices); run history via `listScheduleReceipts` |
+| V-UX-13 | User can open **Schedules chat** from the shell (desktop sidebar and mobile nav) without Home Assistant; session uses `purpose: "schedules"` (one session per profile); the turn standing text lists non-system jobs and tells the model to propose/confirm via the schedule tool; smart-home tools are not enabled by that purpose |
 
 ---
 
@@ -1955,7 +2433,7 @@ We do **not** copy products. Each idea is fitness-checked. Detail analysis: `ana
 | Profile standing facts | **Adapt** | §9.1 — Settings-visible |
 | Static intent workflows (`planner_executor.flows`) | **Adapt** | §7 — global + account overlay; these are **ordered step chains**, not a graph |
 | llama.cpp / GGUF local | **Adapt** pattern (independent Home process) | §8.1 + §8.5 (spawn `:18792` / Ollama `:11434`; never Mesh `:18790`) |
-| Output tiers (plain/MD/rich link) | **Adapt** | §9.5 — daemon signed artifacts |
+| Output tiers (plain/MD/rich link) | **Adapt** | §9.5 — thin-client mesh open; channels markdown only |
 | HTTP `/inbound` for any bot | **Adopt** idea | §5.4, Appendix A.8 |
 | OpenClaw-compatible skills + ClawHub | **Adapt** | §9.2 — verify gate |
 | Channel zoo / YAML-first ops | **Reject** as day-one | One reference IM; Settings-first |
@@ -2171,6 +2649,7 @@ Same as v1, including §9.3: no silent skill overwrite. Thin clients stay thin. 
 | Wave | Theme | Shape |
 |------|--------|--------|
 | **2a** | Mobile thin client | Shared Dart `home.*` + EnvoyHome UI; dials **hosting** peer via join channels **link / host:port / SSH** (§2.3) |
+| **2a** | **Household Owner + workspace** | §4.1.1 Owner account + transfer; Owner-scope from Owner’s mobile; §4.2.1 workspace under Owner; V-SEC-13…16 |
 | **2b** | Optional typed triage | Plug-in behind §8.3 |
 | **2b** | Privacy Mode | Hard block cloud |
 | **2c** | Extra channels / multi-agent | SDK/community; Q10 default agent until UX clear |
@@ -2377,11 +2856,11 @@ Conventions:
 
 **`home.unregisterPushToken`** params `{}` → `{ "ok": true }` — paired-device session.
 
-**`home.sendTestPush`** params `{ "deviceId?", "title?", "body?" }` → `{ "ok": true, "sent": 0 }` — **loopback-owner only.** Sends a test APNs/FCM alert; `sent` is the count of HTTP 200 responses.
+**`home.sendTestPush`** params `{ "deviceId?", "title?", "body?" }` → `{ "ok": true, "sent": 0 }` — **Owner-scope** (§4.1.1). Sends a test APNs/FCM alert; `sent` is the count of HTTP 200 responses.
 
 **`home.restartService`** params `{ "graceSec?": 5 }` → `{ "ok": true, "restartedAt": "…" }` — **loopback-owner only**; equivalent to `home.shutdown` followed by a manager restart, and MUST resolve pending approvals as denied first (a restart must not leave an approval "pending" forever).
 
-### A.2 Pairing (loopback-only)
+### A.2 Pairing (§4.1.1)
 
 **`home.mintPairing`**
 
@@ -2402,19 +2881,21 @@ Conventions:
 }
 ```
 
-- `accountIds` (optional, §4.1) binds the new device to those accounts **at mint time** — the normal household flow, "pair Alice's phone for Alice". Omit it to mint an unbound device, then bind later with `home.setBinding {deviceId}`.
+- `accountIds` (optional, §4.1) binds the new device to those accounts **at mint time**. Omit it to mint an unbound device, then bind later with `home.setBinding {deviceId}`.
+- If `ownerAccountId ∈ accountIds`, then `accountIds` **MUST** be exactly `[ownerAccountId]` or the call fails `envoyhome.owner_bind_exclusive` (V-SEC-19).
 - `host` / `lanHost` are optional. Omit both for the QR route — the daemon picks the first non-loopback IPv4, else `127.0.0.1`. When supplied (typed host:port route), `host` wins as reach; `lanHost` is an optional second dial hint. The daemon owns its bound port: it appends the **resolved** WS port (never a client-supplied one) and normalises `host:port` and bracketed IPv6 before building the URI. Precedent: `../EnvoyCoder/apps/desktop/src/daemon/pairing.ts`.
 - User-supplied `token` (typed route) must be **8–10** letters/digits; QR mint uses a long random secret and omits `token`.
-- **Mint is loopback-only and rate-limited** (§4.4): repeated mints must back off, and a mint never returns a previously issued credential.
+- **Mint is Owner-scope and rate-limited** (§4.1.1 / §4.4); a mint never returns a previously issued credential.
 
-**`home.listPairedDevices`** → `{ "devices": [{ "deviceId", "label", "createdAt", "lastSeenAt?", "revoked": false, "accountIds": ["alice"] }] }`
+**`home.listPairedDevices`** → `{ "devices": [{ "deviceId", "label", "createdAt", "lastSeenAt?", "revoked": false, "accountIds": ["alice"] }] }` — **Owner-scope**
 
-**`home.revokePairedDevice`** params `{ "deviceId" }` → `{ "ok": true }`  
-**`home.forgetPairedDevice`** params `{ "deviceId" }` → `{ "ok": true }`
+**`home.revokePairedDevice`** params `{ "deviceId" }` → `{ "ok": true }` — **Owner-scope**  
+**`home.forgetPairedDevice`** params `{ "deviceId" }` → `{ "ok": true }` — **Owner-scope**
 
 **`home.setDeviceAccounts`** params `{ "deviceId", "accountIds": ["alice"] }` → `{ "ok": true, "device": { /* updated */ } }`
 
-- Rebinds an already-paired device without re-pairing it (§4.1). Loopback owner window only.
+- Rebinds an already-paired device without re-pairing it (§4.1). **Owner-scope** (§4.1.1).
+- Same exclusive-Owner rule as mint (`envoyhome.owner_bind_exclusive`).
 - Setting `"accountIds": []` drops the device to the zero-binding scope of §4.1 rule 4 — it does **not** revoke the credential; use `home.revokePairedDevice` for that.
 - Must be idempotent and must not disturb live sessions except by making subsequent account-scoped calls fail closed.
 
@@ -2430,8 +2911,17 @@ Conventions:
 ```
 
 **`home.listAccounts`** → `{ "accounts": [/* same account objects */] }`  
-**`home.updateAccount`** params `{ "accountId", "displayName?", "locale?", "toolPolicy?" }` — `toolPolicy` is a preset id from the §4.3 risk-tier table (v1 presets: `standard`, `restricted`)  
-**`home.deleteAccount`** params `{ "accountId", "confirm": true, "force?": false }` — fails closed if the account has active sessions or pending approvals unless `force: true`; on delete the daemon also drops that account's device bindings
+**`home.updateAccount`** params `{ "accountId", "displayName?", "locale?", "toolPolicy?" }` — `toolPolicy` is a preset id from the §4.3 risk-tier table (v1 presets: `standard`, `restricted`). **Field auth (§4.1.1):** `displayName`/`locale` require `mayActForSeat`; `toolPolicy` requires `isHouseholdOwner` (`envoyhome.owner_required` otherwise).  
+**`home.deleteAccount`** params `{ "accountId", "confirm": true, "force?": false }` — fails closed if the account has active sessions or pending approvals unless `force: true`; on delete the daemon also drops that account's device bindings; **refuses if `accountId` is `ownerAccountId`** until transfer (§4.1.1)  
+**`home.getHouseholdOwner`** → `{ "ownerAccountId", "displayName?" }` — account-scoped  
+**`home.transferHouseholdOwner`** params `{ "toAccountId", "confirm": true }` → `{ "ownerAccountId" }` — **Owner-scope**; exactly one Owner afterward  
+**`home.getWorkspace`** params `{ "accountId" }` → `{ "configured", "mounts": [{ "id", "displayPath", "mode", "filesystemRoot", "active" }], "mode?", "displayPath?", "filesystemRoot?", "active?" }` — **seat-or-Owner** (§4.2.1); singular fields = primary mount; `active: false` when that mount is R3-ineffective  
+**`home.setWorkspace`** params `{ "accountId", "hostPath", "mode": "ro"|"rw", "id"? }` → same shape as get — **Owner-scope**; **replaces** all mounts with one folder; filesystem/volume root only when `accountId = ownerAccountId` else `envoyhome.workspace_root_owner_only` (V-SEC-20)  
+**`home.upsertWorkspaceMount`** params `{ "accountId", "hostPath", "mode": "ro"|"rw", "id"? }` → same shape as get — **Owner-scope**; add/update one mount (keeps others; max 16)  
+**`home.removeWorkspaceMount`** params `{ "accountId", "id" }` → same shape as get — **Owner-scope**  
+**`home.clearWorkspace`** params `{ "accountId" }` → `{ "ok": true }` — **Owner-scope**; clears all mounts
+**`home.getHomeFsInfo`** → `{ "platform", "pathSep", "homeDir", "roots" }` — **Owner-scope**; workspace folder picker bootstrap
+**`home.listHomeFsEntries`** params `{ "path?", "dirsOnly?" }` → `{ "path", "parent?", "entries": [{ "name", "kind", "path" }] }` — **Owner-scope**; absolute host dirs (default `dirsOnly: true`)
 
 **`home.setBinding`** — exactly one of (`senderId` + `channel`) or `deviceId`:
 
@@ -2450,27 +2940,27 @@ Conventions:
 {
   "deviceId": "…",
   "accountId": "alice",
-  "agentId?": "default",
-  "ownerTrusted?": false          // §4.1 rule 6 — this device may call owner-scope methods
+  "agentId?": "default"
+  // ownerTrusted? — deprecated no-op; Owner-scope = exclusive [ownerAccountId] (§4.1.1)
 }
 // result
 { "bindingId": "…", "binding": { /* echo */ } }
 ```
 
-Both forms are **owner-scope** (loopback or an owner-bound device) and daemon-owned: the client never supplies its own binding. `listBindings` echoes a `deviceId` field when the row is a device binding.
+`setBinding` / `removeBinding` are **Owner-scope**. `listBindings` is **seat-or-Owner** (§4.1.1): members see only rows for their seats; Owner (or loopback) sees the household roster. The client never supplies its own binding. `listBindings` echoes a `deviceId` field when the row is a device binding.
 
-**Binding flags (Normative).** Three booleans on a binding change behaviour elsewhere, so they are defined here rather than implicitly:
+**Binding flags (Normative).** Booleans on a binding that change behaviour elsewhere:
 
 | Flag | On | Default | Meaning |
 |------|----|---------|---------|
 | `machine` | a sender binding (§5.2) | `false` | The sender is an automation/service account, not a person. Turns from it are **`origin: unattended`** (§4.3.3), so `ask` is unsatisfiable for `exec`/`network`/`admin`/`sensitive`. Applies to chat and HTTP-hatch senders. |
-| `trustedChannel` | a sender binding | `false` | Turns from this sender may write memory at `trust: "agent"` (Memory Design §13). Written as `policy.json` → `trustedChannels[]`; **never** `owner` — only the loopback owner window and an `ownerTrusted` device produce `owner`. |
-| `ownerTrusted` | a **paired device** | `false` | This device may call **owner-scope** methods (§4.3.1) and produces `trust: "owner"` for memory (Memory Design §13). Setting it requires the loopback owner window, never a remote call — otherwise a member-bound device could promote itself. |
+| `trustedChannel` | a sender binding | `false` | Turns from this sender may write memory at `trust: "agent"` (Memory Design §13). Written as `policy.json` → `trustedChannels[]`; **never** `owner` — only loopback and an **exclusive-Owner** device produce `trust: "owner"` (§4.1.1). |
+| `ownerTrusted` | a **paired device** (legacy) | `false` | **Deprecated no-op** for method scope and memory trust. Kept on wire/disk so older clients do not break; ignored by the daemon. Do not surface in Settings. |
 
-All three are owner-scope to change. Revoking a device or unbinding a sender clears them, and `home.listBindings` MUST echo them so Settings can show why a given turn was treated as unattended.
+`machine` and `trustedChannel` are Owner-scope to change. Revoking a device or unbinding a sender clears them, and `home.listBindings` MUST echo them so Settings can show why a given turn was treated as unattended.
 
-**`home.listBindings`** params `{ "accountId?", "deviceId?" }` → `{ "bindings": […] }`  
-**`home.removeBinding`** params `{ "bindingId" }` → `{ "ok": true }` — removing an account's last device binding drops that device to the zero-binding scope of §4.1 rule 4
+**`home.listBindings`** params `{ "accountId?", "deviceId?" }` → `{ "bindings": […] }` — **seat-or-Owner** (§4.1.1 / §4.3.1)  
+**`home.removeBinding`** params `{ "bindingId" }` → `{ "ok": true }` — **Owner-scope**; removing an account's last device binding drops that device to the zero-binding scope of §4.1 rule 4
 
 **`home.listSources`** — the smart-home object registry (§5.7.3).
 
@@ -2547,7 +3037,7 @@ Returns the household object registry for callers on this EnvoyHome (Design `202
 
 `purpose` defaults to `"general"`. `"home"` selects the Home chat surface (§5.7.8 / §10.1 `homeChat`): bound-object inject + smart-home tools enabled for turns in that session. Additive — discover via `home.hello.methods[]`; no `protocolApiVersion` bump.
 
-**`home.uploadChatMedia`** params `{ "accountId", "fileName", "contentBase64", "mimeType?" }` → `{ "kind", "uri", "fileName", "bytes", "mimeType?" }` — account-scoped; writes into `accounts/<id>/files/uploads/` (sandbox-relative `uri`). Cap: 8 MB per file. Use the returned item in `home.sendMessage.media[]`.
+**`home.uploadChatMedia`** params `{ "accountId", "fileName", "contentBase64", "mimeType?" }` → `{ "kind", "uri", "fileName", "bytes", "mimeType?", "extractUri?", "extractor?", "extractChars?" }` — account-scoped; writes into `accounts/<id>/files/uploads/` (sandbox-relative `uri`). Cap: 8 MB per file. Office/PDF/text extractable types also write `*.extract.md` (§9.5a); `extractUri` is sandbox-relative. Use the returned item in `home.sendMessage.media[]` (clients may omit extract fields — daemon re-resolves `<uri>.extract.md` on send).
 
 **`home.sendMessage`**
 
@@ -2570,8 +3060,14 @@ Returns the household object registry for callers on this EnvoyHome (Design `202
 ```
 
 **`home.cancelTurn`** params `{ "turnId" }` → `{ "ok": true }`  
-**`home.getTranscript`** params `{ "sessionId", "limit?": 50, "before?": "cursor" }` → `{ "messages": […], "nextCursor?" }`  
-**`home.listSessions`** params `{ "accountId" }` → `{ "sessions": [{ "sessionId", "title?", "updatedAt" }] }`
+**`home.getTranscript`** params `{ "accountId", "sessionId", "limit?": 50, "before?": "cursor" }` → `{ "messages": [{ "role", "text", "messageId", … }], "nextCursor?" }` — every line carries a stable `messageId` (legacy rows without one receive a deterministic synthetic id on read).  
+**`home.clearTranscript`** params `{ "accountId", "sessionId" }` → `{ "ok": true }` — empties the transcript **in place** (same `sessionId`); does not mint a new session.  
+**`home.deleteTranscriptMessages`** params `{ "accountId", "sessionId", "messageIds": ["…"] }` → `{ "ok": true, "removed": n }` — deletes matching lines by `messageId`.  
+**`home.archiveSession`** params `{ "accountId", "sessionId" }` → `{ "ok": true }` — soft-hides from default `listSessions` (`archivedAt`); transcript kept until `removeSession`.  
+**`home.unarchiveSession`** params `{ "accountId", "sessionId" }` → `{ "ok": true }` — clears `archivedAt` so the session returns to the default Chats list. Opening an archived chat in the UI MUST unarchive it.  
+**`home.removeSession`** params `{ "accountId", "sessionId" }` → `{ "ok": true }` — deletes the session directory.  
+**`home.renameSession`** params `{ "accountId", "sessionId", "title" }` → `{ "ok": true, "title" }` — sets display title and locks out first-message auto-title (`titleSource: user`). Untouched general sessions are auto-titled from the first user message (`titleSource: auto`). **New chat** may pass an optional `title` on `home.openSession` (same lock); omit/`""` keeps auto-title.  
+**`home.listSessions`** params `{ "accountId", "includeArchived?" }` → `{ "sessions": [{ "sessionId", "title?", "updatedAt", "purpose?", "channel?", "messageCount?", "archivedAt?" }] }` — archived omitted unless `includeArchived: true`. Chats UI lists only general rows with `messageCount > 0` and no system `channel` / schedule / hatch titles. The **Archived** view filters to rows with `archivedAt` set.
 
 **Turn event envelopes.** All three turn events carry the same identity block, so a client can key on one shape:
 
@@ -2638,8 +3134,8 @@ Returns the household object registry for callers on this EnvoyHome (Design `202
 - `scope: "always"` on a **safety-class** call is refused with `envoyhome.actuation_never_unattended: …`; safety-class calls are always `once`.
 - Answering an already-expired approval is a no-op that returns `envoyhome.approval_expired: …`; it MUST NOT allow the action. Answering an approval for another account, or a second answer for an already-resolved approval, is rejected (`envoyhome.approval_not_yours`, `envoyhome.approval_resolved`) — no replay.
 
-**`home.listGrants`** params `{ "accountId?" }` → `{ "grants": [{ "id", "accountId", "tool", "argsDigest", "isFullDigest", "objectId?", "desiredState?", "risk", "grantedBy", "createdAt", "expiresAt" }] }`  
-**`home.revokeGrant`** params `{ "id" }` → `{ "ok": true }`
+**`home.listGrants`** params `{ "accountId?" }` → `{ "grants": [{ "id", "accountId", "tool", "argsDigest", "isFullDigest", "objectId?", "desiredState?", "risk", "grantedBy", "createdAt", "expiresAt" }] }` — **seat-or-Owner** (§4.1.1)  
+**`home.revokeGrant`** params `{ "id" }` → `{ "ok": true }` — **seat-or-Owner** on the grant’s `accountId` (V-SEC-17)
 
 **`home.listActuations`** params `{ "accountId?", "objectId?", "since?", "limit?": 50 }` → `{ "actuations": [{ "actuationId", "accountId", "turnId", "objectId", "desiredState", "risk", "origin", "grantId?", "dispatchedAt", "outcome": "pending"|"confirmed"|"unconfirmed"|"failed", "stateChanged": true|false|"unknown", "error?" }] }` — the §5.7.7 journal. **Owner-scope**; Settings Devices UI does not render it by default (`2026-10-16n`).
 
@@ -2665,7 +3161,7 @@ Returns the household object registry for callers on this EnvoyHome (Design `202
 { "channel": { "id": "telegram", "enabled": true, "healthy": true } }
 ```
 
-- Owner-scope (`admin` tier, §4.3). Validated against the plugin's `configSchema` — an unknown key is rejected, not stored.
+- **Owner-scope** (§4.1.1 / §4.3.1). Validated against the plugin's `configSchema` — an unknown key is rejected, not stored.
 - **Secrets are write-only.** They go to the secret store (§4.2) and are never returned by `home.listChannels`, `home.getChannelStatus`, or `home.getChannelConfig` (should one be added), and never logged. Verification: V-CH-9, V-HA-9.
 - `config` merges into existing non-secret config; `secrets` replaces the named fields only. Passing `"secrets": { "botToken": "" }` clears a secret explicitly.
 
@@ -2704,7 +3200,7 @@ Returns the household object registry for callers on this EnvoyHome (Design `202
 **`home.setProviderSecret`** params `{ "id", "field?": "apiKey", "value": "…" }` → `{ "ok": true }`
 
 - Write-only: the secret is written to the secret store (§4.2) and **never echoed back** — `home.listProviders` returns `hasSecret` only (boolean), never the value, and logs must not contain `value`.
-- Owner-scope (`admin` tier, §4.3). This is the surface that makes V-LLM-2 ("swap provider via config") reachable without hand-editing `providers/`.
+- **Owner-scope** (§4.1.1). Non-secret provider shape stays `home.setProvider`.
 
 **`home.testProvider`** params `{ "id" }` → `{ "ok": true, "latencyMs?": 0, "model?": "…", "error?": "…" }` — owner-scope; runs a tiny completion; never echoes secrets.
 
@@ -2744,11 +3240,13 @@ Returns the household object registry for callers on this EnvoyHome (Design `202
 **`home.putWorkflowStepTemplate`** params `{ "label", "nodeType", "prompt", "id?", "out?", "accountId?" }` → `{ "ok", "id", "label", "nodeType", "source" }` — owner-scope; writes global or account overlay.
 **`home.removeWorkflowStepTemplate`** params `{ "id", "accountId?" }` → `{ "ok" }` — owner-scope.
 
-**`home.listSchedules`** params `{ "accountId" }` → `{ "jobs": [{ "id", "name", "enabled", "kind", "nextRunAt?", "lastStatus?", "source", "payloadKind", "message?", "workflowId?", "toolName?" }] }`  
-**`home.proposeSchedule`** params `{ "accountId", "text", "timeZone?" }` → `{ "proposalId", "resolvedLocal", "kind", "whenInstant?", "cronExpr?", "everyMs?", "message" }` or error `missing_time` / `ambiguous`  
-**`home.confirmSchedule`** params `{ "accountId", "proposalId", "name?", "payload?" }` → `{ "job": { "id", "nextRunAt?", "enabled" } }` — optional `payload.kind` ∈ {`notify`,`workflow`,`tool`} replaces the proposal payload (validates workflow/tool existence)  
-**`home.putSchedule`** params `{ "accountId", "name", "spec", "payload" }` → `{ "job": { "id", "nextRunAt?", "enabled" } }` — structured create; refuses `system`; same workflow/tool validation  
-**`home.updateSchedule`** params `{ "accountId", "jobId", "enabled?" }` → `{ "job": { … } }`  
+**`home.listSchedules`** params `{ "accountId" }` → `{ "jobs": [{ "id", "name", "enabled", "kind", "nextRunAt?", "lastStatus?", "source", "payloadKind", "message?", "workflowId?", "toolName?", "prompt?", "timeZone?", "cronExpr?", "everyMs?", "whenInstant?" }], "dismissed?": [{ "proposalId", "status" ∈ {`canceled`,`expired`}, "resolvedLocal", "name", "kind", "closedAt", … }] }` — `payloadKind` ∈ {`notify`,`workflow`,`tool`,`system`,`agentTurn`}; Settings lists split Repeating (`cron`/`every`) vs Once (`at`) vs History (**Not set** dismissed + run receipts)
+**`home.cancelScheduleProposal`** params `{ "accountId", "proposalId" }` → `{ "dismissed": { … } }` — archives as canceled; never arms  
+**`home.proposeSchedule`** params `{ "accountId", "text", "timeZone?" }` → `{ "proposalId", "resolvedLocal", "relativeHint?", "nextRunAt?", "kind", "whenInstant?", "cronExpr?", "everyMs?", "message" }` or error `missing_time` / `ambiguous` (MAY include `candidates[]` for near-miss asks)  
+**`home.confirmSchedule`** params `{ "accountId", "proposalId", "name?", "payload?" }` → `{ "job": { "id", "nextRunAt?", "enabled" } }` — optional `payload.kind` ∈ {`notify`,`workflow`,`tool`,`agentTurn`} replaces the proposal payload (validates workflow/tool existence; `agentTurn` requires `prompt`)  
+**`home.putSchedule`** params `{ "accountId", "name", "spec", "payload" }` → `{ "job": { "id", "nextRunAt?", "enabled" } }` — structured create; refuses `system`; same validation  
+**`home.updateSchedule`** params `{ "accountId", "jobId", "enabled?", "name?", "spec?", "payload?" }` → `{ "job": { … } }` — patch user jobs; refuse `system` payload; refuse spec/payload on workflow-synced  
+**`home.listScheduleReceipts`** params `{ "accountId", "jobId?", "limit?" }` → `{ "receipts": [{ "jobId", "accountId", "scheduledFor", "startedAt", "finishedAt", "execStatus", "deliveryStatus", "error?" }] }`  
 **`home.removeSchedule`** params `{ "accountId", "jobId" }` → `{ "ok": true }`  
 **`home.runSchedule`** params `{ "accountId", "jobId" }` → `{ "receipt": { "execStatus", "deliveryStatus" } }`
 
@@ -2762,8 +3260,10 @@ Returns the household object registry for callers on this EnvoyHome (Design `202
 **`home.verifySkill`** params `{ "id" }` → `{ "ok": true, "findings": [] }`  
 **`home.removeSkill`** params `{ "id" }` → `{ "ok": true }`
 
-**`home.listArtifacts`** params `{ "accountId", "sessionId?" }` → `{ "artifacts": [{ "id", "path", "createdAt" }] }`  
-**`home.getArtifactUrl`** params `{ "accountId", "path", "ttlSec?": 3600 }` → `{ "url": "https://…/artifacts/{accountId}/{token}", "expiresAt": "…" }` — the URL shape and token framing are §4.1b; `ttlSec` is clamped to 86400
+**`home.listArtifacts`** params `{ "accountId", "sessionId?" }` → `{ "artifacts": [{ "id", "path", "createdAt" }] }` — recursive under `output/` / `documents/` / `knowledge/` / `uploads/` only; `sessionId` ignored (§9.5d)  
+**`home.listSandboxEntries`** params `{ "accountId", "path?" }` → `{ "path", "parent?", "entries": [{ "name", "kind": "dir"|"file", "path", "size?", "modifiedAt?" }], "roots": ["documents", …] }` — File Explore one-level browse; empty `path` → synthetic roots; refuse `share/` / inactive `workspace/` (§9.5d / V-OUT-4)  
+**`home.getArtifactContent`** params `{ "accountId", "path" }` → `{ "path", "mimeType", "encoding": "utf8"|"base64", "text?", "base64?", "bytes" }` — mesh/paired open for sandbox **or** `workspace/…` (R3-effective jail); refuse `share/`; 8 MiB stat-before-read (§9.5 / §9.5d); no `publicBaseUrl` required; Office MIME on common export extensions  
+**`home.getArtifactUrl`** params `{ "accountId", "path", "ttlSec?": 3600 }` → `{ "url": "https://…/artifacts/{accountId}/{token}", "expiresAt": "…" }` — optional LAN/tunnel; **sandbox paths only** (refuse `workspace/` / `share/`); URL shape and token framing are §4.1b; `ttlSec` is clamped to 86400
 
 **`home.doctor`** → `{ "ok": true, "issues": [{ "id", "severity", "message", "fixable" }] }`  
 **`home.doctorFix`** params `{ "issueIds": ["…"] }` → `{ "fixed": [], "failed": [] }`
@@ -2778,7 +3278,7 @@ Memory / profile / learn RPCs → **Appendix A.9** (Normative schemas).
 // request
 { "accountId": "alice", "text": "…", "sessionId?": "…", "async?": false, "clientTurnId?": "…" }
 // sync response
-{ "turnId": "…", "text": "…", "format": "markdown", "artifactUrl?": "…" }
+{ "turnId": "…", "text": "…", "format": "markdown" }
 ```
 
 ### A.9 Memory, profile, learn (Normative — align Memory Design)
@@ -2943,7 +3443,7 @@ Profile document (`accounts/<id>/profile.json`) — **supersede-by-key**:
     {
       "id": "…",
       "accountId": "alice",
-      "kind": "profile_patch"|"memory_append"|"memory_edit"|"skill_create"|"skill_patch"|"skill_delete",
+      "kind": "profile_patch"|"identity_append"|"memory_append"|"memory_edit"|"skill_create"|"skill_patch"|"skill_delete",
       "diff": { "summary": "…", "patch?": "…" },
       "sourceTurnId?": "…",
       "createdAt": "…",
@@ -3028,6 +3528,7 @@ This is the **pre-MVP floor**, not the full Plan §4 set — a build that fails 
 | V-MEM-1,7,8,11,13 | cross-account deny; refresh-after-write; flush-before-compact; no torn MEMORY.md; recall FTS incl. a CJK query |
 | V-LEARN-1 | skill unchanged until `acceptLearn` |
 | V-OUT-1 | replay after TTL → 403 (the abuse case is §4.6 #3; do not conflate it with the artifact-URL criterion) |
+| V-OUT-4 | File Explore `listSandboxEntries` stays in profile jail (sandbox + R3-effective workspace/; no share/) |
 | **V-HA-4** | a workflow whose `tool` step actuates is blocked unattended with no grant, and is never an approval bypass |
 | **V-HA-5** | the safety class is not grant-satisfiable — refusal at creation **and** at dispatch |
 | **V-HA-7** | an unbound object cannot be actuated/resolved; bound objects are household-scoped |

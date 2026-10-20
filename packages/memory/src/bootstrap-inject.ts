@@ -1,6 +1,10 @@
 // Standing bootstrap inject — Memory Design §4.2 caps + duty line (V-MEM-4/10/18).
 
 import {
+  IDENTITY_INJECT_BUDGET,
+  composeIdentityInject,
+} from "./agent-identity.js";
+import {
   buildL2Inject,
   buildL3Inject,
   todayIsoDate,
@@ -15,11 +19,14 @@ import {
 /**
  * Exact v1 inject budgets (Memory Design §4.2 — OpenClaw-aligned).
  * L1 ↔ USER.md hard 4k; L2/L3 ↔ bootstrapMaxChars 20k.
+ * Identity (floor + persona) is reserved separately — see IDENTITY_STANDING_RESERVE.
  */
 export const INJECT_BUDGET = {
   l1: 4000,
   l2: 20_000,
   l3: 20_000,
+  /** Editable IDENTITY.md body only (floor is fixed and always included). */
+  identity: IDENTITY_INJECT_BUDGET,
 } as const;
 
 /** Exact v1 raw soft caps (Memory Design §4.2). */
@@ -27,6 +34,7 @@ export const RAW_SOFT_CAP = {
   l1: 20_000,
   l2: 40_000,
   l3: 10_000,
+  identity: 20_000,
 } as const;
 
 /**
@@ -35,6 +43,9 @@ export const RAW_SOFT_CAP = {
  */
 export const STANDING_DUTY_LINE =
   "Standing bootstrap may be partial — use recall / session_search for more.";
+
+/** @deprecated Use PRODUCT_IDENTITY_FLOOR from agent-identity — kept for import stability. */
+export { PRODUCT_IDENTITY_FLOOR as PRODUCT_IDENTITY_PROLOGUE } from "./agent-identity.js";
 
 export interface AssetBudgetReport {
   rawChars: number;
@@ -50,6 +61,8 @@ export interface StandingInjectResult {
   text: string;
   truncated: boolean;
   dutyLine: string | null;
+  /** Brand floor + editable persona (outside L1–L3 package; reserved in §4.2.1). */
+  identity: AssetBudgetReport;
   profile: AssetBudgetReport & { factCount: number };
   memory: AssetBudgetReport & { sectionsOmitted: string[] };
   daily: AssetBudgetReport;
@@ -62,6 +75,13 @@ export interface InjectInputs {
   memoryMd: string;
   todayContent: string;
   yesterdayContent: string;
+  /** Editable assistant persona (IDENTITY.md). */
+  identityMd?: string;
+  /**
+   * Account displayName from profile.json extras — injected as a `name` fact
+   * when no name/preferred_name fact exists yet.
+   */
+  accountDisplayName?: string;
   now?: Date;
   injectPrioritySections?: string[];
   generation?: number;
@@ -73,6 +93,31 @@ export interface InjectInputs {
   };
 }
 
+/** Merge account displayName into L1 facts for inject only (does not mutate disk). */
+export function profileFactsForInject(
+  profile: ProfileDocument,
+  accountDisplayName?: string,
+): Record<string, ProfileFact> {
+  const facts = { ...(profile.facts as Record<string, ProfileFact>) };
+  const display =
+    (typeof accountDisplayName === "string" && accountDisplayName.trim()) ||
+    (typeof profile.displayName === "string" ? profile.displayName.trim() : "");
+  if (!display) return facts;
+  const hasName =
+    facts.name !== undefined ||
+    facts.preferred_name !== undefined ||
+    facts.displayName !== undefined;
+  if (hasName) return facts;
+  facts.name = {
+    value: display,
+    updatedAt:
+      typeof profile.updatedAt === "string" ? profile.updatedAt : new Date().toISOString(),
+    source: "migrate",
+    trust: "owner",
+  };
+  return facts;
+}
+
 export function buildStandingInject(input: InjectInputs): StandingInjectResult {
   const l1Budget = input.caps?.l1?.injectBudget ?? INJECT_BUDGET.l1;
   const l2Budget = input.caps?.l2?.injectBudget ?? INJECT_BUDGET.l2;
@@ -80,8 +125,10 @@ export function buildStandingInject(input: InjectInputs): StandingInjectResult {
   const l1Raw = input.caps?.l1?.rawSoftCap ?? RAW_SOFT_CAP.l1;
   const l2Raw = input.caps?.l2?.rawSoftCap ?? RAW_SOFT_CAP.l2;
   const l3Raw = input.caps?.l3?.rawSoftCap ?? RAW_SOFT_CAP.l3;
+  const identityBudget = INJECT_BUDGET.identity;
+  const identityRawCap = RAW_SOFT_CAP.identity;
 
-  const facts = input.profile.facts as Record<string, ProfileFact>;
+  const facts = profileFactsForInject(input.profile, input.accountDisplayName);
   const profileSer = serializeProfileForInject(facts, l1Budget);
   const profileBlock = `## Profile\n${profileSer.text}`;
   // injectBudget is measured on the exact serialized block including label.
@@ -127,8 +174,10 @@ export function buildStandingInject(input: InjectInputs): StandingInjectResult {
   const dailyFinal = l3.text ? `## Daily\n${l3.text}` : "## Daily\n";
   const dailyTrunc = l3.truncated;
 
-  const truncated = profileTrunc || memoryTrunc || dailyTrunc;
-  const parts = [profileFinal, memoryFinal, dailyFinal];
+  const identityMd = input.identityMd ?? "";
+  const identity = composeIdentityInject(identityMd);
+  const truncated = profileTrunc || memoryTrunc || dailyTrunc || identity.truncated;
+  const parts = [identity.text, profileFinal, memoryFinal, dailyFinal];
   if (truncated) parts.push(STANDING_DUTY_LINE);
   const text = parts.join("\n\n");
 
@@ -141,6 +190,13 @@ export function buildStandingInject(input: InjectInputs): StandingInjectResult {
     truncated,
     dutyLine: truncated ? STANDING_DUTY_LINE : null,
     generation: input.generation ?? 0,
+    identity: {
+      rawChars: identityMd.length,
+      injectChars: identity.text.length,
+      truncated: identity.truncated,
+      injectBudget: identityBudget,
+      rawSoftCap: identityRawCap,
+    },
     profile: {
       factCount: Object.keys(facts).length,
       rawChars: profileRaw.length,

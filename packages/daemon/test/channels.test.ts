@@ -21,6 +21,8 @@ import { WorkflowStepTemplateStore } from "../dist/workflow-step-templates.js";
 import { ScheduleService } from "../dist/schedule/service.js";
 import { SkillService } from "../dist/skills.js";
 import { ArtifactService } from "../dist/artifacts.js";
+import { WebSearchService } from "../dist/web-search.js";
+import { BrowserControlService } from "../dist/browser-control.js";
 import { ActuationService } from "../dist/actuation-service.js";
 import { PushTokenStore } from "../dist/push-tokens.js";
 
@@ -57,6 +59,7 @@ function channelRouterDeps(stateDir: string): RouterDeps {
     onShutdown: () => undefined,
     packageVersion: "0.0.0-test",
     accounts: { list: async () => [], get: async () => undefined } as RouterDeps["accounts"],
+    household: { getOwnerAccountId: () => null, load: async () => undefined, onAccountCreated: async () => undefined, assertDeletable: async () => undefined, transfer: async (id: string) => id, fixMissingOwner: async () => null } as RouterDeps["household"],
     bindings,
     pairing: {} as RouterDeps["pairing"],
     memory: {} as RouterDeps["memory"],
@@ -69,6 +72,8 @@ function channelRouterDeps(stateDir: string): RouterDeps {
     schedules: new ScheduleService({ paths: homePaths(stateDir) }),
     skills: new SkillService(homePaths(stateDir)),
     artifacts: new ArtifactService(homePaths(stateDir), () => "http://127.0.0.1:1"),
+    webSearch: new WebSearchService(homePaths(stateDir)),
+    browserControl: new BrowserControlService(homePaths(stateDir)),
     actuations: new ActuationService(homePaths(stateDir)),
     pushTokens: new PushTokenStore(homePaths(stateDir)),
     push: {

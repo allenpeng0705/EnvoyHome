@@ -2,7 +2,7 @@
 // Tools and RPC handlers resolve sandbox paths ONLY through safeJoin.
 
 import { lstatSync, realpathSync } from "node:fs";
-import { isAbsolute, normalize, resolve, sep } from "node:path";
+import { isAbsolute, normalize, parse, resolve, sep } from "node:path";
 
 export class PathJailError extends Error {
   readonly code = "path_jail" as const;
@@ -141,37 +141,149 @@ export function safeJoin(accountRoot: string, userPath: string): string {
   return joined;
 }
 
+export type WorkspaceMode = "ro" | "rw";
+
+/** One named host folder mount (§4.2.1 multi-folder). */
+export interface WorkspaceMountRef {
+  id: string;
+  hostPath: string;
+  mode: WorkspaceMode;
+}
+
 /**
- * V-SEC-4: resolve a tool path that may be account-private (`files/…`) or the
- * intentional cross-account `share/` tree. Writes outside `share/` into another
- * account are refused; share writes require `shareWrite: true`.
+ * V-SEC-4 / §4.2.1: resolve a tool path under account `files/`, optional
+ * `workspace/` (host mounts), or intentional `share/`.
+ * Writes outside `share/` into another account are refused; share writes require
+ * `shareWrite: true`. Workspace writes require that mount's `mode: "rw"`.
+ *
+ * Paths: `workspace/<mountId>/…`. With a **single** mount, bare `workspace/…`
+ * (no id segment) still resolves under that mount for legacy transcripts.
+ * `workspaceRoot`/`workspaceMode` remain as a single-mount shorthand.
  */
 export function resolveSandboxPath(input: {
   accountFilesRoot: string;
   shareRoot: string;
-  /** Relative path as tools see it, e.g. `documents/a.txt` or `share/note.md`. */
+  /** Relative path as tools see it, e.g. `documents/a.txt`, `workspace/x`, `share/note.md`. */
   path: string;
   write: boolean;
   /** Explicit policy flag required for any write under share/ (V-SEC-4). */
   shareWrite?: boolean;
-}): { absolute: string; area: "account" | "share" } {
+  /** Named mounts (§4.2.1). Prefer over workspaceRoot when both are set. */
+  workspaceMounts?: WorkspaceMountRef[] | null;
+  /** Absolute host workspace root (§4.2.1 single); omit/null ⇒ unset when no mounts. */
+  workspaceRoot?: string | null;
+  workspaceMode?: WorkspaceMode | null;
+}): { absolute: string; area: "account" | "share" | "workspace" } {
   const { path: userPath, write } = input;
   assertNoNullByte(userPath);
 
   const trimmed = userPath.replace(/^\.\/+/, "");
-  const sharePrefix = trimmed === "share" || trimmed.startsWith(`share${sep}`) || trimmed.startsWith("share/");
+  const sharePrefix =
+    trimmed === "share" || trimmed.startsWith(`share${sep}`) || trimmed.startsWith("share/");
 
   if (sharePrefix) {
     if (write && input.shareWrite !== true) {
       throw new PathJailError("share/ write requires explicit policy (shareWrite)");
     }
     const under = trimmed === "share" ? "." : trimmed.slice("share/".length).replace(/^\/+/, "");
-    const absolute = under === "." || under.length === 0
-      ? resolve(input.shareRoot)
-      : safeJoin(input.shareRoot, under);
+    const absolute =
+      under === "." || under.length === 0
+        ? resolve(input.shareRoot)
+        : safeJoin(input.shareRoot, under);
     return { absolute, area: "share" };
+  }
+
+  const workspacePrefix =
+    trimmed === "workspace" ||
+    trimmed.startsWith(`workspace${sep}`) ||
+    trimmed.startsWith("workspace/");
+
+  if (workspacePrefix) {
+    let mounts: WorkspaceMountRef[] = Array.isArray(input.workspaceMounts)
+      ? input.workspaceMounts.filter((m) => m && typeof m.id === "string" && m.hostPath)
+      : [];
+    if (mounts.length === 0 && input.workspaceRoot?.trim()) {
+      mounts = [
+        {
+          id: "default",
+          hostPath: input.workspaceRoot.trim(),
+          mode: input.workspaceMode === "rw" ? "rw" : "ro",
+        },
+      ];
+    }
+    if (mounts.length === 0) {
+      throw new PathJailError("workspace/ path refused: workspace root unset");
+    }
+
+    const rest =
+      trimmed === "workspace" ? "" : trimmed.slice("workspace/".length).replace(/^\/+/, "");
+    const slash = rest.indexOf("/");
+    const firstSeg = slash < 0 ? rest : rest.slice(0, slash);
+    const afterFirst = slash < 0 ? "" : rest.slice(slash + 1);
+
+    let mount: WorkspaceMountRef;
+    let under: string;
+    const byId = firstSeg ? mounts.find((m) => m.id === firstSeg) : undefined;
+    if (byId) {
+      mount = byId;
+      under = afterFirst;
+    } else if (mounts.length === 1 && mounts[0]) {
+      // Single-mount flat legacy: workspace/foo → under the only host folder.
+      mount = mounts[0];
+      under = rest;
+    } else {
+      throw new PathJailError(
+        firstSeg
+          ? `workspace/ unknown mount id: ${firstSeg}`
+          : "workspace/ path requires a mount id when multiple folders are configured",
+      );
+    }
+
+    if (write && mount.mode !== "rw") {
+      throw new PathJailError("workspace/ write requires mode rw");
+    }
+    assertNoNullByte(mount.hostPath);
+    let absRoot: string;
+    try {
+      absRoot = realpathSync(resolve(mount.hostPath));
+    } catch {
+      absRoot = resolve(mount.hostPath);
+    }
+    const absolute =
+      under === "" || under === "." ? absRoot : safeJoin(absRoot, under);
+    return { absolute, area: "workspace" };
   }
 
   const absolute = safeJoin(input.accountFilesRoot, trimmed);
   return { absolute, area: "account" };
+}
+
+/**
+ * True when `hostPath` is a filesystem / volume root (`/`, `C:\`, `D:\`, …).
+ * Windows drive-letter forms are recognized from the raw string first — POSIX
+ * `resolve("C:\\")` would otherwise mangle them when tests run on macOS/Linux.
+ */
+export function isFilesystemRoot(hostPath: string): boolean {
+  const trimmed = hostPath.trim();
+  if (!trimmed) return false;
+
+  // Windows volume roots (`C:`, `C\`, `C:/`, `D:\`, …) before platform resolve.
+  if (/^[A-Za-z]:[\\/]?$/.test(trimmed)) return true;
+
+  let abs: string;
+  try {
+    abs = realpathSync(resolve(trimmed));
+  } catch {
+    abs = resolve(trimmed);
+  }
+  // macOS Data volume sometimes used as “whole machine” substitute
+  if (abs === "/System/Volumes/Data") return true;
+
+  const root = parse(abs).root;
+  if (!root) return false;
+  const rootAbs = resolve(root);
+  if (process.platform === "win32") {
+    return abs.toLowerCase() === rootAbs.toLowerCase();
+  }
+  return abs === rootAbs || abs === "/";
 }

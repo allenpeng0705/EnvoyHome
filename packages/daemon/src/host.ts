@@ -49,10 +49,10 @@ export async function startWsHost(input: {
   onDeviceSeen?: (deviceId: string) => void;
 }): Promise<HostHandle> {
   let connections = 0;
-  const sessionIdentity = createSessionIdentity(
-    input.devices,
-    input.onDeviceSeen ? { onDeviceSeen: input.onDeviceSeen } : {},
-  );
+  const sessionIdentity = createSessionIdentity(input.devices, {
+    ...(input.onDeviceSeen ? { onDeviceSeen: input.onDeviceSeen } : {}),
+    getOwnerAccountId: () => input.routerDeps.household.getOwnerAccountId(),
+  });
   const inner = createDispatcher({
     ...input.routerDeps,
     connections: () => connections,

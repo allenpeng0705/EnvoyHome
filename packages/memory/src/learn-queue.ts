@@ -12,6 +12,7 @@ export const PENDING_LEARN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 export type PendingLearnKind =
   | "profile_patch"
+  | "identity_append"
   | "memory_append"
   | "memory_edit"
   | "skill_create"

@@ -8,6 +8,7 @@ import 'skills_screen.dart';
 import 'system_screen.dart';
 
 /// Settings hub listing desktop §10.1 groups (LLM / Connections / Skills / System).
+/// Profiles live under System (first tab) — Design `2026-10-18ai`.
 class SettingsHub extends StatelessWidget {
   const SettingsHub({
     super.key,

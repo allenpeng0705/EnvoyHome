@@ -228,16 +228,9 @@ export class BindingStore {
       return { bindingId, binding: created };
     }
 
-    // deviceId form
+    // deviceId form — ownerTrusted is a deprecated no-op (Design §4.1.1).
     const deviceId = params.deviceId as string;
-    const ownerTrusted = params.ownerTrusted === true;
-    // Design A.3: setting ownerTrusted requires the loopback owner window.
-    if (ownerTrusted && caller.kind !== "loopback-owner") {
-      throw new BindingError(
-        "auth",
-        "ownerTrusted may only be set from the loopback owner window",
-      );
-    }
+    void caller;
 
     const bindingId = stableId([deviceKey(deviceId, accountId)]);
     const existingIdx = all.findIndex((b) => b.bindingId === bindingId);
@@ -256,13 +249,9 @@ export class BindingStore {
         ...prev,
         accountId,
         agentId,
-        ownerTrusted: ownerTrusted || prev.ownerTrusted,
+        ownerTrusted: false,
         updatedAt: now,
       };
-      // Clear ownerTrusted only when explicitly set false from loopback.
-      if (params.ownerTrusted === false && caller.kind === "loopback-owner") {
-        updated.ownerTrusted = false;
-      }
       all[existingIdx] = updated;
       await this.save(all);
       this.syncDeviceStore(deviceId);
@@ -275,7 +264,7 @@ export class BindingStore {
       deviceId,
       accountId,
       agentId,
-      ownerTrusted,
+      ownerTrusted: false,
       createdAt: now,
       updatedAt: now,
     };
@@ -320,6 +309,69 @@ export class BindingStore {
   }
 
   /**
+   * Design §4.1.1 R2 Doctor Fix — drop non-Owner seats from any device that
+   * includes `ownerAccountId` with other seats. Returns rewritten deviceIds.
+   */
+  async enforceOwnerExclusiveBinds(ownerAccountId: string | null): Promise<string[]> {
+    if (!ownerAccountId) return [];
+    const all = await this.load();
+    const byDevice = new Map<string, DeviceBinding[]>();
+    for (const b of all) {
+      if (b.kind !== "device") continue;
+      const list = byDevice.get(b.deviceId) ?? [];
+      list.push(b);
+      byDevice.set(b.deviceId, list);
+    }
+    const next: BindingRecord[] = all.filter((b) => b.kind !== "device");
+    const rewritten: string[] = [];
+    for (const [deviceId, binds] of byDevice) {
+      const ids = [...new Set(binds.map((b) => b.accountId))];
+      const illegal =
+        ids.includes(ownerAccountId) &&
+        !(ids.length === 1 && ids[0] === ownerAccountId);
+      if (!illegal) {
+        next.push(...binds);
+        continue;
+      }
+      const ownerBind = binds.find((b) => b.accountId === ownerAccountId);
+      if (ownerBind) next.push(ownerBind);
+      rewritten.push(deviceId);
+    }
+    if (rewritten.length === 0) return [];
+    await this.save(next);
+    for (const deviceId of rewritten) this.syncDeviceStore(deviceId);
+    return rewritten;
+  }
+
+  /**
+   * Devices whose durable binds violate Owner exclusive-bind (R2).
+   */
+  async listOwnerExclusiveViolations(
+    ownerAccountId: string | null,
+  ): Promise<Array<{ deviceId: string; accountIds: string[] }>> {
+    if (!ownerAccountId) return [];
+    const all = await this.load();
+    const byDevice = new Map<string, string[]>();
+    for (const b of all) {
+      if (b.kind !== "device") continue;
+      const list = byDevice.get(b.deviceId) ?? [];
+      list.push(b.accountId);
+      byDevice.set(b.deviceId, list);
+    }
+    const out: Array<{ deviceId: string; accountIds: string[] }> = [];
+    for (const [deviceId, idsRaw] of byDevice) {
+      const accountIds = [...new Set(idsRaw)];
+      if (
+        accountIds.includes(ownerAccountId) &&
+        !(accountIds.length === 1 && accountIds[0] === ownerAccountId)
+      ) {
+        out.push({ deviceId, accountIds });
+      }
+    }
+    return out;
+  }
+
+  /**
    * Keep DeviceCredentialStore.accountIds / ownerTrusted aligned with durable
    * bindings (in-memory until B4 persists paired-devices hashes).
    */
@@ -330,7 +382,8 @@ export class BindingStore {
       (b): b is DeviceBinding => b.kind === "device" && b.deviceId === deviceId,
     );
     rec.accountIds = [...new Set(deviceBindings.map((b) => b.accountId))];
-    rec.ownerTrusted = deviceBindings.some((b) => b.ownerTrusted);
+    // ownerTrusted no longer grants Owner-scope; keep false on the device row.
+    rec.ownerTrusted = false;
     this.devices.put(rec);
   }
 }

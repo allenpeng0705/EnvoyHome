@@ -238,6 +238,7 @@ test("home.listWorkflowTools RPC + skill step returns SKILL.md body", async () =
         onShutdown: () => undefined,
         packageVersion: "0.0.0-test",
         accounts: daemon.accounts,
+        household: daemon.household,
         bindings: daemon.bindings,
         pairing: daemon.pairing,
         memory: daemon.memory,
@@ -250,6 +251,8 @@ test("home.listWorkflowTools RPC + skill step returns SKILL.md body", async () =
         schedules: daemon.schedules,
         skills: daemon.skills,
         artifacts: daemon.artifacts,
+    webSearch: daemon.webSearch,
+    browserControl: daemon.browserControl,
         actuations: daemon.actuations,
         pushTokens: daemon.pushTokens,
         push: daemon.push,
@@ -442,6 +445,44 @@ test("sandbox_write alias is accepted by put validation", async () => {
     for (let i = 0; i < 20 && daemon.turns.activeTurnCount() > 0; i++) {
       await flushLoop(5);
     }
+  } finally {
+    await cleanup();
+  }
+});
+
+test("V-CRON-11: schedule propose refuses invented WHEN specs", async () => {
+  const { daemon, cleanup } = await boot();
+  try {
+    const paths = homePaths(daemon.config.stateDir);
+    await assert.rejects(
+      () =>
+        runExtendedWorkflowTool({
+          tool: "schedule",
+          args: {
+            action: "propose",
+            text: "tomorrow at 8am",
+            whenInstant: "2026-10-10T00:00:00.000Z",
+          },
+          accountId: "alice",
+          skills: daemon.skills,
+          channels: daemon.channels,
+          paths,
+          schedules: daemon.schedules,
+        }),
+      /refuses whenInstant/,
+    );
+    const out = await runExtendedWorkflowTool({
+      tool: "schedule",
+      args: { action: "propose", text: "Remind me tomorrow at 8:00 to stretch" },
+      accountId: "alice",
+      skills: daemon.skills,
+      channels: daemon.channels,
+      paths,
+      schedules: daemon.schedules,
+    });
+    const parsed = JSON.parse(out) as { proposalId: string; resolvedLocal: string };
+    assert.ok(parsed.proposalId);
+    assert.match(parsed.resolvedLocal, /\d{4}-\d{2}-\d{2} \d{2}:\d{2}/);
   } finally {
     await cleanup();
   }

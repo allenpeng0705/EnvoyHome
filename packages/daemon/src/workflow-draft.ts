@@ -55,6 +55,8 @@ function buildWorkflowSystemPrompt(toolNames: string[]): string {
     "- For linear flows use steps:.",
     "- Include a stable id (snake_case) and at least one step/node.",
     "- llm_fill / llm_summarize need a prompt string; tool nodes need name and args as needed.",
+    "- LLM prompts may use {{step.<id>}} or {{step.<id>.<field>}} from prior outputs (e.g. after extract_document use {{step.extract.text}}).",
+    "- Document pipelines: extract_document (sourcePath) → llm_summarize → optional export_document (args_from markdown from the summarize step).",
   ].join("\n");
 }
 

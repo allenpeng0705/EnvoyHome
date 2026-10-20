@@ -39,6 +39,8 @@ test("parseClawHubRef accepts owner/slug and page URLs", () => {
 test("assertPublicHttpsUrl blocks localhost and http", () => {
   assert.equal(isBlockedHostname("127.0.0.1"), true);
   assert.equal(isBlockedHostname("192.168.1.1"), true);
+  assert.equal(isBlockedHostname("2130706433"), true); // decimal 127.0.0.1
+  assert.equal(isBlockedHostname("127.1"), true); // short form
   assert.equal(isBlockedHostname("clawhub.ai"), false);
   assert.throws(() => assertPublicHttpsUrl("http://example.com/a.zip"), SkillRemoteError);
   assert.throws(() => assertPublicHttpsUrl("https://127.0.0.1/a.zip"), SkillRemoteError);

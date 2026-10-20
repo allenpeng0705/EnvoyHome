@@ -1,4 +1,9 @@
 [[permission]]
 identifier = "allow-skill-pickers"
-description = "Native folder/file pickers for Skills path install + open http(s) in the system browser"
-commands.allow = ["pick_skill_folder", "pick_skill_file", "open_external_url"]
+description = "Native folder/file pickers for Skills path install, workspace folders, + open http(s) in the system browser"
+commands.allow = [
+  "pick_skill_folder",
+  "pick_skill_file",
+  "pick_workspace_folder",
+  "open_external_url",
+]

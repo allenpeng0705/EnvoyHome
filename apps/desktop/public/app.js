@@ -28,6 +28,12 @@ import {
   setThemePreference,
 } from "./theme.js";
 import { graphToYaml, yamlToGraph } from "./workflow-model.js";
+import {
+  classifyChatFormat,
+  humanizeScheduleChatText,
+  renderChatMarkdown,
+} from "./chat-markdown.js";
+import { extractSandboxFilePaths } from "./sandbox-paths.js";
 import { mountWorkflowCanvas } from "./workflow-canvas.js";
 
 const DEFAULT_WS = "ws://127.0.0.1:4780/ws";
@@ -55,6 +61,22 @@ When helping with this home:
 - Never claim a device action succeeded unless a tool result says so.
 `;
 
+/** Default editable persona — mirrors packages/memory DEFAULT_IDENTITY_MD. */
+const DEFAULT_IDENTITY_MD = `# EnvoyHome
+
+I am EnvoyHome, your household AI assistant.
+
+## Voice
+- Friendly, clear, and practical.
+- Prefer short answers unless the user asks for detail.
+
+## Home
+- Help with everyday questions, memory, and (when Home tools are available) the household.
+
+## Learned
+<!-- The assistant may propose additions here from chat; you can edit freely. -->
+`;
+
 /** Blank starter for New workflow (one document). */
 const WORKFLOW_NEW_TEMPLATE = `id: my_workflow
 match:
@@ -75,6 +97,43 @@ const yamlWorkflowId = (yaml) => {
   const m = /^id:\s*([^\s#]+)/m.exec(String(yaml || ""));
   return m ? m[1] : "";
 };
+
+/**
+ * Document pipeline demo: Office/PDF → Markdown (anydoc) → LLM summarize → Word out.
+ * Requires documents/report.docx (or change sourcePath). Uses {{step.extract.text}}.
+ */
+const WORKFLOW_HOWTO_DOCS = `id: demo_doc_summarize
+enabled: false
+match:
+  keywords: ["summarize document", "summarize doc"]
+steps:
+  - id: extract
+    type: tool
+    name: extract_document
+    args:
+      sourcePath: documents/report.docx
+    x: 40
+    y: 100
+  - id: summarize
+    type: llm_summarize
+    prompt: |
+      Summarize the following document in 5–8 short bullet points for the household:
+
+      {{step.extract.text}}
+    out: summary
+    x: 300
+    y: 100
+  - id: export
+    type: tool
+    name: export_document
+    args:
+      format: docx
+      title: Summary
+    args_from:
+      markdown: step.summarize
+    x: 560
+    y: 100
+`;
 
 /** Linear multi-step demo: draft → title → save file. */
 const WORKFLOW_HOWTO_LINEAR = `id: demo_morning_brief
@@ -226,6 +285,7 @@ edges:
 const NAV_ICON = {
   chat: `<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>`,
   homeChat: `<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>`,
+  schedulesChat: `<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>`,
   llm: `<path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/><path d="M5 16l.8 2.2L8 19l-2.2.8L5 22l-.8-2.2L2 19l2.2-.8L5 16z"/><path d="M19 13l.6 1.8L21.4 15.4 19.6 16 19 17.8l-.6-1.8L16.6 15.4l1.8-.6L19 13z"/>`,
   connections: `<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>`,
   automation: `<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>`,
@@ -236,6 +296,7 @@ const VIEWS = [
   { id: "chat", labelKey: "nav.chat" },
   // Hidden until HA configured+enabled (Design §5.7.8 / V-UX-8).
   { id: "homeChat", labelKey: "nav.homeChat" },
+  { id: "schedulesChat", labelKey: "nav.schedulesChat" },
   { id: "llm", labelKey: "nav.llm" },
   { id: "connections", labelKey: "nav.connections" },
   // Product label is Skills (agent-familiar); view id stays automation for deep links.
@@ -555,8 +616,8 @@ let discordConfigDraft = chatBotDrafts.discord;
 /** @type {"skills" | "workflows" | "jobs"} */
 let automationTab = "skills";
 
-/** @type {"files" | "health" | "machine"} */
-let systemTab = "files";
+/** @type {"profiles" | "files" | "health" | "machine"} */
+let systemTab = "profiles";
 
 const PRESENCE_CLASSES = new Set(["lock", "alarm", "camera", "presence"]);
 const OBJECT_CLASSES = [
@@ -842,6 +903,83 @@ function approvalCardHtml(a) {
 let chatPendingApprovals = [];
 
 /**
+ * Unarmed schedule proposal for the open chat (Confirm / Cancel card).
+ * @type {{ proposalId: string, resolvedLocal: string, expiresAt?: string, message?: string, name?: string } | null}
+ */
+let chatPendingSchedule = null;
+
+function scheduleCardHtml(p) {
+  if (!p || !p.proposalId) return "";
+  const expired = p.expiresAt && Date.parse(p.expiresAt) < Date.now();
+  const when = escapeHtml(p.resolvedLocal || "");
+  const msg = p.message || p.name
+    ? `<p class="chat-schedule-msg">${escapeHtml(p.message || p.name || "")}</p>`
+    : "";
+  if (expired) {
+    return `<div class="chat-schedule is-expired" data-proposal-id="${escapeHtml(p.proposalId)}">
+      <div class="chat-schedule-head"><strong>${escapeHtml(t("scheduleCard.title"))}</strong>
+        <span class="badge">${escapeHtml(t("scheduleCard.expired"))}</span></div>
+      <p class="chat-schedule-when">${when}</p>
+      ${msg}
+      <p class="muted">${escapeHtml(t("scheduleCard.expiredHint"))}</p>
+    </div>`;
+  }
+  return `<div class="chat-schedule" data-proposal-id="${escapeHtml(p.proposalId)}">
+    <div class="chat-schedule-head"><strong>${escapeHtml(t("scheduleCard.title"))}</strong></div>
+    <p class="chat-schedule-when">${when}</p>
+    ${msg}
+    <div class="row">
+      <button type="button" data-act="confirm">${escapeHtml(t("scheduleCard.confirm"))}</button>
+      <button type="button" class="secondary" data-act="cancel">${escapeHtml(t("scheduleCard.cancel"))}</button>
+    </div>
+  </div>`;
+}
+
+function bindScheduleCardActions(root, onDone) {
+  root.querySelectorAll(".chat-schedule [data-act]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const card = btn.closest("[data-proposal-id]");
+      const proposalId = card?.dataset.proposalId;
+      if (!proposalId) return;
+      const aid = selectedAccountId();
+      if (!aid) return;
+      btn.disabled = true;
+      if (btn.dataset.act === "confirm") {
+        const ans = await rpc("home.confirmSchedule", { accountId: aid, proposalId });
+        if (ans.error) {
+          showToast(errMsg(ans) || t("scheduleCard.failed"), "err");
+          btn.disabled = false;
+          return;
+        }
+        showToast(t("scheduleCard.confirmedToast"), "ok");
+      } else {
+        const ans = await rpc("home.cancelScheduleProposal", { accountId: aid, proposalId });
+        if (ans.error) {
+          showToast(errMsg(ans) || t("scheduleCard.failed"), "err");
+          btn.disabled = false;
+          return;
+        }
+        showToast(t("scheduleCard.canceledToast"), "ok");
+      }
+      chatPendingSchedule = null;
+      await onDone();
+    });
+  });
+}
+
+async function refreshChatPendingSchedule(sessionId) {
+  const aid = selectedAccountId();
+  if (!aid || !sessionId) {
+    chatPendingSchedule = null;
+    return;
+  }
+  const body = await rpc("home.listSessions", { accountId: aid }).catch(() => null);
+  const sessions = body?.result?.sessions || body?.sessions || [];
+  const row = sessions.find((s) => s && s.sessionId === sessionId);
+  chatPendingSchedule = row?.pendingSchedule || null;
+}
+
+/**
  * Place each pending approval after the last bubble of its turn (Design V-UX-7 inline).
  * Unmatched approvals append at the end of the thread (not a sticky top strip).
  * @param {Array<{ role: string, text: string, turnId?: string }>} log
@@ -895,6 +1033,8 @@ function chatThreadHtml(log, pending, emptyKey) {
       if (html) parts.push(html);
     }
   }
+  const sched = scheduleCardHtml(chatPendingSchedule);
+  if (sched) parts.push(sched);
   if (parts.length === 0) {
     return `<div class="chat-empty">${escapeHtml(t(emptyKey || "chat.empty"))}</div>`;
   }
@@ -938,9 +1078,22 @@ const liveEvents = [];
 /** @type {Array<{ role: string, text: string, media?: Array<{ kind: string, uri: string, fileName?: string }> }>} */
 const chatLog = [];
 let chatSessionId = "";
+/**
+ * Optional title chosen at New chat — applied on first `openSession`, then cleared.
+ * Empty / unset → daemon auto-titles from the first user message.
+ */
+let pendingNewChatTitle = "";
+/** When true, the Chats rail shows archived sessions instead of active ones. */
+let chatSessionsShowArchived = false;
 /** @type {Array<{ role: string, text: string, media?: Array<{ kind: string, uri: string, fileName?: string }> }>} */
 const homeChatLog = [];
 let homeChatSessionId = "";
+/** @type {Array<{ role: string, text: string, media?: Array<{ kind: string, uri: string, fileName?: string }> }>} */
+const schedulesChatLog = [];
+let schedulesChatSessionId = "";
+/** Session ids with an in-flight turn — block empty/delete/archive/remove/switch. */
+/** @type {Set<string>} */
+const chatTurnsInFlight = new Set();
 /**
  * Pending local files for the next send (Chat / Home chat).
  * @type {Array<{ id: string, file: File, name: string, mimeType: string, size: number }>}
@@ -948,6 +1101,8 @@ let homeChatSessionId = "";
 let chatPendingFiles = [];
 /** @type {Array<{ id: string, file: File, name: string, mimeType: string, size: number }>} */
 let homeChatPendingFiles = [];
+/** @type {Array<{ id: string, file: File, name: string, mimeType: string, size: number }>} */
+let schedulesChatPendingFiles = [];
 /** Home Assistant ready for Home chat nav (V-UX-8). */
 let haHomeChatReady = false;
 let activeView = "chat";
@@ -955,12 +1110,55 @@ let activeView = "chat";
 const CHAT_ATTACH_MAX_FILES = 8;
 const CHAT_ATTACH_MAX_BYTES = 8 * 1024 * 1024;
 
-function pendingFilesForView(isHome) {
-  return isHome ? homeChatPendingFiles : chatPendingFiles;
+function isChatSurface(view) {
+  return view === "chat" || view === "homeChat" || view === "schedulesChat";
 }
 
-function setPendingFilesForView(isHome, next) {
-  if (isHome) homeChatPendingFiles = next;
+function purposeForView(view) {
+  if (view === "homeChat") return "home";
+  if (view === "schedulesChat") return "schedules";
+  return "general";
+}
+
+function dedicatedChat(purpose) {
+  return purpose === "home" || purpose === "schedules";
+}
+
+function chatLogForPurpose(purpose) {
+  if (purpose === "home") return homeChatLog;
+  if (purpose === "schedules") return schedulesChatLog;
+  return chatLog;
+}
+
+function readChatSessionId(purpose) {
+  if (purpose === "home") return homeChatSessionId;
+  if (purpose === "schedules") return schedulesChatSessionId;
+  return chatSessionId;
+}
+
+function writeChatSessionId(purpose, sid) {
+  if (purpose === "home") homeChatSessionId = sid;
+  else if (purpose === "schedules") schedulesChatSessionId = sid;
+  else chatSessionId = sid;
+}
+
+function emptyKeyForPurpose(purpose) {
+  if (purpose === "home") return "homeChat.empty";
+  if (purpose === "schedules") return "schedulesChat.empty";
+  return "chat.empty";
+}
+
+/** @param {boolean | string} which home boolean or purpose */
+function pendingFilesForView(which) {
+  if (which === "home" || which === true) return homeChatPendingFiles;
+  if (which === "schedules") return schedulesChatPendingFiles;
+  return chatPendingFiles;
+}
+
+/** @param {boolean | string} which */
+function setPendingFilesForView(which, next) {
+  if (which === "home" || which === true) homeChatPendingFiles = next;
+  else if (which === "schedules") schedulesChatPendingFiles = next;
   else chatPendingFiles = next;
 }
 
@@ -1017,6 +1215,50 @@ function chatOsDictationHint() {
 /** Mic icon for the Chat voice control (matches nav stroke icons). */
 function chatMicIconSvg() {
   return `<svg class="chat-voice-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>`;
+}
+
+/** Paperclip for Chat attach (same stroke weight as mic). */
+function chatAttachIconSvg() {
+  return `<svg class="chat-attach-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`;
+}
+
+function chatTrashIconSvg(size = 16) {
+  return `<svg class="chat-trash-icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
+}
+
+function chatEmptyIconSvg(size = 16) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M4 6l1-2h14l1 2"/></svg>`;
+}
+
+function chatUnarchiveIconSvg(size = 16) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><polyline points="9 13 12 10 15 13"/><line x1="12" y1="10" x2="12" y2="17"/></svg>`;
+}
+
+/** Menu row with leading icon (chrome trash + rail ⋯ menus). */
+function chatMenuItemHtml({ actionAttr, actionValue, label, iconHtml, danger = false }) {
+  const cls = danger ? "chat-menu-item danger" : "chat-menu-item";
+  return `<button type="button" class="${cls}" ${actionAttr}="${escapeHtml(actionValue)}"><span class="chat-menu-item-icon" aria-hidden="true">${iconHtml}</span><span class="chat-menu-item-label">${escapeHtml(label)}</span></button>`;
+}
+
+function chatMenuSepHtml() {
+  return `<div class="chat-menu-sep" role="separator"></div>`;
+}
+
+/** EnvoyMesh Social `CopyIcon` — stroke clipboard glyph. */
+function chatCopyIconSvg(size = 14) {
+  return `<svg class="chat-copy-icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+}
+
+/** Hover/focus actions footer — peer EnvoyMesh Social `message-bubble-actions`. */
+function chatBubbleActionsHtml(copyText, messageId) {
+  const copy =
+    copyText &&
+    `<button type="button" class="bubble-action bubble-copy" data-copy-msg title="${escapeHtml(t("chat.copyMessage"))}" aria-label="${escapeHtml(t("chat.copyMessage"))}">${chatCopyIconSvg(14)}</button>`;
+  const del =
+    messageId &&
+    `<button type="button" class="bubble-action bubble-delete" data-del-msg title="${escapeHtml(t("chat.deleteMessage"))}" aria-label="${escapeHtml(t("chat.deleteMessage"))}">${chatTrashIconSvg(14)}</button>`;
+  if (!copy && !del) return "";
+  return `<div class="bubble-actions">${copy || ""}${del || ""}</div>`;
 }
 
 function setChatVoiceBtnState(listening) {
@@ -1122,7 +1364,7 @@ function toggleChatSpeech(input) {
     showToast(t("chat.voiceFailed"), "err");
   }
 }
-/** @type {Array<{ accountId: string, displayName?: string, createdAt?: string }>} */
+/** @type {Array<{ accountId: string, displayName?: string, createdAt?: string, timeZone?: string }>} */
 let cachedAccounts = [];
 /**
  * Last QR mint in this Settings session — reopen Pair devices without stacking
@@ -1133,20 +1375,135 @@ let cachedPairingMint = null;
 /** Profile the next Mesh invite binds to (Pair devices). */
 let inviteAccountId = "";
 
-/** Strip model reasoning blocks so bubbles stay readable. */
-function displayChatText(text) {
+/**
+ * Split assistant text into visible reply vs model `<think>` reasoning.
+ * Unclosed think (streaming) is treated as a think segment through end-of-string.
+ * @param {string} text
+ * @returns {Array<{ kind: "text" | "think", text: string }>}
+ */
+function splitAssistantSegments(text) {
   const raw = String(text || "");
-  const stripped = raw.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
-  // Some models emit only a think block — still show a short fallback so the UI isn't blank.
-  if (stripped) return stripped;
-  if (/<think>/i.test(raw)) return t("chat.replyHiddenReasoning");
-  return raw.trim();
+  if (!raw) return [];
+  /** @type {Array<{ kind: "text" | "think", text: string }>} */
+  const parts = [];
+  const re = /<think\b[^>]*>([\s\S]*?)(?:<\/think>|$)/gi;
+  let last = 0;
+  let m;
+  while ((m = re.exec(raw)) !== null) {
+    if (m.index > last) {
+      const chunk = raw.slice(last, m.index).replace(/<\/?think\b[^>]*>/gi, "");
+      if (chunk) parts.push({ kind: "text", text: chunk });
+    }
+    parts.push({ kind: "think", text: m[1] ?? "" });
+    last = m.index + m[0].length;
+  }
+  if (last < raw.length) {
+    const chunk = raw.slice(last).replace(/<\/?think\b[^>]*>/gi, "");
+    if (chunk) parts.push({ kind: "text", text: chunk });
+  }
+  if (parts.length === 0 && raw.trim()) parts.push({ kind: "text", text: raw });
+  return parts;
 }
 
+/** Visible reply only (no think bodies) — used when a plain string is needed. */
+function displayChatText(text) {
+  const visible = splitAssistantSegments(text)
+    .filter((p) => p.kind === "text")
+    .map((p) => p.text)
+    .join("")
+    .trim();
+  if (visible) return visible;
+  if (/<think\b/i.test(String(text || ""))) return t("chat.replyHiddenReasoning");
+  return String(text || "").trim();
+}
+
+/**
+ * HTML for an assistant bubble: think blocks are collapsed `<details>`;
+ * visible reply uses Design §9.5 format (plain escape vs markdown).
+ * Mesh-first: prefer `artifactPath` (in-app over home.*) over `artifactUrl`.
+ * @param {string} text
+ * @param {"plain"|"markdown"|"link"|string|undefined} format
+ * @param {string|undefined} artifactPath
+ * @param {string|undefined} artifactUrl
+ */
+function formatAssistantHtml(text, format, artifactPath, artifactUrl) {
+  const segments = splitAssistantSegments(humanizeScheduleChatText(text));
+  const mentioned = extractSandboxFilePaths(text).filter((p) => p !== artifactPath);
+  const hasOpen =
+    (typeof artifactPath === "string" && artifactPath) ||
+    (format === "link" && typeof artifactUrl === "string" && artifactUrl) ||
+    mentioned.length > 0;
+  if (segments.length === 0 && !hasOpen) return "";
+  const label = escapeHtml(t("chat.thought"));
+  const resolved =
+    format === "plain" || format === "markdown" || format === "link"
+      ? format
+      : classifyChatFormat(
+          segments
+            .filter((p) => p.kind === "text")
+            .map((p) => p.text)
+            .join(""),
+        );
+  const body = segments
+    .map((seg) => {
+      if (seg.kind === "think") {
+        return `<details class="chat-think"><summary>${label}</summary><div class="chat-think-body">${escapeHtml(seg.text)}</div></details>`;
+      }
+      if (resolved === "plain") {
+        return `<div class="chat-plain">${escapeHtml(seg.text)}</div>`;
+      }
+      return `<div class="chat-md">${renderChatMarkdown(seg.text)}</div>`;
+    })
+    .join("");
+  /** @type {string[]} */
+  const links = [];
+  // Prefer mesh path whenever present (even if format drifted to markdown).
+  if (typeof artifactPath === "string" && artifactPath) {
+    links.push(
+      `<button type="button" class="chat-artifact-open" data-artifact-path="${escapeHtml(artifactPath)}">${escapeHtml(t("chat.openArtifact"))}</button>`,
+    );
+  } else if (resolved === "link" && typeof artifactUrl === "string" && artifactUrl) {
+    const href = escapeHtml(artifactUrl);
+    links.push(
+      `<a href="${href}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("chat.openArtifact"))}</a>`,
+    );
+  }
+  for (const p of mentioned) {
+    const name = p.includes("/") ? p.slice(p.lastIndexOf("/") + 1) : p;
+    links.push(
+      `<button type="button" class="chat-artifact-open" data-artifact-path="${escapeHtml(p)}">${escapeHtml(t("chat.openFile", { name }))}</button>`,
+    );
+  }
+  if (links.length === 0) return body;
+  return `${body}<p class="chat-artifact-link">${links.join(" ")}</p>`;
+}
+
+/**
+ * Resolve the in-memory log for a turn event. Returns null when the event is
+ * for a session that is not open — never fall back to the visible thread.
+ */
 function chatLogForSession(sessionId) {
-  if (sessionId && homeChatSessionId && sessionId === homeChatSessionId) return homeChatLog;
-  if (sessionId && chatSessionId && sessionId === chatSessionId) return chatLog;
-  return activeView === "homeChat" ? homeChatLog : chatLog;
+  if (!sessionId) return null;
+  if (homeChatSessionId && sessionId === homeChatSessionId) return homeChatLog;
+  if (schedulesChatSessionId && sessionId === schedulesChatSessionId) return schedulesChatLog;
+  if (chatSessionId && sessionId === chatSessionId) return chatLog;
+  return null;
+}
+
+function markChatTurnInFlight(sessionId, on) {
+  if (!sessionId) return;
+  if (on) chatTurnsInFlight.add(sessionId);
+  else chatTurnsInFlight.delete(sessionId);
+}
+
+function chatSessionBusy(sessionId) {
+  return Boolean(sessionId && chatTurnsInFlight.has(sessionId));
+}
+
+function assertChatNotBusy(sessionId) {
+  if (chatSessionBusy(sessionId)) {
+    throw new Error(t("chat.busyTurn"));
+  }
 }
 
 function clearThinkingPlaceholders(log) {
@@ -1158,8 +1515,6 @@ function clearThinkingPlaceholders(log) {
 
 function chatBubbleHtml(m) {
   const role = escapeHtml(m.role);
-  const text =
-    m.role === "assistant" ? displayChatText(m.text) : String(m.text || "");
   const media = Array.isArray(m.media) ? m.media : [];
   const mediaHtml =
     media.length && m.role === "user"
@@ -1170,11 +1525,393 @@ function chatBubbleHtml(m) {
           })
           .join("")}</ul>`
       : "";
-  if (!text && !mediaHtml) return "";
+  const messageId =
+    typeof m.messageId === "string" && m.messageId ? m.messageId : "";
+  const mid = messageId ? ` data-message-id="${escapeHtml(messageId)}"` : "";
   if (m.role === "system") {
+    const text = String(m.text || "");
+    if (!text) return "";
     return `<div class="bubble system">${escapeHtml(text)}</div>`;
   }
-  return `<div class="bubble ${role}">${text ? escapeHtml(text) : ""}${mediaHtml}</div>`;
+  if (m.role === "assistant") {
+    const body = formatAssistantHtml(m.text, m.format, m.artifactPath, m.artifactUrl);
+    if (!body && !mediaHtml) return "";
+    const copyText = displayChatText(m.text);
+    const actions = chatBubbleActionsHtml(copyText, messageId);
+    const fmt =
+      m.format === "plain" || m.format === "markdown" || m.format === "link"
+        ? ` data-format="${escapeHtml(m.format)}"`
+        : "";
+    return `<div class="bubble ${role}"${mid}${fmt}><div class="bubble-body">${body}${mediaHtml}</div>${actions}</div>`;
+  }
+  const text = String(m.text || "");
+  if (!text && !mediaHtml) return "";
+  const actions = chatBubbleActionsHtml(text, messageId);
+  return `<div class="bubble ${role}"${mid}><div class="bubble-body">${text ? escapeHtml(text) : ""}${mediaHtml}</div>${actions}</div>`;
+}
+
+const CHAT_SESSIONS_OPEN_KEY = "envoyhome.chatSessionsOpen";
+
+function chatSessionsOpenPreferred() {
+  try {
+    const v = localStorage.getItem(CHAT_SESSIONS_OPEN_KEY);
+    if (v === "0") return false;
+    if (v === "1") return true;
+  } catch {
+    /* ignore */
+  }
+  return true;
+}
+
+function setChatSessionsOpenPreferred(open) {
+  try {
+    localStorage.setItem(CHAT_SESSIONS_OPEN_KEY, open ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
+function chatPanelIconSvg(size = 16) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="9" y1="4" x2="9" y2="20"/></svg>`;
+}
+
+/** General Chats rail — ChatGPT-style: New chat + session list (replaces Recents). */
+function chatSessionsRailHtml() {
+  const archived = chatSessionsShowArchived;
+  const head = archived
+    ? `<div class="chat-sessions-head">
+      <button type="button" class="chat-sessions-back" id="chat-sessions-back" title="${escapeHtml(t("chat.archivedBack"))}">
+        <span aria-hidden="true">←</span>
+        <span>${escapeHtml(t("chat.archivedTitle"))}</span>
+      </button>
+      <button type="button" class="chat-sessions-collapse" id="chat-sessions-collapse" title="${escapeHtml(t("chat.hideSessions"))}" aria-label="${escapeHtml(t("chat.hideSessions"))}">«</button>
+    </div>`
+    : `<div class="chat-sessions-head">
+      <button type="button" class="chat-sessions-new" id="chat-new" title="${escapeHtml(t("chat.new"))}">
+        <span class="chat-sessions-new-plus" aria-hidden="true">+</span>
+        <span>${escapeHtml(t("chat.new"))}</span>
+      </button>
+      <button type="button" class="chat-sessions-collapse" id="chat-sessions-collapse" title="${escapeHtml(t("chat.hideSessions"))}" aria-label="${escapeHtml(t("chat.hideSessions"))}">«</button>
+    </div>`;
+  const foot = archived
+    ? ""
+    : `<div class="chat-sessions-foot">
+      <button type="button" class="chat-sessions-archived" id="chat-sessions-archived" title="${escapeHtml(t("chat.archivedOpen"))}">
+        ${chatArchiveIconSvg(14)}
+        <span>${escapeHtml(t("chat.archivedOpen"))}</span>
+      </button>
+    </div>`;
+  return `<aside class="chat-sessions${archived ? " is-archived-view" : ""}" id="chat-sessions" aria-label="${escapeHtml(t("nav.chat"))}">
+    ${head}
+    <div class="chat-sessions-list" id="chat-sessions-list">
+      <p class="muted chat-sessions-empty">${escapeHtml(t("chat.sessionsLoading"))}</p>
+    </div>
+    ${foot}
+  </aside>`;
+}
+
+function chatChromeHtml(isHome, currentTitle, sessionsCollapsed) {
+  const rawTitle = isHome
+    ? currentTitle || t("homeChat.title")
+    : currentTitle || t("chat.untitled");
+  const title = escapeHtml(rawTitle);
+  const openBtn =
+    !isHome && sessionsCollapsed
+      ? `<button type="button" class="chat-sessions-open" id="chat-sessions-open" title="${escapeHtml(t("chat.showSessions"))}" aria-label="${escapeHtml(t("chat.showSessions"))}">${chatPanelIconSvg(15)}</button>`
+      : "";
+  const titleEl = isHome
+    ? `<strong class="chat-chrome-title">${title}</strong>`
+    : `<button type="button" class="chat-chrome-title chat-chrome-title-edit" id="chat-rename" title="${escapeHtml(t("chat.renameAction"))}" aria-label="${escapeHtml(t("chat.renameAction"))}">${title}</button>
+      <button type="button" class="secondary chat-chrome-btn chat-chrome-icon" id="chat-rename-icon" title="${escapeHtml(t("chat.renameAction"))}" aria-label="${escapeHtml(t("chat.renameAction"))}">${chatRenameIconSvg(15)}</button>`;
+  return `<div class="chat-chrome">
+    <div class="chat-chrome-left">
+      ${openBtn}
+      ${titleEl}
+    </div>
+    <div class="chat-chrome-actions">
+      <div class="chat-trash-wrap">
+        <button type="button" class="secondary chat-chrome-btn chat-chrome-icon" id="chat-trash" title="${escapeHtml(t("chat.trashMenu"))}" aria-label="${escapeHtml(t("chat.trashMenu"))}" aria-haspopup="true" aria-expanded="false">${chatMoreIconSvg(16)}</button>
+        <div class="chat-menu chat-trash-menu" id="chat-trash-menu" hidden role="menu">
+          ${
+            isHome
+              ? ""
+              : `${chatMenuItemHtml({
+                  actionAttr: "data-trash-action",
+                  actionValue: "rename",
+                  label: t("chat.renameAction"),
+                  iconHtml: chatRenameIconSvg(15),
+                })}${chatMenuSepHtml()}`
+          }
+          ${chatMenuItemHtml({
+            actionAttr: "data-trash-action",
+            actionValue: "empty",
+            label: t("chat.emptyAction"),
+            iconHtml: chatEmptyIconSvg(15),
+          })}
+          ${
+            isHome
+              ? ""
+              : chatMenuItemHtml({
+                  actionAttr: "data-trash-action",
+                  actionValue: "archive",
+                  label: t("chat.archiveAction"),
+                  iconHtml: chatArchiveIconSvg(15),
+                })
+          }
+          ${chatMenuSepHtml()}
+          ${chatMenuItemHtml({
+            actionAttr: "data-trash-action",
+            actionValue: "remove",
+            label: t("chat.removeAction"),
+            iconHtml: chatTrashIconSvg(15),
+            danger: true,
+          })}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function applyChatSessionsCollapsed(collapsed) {
+  const page = document.querySelector(".chat-page-split");
+  if (page) page.classList.toggle("is-sessions-collapsed", collapsed);
+  setChatSessionsOpenPreferred(!collapsed);
+}
+
+/** Fill #chat-sessions-list from home.listSessions (general only). */
+async function refreshChatSessionsRail(aid) {
+  const listEl = document.getElementById("chat-sessions-list");
+  if (!listEl || !aid) return;
+  try {
+    const archived = chatSessionsShowArchived;
+    const rows = archived
+      ? await listArchivedGeneralChatSessions(aid)
+      : await listGeneralChatSessions(aid);
+    if (!rows.length) {
+      listEl.innerHTML = `<p class="muted chat-sessions-empty">${escapeHtml(
+        archived ? t("chat.archivedEmpty") : t("chat.sessionsEmpty"),
+      )}</p>`;
+      return;
+    }
+    listEl.innerHTML = rows
+      .map((s) => {
+        const rawTitle = s.title || t("chat.untitled");
+        const title = escapeHtml(rawTitle);
+        const sid = escapeHtml(s.sessionId);
+        const cur = s.sessionId === chatSessionId ? " is-current" : "";
+        if (archived) {
+          return `<div class="chat-session-row${cur}">
+            <button type="button" class="chat-session-item" data-session-id="${sid}" data-archived="1" title="${title}">
+              <span class="chat-session-item-title">${title}</span>
+            </button>
+            <div class="chat-session-more-wrap">
+              <button type="button" class="chat-session-more" data-more-toggle="${sid}" title="${escapeHtml(t("chat.sessionMore"))}" aria-label="${escapeHtml(t("chat.sessionMore"))}" aria-haspopup="true" aria-expanded="false">${chatMoreIconSvg(13)}</button>
+              <div class="chat-menu chat-session-more-menu" data-more-menu="${sid}" hidden role="menu">
+                ${chatMenuItemHtml({
+                  actionAttr: "data-unarchive-id",
+                  actionValue: s.sessionId,
+                  label: t("chat.unarchiveAction"),
+                  iconHtml: chatUnarchiveIconSvg(14),
+                })}
+                ${chatMenuSepHtml()}
+                ${chatMenuItemHtml({
+                  actionAttr: "data-remove-id",
+                  actionValue: s.sessionId,
+                  label: t("chat.removeAction"),
+                  iconHtml: chatTrashIconSvg(14),
+                  danger: true,
+                })}
+              </div>
+            </div>
+          </div>`;
+        }
+        return `<div class="chat-session-row${cur}">
+          <button type="button" class="chat-session-item" data-session-id="${sid}" title="${title}">
+            <span class="chat-session-item-title">${title}</span>
+          </button>
+          <button type="button" class="chat-session-rename" data-rename-id="${sid}" data-rename-title="${escapeHtml(rawTitle)}" title="${escapeHtml(t("chat.renameAction"))}" aria-label="${escapeHtml(t("chat.renameAction"))}">${chatRenameIconSvg(13)}</button>
+          <div class="chat-session-more-wrap">
+            <button type="button" class="chat-session-more" data-more-toggle="${sid}" title="${escapeHtml(t("chat.sessionMore"))}" aria-label="${escapeHtml(t("chat.sessionMore"))}" aria-haspopup="true" aria-expanded="false">${chatMoreIconSvg(13)}</button>
+            <div class="chat-menu chat-session-more-menu" data-more-menu="${sid}" hidden role="menu">
+              ${chatMenuItemHtml({
+                actionAttr: "data-archive-id",
+                actionValue: s.sessionId,
+                label: t("chat.archiveAction"),
+                iconHtml: chatArchiveIconSvg(14),
+              })}
+              ${chatMenuSepHtml()}
+              ${chatMenuItemHtml({
+                actionAttr: "data-remove-id",
+                actionValue: s.sessionId,
+                label: t("chat.removeAction"),
+                iconHtml: chatTrashIconSvg(14),
+                danger: true,
+              })}
+            </div>
+          </div>
+        </div>`;
+      })
+      .join("");
+  } catch (err) {
+    listEl.innerHTML = `<p class="muted chat-sessions-empty">${escapeHtml(String(err?.message || err))}</p>`;
+  }
+}
+
+function chatArchiveIconSvg(size = 14) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>`;
+}
+
+function chatRenameIconSvg(size = 14) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`;
+}
+
+function chatMoreIconSvg(size = 14) {
+  return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="5" r="1.25" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.25" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.25" fill="currentColor" stroke="none"/></svg>`;
+}
+
+function closeChatSessionMoreMenus(exceptSid) {
+  document.querySelectorAll("[data-more-menu]").forEach((menu) => {
+    const sid = menu.getAttribute("data-more-menu");
+    if (exceptSid && sid === exceptSid) return;
+    menu.hidden = true;
+    const toggle = document.querySelector(`[data-more-toggle="${sid}"]`);
+    if (toggle) toggle.setAttribute("aria-expanded", "false");
+  });
+}
+
+function bindChatSessionsRail(aid) {
+  const listEl = document.getElementById("chat-sessions-list");
+  if (!listEl || !aid) return;
+  listEl.addEventListener("click", async (ev) => {
+    const raw = /** @type {EventTarget | null} */ (ev.target);
+    const el = raw instanceof Element ? raw : raw?.parentElement;
+    const moreToggle = el?.closest?.("[data-more-toggle]");
+    if (moreToggle) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const sid = moreToggle.getAttribute("data-more-toggle");
+      if (!sid) return;
+      const menu = listEl.querySelector(`[data-more-menu="${sid}"]`);
+      if (!menu) return;
+      const open = menu.hidden;
+      closeChatSessionMoreMenus(open ? sid : undefined);
+      menu.hidden = !open;
+      moreToggle.setAttribute("aria-expanded", open ? "true" : "false");
+      return;
+    }
+    const ren = el?.closest?.("[data-rename-id]");
+    if (ren) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeChatSessionMoreMenus();
+      const sid = ren.getAttribute("data-rename-id");
+      const cur = ren.getAttribute("data-rename-title") || "";
+      if (!sid) return;
+      const title = await promptRenameGeneralChat(aid, sid, cur);
+      if (title) {
+        await refreshChatSessionsRail(aid);
+        const titleEl = document.querySelector(".chat-chrome-title");
+        if (titleEl && sid === chatSessionId) titleEl.textContent = title;
+      }
+      return;
+    }
+    const arch = el?.closest?.("[data-archive-id]");
+    if (arch) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeChatSessionMoreMenus();
+      const sid = arch.getAttribute("data-archive-id");
+      if (
+        !sid ||
+        !(await confirmDialog({
+          title: t("chat.archiveAction"),
+          body: t("chat.archiveConfirm"),
+          okLabel: t("chat.archiveAction"),
+        }))
+      ) {
+        return;
+      }
+      try {
+        await archiveGeneralChatSession(aid, sid);
+        if (!chatSessionId) await startNewGeneralChat(aid, { askName: false });
+        await showView("chat");
+        showToast(t("chat.archiveDone"), "ok");
+      } catch (err) {
+        showToast(String(err?.message || err), "err");
+      }
+      return;
+    }
+    const unarch = el?.closest?.("[data-unarchive-id]");
+    if (unarch) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeChatSessionMoreMenus();
+      const sid = unarch.getAttribute("data-unarchive-id");
+      if (!sid) return;
+      try {
+        await unarchiveGeneralChatSession(aid, sid);
+        showToast(t("chat.unarchiveDone"), "ok");
+        await refreshChatSessionsRail(aid);
+      } catch (err) {
+        showToast(String(err?.message || err), "err");
+      }
+      return;
+    }
+    const rem = el?.closest?.("[data-remove-id]");
+    if (rem) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closeChatSessionMoreMenus();
+      const sid = rem.getAttribute("data-remove-id");
+      if (
+        !sid ||
+        !(await confirmDialog({
+          title: t("chat.removeAction"),
+          body: t("chat.removeConfirm"),
+          okLabel: t("chat.removeAction"),
+          danger: true,
+        }))
+      ) {
+        return;
+      }
+      try {
+        await removeGeneralChatSession(aid, sid);
+        if (!chatSessionId) await startNewGeneralChat(aid, { askName: false });
+        if (chatSessionsShowArchived) await refreshChatSessionsRail(aid);
+        else await showView("chat");
+        showToast(t("chat.removeDone"), "ok");
+      } catch (err) {
+        showToast(String(err?.message || err), "err");
+      }
+      return;
+    }
+    const btn = el?.closest?.("[data-session-id]");
+    if (!btn) return;
+    closeChatSessionMoreMenus();
+    const sid = btn.getAttribute("data-session-id");
+    if (!sid) return;
+    try {
+      if (btn.getAttribute("data-archived") === "1") {
+        await unarchiveGeneralChatSession(aid, sid);
+        chatSessionsShowArchived = false;
+      } else if (sid === chatSessionId) {
+        return;
+      }
+      await selectGeneralChatSession(aid, sid);
+      await showView("chat");
+    } catch (err) {
+      showToast(String(err?.message || err), "err");
+    }
+  });
+  if (!listEl.dataset.moreOutsideBound) {
+    listEl.dataset.moreOutsideBound = "1";
+    document.addEventListener("mousedown", (ev) => {
+      const target = ev.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest(".chat-session-more-wrap")) return;
+      closeChatSessionMoreMenus();
+    });
+  }
 }
 
 /** Update #chat-log in place — avoid full showView (nested rebuild races wipe the thread). */
@@ -1186,21 +1923,28 @@ function renderChatLogDom(log, emptyKey) {
   if (chatPendingApprovals.length) {
     bindApprovalActions(logEl, chatPendingApprovals, () => showView(activeView));
   }
+  if (chatPendingSchedule) {
+    bindScheduleCardActions(logEl, () => showView(activeView));
+  }
   return true;
 }
 
 function refreshOpenChatView() {
-  if (activeView !== "chat" && activeView !== "homeChat") return;
-  const log = activeView === "homeChat" ? homeChatLog : chatLog;
-  const emptyKey = activeView === "homeChat" ? "homeChat.empty" : "chat.empty";
+  if (!isChatSurface(activeView)) return;
+  const purpose = purposeForView(activeView);
+  const log = chatLogForPurpose(purpose);
+  const emptyKey = emptyKeyForPurpose(purpose);
   if (!renderChatLogDom(log, emptyKey)) {
     void showView(activeView);
   }
 }
 
-/** Marker appended by daemon appendMediaToUserText — keep in sync with chat-media.ts. */
-const CHAT_ATTACH_TRANSCRIPT_MARKER =
-  "[Attached files — paths are under the account sandbox `files/`; use read_file to inspect contents]";
+/**
+ * Prefix of the attach block from daemon appendMediaToUserText.
+ * Match by prefix so wording after the semicolon can evolve (§9.5a extract hint).
+ */
+const CHAT_ATTACH_TRANSCRIPT_PREFIX =
+  "[Attached files — paths are under the account sandbox `files/`";
 
 /**
  * Split transcript user text into display body + media chips.
@@ -1227,11 +1971,13 @@ function displayUserTranscript(text, rawMedia) {
     }
   }
   let body = text;
-  const markerIdx = text.indexOf(CHAT_ATTACH_TRANSCRIPT_MARKER);
+  const markerIdx = text.indexOf(CHAT_ATTACH_TRANSCRIPT_PREFIX);
   if (markerIdx >= 0) {
     body = text.slice(0, markerIdx).trim();
     if (media.length === 0) {
-      const block = text.slice(markerIdx + CHAT_ATTACH_TRANSCRIPT_MARKER.length);
+      const afterPrefix = text.slice(markerIdx);
+      const nl = afterPrefix.indexOf("\n");
+      const block = nl >= 0 ? afterPrefix.slice(nl + 1) : "";
       for (const line of block.split("\n")) {
         const m = line.match(/^- (.+?) \((\w+)(?:, [^)]*)?\) · path `([^`]+)`/);
         if (!m) continue;
@@ -1264,7 +2010,7 @@ async function hydrateChatLogFromTranscript(accountIdVal, sessionId, log) {
       const text =
         typeof m.text === "string" ? m.text : typeof m.content === "string" ? m.content : "";
       if (!role || !text) continue;
-      /** @type {{ role: string, text: string, turnId?: string, media?: Array<{ kind: string, uri: string, fileName?: string }> }} */
+      /** @type {{ role: string, text: string, turnId?: string, messageId?: string, media?: Array<{ kind: string, uri: string, fileName?: string }> }} */
       let row;
       if (role === "user") {
         const parsed = displayUserTranscript(text, m.media);
@@ -1272,11 +2018,21 @@ async function hydrateChatLogFromTranscript(accountIdVal, sessionId, log) {
         row = { role, text: parsed.text };
         if (parsed.media.length) row.media = parsed.media;
       } else {
-        const shown = role === "assistant" ? displayChatText(text) : text;
-        if (!shown) continue;
-        row = { role, text: shown };
+        // Keep raw assistant text (incl. <think>) so the UI can collapse/expand it.
+        if (!text) continue;
+        row = { role, text };
+        if (m.format === "plain" || m.format === "markdown" || m.format === "link") {
+          row.format = m.format;
+        }
+        if (typeof m.artifactPath === "string" && m.artifactPath) {
+          row.artifactPath = m.artifactPath;
+        }
+        if (typeof m.artifactUrl === "string" && m.artifactUrl) {
+          row.artifactUrl = m.artifactUrl;
+        }
       }
       if (typeof m.turnId === "string" && m.turnId) row.turnId = m.turnId;
+      if (typeof m.messageId === "string" && m.messageId) row.messageId = m.messageId;
       next.push(row);
     }
     if (next.length === 0) return false;
@@ -1330,7 +2086,9 @@ function accountId() {
 }
 
 function chatSessionStorageKey(aid, purpose) {
-  return `envoyhome.${purpose === "home" ? "homeChat" : "chat"}SessionId.${aid}`;
+  const slot =
+    purpose === "home" ? "homeChat" : purpose === "schedules" ? "schedulesChat" : "chat";
+  return `envoyhome.${slot}SessionId.${aid}`;
 }
 
 function loadStoredChatSessionId(aid, purpose) {
@@ -1356,6 +2114,7 @@ function clearStoredChatSessionIds(aid) {
   try {
     localStorage.removeItem(chatSessionStorageKey(aid, "general"));
     localStorage.removeItem(chatSessionStorageKey(aid, "home"));
+    localStorage.removeItem(chatSessionStorageKey(aid, "schedules"));
   } catch {
     /* ignore */
   }
@@ -1367,8 +2126,10 @@ function setAccountId(id) {
   localStorage.setItem("envoyhome.accountId", id);
   chatSessionId = "";
   homeChatSessionId = "";
+  schedulesChatSessionId = "";
   chatLog.length = 0;
   homeChatLog.length = 0;
+  schedulesChatLog.length = 0;
 }
 
 async function refreshHaHomeChatReady() {
@@ -1554,6 +2315,8 @@ function connect() {
           "home:local-model-download",
           "home:workflow-step",
           "home:workflow-finished",
+          "home:schedule-proposed",
+          "home:schedule-proposal-closed",
         ],
       });
       for (const event of [
@@ -1565,6 +2328,8 @@ function connect() {
         "home:local-model-download",
         "home:workflow-step",
         "home:workflow-finished",
+        "home:schedule-proposed",
+        "home:schedule-proposal-closed",
       ]) {
         await rpc("on", { event }).catch(() => undefined);
       }
@@ -1618,16 +2383,44 @@ function connect() {
       liveEvents.unshift({ at: new Date().toISOString(), event: name, data });
       if (liveEvents.length > 40) liveEvents.length = 40;
       if (name === "home:turn-delta" && data?.kind === "text" && data?.text) {
-        const shown = displayChatText(data.text);
-        if (shown) {
-          const log = chatLogForSession(data.sessionId);
+        const raw = String(data.text);
+        const log = chatLogForSession(data.sessionId);
+        if (!log) {
+          /* Event for a session that is not open — ignore (no cross-thread bleed). */
+        } else {
           clearThinkingPlaceholders(log);
           // Avoid duplicate bubbles if hydrate already loaded this text.
           const last = log[log.length - 1];
-          if (!(last && last.role === "assistant" && last.text === shown)) {
-            /** @type {{ role: string, text: string, turnId?: string }} */
-            const row = { role: "assistant", text: shown };
-            if (typeof data.turnId === "string" && data.turnId) row.turnId = data.turnId;
+          const turnId = typeof data.turnId === "string" && data.turnId ? data.turnId : undefined;
+          const fmt =
+            data.format === "plain" || data.format === "markdown" || data.format === "link"
+              ? data.format
+              : undefined;
+          const artifactPath =
+            typeof data.artifactPath === "string" && data.artifactPath
+              ? data.artifactPath
+              : undefined;
+          const artifactUrl =
+            typeof data.artifactUrl === "string" && data.artifactUrl
+              ? data.artifactUrl
+              : undefined;
+          if (last && last.role === "assistant" && turnId && last.turnId === turnId) {
+            // Same turn — append chunk (token streaming) or replace if identical re-emit.
+            // `link` + artifactPath replaces the bubble (thin-client spill after stream).
+            if (fmt === "link" && artifactPath) {
+              last.text = raw;
+            } else if (raw.startsWith(last.text)) last.text = raw;
+            else if (!last.text.endsWith(raw)) last.text += raw;
+            if (fmt) last.format = fmt;
+            if (artifactPath) last.artifactPath = artifactPath;
+            if (artifactUrl) last.artifactUrl = artifactUrl;
+          } else if (!(last && last.role === "assistant" && last.text === raw)) {
+            /** @type {{ role: string, text: string, turnId?: string, format?: string, artifactPath?: string, artifactUrl?: string }} */
+            const row = { role: "assistant", text: raw };
+            if (turnId) row.turnId = turnId;
+            if (fmt) row.format = fmt;
+            if (artifactPath) row.artifactPath = artifactPath;
+            if (artifactUrl) row.artifactUrl = artifactUrl;
             log.push(row);
           }
           refreshOpenChatView();
@@ -1682,29 +2475,46 @@ function connect() {
         }
       }
       if (name === "home:turn-finished") {
-        const log = chatLogForSession(data?.sessionId);
-        clearThinkingPlaceholders(log);
-        const aid = accountId();
-        const sid =
-          data?.sessionId ||
-          (activeView === "homeChat" ? homeChatSessionId : chatSessionId);
-        void (async () => {
-          await hydrateChatLogFromTranscript(aid, sid, log);
-          if (data?.status === "error") {
-            log.push({ role: "system", text: t("chat.turnFailed") });
-            showToast(t("chat.turnFailed"), "err");
-          }
-          refreshOpenChatView();
-          // Approvals strip may have changed — full refresh once.
-          if (data?.status === "ok" && (activeView === "chat" || activeView === "homeChat")) {
-            /* log already painted; approvals refresh on next open is enough */
-          }
-        })();
+        const sid = typeof data?.sessionId === "string" ? data.sessionId : "";
+        const log = chatLogForSession(sid);
+        if (!log) {
+          /* Finished for a session that is not open — still clear busy if set. */
+          if (sid) markChatTurnInFlight(sid, false);
+        } else {
+          clearThinkingPlaceholders(log);
+          const aid = accountId();
+          // Hydrate before clearing busy so New chat / session switch cannot race
+          // waitForAssistantReply's shared chatLog mutations.
+          void (async () => {
+            try {
+              await hydrateChatLogFromTranscript(aid, sid, log);
+              if (data?.status === "error") {
+                log.push({ role: "system", text: t("chat.turnFailed") });
+                showToast(t("chat.turnFailed"), "err");
+              }
+              if (isChatSurface(activeView) && sid === readChatSessionId(purposeForView(activeView))) {
+                await refreshChatPendingSchedule(sid);
+              }
+              refreshOpenChatView();
+              if (activeView === "chat" && aid && sid === chatSessionId) {
+                void refreshChatSessionsRail(aid);
+                const titleEl = document.querySelector(".chat-chrome-title");
+                if (titleEl) {
+                  void currentGeneralChatTitle(aid).then((title) => {
+                    if (titleEl.isConnected) titleEl.textContent = title;
+                  });
+                }
+              }
+            } finally {
+              if (sid) markChatTurnInFlight(sid, false);
+            }
+          })();
+        }
       }
       if (name === "home:approval-needed" || name === "home:approval-resolved") {
         if (name === "home:approval-needed") {
           showToast(t("approvals.neededToast"), "ok");
-          if (activeView !== "chat" && activeView !== "homeChat") {
+          if (!isChatSurface(activeView)) {
             void showView("chat");
           }
         }
@@ -1713,8 +2523,28 @@ function connect() {
           if (!aid) return;
           const ap = await rpc("home.listApprovals", { accountId: aid }).catch(() => null);
           chatPendingApprovals = ap?.result?.approvals || [];
-          if (activeView === "chat" || activeView === "homeChat") refreshOpenChatView();
+          if (isChatSurface(activeView)) refreshOpenChatView();
         })();
+      }
+      if (name === "home:schedule-proposed" && data?.proposalId) {
+        const purpose = purposeForView(activeView);
+        const sid = readChatSessionId(purpose);
+        if (!data.sessionId || data.sessionId === sid) {
+          chatPendingSchedule = {
+            proposalId: String(data.proposalId),
+            resolvedLocal: String(data.resolvedLocal || ""),
+            ...(data.expiresAt ? { expiresAt: String(data.expiresAt) } : {}),
+            ...(data.message ? { message: String(data.message) } : {}),
+            ...(data.name ? { name: String(data.name) } : {}),
+          };
+          if (isChatSurface(activeView)) refreshOpenChatView();
+        }
+      }
+      if (name === "home:schedule-proposal-closed" && data?.proposalId) {
+        if (chatPendingSchedule?.proposalId === data.proposalId) {
+          chatPendingSchedule = null;
+          if (isChatSurface(activeView)) refreshOpenChatView();
+        }
       }
       if (name === "home:local-model-download" && data?.fileName) {
         patchDownloadProgressDom(data);
@@ -2381,32 +3211,932 @@ async function listProvidersRpc(aid) {
 }
 
 async function ensureChatSession(aid, purpose = "general") {
-  const isHome = purpose === "home";
-  let sid = isHome ? homeChatSessionId : chatSessionId;
+  const dedicated = dedicatedChat(purpose);
+  let sid = readChatSessionId(purpose);
   if (!sid) sid = loadStoredChatSessionId(aid, purpose);
   if (sid) {
     // Reuse stored session if the daemon still has it (keeps multi-turn history).
+    // Dedicated chats: always reuse the single session — never mint a second while one exists.
     const probe = await rpc("home.getTranscript", { accountId: aid, sessionId: sid }).catch(
       () => null,
     );
     if (probe && !probe.error) {
-      if (isHome) homeChatSessionId = sid;
-      else chatSessionId = sid;
+      writeChatSessionId(purpose, sid);
       storeChatSessionId(aid, purpose, sid);
       return sid;
     }
   }
+  // Dedicated: if pointer stale, prefer an existing session of that purpose.
+  if (dedicated) {
+    const listed = await rpc("home.listSessions", { accountId: aid }).catch(() => null);
+    const row = (listed?.result?.sessions || []).find((s) => s.purpose === purpose);
+    if (row?.sessionId) {
+      writeChatSessionId(purpose, row.sessionId);
+      storeChatSessionId(aid, purpose, row.sessionId);
+      return row.sessionId;
+    }
+  }
+  const pendingTitle = !dedicated ? String(pendingNewChatTitle || "").trim() : "";
+  const dedicatedTitle =
+    purpose === "home"
+      ? t("homeChat.sessionTitle")
+      : purpose === "schedules"
+        ? t("schedulesChat.sessionTitle")
+        : "";
   const opened = await rpc("home.openSession", {
     accountId: aid,
-    title: isHome ? t("homeChat.sessionTitle") : t("chat.sessionTitle"),
-    ...(isHome ? { purpose: "home" } : { purpose: "general" }),
+    // General: optional New-chat name; else daemon auto-titles from first message.
+    ...(dedicated
+      ? { title: dedicatedTitle, purpose }
+      : {
+          purpose: "general",
+          ...(pendingTitle ? { title: pendingTitle } : {}),
+        }),
   });
   if (opened.error) throw new Error(errMsg(opened));
   sid = opened.result.sessionId;
-  if (isHome) homeChatSessionId = sid;
-  else chatSessionId = sid;
+  writeChatSessionId(purpose, sid);
+  if (!dedicated) pendingNewChatTitle = "";
   storeChatSessionId(aid, purpose, sid);
   return sid;
+}
+
+/**
+ * New-chat name dialog.
+ * Returns null if cancelled (stay on current chat).
+ * Empty string = start untitled (auto-title from first message later).
+ * Non-empty = named chat (titleSource=user on open).
+ */
+function promptOptionalNewChatTitle() {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop wf-prompt-backdrop";
+    backdrop.setAttribute("role", "presentation");
+    let closed = false;
+    backdrop.innerHTML = `
+      <div class="modal-card wf-prompt-card chat-new-dialog" role="dialog" aria-modal="true" aria-labelledby="chat-new-title">
+        <h2 id="chat-new-title">${escapeHtml(t("chat.new"))}</h2>
+        <p class="muted chat-new-hint">${escapeHtml(t("chat.newNameHint"))}</p>
+        <label class="wf-prompt-field">${escapeHtml(t("chat.newNamePrompt"))}
+          <input id="chat-new-name" name="title" type="text" maxlength="120" value="" placeholder="${escapeHtml(t("chat.newNamePlaceholder"))}" />
+        </label>
+        <p class="muted wf-prompt-status le-error" data-chat-new-status hidden></p>
+        <div class="row wf-prompt-actions chat-new-actions">
+          <button type="button" class="secondary" data-chat-new-cancel>${escapeHtml(t("workflows.cancel"))}</button>
+          <button type="button" class="secondary" data-chat-new-skip>${escapeHtml(t("chat.newSkip"))}</button>
+          <button type="button" data-chat-new-create>${escapeHtml(t("chat.newCreate"))}</button>
+        </div>
+      </div>`;
+    const input = /** @type {HTMLInputElement | null} */ (backdrop.querySelector("#chat-new-name"));
+    const statusEl = /** @type {HTMLElement | null} */ (backdrop.querySelector("[data-chat-new-status]"));
+    const finish = (value) => {
+      if (closed) return;
+      closed = true;
+      document.removeEventListener("keydown", onKeydown, true);
+      backdrop.remove();
+      resolve(value);
+    };
+    const readTitle = () => String(input?.value || "").trim().slice(0, 120);
+    const showNeedName = () => {
+      if (!statusEl) return;
+      statusEl.hidden = false;
+      statusEl.textContent = t("chat.newNeedName");
+      input?.focus();
+    };
+    const onKeydown = (ev) => {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        finish(null);
+        return;
+      }
+      if (ev.key !== "Enter") return;
+      ev.preventDefault();
+      const title = readTitle();
+      // Enter with a name → Create; empty → Start without name.
+      finish(title || "");
+    };
+    backdrop.querySelector("[data-chat-new-cancel]")?.addEventListener("click", () => finish(null));
+    backdrop.querySelector("[data-chat-new-skip]")?.addEventListener("click", () => finish(""));
+    backdrop.querySelector("[data-chat-new-create]")?.addEventListener("click", () => {
+      const title = readTitle();
+      if (!title) {
+        showNeedName();
+        return;
+      }
+      finish(title);
+    });
+    backdrop.addEventListener("click", (ev) => {
+      if (ev.target === backdrop) finish(null);
+    });
+    document.addEventListener("keydown", onKeydown, true);
+    document.body.appendChild(backdrop);
+    input?.focus();
+  });
+}
+
+/**
+ * General Chat — ChatGPT-style New chat: clear the composer/thread locally.
+ * A session id is minted only on the first send (`ensureChatSession`), so the
+ * list never fills with empty shells the user never messaged.
+ * Optional name is stored in `pendingNewChatTitle` until openSession.
+ */
+async function startNewGeneralChat(aid, opts = {}) {
+  if (chatSessionBusy(chatSessionId)) throw new Error(t("chat.busyTurn"));
+  const askName = opts.askName !== false;
+  let title = "";
+  if (askName) {
+    const chosen = await promptOptionalNewChatTitle();
+    if (chosen === null) return null;
+    title = chosen;
+  }
+  await pruneEmptyGeneralSessions(aid).catch(() => undefined);
+  chatSessionId = "";
+  pendingNewChatTitle = title;
+  try {
+    localStorage.removeItem(chatSessionStorageKey(aid, "general"));
+  } catch {
+    /* ignore */
+  }
+  chatLog.length = 0;
+  return title;
+}
+
+/** Drop empty general sessions left behind by older New-chat / ensure paths. */
+async function pruneEmptyGeneralSessions(aid) {
+  const listed = await rpc("home.listSessions", { accountId: aid });
+  if (listed.error) return;
+  const rows = listed.result?.sessions || [];
+  for (const s of rows) {
+    if ((s.purpose || "general") !== "general") continue;
+    if (Number(s.messageCount || 0) > 0) continue;
+    if (s.sessionId === chatSessionId) continue;
+    // Keep schedule/system shells out of the way by deleting empties only.
+    await rpc("home.removeSession", { accountId: aid, sessionId: s.sessionId }).catch(() => null);
+  }
+}
+
+/** Resolve display title for the open general session (from list or fallback). */
+async function currentGeneralChatTitle(aid) {
+  if (!aid) return t("chat.untitled");
+  if (!chatSessionId) {
+    const pending = String(pendingNewChatTitle || "").trim();
+    return pending || t("chat.new");
+  }
+  try {
+    const rows = await listGeneralChatSessions(aid);
+    const hit = rows.find((s) => s.sessionId === chatSessionId);
+    if (hit?.title) return String(hit.title);
+  } catch {
+    /* fall through */
+  }
+  return t("chat.untitled");
+}
+
+async function selectGeneralChatSession(aid, sessionId) {
+  if (chatSessionBusy(chatSessionId)) throw new Error(t("chat.busyTurn"));
+  chatSessionId = sessionId;
+  pendingNewChatTitle = "";
+  storeChatSessionId(aid, "general", sessionId);
+  chatLog.length = 0;
+  await hydrateChatLogFromTranscript(aid, sessionId, chatLog);
+}
+
+/** True when a listSessions row belongs in the Chats rail (user-messaged, not system). */
+function isUserFacingGeneralChat(s) {
+  if ((s?.purpose || "general") !== "general") return false;
+  if (Number(s?.messageCount || 0) <= 0) return false;
+  // Channel/hatch inbound + schedule/workflow shells are daemon-created, not Recents.
+  if (s?.channel) return false;
+  const title = String(s?.title || "").trim();
+  if (!title) return true;
+  if (/^schedule:/i.test(title)) return false;
+  if (/^workflow-test:/i.test(title)) return false;
+  if (/^hatch$/i.test(title)) return false;
+  if (/\binbound$/i.test(title)) return false;
+  return true;
+}
+
+async function listGeneralChatSessions(aid) {
+  const listed = await rpc("home.listSessions", { accountId: aid });
+  if (listed.error) throw new Error(errMsg(listed));
+  return (listed.result?.sessions || []).filter(isUserFacingGeneralChat).slice(0, 40);
+}
+
+async function listArchivedGeneralChatSessions(aid) {
+  const listed = await rpc("home.listSessions", {
+    accountId: aid,
+    includeArchived: true,
+  });
+  if (listed.error) throw new Error(errMsg(listed));
+  return (listed.result?.sessions || [])
+    .filter((s) => s?.archivedAt && isUserFacingGeneralChat(s))
+    .slice(0, 40);
+}
+
+async function unarchiveGeneralChatSession(aid, sessionId) {
+  assertChatNotBusy(sessionId);
+  const ans = await rpc("home.unarchiveSession", { accountId: aid, sessionId });
+  if (ans.error) throw new Error(errMsg(ans));
+}
+
+async function clearCurrentChatTranscript(aid, purpose) {
+  const sid = readChatSessionId(purpose);
+  if (!sid) throw new Error(t("chat.noSession"));
+  assertChatNotBusy(sid);
+  const ans = await rpc("home.clearTranscript", { accountId: aid, sessionId: sid });
+  if (ans.error) throw new Error(errMsg(ans));
+  chatLogForPurpose(purpose).length = 0;
+}
+
+async function deleteChatMessage(aid, purpose, messageId) {
+  const sid = readChatSessionId(purpose);
+  if (!sid) throw new Error(t("chat.noSession"));
+  assertChatNotBusy(sid);
+  if (!messageId) throw new Error(t("chat.deleteNoId"));
+  const ans = await rpc("home.deleteTranscriptMessages", {
+    accountId: aid,
+    sessionId: sid,
+    messageIds: [messageId],
+  });
+  if (ans.error) throw new Error(errMsg(ans));
+  const removed = Number(ans.result?.removed ?? 0);
+  if (removed < 1) throw new Error(t("chat.deleteFailed"));
+  const log = chatLogForPurpose(purpose);
+  for (let i = log.length - 1; i >= 0; i--) {
+    if (log[i].messageId === messageId) log.splice(i, 1);
+  }
+}
+
+async function archiveCurrentChat(aid, purpose) {
+  const sid = readChatSessionId(purpose);
+  if (!sid) throw new Error(t("chat.noSession"));
+  assertChatNotBusy(sid);
+  const ans = await rpc("home.archiveSession", { accountId: aid, sessionId: sid });
+  if (ans.error) throw new Error(errMsg(ans));
+  writeChatSessionId(purpose, "");
+  chatLogForPurpose(purpose).length = 0;
+  if (purpose === "general") pendingNewChatTitle = "";
+  try {
+    localStorage.removeItem(chatSessionStorageKey(aid, purpose));
+  } catch {
+    /* ignore */
+  }
+}
+
+async function removeCurrentChat(aid, purpose) {
+  const sid = readChatSessionId(purpose);
+  // Pending New chat (no session minted yet) — clear locally.
+  if (!sid) {
+    if (purpose === "general") {
+      pendingNewChatTitle = "";
+      chatLog.length = 0;
+      try {
+        localStorage.removeItem(chatSessionStorageKey(aid, "general"));
+      } catch {
+        /* ignore */
+      }
+      return;
+    }
+    throw new Error(t("chat.noSession"));
+  }
+  assertChatNotBusy(sid);
+  const ans = await rpc("home.removeSession", { accountId: aid, sessionId: sid });
+  if (ans.error) throw new Error(errMsg(ans));
+  writeChatSessionId(purpose, "");
+  chatLogForPurpose(purpose).length = 0;
+  if (purpose === "general") pendingNewChatTitle = "";
+  try {
+    localStorage.removeItem(chatSessionStorageKey(aid, purpose));
+  } catch {
+    /* ignore */
+  }
+}
+
+async function archiveGeneralChatSession(aid, sessionId) {
+  assertChatNotBusy(sessionId);
+  const ans = await rpc("home.archiveSession", { accountId: aid, sessionId });
+  if (ans.error) throw new Error(errMsg(ans));
+  if (sessionId === chatSessionId) {
+    chatSessionId = "";
+    chatLog.length = 0;
+    try {
+      localStorage.removeItem(chatSessionStorageKey(aid, "general"));
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+async function removeGeneralChatSession(aid, sessionId) {
+  assertChatNotBusy(sessionId);
+  const ans = await rpc("home.removeSession", { accountId: aid, sessionId });
+  if (ans.error) throw new Error(errMsg(ans));
+  if (sessionId === chatSessionId) {
+    chatSessionId = "";
+    chatLog.length = 0;
+    try {
+      localStorage.removeItem(chatSessionStorageKey(aid, "general"));
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** Rename a general chat; locks title so later first-message auto-title won't overwrite. */
+async function renameGeneralChatSession(aid, sessionId, title) {
+  const ans = await rpc("home.renameSession", {
+    accountId: aid,
+    sessionId,
+    title,
+  });
+  if (ans.error) throw new Error(errMsg(ans));
+  return String(ans.result?.title || title).trim();
+}
+
+async function promptRenameGeneralChat(aid, sessionId, currentTitle) {
+  if (!aid || !sessionId) return null;
+  const initial = currentTitle && currentTitle !== t("chat.untitled") ? currentTitle : "";
+  // Tauri/WKWebView blocks window.prompt — use the in-app modal (same as workflows).
+  const fields = await promptForm({
+    title: t("chat.renameAction"),
+    fields: [
+      {
+        name: "title",
+        label: t("chat.renamePrompt"),
+        value: initial,
+        placeholder: t("chat.untitled"),
+      },
+    ],
+    okLabel: t("chat.renameAction"),
+    cancelLabel: t("workflows.cancel"),
+  });
+  if (!fields) return null;
+  const trimmed = String(fields.title || "").trim();
+  if (!trimmed) {
+    showToast(t("chat.renameEmpty"), "err");
+    return null;
+  }
+  try {
+    const title = await renameGeneralChatSession(aid, sessionId, trimmed);
+    showToast(t("chat.renameDone"), "ok");
+    return title;
+  } catch (err) {
+    showToast(String(err?.message || err), "err");
+    return null;
+  }
+}
+
+/**
+ * System → Profiles (first tab). Design §10.1 accounts / account.detail / §4.2.1.
+ * @param {HTMLElement} el
+ * @param {(panel: string) => string} shell
+ * @param {() => void} wireTabs
+ * @param {Array<{ accountId: string, displayName?: string, createdAt?: string }>} accounts
+ * @param {string} aid
+ */
+async function renderSystemProfilesPanel(el, shell, wireTabs, accounts, aid) {
+  /** @type {Map<string, { configured?: boolean, mounts?: Array<{ id?: string, displayPath?: string, mode?: string, filesystemRoot?: boolean, active?: boolean }>, mode?: string, displayPath?: string, filesystemRoot?: boolean, active?: boolean }>} */
+  const workspaceById = new Map();
+  let ownerAccountId = "";
+  try {
+    const own = await rpc("home.getHouseholdOwner");
+    if (!own.error && typeof own.result?.ownerAccountId === "string") {
+      ownerAccountId = own.result.ownerAccountId;
+    }
+  } catch {
+    /* ignore */
+  }
+  await Promise.all(
+    accounts.map(async (a) => {
+      try {
+        const ans = await rpc("home.getWorkspace", { accountId: a.accountId });
+        if (!ans.error && ans.result) workspaceById.set(a.accountId, ans.result);
+      } catch {
+        /* ignore */
+      }
+    }),
+  );
+
+  const refresh = async () => {
+    systemTab = "profiles";
+    await showView("system");
+  };
+
+  const cards =
+    accounts.length === 0
+      ? `<div class="empty">
+          <p>${escapeHtml(t("profile.empty"))}</p>
+          <p class="muted">${escapeHtml(t("profile.emptyHint"))}</p>
+        </div>`
+      : `<ul class="profile-list">${accounts
+          .map((a) => {
+            const ws = workspaceById.get(a.accountId);
+            const mounts = Array.isArray(ws?.mounts)
+              ? ws.mounts
+              : ws?.configured && ws?.displayPath
+                ? [
+                    {
+                      id: "folder",
+                      displayPath: ws.displayPath,
+                      mode: ws.mode,
+                      filesystemRoot: ws.filesystemRoot,
+                      active: ws.active,
+                    },
+                  ]
+                : [];
+            const configured = ws?.configured === true && mounts.length > 0;
+            const isOwner = Boolean(ownerAccountId && a.accountId === ownerAccountId);
+            const isActive = a.accountId === aid;
+            const activeDot = isActive
+              ? `<span class="conn-dot profile-active-dot" data-state="ok" title="${escapeHtml(
+                  t("app.active"),
+                )}" aria-label="${escapeHtml(t("app.active"))}"></span>`
+              : "";
+            const badges = isOwner
+              ? `<span class="profile-label profile-label--owner">${escapeHtml(
+                  t("profile.ownerBadge"),
+                )}</span>`
+              : "";
+            const others = accounts.filter((o) => o.accountId !== a.accountId);
+            const transferRow =
+              isOwner && others.length > 0
+                ? `<div class="profile-transfer row">
+                    <select data-transfer-select="${escapeHtml(a.accountId)}" aria-label="${escapeHtml(
+                      t("profile.transferPick"),
+                    )}">
+                      <option value="">${escapeHtml(t("profile.transferPick"))}</option>
+                      ${others
+                        .map(
+                          (o) =>
+                            `<option value="${escapeHtml(o.accountId)}">${escapeHtml(
+                              o.displayName || o.accountId,
+                            )}</option>`,
+                        )
+                        .join("")}
+                    </select>
+                    <button type="button" class="secondary" data-transfer-go="${escapeHtml(
+                      a.accountId,
+                    )}">${escapeHtml(t("profile.transferGo"))}</button>
+                  </div>`
+                : "";
+            const deleteBtn = !isOwner
+              ? `<button type="button" class="secondary" data-delete-account="${escapeHtml(
+                  a.accountId,
+                )}">${escapeHtml(t("profile.delete"))}</button>`
+              : "";
+            const rootBtn = isOwner
+              ? `<button type="button" class="secondary" data-ws-root="${escapeHtml(
+                  a.accountId,
+                )}">${escapeHtml(t("profile.workspaceUseRoot"))}</button>`
+              : "";
+            const mountList = configured
+              ? `<ul class="profile-workspace-mounts">${mounts
+                  .map((m) => {
+                    const bits = [
+                      m.mode === "rw" ? t("profile.workspaceRw") : t("profile.workspaceRo"),
+                      m.id ? t("profile.workspaceMountId", { id: m.id }) : "",
+                      m.filesystemRoot ? t("profile.workspaceWholeMachine") : "",
+                      m.active === false ? t("profile.workspaceInactive") : "",
+                    ].filter(Boolean);
+                    return `<li class="profile-workspace-mount">
+                      <div class="profile-workspace-mount-main">
+                        <code>${escapeHtml(m.displayPath || "")}</code>
+                        <span class="muted profile-workspace-mount-meta">${escapeHtml(
+                          bits.join(" · "),
+                        )}</span>
+                      </div>
+                      <button type="button" class="secondary profile-workspace-remove" data-ws-remove="${escapeHtml(
+                        a.accountId,
+                      )}" data-ws-mount-id="${escapeHtml(m.id || "")}" title="${escapeHtml(
+                        t("profile.workspaceRemove"),
+                      )}">${escapeHtml(t("profile.workspaceRemove"))}</button>
+                    </li>`;
+                  })
+                  .join("")}</ul>`
+              : `<p class="muted profile-workspace-path">${escapeHtml(
+                  t("profile.workspaceUnset"),
+                )}</p>`;
+            return `<li class="profile-card" data-account-card="${escapeHtml(a.accountId)}">
+              <div class="profile-card-head">
+                <div class="profile-card-identity">
+                  <strong class="profile-card-name">${activeDot}${escapeHtml(
+                    a.displayName || a.accountId,
+                  )}</strong>
+                  ${badges ? `<div class="profile-card-badges">${badges}</div>` : ""}
+                  <div class="muted profile-card-id">${escapeHtml(a.accountId)}${
+                    a.createdAt
+                      ? ` · ${escapeHtml(t("profile.addedAt", { date: a.createdAt }))}`
+                      : ""
+                  }</div>
+                  <div class="muted profile-card-tz">${escapeHtml(
+                    a.timeZone
+                      ? t("profile.timeZoneValue", { tz: a.timeZone })
+                      : t("profile.timeZoneUnset"),
+                  )}</div>
+                </div>
+                <div class="profile-card-actions row">
+                  <button type="button" class="secondary" data-use="${escapeHtml(
+                    a.accountId,
+                  )}"${isActive ? " disabled" : ""}>${escapeHtml(t("app.use"))}</button>
+                  <button type="button" class="secondary" data-rename-account="${escapeHtml(
+                    a.accountId,
+                  )}">${escapeHtml(t("profile.rename"))}</button>
+                  <button type="button" class="secondary" data-tz-account="${escapeHtml(
+                    a.accountId,
+                  )}">${escapeHtml(t("profile.timeZoneEdit"))}</button>
+                  ${deleteBtn}
+                </div>
+              </div>
+              ${transferRow}
+              <div class="profile-workspace">
+                <div class="profile-workspace-head">
+                  <h4>${escapeHtml(t("profile.workspaceTitle"))}</h4>
+                  ${
+                    configured
+                      ? `<button type="button" class="secondary profile-workspace-clear" data-ws-clear="${escapeHtml(
+                          a.accountId,
+                        )}">${escapeHtml(t("profile.workspaceClear"))}</button>`
+                      : ""
+                  }
+                </div>
+                ${mountList}
+                <div class="profile-workspace-add">
+                  <span class="muted profile-workspace-add-label">${escapeHtml(
+                    t("profile.workspaceAddRow"),
+                  )}</span>
+                  <div class="row profile-workspace-add-row">
+                    <label class="profile-workspace-mode">
+                      <span class="visually-hidden">${escapeHtml(t("profile.workspaceMode"))}</span>
+                      <select data-ws-mode="${escapeHtml(a.accountId)}">
+                        <option value="ro" selected>${escapeHtml(t("profile.workspaceRo"))}</option>
+                        <option value="rw">${escapeHtml(t("profile.workspaceRw"))}</option>
+                      </select>
+                    </label>
+                    <button type="button" data-ws-pick="${escapeHtml(a.accountId)}">${escapeHtml(
+                      t("profile.workspacePick"),
+                    )}</button>
+                    ${rootBtn}
+                  </div>
+                  <details class="profile-workspace-paste">
+                    <summary class="muted">${escapeHtml(t("profile.workspaceOrPaste"))}</summary>
+                    <div class="row">
+                      <input type="text" data-ws-path="${escapeHtml(
+                        a.accountId,
+                      )}" value="" placeholder="/" autocomplete="off" />
+                      <button type="button" class="secondary" data-ws-apply="${escapeHtml(
+                        a.accountId,
+                      )}">${escapeHtml(t("profile.workspaceApply"))}</button>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            </li>`;
+          })
+          .join("")}</ul>`;
+
+  el.innerHTML = shell(`
+    <p class="muted profile-panel-intro">${escapeHtml(t("profile.intro"))}</p>
+    <p class="muted profile-panel-hint">${escapeHtml(t("profile.workspaceHint"))}</p>
+    ${cards}
+    <form id="create-acct" class="card profile-add-card">
+      <h3>${escapeHtml(t("profile.addTitle"))}</h3>
+      <label class="profile-add-field-label" for="create-acct-name">${escapeHtml(
+        t("profile.displayName"),
+      )}</label>
+      <div class="row profile-add-row">
+        <input
+          id="create-acct-name"
+          name="displayName"
+          required
+          placeholder="${escapeHtml(t("profile.displayNamePlaceholder"))}"
+          autocomplete="nickname"
+        />
+        <button type="submit">${escapeHtml(t("app.add"))}</button>
+      </div>
+    </form>`);
+  wireTabs();
+
+  /**
+   * @param {string} accountId
+   * @param {string} hostPath
+   * @param {"ro"|"rw"} mode
+   */
+  /** Whole-machine / volume root — POSIX `/`, macOS Data volume, Windows `C:\`… */
+  const looksLikeComputerRoot = (hostPath) => {
+    const trimmed = String(hostPath || "").trim();
+    if (!trimmed) return false;
+    if (trimmed === "/" || trimmed === "/System/Volumes/Data") return true;
+    return /^[A-Za-z]:[\\/]?$/.test(trimmed);
+  };
+
+  const applyWorkspace = async (accountId, hostPath, mode) => {
+    const trimmed = String(hostPath || "").trim();
+    if (!trimmed) {
+      showToast(t("profile.workspaceNeedPath"), "err");
+      return;
+    }
+    const isRoot = looksLikeComputerRoot(trimmed);
+    const crossSeat = accountId !== aid;
+    if (isRoot) {
+      const ok = await confirmDialog({
+        title: t("profile.workspaceRootConfirmTitle"),
+        body: t("profile.workspaceRootConfirmBody"),
+        okLabel: t("profile.workspaceRootConfirmOk"),
+      });
+      if (!ok) return;
+    } else if (crossSeat) {
+      const dest = accounts.find((x) => x.accountId === accountId);
+      const ok = await confirmDialog({
+        title: t("profile.workspaceCrossConfirmTitle"),
+        body: t("profile.workspaceCrossConfirmBody", {
+          name: dest?.displayName || accountId,
+        }),
+        okLabel: t("profile.workspaceApply"),
+      });
+      if (!ok) return;
+    }
+    const ans = await rpc("home.upsertWorkspaceMount", {
+      accountId,
+      hostPath: trimmed,
+      mode,
+    });
+    if (ans.error) {
+      showToast(errMsg(ans) || t("profile.workspaceFailed"), "err");
+      return;
+    }
+    showToast(
+      isRoot ? t("profile.workspaceWholeMachineSet") : t("profile.workspaceSaved"),
+    );
+    await refresh();
+  };
+
+  el.querySelectorAll("[data-use]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-use") || "";
+      setAccountId(id);
+      const name =
+        accounts.find((a) => a.accountId === id)?.displayName || id;
+      showToast(t("profile.using", { name }));
+      void refresh();
+    });
+  });
+
+  el.querySelectorAll("[data-transfer-go]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const fromId = btn.getAttribute("data-transfer-go") || "";
+      const sel = /** @type {HTMLSelectElement | null} */ (
+        el.querySelector(`[data-transfer-select="${CSS.escape(fromId)}"]`)
+      );
+      const toId = sel?.value || "";
+      const dest = accounts.find((a) => a.accountId === toId);
+      if (!dest) {
+        showToast(t("profile.transferPick"), "err");
+        return;
+      }
+      const ok = await confirmDialog({
+        title: t("profile.transferOwnerTitle"),
+        body: t("profile.transferOwnerConfirmBody", {
+          name: dest.displayName || dest.accountId,
+        }),
+        okLabel: t("profile.transferOwnerConfirm"),
+      });
+      if (!ok) return;
+      const ans = await rpc("home.transferHouseholdOwner", {
+        toAccountId: dest.accountId,
+        confirm: true,
+      });
+      if (ans.error) {
+        showToast(errMsg(ans) || t("profile.transferOwnerFailed"), "err");
+        return;
+      }
+      showToast(
+        t("profile.transferOwnerDone", {
+          name: dest.displayName || dest.accountId,
+        }),
+      );
+      await refresh();
+    });
+  });
+
+  el.querySelectorAll("[data-ws-pick]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const accountId = btn.getAttribute("data-ws-pick") || "";
+      const modeEl = /** @type {HTMLSelectElement | null} */ (
+        el.querySelector(`[data-ws-mode="${CSS.escape(accountId)}"]`)
+      );
+      const mode = modeEl?.value === "rw" ? "rw" : "ro";
+      if (!isTauriShell()) {
+        showToast(t("profile.workspacePickerUnavailable"), "err");
+        return;
+      }
+      try {
+        const picked = await tauriInvoke("pick_workspace_folder");
+        if (typeof picked === "string" && picked) {
+          await applyWorkspace(accountId, picked, mode);
+        }
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : String(err), "err");
+      }
+    });
+  });
+  el.querySelectorAll("[data-ws-root]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const accountId = btn.getAttribute("data-ws-root") || "";
+      const modeEl = /** @type {HTMLSelectElement | null} */ (
+        el.querySelector(`[data-ws-mode="${CSS.escape(accountId)}"]`)
+      );
+      const mode = modeEl?.value === "rw" ? "rw" : "ro";
+      // Ask the daemon (home machine), not navigator.platform — desktop UI
+      // must match Windows/Linux/macOS roots on the host running the agent.
+      let rootPath = "/";
+      try {
+        const info = await rpc("home.getHomeFsInfo");
+        if (!info.error && info.result) {
+          const roots = Array.isArray(info.result.roots) ? info.result.roots : [];
+          const platform = info.result.platform;
+          if (platform === "win32" || roots.some((r) => /^[A-Za-z]:/.test(String(r)))) {
+            const c = roots.find((r) => /^C:[\\/]?$/i.test(String(r || "").trim()));
+            rootPath = c || roots[0] || "C:\\";
+          } else {
+            rootPath = roots[0] || "/";
+          }
+        }
+      } catch {
+        rootPath = "/";
+      }
+      await applyWorkspace(accountId, rootPath, mode);
+    });
+  });
+  el.querySelectorAll("[data-ws-apply]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const accountId = btn.getAttribute("data-ws-apply") || "";
+      const pathEl = /** @type {HTMLInputElement | null} */ (
+        el.querySelector(`[data-ws-path="${CSS.escape(accountId)}"]`)
+      );
+      const modeEl = /** @type {HTMLSelectElement | null} */ (
+        el.querySelector(`[data-ws-mode="${CSS.escape(accountId)}"]`)
+      );
+      const mode = modeEl?.value === "rw" ? "rw" : "ro";
+      await applyWorkspace(accountId, pathEl?.value || "", mode);
+    });
+  });
+  el.querySelectorAll("[data-ws-remove]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const accountId = btn.getAttribute("data-ws-remove") || "";
+      const mountId = btn.getAttribute("data-ws-mount-id") || "";
+      if (!mountId) return;
+      const ans = await rpc("home.removeWorkspaceMount", {
+        accountId,
+        id: mountId,
+      });
+      if (ans.error) {
+        showToast(errMsg(ans) || t("profile.workspaceFailed"), "err");
+        return;
+      }
+      showToast(t("profile.workspaceRemoved"));
+      await refresh();
+    });
+  });
+  el.querySelectorAll("[data-ws-clear]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const accountId = btn.getAttribute("data-ws-clear") || "";
+      const ok = await confirmDialog({
+        title: t("profile.workspaceClearTitle"),
+        body: t("profile.workspaceClearBody"),
+        okLabel: t("profile.workspaceClear"),
+      });
+      if (!ok) return;
+      const ans = await rpc("home.clearWorkspace", { accountId });
+      if (ans.error) {
+        showToast(errMsg(ans) || t("profile.workspaceFailed"), "err");
+        return;
+      }
+      showToast(t("profile.workspaceCleared"));
+      await refresh();
+    });
+  });
+
+  el.querySelectorAll("[data-rename-account]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const accountId = btn.getAttribute("data-rename-account") || "";
+      const acct = accounts.find((a) => a.accountId === accountId);
+      if (!acct) return;
+      // Tauri/WKWebView blocks window.prompt — use in-app modal (same as chat rename).
+      const fields = await promptForm({
+        title: t("profile.renameTitle"),
+        fields: [
+          {
+            name: "displayName",
+            label: t("profile.renamePrompt"),
+            value: acct.displayName || "",
+            placeholder: t("profile.displayNamePlaceholder"),
+          },
+        ],
+        okLabel: t("profile.renameSave"),
+        cancelLabel: t("workflows.cancel"),
+      });
+      if (!fields) return;
+      const displayName = String(fields.displayName || "").trim();
+      if (!displayName) {
+        showToast(t("profile.renameFailed"), "err");
+        return;
+      }
+      const ans = await rpc("home.updateAccount", { accountId, displayName });
+      if (ans.error) {
+        showToast(errMsg(ans) || t("profile.renameFailed"), "err");
+        return;
+      }
+      showToast(t("profile.renameDone", { name: displayName }));
+      await refresh();
+    });
+  });
+
+  el.querySelectorAll("[data-tz-account]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const accountId = btn.getAttribute("data-tz-account") || "";
+      const acct = accounts.find((a) => a.accountId === accountId);
+      if (!acct) return;
+      const fields = await promptForm({
+        title: t("profile.timeZoneTitle"),
+        fields: [
+          {
+            name: "timeZone",
+            label: t("profile.timeZonePrompt"),
+            value: acct.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
+            placeholder: "Asia/Shanghai",
+          },
+        ],
+        okLabel: t("profile.timeZoneSave"),
+        cancelLabel: t("workflows.cancel"),
+      });
+      if (!fields) return;
+      const timeZone = String(fields.timeZone || "").trim();
+      if (!timeZone) {
+        showToast(t("profile.timeZoneFailed"), "err");
+        return;
+      }
+      const ans = await rpc("home.updateAccount", { accountId, timeZone });
+      if (ans.error) {
+        showToast(errMsg(ans) || t("profile.timeZoneFailed"), "err");
+        return;
+      }
+      showToast(t("profile.timeZoneDone", { tz: timeZone }));
+      await refresh();
+    });
+  });
+
+  el.querySelectorAll("[data-delete-account]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const accountId = btn.getAttribute("data-delete-account") || "";
+      const acct = accounts.find((a) => a.accountId === accountId);
+      if (!acct) return;
+      if (ownerAccountId && accountId === ownerAccountId) {
+        showToast(t("profile.deleteOwnerBlocked"), "err");
+        return;
+      }
+      const ok = await confirmDialog({
+        title: t("profile.deleteTitle"),
+        body: t("profile.deleteBody", {
+          name: acct.displayName || accountId,
+        }),
+        okLabel: t("profile.deleteConfirm"),
+      });
+      if (!ok) return;
+      const ans = await rpc("home.deleteAccount", {
+        accountId,
+        confirm: true,
+        force: true,
+      });
+      if (ans.error) {
+        showToast(errMsg(ans) || t("profile.deleteFailed"), "err");
+        return;
+      }
+      if (aid === accountId) setAccountId("");
+      showToast(t("profile.deleteDone", { name: acct.displayName || accountId }));
+      await refresh();
+    });
+  });
+
+  document.getElementById("create-acct")?.addEventListener("submit", async (ev) => {
+    ev.preventDefault();
+    const fd = new FormData(/** @type {HTMLFormElement} */ (ev.target));
+    const displayName = String(fd.get("displayName") || "").trim();
+    const ans = await rpc("home.createAccount", { displayName });
+    if (ans.error) {
+      showToast(errMsg(ans) || t("profile.createFailed"), "err");
+      return;
+    }
+    if (ans.result?.account?.accountId) {
+      setAccountId(ans.result.account.accountId);
+      showToast(
+        t("profile.added", {
+          name: ans.result.account.displayName || displayName,
+        }),
+      );
+    }
+    await refresh();
+  });
 }
 
 async function showView(id) {
@@ -2435,6 +4165,10 @@ async function showView(id) {
   } else if (id === "skills" || id === "workflows" || id === "jobs") {
     automationTab = id;
     id = "automation";
+  } else if (id === "accounts") {
+    // Legacy / top-bar “Manage profiles” → System → Profiles (first tab).
+    systemTab = "profiles";
+    id = "system";
   } else if (id === "artifacts") {
     systemTab = "files";
     id = "system";
@@ -2480,11 +4214,17 @@ async function showView(id) {
       return;
     }
 
-    if (id === "chat" || id === "homeChat") {
-      const isHome = id === "homeChat";
-      const log = isHome ? homeChatLog : chatLog;
-      const emptyKey = isHome ? "homeChat.empty" : "chat.empty";
-      const placeholderKey = isHome ? "homeChat.placeholder" : "chat.placeholder";
+    if (id === "chat" || id === "homeChat" || id === "schedulesChat") {
+      const purpose = purposeForView(id);
+      const isHome = dedicatedChat(purpose);
+      const log = chatLogForPurpose(purpose);
+      const emptyKey = emptyKeyForPurpose(purpose);
+      const placeholderKey =
+        purpose === "home"
+          ? "homeChat.placeholder"
+          : purpose === "schedules"
+            ? "schedulesChat.placeholder"
+            : "chat.placeholder";
       if (!aid) {
         el.innerHTML = `<div class="chat-page">
           <div class="empty">
@@ -2497,21 +4237,16 @@ async function showView(id) {
         return;
       }
       // Restore / refresh thread from daemon (session id may come from localStorage).
-      const purpose = isHome ? "home" : "general";
-      if (!(isHome ? homeChatSessionId : chatSessionId)) {
+      if (!readChatSessionId(purpose)) {
         const stored = loadStoredChatSessionId(aid, purpose);
-        if (stored) {
-          if (isHome) homeChatSessionId = stored;
-          else chatSessionId = stored;
-        }
+        if (stored) writeChatSessionId(purpose, stored);
       }
-      const existingSid = isHome ? homeChatSessionId : chatSessionId;
+      const existingSid = readChatSessionId(purpose);
       if (existingSid) {
         const ok = await hydrateChatLogFromTranscript(aid, existingSid, log);
         if (!ok && log.length === 0) {
           // Stale stored id — clear so the next send opens a fresh session.
-          if (isHome) homeChatSessionId = "";
-          else chatSessionId = "";
+          writeChatSessionId(purpose, "");
           try {
             localStorage.removeItem(chatSessionStorageKey(aid, purpose));
           } catch {
@@ -2523,36 +4258,279 @@ async function showView(id) {
         result: { approvals: [] },
       }));
       chatPendingApprovals = approvalsBody.result?.approvals || [];
-      const banner = isHome
-        ? `<p class="muted chat-home-banner">${escapeHtml(t("homeChat.banner"))}</p>`
+      await refreshChatPendingSchedule(readChatSessionId(purpose));
+      const bannerKey =
+        purpose === "home"
+          ? "homeChat.banner"
+          : purpose === "schedules"
+            ? "schedulesChat.banner"
+            : "";
+      const banner = bannerKey
+        ? `<p class="muted chat-home-banner">${escapeHtml(t(bannerKey))}</p>`
         : "";
-      const pendingFiles = pendingFilesForView(isHome);
+      const pendingFiles = pendingFilesForView(purpose);
       stopChatSpeech();
       const voiceTitle = chatVoiceSupported() ? t("chat.voiceHintOs") : chatOsDictationHint();
-      el.innerHTML = `<div class="chat-page">
-        ${banner}
-        <div class="chat-layout">
-          <div class="chat-log" id="chat-log">${chatThreadHtml(log, chatPendingApprovals, emptyKey)}</div>
-          <form id="chat-form" class="chat-composer">
-            <div class="chat-composer-main">
-              ${chatAttachChipsHtml(pendingFiles)}
-              <div class="chat-composer-row">
-                <input type="file" id="chat-file" multiple hidden />
-                <button type="button" class="secondary chat-attach-btn" id="chat-attach" title="${escapeHtml(t("chat.attachHint"))}">${escapeHtml(t("chat.attach"))}</button>
-                <button type="button" class="secondary chat-voice-btn" id="chat-voice" title="${escapeHtml(voiceTitle)}" aria-label="${escapeHtml(t("chat.voice"))}" aria-pressed="false">${chatMicIconSvg()}</button>
-                <input name="text" id="chat-input" placeholder="${escapeHtml(t(placeholderKey))}" autocomplete="off" />
-                <button type="submit" id="chat-send">${escapeHtml(t("app.send"))}</button>
+      const threadTitle = isHome
+        ? t(purpose === "schedules" ? "schedulesChat.title" : "homeChat.title")
+        : await currentGeneralChatTitle(aid);
+      const sessionsOpen = isHome ? true : chatSessionsOpenPreferred();
+      const sessionsRail = isHome ? "" : chatSessionsRailHtml();
+      el.innerHTML = `<div class="chat-page${isHome ? "" : ` chat-page-split${sessionsOpen ? "" : " is-sessions-collapsed"}`}">
+        ${sessionsRail}
+        <div class="chat-main">
+          ${chatChromeHtml(isHome, threadTitle, !sessionsOpen)}
+          ${banner}
+          <div class="chat-layout">
+            <div class="chat-log" id="chat-log">${chatThreadHtml(log, chatPendingApprovals, emptyKey)}</div>
+            <form id="chat-form" class="chat-composer">
+              <div class="chat-composer-main">
+                ${chatAttachChipsHtml(pendingFiles)}
+                <div class="chat-composer-row">
+                  <input type="file" id="chat-file" multiple hidden />
+                  <button type="button" class="secondary chat-attach-btn" id="chat-attach" title="${escapeHtml(t("chat.attachHint"))}" aria-label="${escapeHtml(t("chat.attach"))}">${chatAttachIconSvg()}</button>
+                  <button type="button" class="secondary chat-voice-btn" id="chat-voice" title="${escapeHtml(voiceTitle)}" aria-label="${escapeHtml(t("chat.voice"))}" aria-pressed="false">${chatMicIconSvg()}</button>
+                  <input name="text" id="chat-input" placeholder="${escapeHtml(t(placeholderKey))}" autocomplete="off" />
+                  <button type="submit" id="chat-send">${escapeHtml(t("app.send"))}</button>
+                </div>
               </div>
-            </div>
-          </form>
+            </form>
+          </div>
         </div>
       </div>`;
+      if (!isHome) {
+        bindChatSessionsRail(aid);
+        void (async () => {
+          if (!chatSessionsShowArchived) {
+            await pruneEmptyGeneralSessions(aid).catch(() => undefined);
+          }
+          await refreshChatSessionsRail(aid);
+        })();
+        document.getElementById("chat-sessions-collapse")?.addEventListener("click", () => {
+          applyChatSessionsCollapsed(true);
+          const openBtnHtml = `<button type="button" class="chat-sessions-open" id="chat-sessions-open" title="${escapeHtml(t("chat.showSessions"))}" aria-label="${escapeHtml(t("chat.showSessions"))}">${chatPanelIconSvg(15)}</button>`;
+          const left = document.querySelector(".chat-chrome-left");
+          if (left && !document.getElementById("chat-sessions-open")) {
+            left.insertAdjacentHTML("afterbegin", openBtnHtml);
+            document.getElementById("chat-sessions-open")?.addEventListener("click", () => {
+              applyChatSessionsCollapsed(false);
+              document.getElementById("chat-sessions-open")?.remove();
+              void refreshChatSessionsRail(aid);
+            });
+          }
+        });
+        document.getElementById("chat-sessions-open")?.addEventListener("click", () => {
+          applyChatSessionsCollapsed(false);
+          document.getElementById("chat-sessions-open")?.remove();
+          void refreshChatSessionsRail(aid);
+        });
+        document.getElementById("chat-sessions-archived")?.addEventListener("click", () => {
+          chatSessionsShowArchived = true;
+          void showView("chat");
+        });
+        document.getElementById("chat-sessions-back")?.addEventListener("click", () => {
+          chatSessionsShowArchived = false;
+          void showView("chat");
+        });
+      }
       const logEl = document.getElementById("chat-log");
       if (logEl) {
         if (chatPendingApprovals.length) {
           bindApprovalActions(logEl, chatPendingApprovals, () => showView(id));
         }
+        if (chatPendingSchedule) {
+          bindScheduleCardActions(logEl, () => showView(id));
+        }
         logEl.scrollTop = logEl.scrollHeight;
+        logEl.addEventListener("click", async (ev) => {
+          const raw = /** @type {EventTarget | null} */ (ev.target);
+          const el = raw instanceof Element ? raw : raw?.parentElement;
+          const artBtn = el?.closest?.("[data-artifact-path]");
+          if (artBtn) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const path = artBtn.getAttribute("data-artifact-path");
+            if (!path || !aid) return;
+            await openArtifactViewer({ accountId: aid, path });
+            return;
+          }
+          const copyBtn = el?.closest?.("[data-copy-msg]");
+          if (copyBtn) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const bubble = copyBtn.closest(".bubble");
+            const body = bubble?.querySelector(".bubble-body");
+            let text = "";
+            const threadLog = chatLogForPurpose(purpose);
+            const mid = bubble?.getAttribute("data-message-id");
+            if (mid) {
+              const row = threadLog.find((x) => x.messageId === mid);
+              if (row) text = displayChatText(row.text || "");
+            }
+            if (!text && body) text = body.innerText || body.textContent || "";
+            text = String(text || "").trim();
+            if (!text) return;
+            try {
+              await navigator.clipboard.writeText(text);
+              copyBtn.classList.add("is-copied");
+              showToast(t("chat.copied"), "ok");
+              setTimeout(() => copyBtn.classList.remove("is-copied"), 1200);
+            } catch (err) {
+              showToast(String(err?.message || err), "err");
+            }
+            return;
+          }
+          const btn = el?.closest?.("[data-del-msg]");
+          if (!btn) return;
+          ev.preventDefault();
+          ev.stopPropagation();
+          const bubble = btn.closest(".bubble[data-message-id]");
+          const messageId = bubble?.getAttribute("data-message-id");
+          if (!messageId || !aid) return;
+          try {
+            await deleteChatMessage(aid, purpose, messageId);
+            refreshOpenChatView();
+            showToast(t("chat.deleteMessageDone"), "ok");
+          } catch (err) {
+            showToast(String(err?.message || err), "err");
+          }
+        });
+      }
+      document.getElementById("chat-new")?.addEventListener("click", async () => {
+        if (!aid || isHome) return;
+        try {
+          const started = await startNewGeneralChat(aid);
+          if (started === null) return;
+          await showView("chat");
+        } catch (err) {
+          showToast(String(err?.message || err), "err");
+        }
+      });
+      const runRenameCurrent = async () => {
+        if (!aid || isHome) return;
+        // No session yet (named New chat before first send) — edit the pending title.
+        if (!chatSessionId) {
+          const fields = await promptForm({
+            title: t("chat.renameAction"),
+            fields: [
+              {
+                name: "title",
+                label: t("chat.renamePrompt"),
+                value: pendingNewChatTitle,
+                placeholder: t("chat.newNamePlaceholder"),
+              },
+            ],
+            okLabel: t("chat.renameAction"),
+            cancelLabel: t("workflows.cancel"),
+          });
+          if (!fields) return;
+          pendingNewChatTitle = String(fields.title || "").trim().slice(0, 120);
+          const titleEl = document.getElementById("chat-rename");
+          if (titleEl) {
+            titleEl.textContent = pendingNewChatTitle || t("chat.new");
+          }
+          return;
+        }
+        const cur = await currentGeneralChatTitle(aid);
+        const title = await promptRenameGeneralChat(aid, chatSessionId, cur);
+        if (!title) return;
+        const titleEl = document.getElementById("chat-rename");
+        if (titleEl) titleEl.textContent = title;
+        void refreshChatSessionsRail(aid);
+      };
+      document.getElementById("chat-rename")?.addEventListener("click", () => {
+        void runRenameCurrent();
+      });
+      document.getElementById("chat-rename-icon")?.addEventListener("click", () => {
+        void runRenameCurrent();
+      });
+      const trashBtn = document.getElementById("chat-trash");
+      const trashMenu = document.getElementById("chat-trash-menu");
+      const setTrashMenuOpen = (open) => {
+        if (!trashMenu || !trashBtn) return;
+        trashMenu.hidden = !open;
+        trashBtn.setAttribute("aria-expanded", open ? "true" : "false");
+      };
+      trashBtn?.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        if (!trashMenu) return;
+        setTrashMenuOpen(trashMenu.hidden);
+      });
+      trashMenu?.querySelectorAll("[data-trash-action]").forEach((btn) => {
+        btn.addEventListener("click", async (ev) => {
+          ev.stopPropagation();
+          const action = btn.getAttribute("data-trash-action");
+          if (!aid || !action) return;
+          if (action === "rename") {
+            setTrashMenuOpen(false);
+            await runRenameCurrent();
+            return;
+          }
+          setTrashMenuOpen(false);
+          try {
+            if (action === "empty") {
+              if (
+                !(await confirmDialog({
+                  title: t("chat.emptyAction"),
+                  body: t("chat.emptyConfirm"),
+                  okLabel: t("chat.emptyAction"),
+                  danger: true,
+                }))
+              ) {
+                return;
+              }
+              await clearCurrentChatTranscript(aid, purpose);
+              refreshOpenChatView();
+              showToast(t("chat.emptyDone"), "ok");
+            } else if (action === "archive") {
+              if (isHome) return;
+              if (
+                !(await confirmDialog({
+                  title: t("chat.archiveAction"),
+                  body: t("chat.archiveConfirm"),
+                  okLabel: t("chat.archiveAction"),
+                }))
+              ) {
+                return;
+              }
+              await archiveCurrentChat(aid, purpose);
+              await startNewGeneralChat(aid, { askName: false });
+              await showView("chat");
+              showToast(t("chat.archiveDone"), "ok");
+            } else if (action === "remove") {
+              if (
+                !(await confirmDialog({
+                  title: t("chat.removeAction"),
+                  body: t("chat.removeConfirm"),
+                  okLabel: t("chat.removeAction"),
+                  danger: true,
+                }))
+              ) {
+                return;
+              }
+              await removeCurrentChat(aid, purpose);
+              if (!isHome) await startNewGeneralChat(aid, { askName: false });
+              await showView(id);
+              showToast(t("chat.removeDone"), "ok");
+            }
+          } catch (err) {
+            showToast(String(err?.message || err), "err");
+          }
+        });
+      });
+      if (!document.documentElement.dataset.chatTrashOutsideBound) {
+        document.documentElement.dataset.chatTrashOutsideBound = "1";
+        document.addEventListener("mousedown", (ev) => {
+          const target = ev.target;
+          if (!(target instanceof Element)) return;
+          if (target.closest(".chat-trash-wrap")) return;
+          const menu = document.getElementById("chat-trash-menu");
+          const btn = document.getElementById("chat-trash");
+          if (menu && !menu.hidden) {
+            menu.hidden = true;
+            btn?.setAttribute("aria-expanded", "false");
+          }
+        });
       }
       const form = document.getElementById("chat-form");
       const sendBtn = document.getElementById("chat-send");
@@ -2563,7 +4541,7 @@ async function showView(id) {
       const refreshAttachUi = () => {
         const list = document.getElementById("chat-attach-list");
         const wrap = document.querySelector(".chat-composer-main");
-        const files = pendingFilesForView(isHome);
+        const files = pendingFilesForView(purpose);
         const html = chatAttachChipsHtml(files);
         if (list) {
           if (html) list.outerHTML = html;
@@ -2575,8 +4553,8 @@ async function showView(id) {
           btn.addEventListener("click", () => {
             const rid = btn.getAttribute("data-attach-remove");
             setPendingFilesForView(
-              isHome,
-              pendingFilesForView(isHome).filter((f) => f.id !== rid),
+              purpose,
+              pendingFilesForView(purpose).filter((f) => f.id !== rid),
             );
             refreshAttachUi();
           });
@@ -2587,7 +4565,7 @@ async function showView(id) {
         const picked = Array.from(fileInput.files || []);
         fileInput.value = "";
         if (!picked.length) return;
-        let next = [...pendingFilesForView(isHome)];
+        let next = [...pendingFilesForView(purpose)];
         let added = 0;
         for (const file of picked) {
           if (next.length >= CHAT_ATTACH_MAX_FILES) {
@@ -2613,7 +4591,7 @@ async function showView(id) {
           });
           added += 1;
         }
-        setPendingFilesForView(isHome, next);
+        setPendingFilesForView(purpose, next);
         refreshAttachUi();
         if (added > 0) {
           showToast(
@@ -2632,7 +4610,7 @@ async function showView(id) {
         stopChatSpeech();
         const input = document.getElementById("chat-input");
         const text = String(new FormData(ev.target).get("text") || "").trim();
-        const localFiles = [...pendingFilesForView(isHome)];
+        const localFiles = [...pendingFilesForView(purpose)];
         if (!text && localFiles.length === 0) {
           showToast(t("chat.needTextOrAttach"), "err");
           return;
@@ -2681,7 +4659,7 @@ async function showView(id) {
           if (voiceBtn) voiceBtn.disabled = false;
           return;
         }
-        setPendingFilesForView(isHome, []);
+        setPendingFilesForView(purpose, []);
         refreshAttachUi();
         log.push({
           role: "user",
@@ -2691,8 +4669,24 @@ async function showView(id) {
         log.push({ role: "system", text: t("chat.thinking") });
         if (input) input.value = "";
         renderChatLogDom(log, emptyKey);
+        /** @type {string} */
+        let sessionIdForTurn = "";
         try {
-          const sessionId = await ensureChatSession(aid, isHome ? "home" : "general");
+          const sessionId = await ensureChatSession(aid, purpose);
+          sessionIdForTurn = sessionId;
+          markChatTurnInFlight(sessionId, true);
+          /** Design §7.4 / 2026-10-19m — browser local now/TZ/locale (no GPS). */
+          const clientContext = {
+            clientNow: new Date().toISOString(),
+            timeZone:
+              (typeof Intl !== "undefined" &&
+                Intl.DateTimeFormat().resolvedOptions().timeZone) ||
+              undefined,
+            locale: getLocale() ||
+              (typeof navigator !== "undefined" && navigator.language
+                ? navigator.language.split(/[-_]/)[0]
+                : "en"),
+          };
           const sent = await rpc(
             "home.sendMessage",
             {
@@ -2700,10 +4694,12 @@ async function showView(id) {
               sessionId,
               text: text || "",
               ...(media.length ? { media } : {}),
+              clientContext,
             },
             { timeoutMs: 60_000 },
           );
           if (sent.error) {
+            markChatTurnInFlight(sessionId, false);
             clearThinkingPlaceholders(log);
             log.push({ role: "system", text: errMsg(sent) });
             showToast(errMsg(sent) || t("chat.sendFailed"), "err");
@@ -2720,13 +4716,30 @@ async function showView(id) {
               }
             }
           }
+          // Pick up durable messageIds for the user line so Delete works before the reply.
+          await hydrateChatLogFromTranscript(aid, sessionId, log);
+          const thinking = t("chat.thinking");
+          if (!log.some((m) => m.role === "system" && m.text === thinking)) {
+            log.push({ role: "system", text: thinking });
+          }
+          if (activeView === id) renderChatLogDom(log, emptyKey);
           // Block until transcript has the assistant reply (events are best-effort).
           await waitForAssistantReply(aid, sessionId, log, 90_000);
           // Refresh inline approvals for this turn (after the matching bubbles).
           const ap = await rpc("home.listApprovals", { accountId: aid }).catch(() => null);
           chatPendingApprovals = ap?.result?.approvals || [];
           if (activeView === id) renderChatLogDom(log, emptyKey);
+          if (!isHome && activeView === "chat") {
+            void refreshChatSessionsRail(aid);
+            const titleEl = document.querySelector(".chat-chrome-title");
+            if (titleEl) {
+              void currentGeneralChatTitle(aid).then((title) => {
+                if (titleEl.isConnected) titleEl.textContent = title;
+              });
+            }
+          }
         } catch (e) {
+          if (sessionIdForTurn) markChatTurnInFlight(sessionIdForTurn, false);
           clearThinkingPlaceholders(log);
           const msg = e instanceof Error ? e.message : String(e);
           log.push({ role: "system", text: msg });
@@ -2736,6 +4749,8 @@ async function showView(id) {
           );
           renderChatLogDom(log, emptyKey);
         } finally {
+          // Do not clear chatTurnsInFlight here — first assistant chunk arrives
+          // before tools/finish; home:turn-finished owns the busy flag.
           if (sendBtn) sendBtn.disabled = false;
           if (attachBtn) attachBtn.disabled = false;
           if (voiceBtn) voiceBtn.disabled = false;
@@ -2744,69 +4759,6 @@ async function showView(id) {
             input.focus();
           }
         }
-      });
-      return;
-    }
-
-    if (id === "accounts") {
-      const cards =
-        accounts.length === 0
-          ? `<div class="empty">
-              <p>${escapeHtml(t("profile.empty"))}</p>
-              <p class="muted">${escapeHtml(t("profile.emptyHint"))}</p>
-            </div>`
-          : accounts
-              .map(
-                (a) => `<div class="card">
-            <strong>${escapeHtml(a.displayName || a.accountId)}</strong>
-            ${a.accountId === aid ? `<span class="badge">${escapeHtml(t("app.active"))}</span>` : ""}
-            ${
-              a.createdAt
-                ? `<div class="muted">${escapeHtml(t("profile.addedAt", { date: a.createdAt }))}</div>`
-                : ""
-            }
-            <div class="row">
-              <button type="button" class="secondary" data-use="${escapeHtml(a.accountId)}">${escapeHtml(
-                t("app.use"),
-              )}</button>
-            </div>
-          </div>`,
-              )
-              .join("");
-      el.innerHTML = `<h2>${escapeHtml(t("profile.title"))}</h2>
-        <p class="muted">${escapeHtml(t("profile.intro"))}</p>
-        ${cards}
-        <form id="create-acct" class="card">
-          <h3>${escapeHtml(t("profile.addTitle"))}</h3>
-          <label>${escapeHtml(t("profile.displayName"))} <input name="displayName" required placeholder="${escapeHtml(
-            t("profile.displayNamePlaceholder"),
-          )}" autocomplete="nickname" /></label>
-          <button type="submit">${escapeHtml(t("app.add"))}</button>
-        </form>`;
-      el.querySelectorAll("[data-use]").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          setAccountId(btn.getAttribute("data-use") || "");
-          const name =
-            accounts.find((a) => a.accountId === btn.getAttribute("data-use"))?.displayName ||
-            btn.getAttribute("data-use");
-          showToast(t("profile.using", { name }));
-          showView("accounts");
-        });
-      });
-      document.getElementById("create-acct")?.addEventListener("submit", async (ev) => {
-        ev.preventDefault();
-        const fd = new FormData(ev.target);
-        const displayName = String(fd.get("displayName") || "").trim();
-        const ans = await rpc("home.createAccount", { displayName });
-        if (ans.error) {
-          showToast(errMsg(ans) || t("profile.createFailed"), "err");
-          return;
-        }
-        if (ans.result?.account?.accountId) {
-          setAccountId(ans.result.account.accountId);
-          showToast(t("profile.added", { name: ans.result.account.displayName || displayName }));
-        }
-        await showView("accounts");
       });
       return;
     }
@@ -2821,6 +4773,8 @@ async function showView(id) {
         ${tab("homeassistant", "nav.homeAssistant")}
         ${tab("mqtt", "nav.mqtt")}
         ${tab("channels", "nav.channels")}
+        ${tab("websearch", "nav.webSearch")}
+        ${tab("browser", "nav.browserControl")}
       </div>`;
       const shell = (panel) =>
         `<h2>${escapeHtml(t("nav.connections"))}</h2>${tabsHtml}<div class="page-tab-panel">${panel}</div>`;
@@ -2832,7 +4786,9 @@ async function showView(id) {
               next !== "pairing" &&
               next !== "channels" &&
               next !== "homeassistant" &&
-              next !== "mqtt"
+              next !== "mqtt" &&
+              next !== "websearch" &&
+              next !== "browser"
             ) {
               return;
             }
@@ -4184,6 +6140,264 @@ async function showView(id) {
           showToast(t("channels.haDemoStarted"), "ok");
           await refreshHaHomeChatReady();
           await showView("homeassistant");
+        });
+        return;
+      }
+
+      if (connectionsTab === "websearch") {
+        const ans = await rpc("home.getWebSearchConfig", {}).catch(() => null);
+        const cfg = ans?.result || {
+          enabled: true,
+          provider: "duckduckgo",
+          hasApiKey: false,
+          ready: true,
+          fallback: "none",
+          unattendedBrowser: false,
+          browserRuntime: "missing",
+          browserInstallHint: "",
+        };
+        const provider = cfg.provider || "duckduckgo";
+        const needsKey = provider === "brave" || provider === "tavily";
+        const fallbackOn = cfg.fallback === "browser";
+        const browserReady = cfg.browserRuntime === "ready";
+        const installCmd = cfg.browserInstallHint || "npx playwright install chromium";
+        const readyBadge = cfg.ready
+          ? `<span class="pill ok">${escapeHtml(t("webSearch.ready"))}</span>`
+          : `<span class="pill warn">${escapeHtml(t("webSearch.notReady"))}</span>`;
+        const browserBadge = browserReady
+          ? `<span class="pill ok">${escapeHtml(t("webSearch.browserReady"))}</span>`
+          : `<span class="pill warn">${escapeHtml(t("webSearch.browserMissing"))}</span>`;
+        el.innerHTML = shell(`
+          <p class="lede">${escapeHtml(t("webSearch.lede"))}</p>
+          <div class="card-row" style="align-items:center;gap:0.75rem;margin-bottom:1rem">
+            ${readyBadge}
+            ${
+              cfg.unavailableReason
+                ? `<span class="muted">${escapeHtml(cfg.unavailableReason)}</span>`
+                : ""
+            }
+          </div>
+          <label class="field">
+            <span>${escapeHtml(t("webSearch.enabled"))}</span>
+            <input type="checkbox" id="websearch-enabled" ${cfg.enabled !== false ? "checked" : ""} />
+          </label>
+          <label class="field">
+            <span>${escapeHtml(t("webSearch.provider"))}</span>
+            <select id="websearch-provider">
+              <option value="duckduckgo" ${provider === "duckduckgo" ? "selected" : ""}>${escapeHtml(t("webSearch.provider.duckduckgo"))}</option>
+              <option value="brave" ${provider === "brave" ? "selected" : ""}>${escapeHtml(t("webSearch.provider.brave"))}</option>
+              <option value="tavily" ${provider === "tavily" ? "selected" : ""}>${escapeHtml(t("webSearch.provider.tavily"))}</option>
+            </select>
+          </label>
+          <label class="field" id="websearch-key-wrap" style="${needsKey ? "" : "display:none"}">
+            <span>${escapeHtml(t("webSearch.apiKey"))}${cfg.hasApiKey ? ` (${escapeHtml(t("webSearch.keySet"))})` : ""}</span>
+            <input type="password" id="websearch-api-key" autocomplete="off" placeholder="${escapeHtml(t("webSearch.apiKeyPlaceholder"))}" />
+          </label>
+          <label class="field">
+            <span>${escapeHtml(t("webSearch.browserFallback"))}</span>
+            <input type="checkbox" id="websearch-fallback" ${fallbackOn ? "checked" : ""} />
+          </label>
+          <div class="card-row" style="align-items:center;gap:0.75rem;margin:0.5rem 0">
+            ${browserBadge}
+            <span class="muted">${escapeHtml(t("webSearch.browserFallbackHint"))}</span>
+          </div>
+          <div class="card" id="websearch-install-card" style="margin:0.75rem 0;${
+            !browserReady && fallbackOn ? "" : "display:none"
+          }">
+            <p class="muted" style="margin:0 0 0.5rem">${escapeHtml(t("webSearch.installHintNote"))}</p>
+            <code id="websearch-install-hint" style="display:block;user-select:all;word-break:break-all">${escapeHtml(installCmd)}</code>
+            <button type="button" class="ghost" id="websearch-copy-hint" style="margin-top:0.5rem">${escapeHtml(t("webSearch.copyHint"))}</button>
+          </div>
+          <label class="field">
+            <span>${escapeHtml(t("webSearch.unattendedBrowser"))}</span>
+            <input type="checkbox" id="websearch-unattended-browser" ${cfg.unattendedBrowser === true ? "checked" : ""} />
+          </label>
+          <p class="muted">${escapeHtml(t("webSearch.hint"))}</p>
+          <div class="row-actions">
+            <button type="button" class="primary" id="websearch-save">${escapeHtml(t("app.save"))}</button>
+          </div>
+        `);
+        wireTabs();
+        const syncKeyVisibility = () => {
+          const p = document.getElementById("websearch-provider")?.value;
+          const wrap = document.getElementById("websearch-key-wrap");
+          if (wrap) wrap.style.display = p === "brave" || p === "tavily" ? "" : "none";
+        };
+        const syncInstallCard = () => {
+          const card = document.getElementById("websearch-install-card");
+          if (!card) return;
+          // Show when Chromium missing and Owner enables (or already has) browser fallback.
+          const wantFallback = !!document.getElementById("websearch-fallback")?.checked;
+          card.style.display = !browserReady && wantFallback ? "" : "none";
+        };
+        document.getElementById("websearch-provider")?.addEventListener("change", syncKeyVisibility);
+        document.getElementById("websearch-fallback")?.addEventListener("change", syncInstallCard);
+        syncInstallCard();
+        document.getElementById("websearch-copy-hint")?.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(installCmd);
+            showToast(t("webSearch.hintCopied"), "ok");
+          } catch {
+            showToast(installCmd, "ok");
+          }
+        });
+        document.getElementById("websearch-save")?.addEventListener("click", async () => {
+          const enabled = !!document.getElementById("websearch-enabled")?.checked;
+          const nextProvider = document.getElementById("websearch-provider")?.value || "duckduckgo";
+          const keyRaw = document.getElementById("websearch-api-key")?.value ?? "";
+          const fallback = document.getElementById("websearch-fallback")?.checked
+            ? "browser"
+            : "none";
+          const unattendedBrowser = !!document.getElementById("websearch-unattended-browser")
+            ?.checked;
+          const params = { enabled, provider: nextProvider, fallback, unattendedBrowser };
+          if (keyRaw.trim()) params.apiKey = keyRaw.trim();
+          const saved = await rpc("home.setWebSearchConfig", params);
+          if (saved.error) {
+            showToast(errMsg(saved) || t("webSearch.saveFailed"), "err");
+            return;
+          }
+          showToast(t("app.saved"), "ok");
+          await showView("connections");
+        });
+        return;
+      }
+
+      if (connectionsTab === "browser") {
+        const ans = await rpc("home.getBrowserControlConfig", {});
+        if (ans.error) {
+          el.innerHTML = shell(`
+            <p class="lede">${escapeHtml(t("browserControl.lede"))}</p>
+            <p class="err">${escapeHtml(errMsg(ans) || t("browserControl.loadFailed"))}</p>
+          `);
+          wireTabs();
+          return;
+        }
+        const cfg = ans?.result || {};
+        const browserReady = cfg.browserRuntime === "ready";
+        const installCmd = cfg.browserInstallHint || "npx playwright install chromium";
+        const def = cfg.defaultProfile || "managed";
+        const ackDone = cfg.elevatedAcknowledged === true;
+        const readyBadge = cfg.ready
+          ? `<span class="pill ok">${escapeHtml(t("browserControl.ready"))}</span>`
+          : `<span class="pill warn">${escapeHtml(t("browserControl.notReady"))}</span>`;
+        const runtimeBadge = browserReady
+          ? `<span class="pill ok">${escapeHtml(t("webSearch.browserReady"))}</span>`
+          : `<span class="pill warn">${escapeHtml(t("webSearch.browserMissing"))}</span>`;
+        const personalBadge = cfg.personalReady
+          ? `<span class="pill ok">${escapeHtml(t("browserControl.personalReady"))}</span>`
+          : `<span class="pill warn">${escapeHtml(t("browserControl.personalNotReady"))}</span>`;
+        const remoteBadge = cfg.remoteReady
+          ? `<span class="pill ok">${escapeHtml(t("browserControl.remoteReady"))}</span>`
+          : `<span class="pill warn">${escapeHtml(t("browserControl.remoteNotReady"))}</span>`;
+        el.innerHTML = shell(`
+          <p class="lede">${escapeHtml(t("browserControl.lede"))}</p>
+          <div class="card-row" style="align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap">
+            ${readyBadge}
+            ${runtimeBadge}
+            ${personalBadge}
+            ${remoteBadge}
+            ${
+              cfg.unavailableReason
+                ? `<span class="muted">${escapeHtml(cfg.unavailableReason)}</span>`
+                : ""
+            }
+          </div>
+          <label class="field">
+            <span>${escapeHtml(t("browserControl.enabled"))}</span>
+            <input type="checkbox" id="browserctl-enabled" ${cfg.enabled === true ? "checked" : ""} />
+          </label>
+          <label class="field">
+            <span>${escapeHtml(t("browserControl.unattended"))}</span>
+            <input type="checkbox" id="browserctl-unattended" ${cfg.unattendedEnabled === true ? "checked" : ""} />
+          </label>
+          <label class="field">
+            <span>${escapeHtml(t("browserControl.defaultProfile"))}</span>
+            <select id="browserctl-default">
+              <option value="managed" ${def === "managed" ? "selected" : ""}>${escapeHtml(t("browserControl.profileManaged"))}</option>
+              <option value="personal" ${def === "personal" ? "selected" : ""}>${escapeHtml(t("browserControl.profilePersonal"))}</option>
+              <option value="remote" ${def === "remote" ? "selected" : ""}>${escapeHtml(t("browserControl.profileRemote"))}</option>
+            </select>
+          </label>
+          <div class="card" style="margin:0.75rem 0">
+            <p class="muted" style="margin:0 0 0.5rem">${escapeHtml(t("browserControl.elevatedWarn"))}</p>
+            ${
+              ackDone
+                ? `<p class="muted" id="browserctl-ack-done">${escapeHtml(t("browserControl.acknowledged"))}</p>`
+                : `<label class="field">
+              <span>${escapeHtml(t("browserControl.acknowledge"))}</span>
+              <input type="checkbox" id="browserctl-ack" />
+            </label>`
+            }
+            <label class="field">
+              <span>${escapeHtml(t("browserControl.personalEnabled"))}</span>
+              <input type="checkbox" id="browserctl-personal" ${cfg.personalEnabled === true ? "checked" : ""} />
+            </label>
+            <label class="field">
+              <span>${escapeHtml(t("browserControl.personalCdp"))}</span>
+              <input type="text" id="browserctl-personal-cdp" value="${escapeHtml(cfg.personalCdpEndpoint || "http://127.0.0.1:9222")}" />
+            </label>
+            <label class="field">
+              <span>${escapeHtml(t("browserControl.remoteEnabled"))}</span>
+              <input type="checkbox" id="browserctl-remote" ${cfg.remoteEnabled === true ? "checked" : ""} />
+            </label>
+            <label class="field">
+              <span>${escapeHtml(t("browserControl.remoteCdp"))}</span>
+              <input type="text" id="browserctl-remote-url" value="${escapeHtml(cfg.remoteCdpUrl || "")}" placeholder="wss://…" />
+            </label>
+            <label class="field">
+              <span>${escapeHtml(t("browserControl.remoteToken"))}${cfg.hasRemoteToken ? ` (${escapeHtml(t("browserControl.tokenSet"))})` : ""}</span>
+              <input type="password" id="browserctl-remote-token" autocomplete="off" placeholder="${escapeHtml(t("browserControl.tokenPlaceholder"))}" />
+            </label>
+          </div>
+          <div class="card" id="browserctl-install-card" style="margin:0.75rem 0;${!browserReady ? "" : "display:none"}">
+            <p class="muted" style="margin:0 0 0.5rem">${escapeHtml(t("webSearch.installHintNote"))}</p>
+            <code style="display:block;user-select:all;word-break:break-all">${escapeHtml(installCmd)}</code>
+            <button type="button" class="ghost" id="browserctl-copy-hint" style="margin-top:0.5rem">${escapeHtml(t("webSearch.copyHint"))}</button>
+          </div>
+          <p class="muted">${escapeHtml(t("browserControl.hint"))}</p>
+          <div class="row-actions">
+            <button type="button" class="primary" id="browserctl-save">${escapeHtml(t("app.save"))}</button>
+          </div>
+        `);
+        wireTabs();
+        document.getElementById("browserctl-copy-hint")?.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(installCmd);
+            showToast(t("webSearch.hintCopied"), "ok");
+          } catch {
+            showToast(installCmd, "ok");
+          }
+        });
+        document.getElementById("browserctl-save")?.addEventListener("click", async () => {
+          const enabled = !!document.getElementById("browserctl-enabled")?.checked;
+          const unattendedEnabled = !!document.getElementById("browserctl-unattended")?.checked;
+          const defaultProfile = document.getElementById("browserctl-default")?.value || "managed";
+          const acknowledgeElevated = !!document.getElementById("browserctl-ack")?.checked;
+          const personalEnabled = !!document.getElementById("browserctl-personal")?.checked;
+          const personalCdpEndpoint = document.getElementById("browserctl-personal-cdp")?.value ?? "";
+          const remoteEnabled = !!document.getElementById("browserctl-remote")?.checked;
+          const remoteCdpUrl = document.getElementById("browserctl-remote-url")?.value ?? "";
+          const remoteTokenRaw = document.getElementById("browserctl-remote-token")?.value ?? "";
+          const patch = {
+            enabled,
+            unattendedEnabled,
+            defaultProfile,
+            personalEnabled,
+            personalCdpEndpoint,
+            remoteEnabled,
+            remoteCdpUrl,
+          };
+          // Write-once ack — only send true when newly checked (already-acked has no checkbox).
+          if (acknowledgeElevated) patch.acknowledgeElevated = true;
+          if (remoteTokenRaw.length > 0) patch.remoteToken = remoteTokenRaw;
+          const saved = await rpc("home.setBrowserControlConfig", patch);
+          if (saved.error) {
+            showToast(errMsg(saved) || t("browserControl.saveFailed"), "err");
+            return;
+          }
+          showToast(t("app.saved"), "ok");
+          await showView("connections");
         });
         return;
       }
@@ -5649,6 +7863,11 @@ async function showView(id) {
         }
         const listed = await rpc("home.listMemory", { accountId: aid });
         const mem = listed.result || {};
+        const identityAns = await rpc("home.getIdentity", { accountId: aid }).catch(() => null);
+        const identityFromRpc =
+          typeof identityAns?.result?.markdown === "string" ? identityAns.result.markdown : "";
+        // Always show a body: RPC may be missing on an older daemon, or file not seeded yet.
+        const identityMd = identityFromRpc.trim() ? identityFromRpc : DEFAULT_IDENTITY_MD;
         const pendingLearns = await rpc("home.listPendingLearns", { accountId: aid });
         const learns =
           pendingLearns.result?.pending ||
@@ -5692,6 +7911,7 @@ async function showView(id) {
         const noteLabel = (path) => {
           const p = String(path || "");
           if (p === "profile.json" || p.endsWith("/profile.json")) return t("memory.noteProfile");
+          if (p === "IDENTITY.md" || p.endsWith("/IDENTITY.md")) return t("memory.noteIdentity");
           if (p === "MEMORY.md" || p.endsWith("/MEMORY.md")) return t("memory.noteMemory");
           if (/memory\/\d{4}-\d{2}-\d{2}\.md$/i.test(p) || /^\d{4}-\d{2}-\d{2}\.md$/i.test(p)) {
             return t("memory.noteDaily");
@@ -5810,6 +8030,16 @@ async function showView(id) {
               count: String(mem.pendingLearnCount ?? list.length),
               cap: String(mem.pendingLearnCap ?? "?"),
             }))}</p>
+          <form id="mem-identity" class="card">
+            <h3>${escapeHtml(t("memory.identityTitle"))}</h3>
+            <p class="muted mem-caps-hint">${escapeHtml(t("memory.identityHint"))}</p>
+            <textarea id="mem-identity-md" name="markdown" rows="14" class="mem-identity-editor" spellcheck="true">${escapeHtml(identityMd)}</textarea>
+            <div class="row" style="margin-top:0.65rem;gap:0.5rem;flex-wrap:wrap">
+              <button type="submit">${escapeHtml(t("memory.identitySave"))}</button>
+              <button type="button" class="secondary" id="mem-identity-reset">${escapeHtml(t("memory.identityReset"))}</button>
+            </div>
+            <p id="mem-identity-status" class="muted" hidden></p>
+          </form>
           <form id="mem-settings" class="card">
             <h3>${escapeHtml(t("memory.flushReview"))}</h3>
             <label class="mem-check">
@@ -5837,6 +8067,41 @@ async function showView(id) {
             ${cards || `<p class="muted">${escapeHtml(t("memory.queueEmpty"))}</p>`}
           </div>`);
         wireTabs();
+        document.getElementById("mem-identity")?.addEventListener("submit", async (ev) => {
+          ev.preventDefault();
+          const ta = document.getElementById("mem-identity-md");
+          const status = document.getElementById("mem-identity-status");
+          const markdown = ta instanceof HTMLTextAreaElement ? ta.value : "";
+          const ans = await rpc("home.setIdentity", { accountId: aid, markdown });
+          if (status) {
+            status.hidden = false;
+            if (ans.error) {
+              status.textContent = errMsg(ans);
+              status.className = "le-error";
+            } else {
+              status.textContent = t("memory.identitySaved");
+              status.className = "muted";
+              if (ta instanceof HTMLTextAreaElement && typeof ans.result?.markdown === "string") {
+                ta.value = ans.result.markdown;
+              }
+            }
+          }
+        });
+        document.getElementById("mem-identity-reset")?.addEventListener("click", async () => {
+          const ok = await confirmDialog({
+            title: t("memory.identityReset"),
+            body: t("memory.identityResetConfirm"),
+            okLabel: t("memory.identityReset"),
+            danger: true,
+          });
+          if (!ok) return;
+          const ans = await rpc("home.setIdentity", {
+            accountId: aid,
+            markdown: DEFAULT_IDENTITY_MD,
+          });
+          if (!ans.error) await showView("memory");
+          else showToast(errMsg(ans), "err");
+        });
         document.getElementById("mem-settings")?.addEventListener("submit", async (ev) => {
           ev.preventDefault();
           const fd = new FormData(ev.target);
@@ -6456,6 +8721,24 @@ async function showView(id) {
                 <pre class="skill-howto-md"><code>${escapeHtml(WORKFLOW_HOWTO_LINEAR)}</code></pre>
               </details>
             </div>
+            <div class="wf-howto-block" data-wf-demo="docs">
+              <div class="wf-howto-head">
+                <h4 class="muted">${escapeHtml(t("workflows.howtoDocs"))}</h4>
+                <span class="wf-howto-actions">
+                  <button type="button" class="secondary" id="wf-test-docs">${escapeHtml(t("workflows.howtoTest"))}</button>
+                  <button type="button" id="wf-try-docs">${escapeHtml(t("workflows.howtoTry"))}</button>
+                </span>
+              </div>
+              <p class="wf-howto-what">${escapeHtml(t("workflows.howtoDocsWhat"))}</p>
+              <p class="muted wf-howto-blurb">${escapeHtml(t("workflows.howtoDocsHint"))}</p>
+              <div class="wf-demo-saved" id="wf-saved-docs" hidden></div>
+              <div class="wf-demo-canvas" id="wf-demo-docs"></div>
+              <div class="wf-demo-run" id="wf-run-docs" hidden></div>
+              <details class="wf-demo-yaml">
+                <summary>${escapeHtml(t("workflows.howtoViewYaml"))}</summary>
+                <pre class="skill-howto-md"><code>${escapeHtml(WORKFLOW_HOWTO_DOCS)}</code></pre>
+              </details>
+            </div>
           </details>
           <details class="wf-debug">
             <summary class="muted">${escapeHtml(t("workflows.debug"))}</summary>
@@ -7025,11 +9308,13 @@ async function showView(id) {
         mountHowtoDemo("complex", "wf-demo-complex", WORKFLOW_HOWTO_COMPLEX);
         mountHowtoDemo("branch", "wf-demo-branch", WORKFLOW_HOWTO_BRANCH);
         mountHowtoDemo("linear", "wf-demo-linear", WORKFLOW_HOWTO_LINEAR);
+        mountHowtoDemo("docs", "wf-demo-docs", WORKFLOW_HOWTO_DOCS);
 
         const DEMO_SAMPLES = [
           ["complex", WORKFLOW_HOWTO_COMPLEX],
           ["branch", WORKFLOW_HOWTO_BRANCH],
           ["linear", WORKFLOW_HOWTO_LINEAR],
+          ["docs", WORKFLOW_HOWTO_DOCS],
         ];
 
         /** Show the saved demo_* copy under its sample card (not in the main list). */
@@ -7194,6 +9479,10 @@ async function showView(id) {
           openEditor("create", WORKFLOW_HOWTO_LINEAR.trim() + "\n", "account", { practiceDemo: true });
           setWfMsg(`<p class="muted">${escapeHtml(t("workflows.howtoLoaded"))}</p>`);
         });
+        document.getElementById("wf-try-docs")?.addEventListener("click", () => {
+          openEditor("create", WORKFLOW_HOWTO_DOCS.trim() + "\n", "account", { practiceDemo: true });
+          setWfMsg(`<p class="muted">${escapeHtml(t("workflows.howtoLoadedDocs"))}</p>`);
+        });
         document.getElementById("wf-test-complex")?.addEventListener("click", () => {
           testDemoWorkflow(WORKFLOW_HOWTO_COMPLEX, "complex");
         });
@@ -7202,6 +9491,9 @@ async function showView(id) {
         });
         document.getElementById("wf-test-linear")?.addEventListener("click", () => {
           testDemoWorkflow(WORKFLOW_HOWTO_LINEAR, "linear");
+        });
+        document.getElementById("wf-test-docs")?.addEventListener("click", () => {
+          testDemoWorkflow(WORKFLOW_HOWTO_DOCS, "docs");
         });
 
         const sampleKeyForDemoId = (id) => {
@@ -7390,8 +9682,10 @@ async function showView(id) {
           wireTabs();
           return;
         }
-        /** @type {Array<{ id: string, name: string, enabled: boolean, kind: string, source: string, payloadKind?: string, message?: string, workflowId?: string, toolName?: string, nextRunAt?: string, lastStatus?: string }>} */
+        /** @type {Array<{ id: string, name: string, enabled: boolean, kind: string, source: string, payloadKind?: string, message?: string, workflowId?: string, toolName?: string, nextRunAt?: string, lastStatus?: string, timeZone?: string, cronExpr?: string, everyMs?: number, whenInstant?: string }>} */
         const jobs = (listed.result?.jobs || []).filter((j) => j.payloadKind !== "system");
+        const repeatingJobs = jobs.filter((j) => j.kind === "cron" || j.kind === "every");
+        const onceJobs = jobs.filter((j) => j.kind === "at");
         const workflows = (wfBody.result?.workflows || []).filter((w) => !isDemoWorkflowId(w.id));
         const readyTools = (toolsBody.result?.tools || []).filter((r) => r.available !== false);
         // Household: any bound device is usable by any profile (Design 2026-10-16l).
@@ -7408,6 +9702,7 @@ async function showView(id) {
         const payloadLabel = (kind) => {
           if (kind === "workflow") return t("jobs.payloadWorkflow");
           if (kind === "tool") return t("jobs.payloadTool");
+          if (kind === "agentTurn") return t("jobs.payloadAgent");
           return t("jobs.payloadNotify");
         };
         const formatNext = (iso) => {
@@ -7420,6 +9715,51 @@ async function showView(id) {
             return iso;
           }
         };
+        const DOW_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        /** @param {{ kind?: string, cronExpr?: string, everyMs?: number, whenInstant?: string, timeZone?: string, nextRunAt?: string }} j */
+        const formatJobWhen = (j) => {
+          const tz = j.timeZone ? ` · ${j.timeZone}` : "";
+          if (j.kind === "every" && typeof j.everyMs === "number" && j.everyMs > 0) {
+            const sec = Math.round(j.everyMs / 1000);
+            if (sec < 120) return `${t("jobs.kindEvery")} ${sec}s${tz}`;
+            const min = Math.round(sec / 60);
+            if (min < 120) return `${t("jobs.kindEvery")} ${min}m${tz}`;
+            const hr = Math.round(min / 60);
+            return `${t("jobs.kindEvery")} ${hr}h${tz}`;
+          }
+          if (j.kind === "cron" && j.cronExpr) {
+            const parts = String(j.cronExpr).trim().split(/\s+/);
+            if (parts.length >= 5) {
+              const [min, hour, dom, mon, dow] = parts;
+              const clock =
+                hour !== "*" && min !== "*"
+                  ? `${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`
+                  : j.cronExpr;
+              if (dom === "*" && mon === "*" && dow === "*") {
+                return `${t("jobs.kindDaily")} ${clock}${tz}`;
+              }
+              if (dom === "*" && mon === "*" && dow === "1-5") {
+                return `${t("jobs.kindWeekdays")} ${clock}${tz}`;
+              }
+              if (dom === "*" && mon === "*" && /^\d$/.test(dow || "")) {
+                return `${t("jobs.kindWeekly")} ${DOW_SHORT[Number(dow)] || dow} ${clock}${tz}`;
+              }
+              if (dom !== "*" && mon === "*" && dow === "*") {
+                return `${t("jobs.kindMonthly")} ${t("jobs.dayOfMonth").replace("{d}", dom)} ${clock}${tz}`;
+              }
+              if (dom !== "*" && mon !== "*" && dow === "*") {
+                return `${t("jobs.kindYearly")} ${mon}/${dom} ${clock}${tz}`;
+              }
+              return `${t("jobs.kindRepeating")} ${j.cronExpr}${tz}`;
+            }
+          }
+          if (j.kind === "at") {
+            return `${t("jobs.kindOnce")} · ${formatNext(j.whenInstant || j.nextRunAt)}${tz}`;
+          }
+          return j.kind === "cron" || j.kind === "every"
+            ? t("jobs.kindRepeating")
+            : t("jobs.kindOnce");
+        };
         const wfOptions = workflows
           .map((w) => `<option value="${escapeHtml(w.id)}">${escapeHtml(w.id)}</option>`)
           .join("");
@@ -7431,33 +9771,35 @@ async function showView(id) {
               `<option value="${escapeHtml(r.name)}" title="${escapeHtml(r.summary || "")}">${escapeHtml(r.name)}</option>`,
           )
           .join("");
-        const rows = jobs
-          .map((j) => {
-            const synced = j.source === "workflow";
-            const title =
-              j.name ||
-              j.message ||
-              j.workflowId ||
-              j.toolName ||
-              j.id;
-            const badge = synced
-              ? `<span class="job-badge" title="${escapeHtml(t("jobs.syncedHint"))}">${escapeHtml(t("jobs.badgeWorkflow"))}</span>`
-              : "";
-            const status =
-              j.lastStatus === "ok"
-                ? `<span class="status-pill ok">${escapeHtml(t("jobs.statusOk"))}</span>`
-                : j.lastStatus === "error"
-                  ? `<span class="status-pill warn">${escapeHtml(t("jobs.statusError"))}</span>`
-                  : j.lastStatus === "skipped"
-                    ? `<span class="status-pill">${escapeHtml(t("jobs.statusSkipped"))}</span>`
+        /** @param {typeof jobs} list @param {string} emptyKey */
+        const renderJobRows = (list, emptyKey) =>
+          list.length
+            ? list
+                .map((j) => {
+                  const synced = j.source === "workflow";
+                  const title =
+                    j.name || j.message || j.workflowId || j.toolName || j.id;
+                  const badge = synced
+                    ? `<span class="job-badge" title="${escapeHtml(t("jobs.syncedHint"))}">${escapeHtml(t("jobs.badgeWorkflow"))}</span>`
                     : "";
-            const removeBtn = synced
-              ? ""
-              : `<button type="button" class="secondary" data-act="remove">${escapeHtml(t("app.remove"))}</button>`;
-            return `<li class="job-row" data-id="${escapeHtml(j.id)}" data-source="${escapeHtml(j.source || "user")}">
+                  const status =
+                    j.lastStatus === "ok"
+                      ? `<span class="status-pill ok">${escapeHtml(t("jobs.statusOk"))}</span>`
+                      : j.lastStatus === "error"
+                        ? `<span class="status-pill warn">${escapeHtml(t("jobs.statusError"))}</span>`
+                        : j.lastStatus === "skipped"
+                          ? `<span class="status-pill">${escapeHtml(t("jobs.statusSkipped"))}</span>`
+                          : "";
+                  const removeBtn = synced
+                    ? ""
+                    : `<button type="button" class="secondary" data-act="remove">${escapeHtml(t("app.remove"))}</button>`;
+                  const editBtn = synced
+                    ? ""
+                    : `<button type="button" class="secondary" data-act="edit">${escapeHtml(t("jobs.edit"))}</button>`;
+                  return `<li class="job-row" data-id="${escapeHtml(j.id)}" data-source="${escapeHtml(j.source || "user")}" data-name="${escapeHtml(j.name || "")}" data-message="${escapeHtml(j.message || "")}" data-payload="${escapeHtml(j.payloadKind || "notify")}">
               <div class="job-row-main">
                 <strong>${escapeHtml(title)} ${badge}</strong>
-                <span class="muted job-row-meta">${escapeHtml(j.kind || "")} · ${escapeHtml(payloadLabel(j.payloadKind || "notify"))}${
+                <span class="muted job-row-meta">${escapeHtml(formatJobWhen(j))} · ${escapeHtml(payloadLabel(j.payloadKind || "notify"))}${
                   j.workflowId ? ` · <code>${escapeHtml(j.workflowId)}</code>` : ""
                 }${j.toolName ? ` · <code>${escapeHtml(j.toolName)}</code>` : ""} · ${escapeHtml(t("jobs.next"))}: ${escapeHtml(formatNext(j.nextRunAt))} ${status}</span>
                 ${synced ? `<span class="muted job-synced-hint">${escapeHtml(t("jobs.syncedHint"))}</span>` : ""}
@@ -7465,11 +9807,41 @@ async function showView(id) {
               <span class="row job-row-actions">
                 <button type="button" data-act="toggle" data-en="${j.enabled ? "0" : "1"}">${escapeHtml(j.enabled ? t("app.disable") : t("app.enable"))}</button>
                 <button type="button" data-act="run">${escapeHtml(t("app.run"))}</button>
+                ${editBtn}
                 ${removeBtn}
               </span>
             </li>`;
+                })
+                .join("")
+            : `<li class="muted">${escapeHtml(t(emptyKey))}</li>`;
+        const receiptsBody = await rpc("home.listScheduleReceipts", { accountId: aid, limit: 20 });
+        const receipts = receiptsBody.error ? [] : receiptsBody.result?.receipts || [];
+        const dismissed = Array.isArray(listed.result?.dismissed)
+          ? listed.result.dismissed
+          : Array.isArray(listed.dismissed)
+            ? listed.dismissed
+            : [];
+        const receiptRows = receipts
+          .slice(0, 12)
+          .map((r) => {
+            const when = formatNext(r.finishedAt || r.startedAt);
+            return `<li class="muted job-receipt"><code>${escapeHtml(r.jobId || "")}</code> · ${escapeHtml(r.execStatus || "")}${
+              r.deliveryStatus && r.deliveryStatus !== "none" ? ` · ${escapeHtml(r.deliveryStatus)}` : ""
+            } · ${escapeHtml(when)}${r.error ? ` · ${escapeHtml(r.error)}` : ""}</li>`;
           })
           .join("");
+        const dismissedRows = dismissed
+          .slice(0, 20)
+          .map((d) => {
+            const statusLabel =
+              d.status === "expired" ? t("jobs.dismissedExpired") : t("jobs.dismissedCanceled");
+            const when = formatNext(d.closedAt);
+            return `<li class="muted job-receipt job-dismissed"><strong>${escapeHtml(d.name || d.resolvedLocal || "")}</strong> · ${escapeHtml(statusLabel)} · ${escapeHtml(d.resolvedLocal || "")} · ${escapeHtml(when)}</li>`;
+          })
+          .join("");
+        const historyCount = receipts.length + dismissed.length;
+        /** @type {"repeating" | "once" | "history"} */
+        let jobListView = "repeating";
         el.innerHTML = shell(`
           <p class="muted job-list-hint">${escapeHtml(t("jobs.hint"))}</p>
           <div id="job-banner" class="le-section-msg"></div>
@@ -7479,6 +9851,7 @@ async function showView(id) {
               <button type="button" class="secondary is-active" data-job-mode="notify">${escapeHtml(t("jobs.modeReminder"))}</button>
               <button type="button" class="secondary" data-job-mode="workflow">${escapeHtml(t("jobs.modeWorkflow"))}</button>
               <button type="button" class="secondary" data-job-mode="tool">${escapeHtml(t("jobs.modeTool"))}</button>
+              <button type="button" class="secondary" data-job-mode="agentTurn">${escapeHtml(t("jobs.modeAgent"))}</button>
             </div>
             <label class="job-when-label">${escapeHtml(t("jobs.when"))}
               <span class="job-when-row">
@@ -7520,16 +9893,54 @@ async function showView(id) {
                   : `<p class="muted">${escapeHtml(t("jobs.noTools"))}</p>`
               }
             </div>
+            <div class="job-mode-pane" data-job-pane="agentTurn" hidden>
+              <label>${escapeHtml(t("jobs.agentPrompt"))}
+                <textarea id="job-agent-prompt" rows="3" placeholder="${escapeHtml(t("jobs.agentPromptPlaceholder"))}"></textarea>
+              </label>
+              <p class="muted">${escapeHtml(t("jobs.agentHint"))}</p>
+            </div>
             <div class="row job-create-actions">
               <button type="button" id="job-create">${escapeHtml(t("jobs.createAction"))}</button>
             </div>
           </div>
-          <ul class="job-list" id="job-list">${rows || `<li class="muted">${escapeHtml(t("jobs.none"))}</li>`}</ul>`);
+          <div class="job-view-toggle" role="tablist" aria-label="${escapeHtml(t("jobs.listViews"))}">
+            <button type="button" class="secondary is-active" data-job-view="repeating">${escapeHtml(t("jobs.tabRepeating"))} (${repeatingJobs.length})</button>
+            <button type="button" class="secondary" data-job-view="once">${escapeHtml(t("jobs.tabOnce"))} (${onceJobs.length})</button>
+            <button type="button" class="secondary" data-job-view="history">${escapeHtml(t("jobs.tabHistory"))} (${historyCount})</button>
+          </div>
+          <ul class="job-list" id="job-list-repeating" data-job-view-pane="repeating">${renderJobRows(repeatingJobs, "jobs.noneRepeating")}</ul>
+          <ul class="job-list" id="job-list-once" data-job-view-pane="once" hidden>${renderJobRows(onceJobs, "jobs.noneOnce")}</ul>
+          <div class="card job-receipts" data-job-view-pane="history" hidden>
+            <h4 class="job-history-heading">${escapeHtml(t("jobs.historyNotSet"))}</h4>
+            <ul class="job-receipt-list">${dismissedRows || `<li class="muted">${escapeHtml(t("jobs.noDismissed"))}</li>`}</ul>
+            <h4 class="job-history-heading">${escapeHtml(t("jobs.historyRuns"))}</h4>
+            <ul class="job-receipt-list">${receiptRows || `<li class="muted">${escapeHtml(t("jobs.noReceipts"))}</li>`}</ul>
+          </div>`);
         wireTabs();
+        const setJobListView = (view) => {
+          jobListView = view;
+          el.querySelectorAll("[data-job-view]").forEach((btn) => {
+            btn.classList.toggle("is-active", btn.getAttribute("data-job-view") === view);
+          });
+          el.querySelectorAll("[data-job-view-pane]").forEach((pane) => {
+            const show = pane.getAttribute("data-job-view-pane") === view;
+            if (show) pane.removeAttribute("hidden");
+            else pane.setAttribute("hidden", "");
+          });
+        };
+        el.querySelectorAll("[data-job-view]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const view = btn.getAttribute("data-job-view");
+            if (view === "repeating" || view === "once" || view === "history") {
+              setJobListView(view);
+            }
+          });
+        });
+        setJobListView(jobListView);
 
         /** @type {{ proposalId: string, whenText: string, resolvedLocal: string, kind: string, message?: string } | null} */
         let previewProposal = null;
-        /** @type {"notify" | "workflow" | "tool"} */
+        /** @type {"notify" | "workflow" | "tool" | "agentTurn"} */
         let jobMode = "notify";
         const setJobBanner = (html) => {
           const box = document.getElementById("job-banner");
@@ -7549,7 +9960,14 @@ async function showView(id) {
         el.querySelectorAll("[data-job-mode]").forEach((btn) => {
           btn.addEventListener("click", () => {
             const mode = btn.getAttribute("data-job-mode");
-            if (mode === "notify" || mode === "workflow" || mode === "tool") setMode(mode);
+            if (
+              mode === "notify" ||
+              mode === "workflow" ||
+              mode === "tool" ||
+              mode === "agentTurn"
+            ) {
+              setMode(mode);
+            }
           });
         });
         const argFieldLabel = (key) => {
@@ -7830,7 +10248,21 @@ async function showView(id) {
             return;
           }
           setJobBanner(`<p class="muted">${escapeHtml(t("jobs.previewing"))}</p>`);
-          const proposed = await rpc("home.proposeSchedule", { accountId: aid, text: whenText });
+          const proposed = await rpc("home.proposeSchedule", {
+            accountId: aid,
+            text: whenText,
+            clientContext: {
+              clientNow: new Date().toISOString(),
+              timeZone:
+                (typeof Intl !== "undefined" &&
+                  Intl.DateTimeFormat().resolvedOptions().timeZone) ||
+                undefined,
+              locale: getLocale() ||
+                (typeof navigator !== "undefined" && navigator.language
+                  ? navigator.language.split(/[-_]/)[0]
+                  : "en"),
+            },
+          });
           if (proposed.error) {
             previewProposal = null;
             setJobBanner(`<p class="le-error">${escapeHtml(errMsg(proposed))}</p>`);
@@ -7873,6 +10305,22 @@ async function showView(id) {
             }
             payload = { kind: "workflow", workflowId, message: workflowId };
             name = workflowId;
+          } else if (jobMode === "agentTurn") {
+            const prompt = String(
+              /** @type {HTMLTextAreaElement | null} */ (document.getElementById("job-agent-prompt"))
+                ?.value || "",
+            ).trim();
+            if (!prompt) {
+              setJobBanner(`<p class="le-error">${escapeHtml(t("jobs.agentPromptRequired"))}</p>`);
+              return;
+            }
+            payload = {
+              kind: "agentTurn",
+              prompt,
+              toolPolicyPreset: "restricted",
+              message: prompt.slice(0, 80),
+            };
+            name = prompt.slice(0, 80);
           } else {
             const toolName = String(
               /** @type {HTMLSelectElement | null} */ (document.getElementById("job-tool-name"))
@@ -7900,7 +10348,21 @@ async function showView(id) {
               ? previewProposal.message
               : undefined;
           if (!proposalId) {
-            const proposed = await rpc("home.proposeSchedule", { accountId: aid, text: whenText });
+            const proposed = await rpc("home.proposeSchedule", {
+              accountId: aid,
+              text: whenText,
+              clientContext: {
+                clientNow: new Date().toISOString(),
+                timeZone:
+                  (typeof Intl !== "undefined" &&
+                    Intl.DateTimeFormat().resolvedOptions().timeZone) ||
+                  undefined,
+                locale: getLocale() ||
+                  (typeof navigator !== "undefined" && navigator.language
+                    ? navigator.language.split(/[-_]/)[0]
+                    : "en"),
+              },
+            });
             if (proposed.error) {
               setJobBanner(`<p class="le-error">${escapeHtml(errMsg(proposed))}</p>`);
               return;
@@ -7962,6 +10424,21 @@ async function showView(id) {
               ans = await rpc("home.updateSchedule", { accountId: aid, jobId, enabled });
             } else if (act === "run") {
               ans = await rpc("home.runSchedule", { accountId: aid, jobId });
+            } else if (act === "edit") {
+              const curName = row?.getAttribute("data-name") || "";
+              const curMessage = row?.getAttribute("data-message") || "";
+              const payloadKind = row?.getAttribute("data-payload") || "notify";
+              const nextName = window.prompt(t("jobs.editNamePrompt"), curName);
+              if (nextName === null) return;
+              const patch = { accountId: aid, jobId, name: nextName.trim() || curName };
+              if (payloadKind === "notify") {
+                const nextMsg = window.prompt(t("jobs.editMessagePrompt"), curMessage);
+                if (nextMsg === null) return;
+                if (nextMsg.trim()) {
+                  patch.payload = { kind: "notify", message: nextMsg.trim() };
+                }
+              }
+              ans = await rpc("home.updateSchedule", patch);
             } else if (act === "remove") {
               if (!window.confirm(t("jobs.confirmRemove"))) return;
               ans = await rpc("home.removeSchedule", { accountId: aid, jobId });
@@ -7993,6 +10470,7 @@ async function showView(id) {
           systemTab === tabId ? "true" : "false"
         }">${escapeHtml(t(labelKey))}</button>`;
       const tabsHtml = `<div class="page-tabs" role="tablist">
+        ${tab("profiles", "nav.profiles")}
         ${tab("files", "nav.artifacts")}
         ${tab("health", "nav.doctor")}
         ${tab("machine", "nav.advanced")}
@@ -8003,13 +10481,25 @@ async function showView(id) {
         el.querySelectorAll("[data-system-tab]").forEach((btn) => {
           btn.addEventListener("click", async () => {
             const next = btn.getAttribute("data-system-tab");
-            if (next !== "files" && next !== "health" && next !== "machine") return;
+            if (
+              next !== "profiles" &&
+              next !== "files" &&
+              next !== "health" &&
+              next !== "machine"
+            ) {
+              return;
+            }
             if (next === systemTab) return;
             systemTab = next;
             await showView("system");
           });
         });
       };
+
+      if (systemTab === "profiles") {
+        await renderSystemProfilesPanel(el, shell, wireTabs, accounts, aid);
+        return;
+      }
 
       if (systemTab === "files") {
         if (!aid) {
@@ -8062,36 +10552,9 @@ async function showView(id) {
           btn.addEventListener("click", async () => {
             const path = btn.getAttribute("data-path");
             if (!path) return;
-            const ans = await rpc("home.getArtifactUrl", { accountId: aid, path, ttlSec: 3600 });
-            const box = document.getElementById("art-url");
-            if (!box) return;
-            if (ans.error || !ans.result?.url) {
-              box.hidden = false;
-              box.innerHTML = `<p class="le-error">${escapeHtml(errMsg(ans) || t("artifacts.linkFailed"))}</p>`;
-              return;
-            }
-            const url = String(ans.result.url);
-            const expires = formatWhen(ans.result.expiresAt);
-            box.hidden = false;
-            box.innerHTML = `
-              <p class="sys-link-label">${escapeHtml(t("artifacts.linkReady"))}</p>
-              <p class="sys-link-url"><a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(url)}</a></p>
-              ${expires ? `<p class="muted">${escapeHtml(t("artifacts.expires", { at: expires }))}</p>` : ""}
-              <div class="row">
-                <button type="button" class="secondary" id="art-copy">${escapeHtml(t("artifacts.copy"))}</button>
-                <button type="button" class="secondary" id="art-open-tab">${escapeHtml(t("artifacts.openTab"))}</button>
-              </div>`;
-            document.getElementById("art-copy")?.addEventListener("click", async () => {
-              try {
-                await navigator.clipboard.writeText(url);
-                showToast(t("artifacts.copied"), "ok");
-              } catch {
-                showToast(t("artifacts.copyFailed"), "err");
-              }
-            });
-            document.getElementById("art-open-tab")?.addEventListener("click", () => {
-              window.open(url, "_blank", "noopener,noreferrer");
-            });
+            // Mesh-first: open over home.* in-app (EnvoyMesh libraryRead peer).
+            // Signed HTTP URL is optional (LAN/tunnel) — not required for open.
+            await openArtifactViewer({ accountId: aid, path });
           });
         });
         return;
@@ -8432,6 +10895,239 @@ function escapeHtml(s) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/**
+ * In-app confirm — Tauri/WKWebView often blocks window.confirm (returns false silently).
+ * @param {{
+ *   title: string,
+ *   body: string,
+ *   okLabel?: string,
+ *   cancelLabel?: string,
+ *   danger?: boolean,
+ * }} opts
+ * @returns {Promise<boolean>}
+ */
+function confirmDialog(opts) {
+  return new Promise((resolve) => {
+    const backdrop = document.createElement("div");
+    backdrop.className = "modal-backdrop wf-prompt-backdrop";
+    backdrop.setAttribute("role", "presentation");
+    let closed = false;
+    const bodyHtml = escapeHtml(opts.body || "")
+      .split(/\n{2,}/)
+      .map((p) => `<p class="confirm-dialog-body">${p.replace(/\n/g, "<br>")}</p>`)
+      .join("");
+    backdrop.innerHTML = `
+      <div class="modal-card wf-prompt-card confirm-dialog-card" role="dialog" aria-modal="true" aria-labelledby="confirm-dialog-title">
+        <h2 id="confirm-dialog-title">${escapeHtml(opts.title)}</h2>
+        <div class="confirm-dialog-copy">${bodyHtml}</div>
+        <div class="row wf-prompt-actions">
+          <button type="button" class="secondary" data-confirm-cancel>${escapeHtml(opts.cancelLabel || t("workflows.cancel"))}</button>
+          <button type="button" class="${opts.danger ? "danger" : ""}" data-confirm-ok>${escapeHtml(opts.okLabel || t("app.save"))}</button>
+        </div>
+      </div>`;
+    const finish = (value) => {
+      if (closed) return;
+      closed = true;
+      document.removeEventListener("keydown", onKeydown, true);
+      backdrop.remove();
+      resolve(value);
+    };
+    const onKeydown = (ev) => {
+      if (ev.key === "Escape") {
+        ev.preventDefault();
+        ev.stopPropagation();
+        finish(false);
+      } else if (ev.key === "Enter") {
+        ev.preventDefault();
+        finish(true);
+      }
+    };
+    backdrop.querySelector("[data-confirm-cancel]")?.addEventListener("click", () => finish(false));
+    backdrop.querySelector("[data-confirm-ok]")?.addEventListener("click", () => finish(true));
+    backdrop.addEventListener("click", (ev) => {
+      if (ev.target === backdrop) finish(false);
+    });
+    document.addEventListener("keydown", onKeydown, true);
+    document.body.appendChild(backdrop);
+    /** @type {HTMLButtonElement | null} */
+    const okBtn = backdrop.querySelector("[data-confirm-ok]");
+    okBtn?.focus();
+  });
+}
+
+/**
+ * Trigger a local download from mesh-fetched artifact bytes (no public URL).
+ * @param {string} fileName
+ * @param {string} mime
+ * @param {"utf8"|"base64"} encoding
+ * @param {string} payload
+ */
+function downloadArtifactLocal(fileName, mime, encoding, payload) {
+  /** @type {BlobPart} */
+  let part;
+  if (encoding === "base64") {
+    const bin = atob(payload);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    part = arr;
+  } else {
+    part = payload;
+  }
+  const blob = new Blob([part], { type: mime || "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fileName || "download";
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2_000);
+}
+
+/** True when a signed artifact URL is useful off-loopback (Design §9.5d). */
+function isReachablePublicArtifactUrl(url) {
+  try {
+    const u = new URL(String(url || ""));
+    const h = u.hostname.toLowerCase();
+    return h !== "127.0.0.1" && h !== "localhost" && h !== "::1" && h !== "[::1]";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * In-app artifact open over home.getArtifactContent (Design §9.5 mesh-first).
+ * Peer: EnvoyMesh Feed Browser + libraryRead — no publicBaseUrl required.
+ * Binary exports: Download button (paired path — no publicBaseUrl).
+ * Optional Copy link when publicBaseUrl is reachable (sandbox paths only).
+ * @param {{ accountId: string, path: string }} opts
+ */
+async function openArtifactViewer(opts) {
+  const title = (() => {
+    const p = String(opts.path || "");
+    const slash = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+    return slash >= 0 ? p.slice(slash + 1) : p || t("artifacts.unnamed");
+  })();
+  const pathNorm = String(opts.path || "").replace(/\\/g, "/");
+  const canMintLink = !pathNorm.startsWith("workspace/");
+  const backdrop = document.createElement("div");
+  backdrop.className = "modal-backdrop wf-prompt-backdrop";
+  backdrop.setAttribute("role", "presentation");
+  backdrop.innerHTML = `
+    <div class="modal-card modal-card--wide artifact-viewer-card" role="dialog" aria-modal="true" aria-labelledby="artifact-viewer-title">
+      <div class="artifact-viewer-head">
+        <h2 id="artifact-viewer-title">${escapeHtml(title)}</h2>
+        <div class="artifact-viewer-actions">
+          <button type="button" class="secondary" data-artifact-copy hidden>${escapeHtml(t("artifacts.copy"))}</button>
+          <button type="button" class="secondary" data-artifact-download hidden>${escapeHtml(t("artifacts.download"))}</button>
+          <button type="button" class="secondary" data-artifact-close>${escapeHtml(t("artifacts.close"))}</button>
+        </div>
+      </div>
+      <p class="muted artifact-viewer-path">${escapeHtml(opts.path)}</p>
+      <div class="artifact-viewer-body" data-artifact-body>
+        <p class="muted">${escapeHtml(t("artifacts.loading"))}</p>
+      </div>
+    </div>`;
+  const close = () => {
+    document.removeEventListener("keydown", onKey, true);
+    backdrop.remove();
+  };
+  const onKey = (ev) => {
+    if (ev.key === "Escape") {
+      ev.preventDefault();
+      ev.stopPropagation();
+      close();
+    }
+  };
+  backdrop.querySelector("[data-artifact-close]")?.addEventListener("click", close);
+  backdrop.addEventListener("click", (ev) => {
+    if (ev.target === backdrop) close();
+  });
+  document.addEventListener("keydown", onKey, true);
+  document.body.appendChild(backdrop);
+  const bodyEl = backdrop.querySelector("[data-artifact-body]");
+  const dlBtn = /** @type {HTMLButtonElement | null} */ (
+    backdrop.querySelector("[data-artifact-download]")
+  );
+  const copyBtn = /** @type {HTMLButtonElement | null} */ (
+    backdrop.querySelector("[data-artifact-copy]")
+  );
+  try {
+    const ans = await rpc("home.getArtifactContent", {
+      accountId: opts.accountId,
+      path: opts.path,
+    });
+    if (!bodyEl) return;
+    if (ans.error) {
+      const msg = errMsg(ans) || t("artifacts.openFailed");
+      const tooLarge = /8 MiB|exceeds .*bytes/i.test(msg);
+      bodyEl.innerHTML = `<p class="le-error">${escapeHtml(
+        tooLarge ? t("artifacts.tooLarge") : msg,
+      )}</p>`;
+      return;
+    }
+    const mime = String(ans.result?.mimeType || "application/octet-stream").toLowerCase();
+    const encoding = ans.result?.encoding;
+    /** @type {(() => void) | null} */
+    let onDownload = null;
+    if (encoding === "utf8" && typeof ans.result?.text === "string") {
+      const text = ans.result.text;
+      onDownload = () => downloadArtifactLocal(title, mime, "utf8", text);
+      if (mime.includes("markdown") || /\.md$/i.test(opts.path)) {
+        bodyEl.innerHTML = `<div class="chat-md artifact-viewer-md">${renderChatMarkdown(text)}</div>`;
+      } else {
+        bodyEl.innerHTML = `<pre class="artifact-viewer-pre">${escapeHtml(text)}</pre>`;
+      }
+    } else if (encoding === "base64" && typeof ans.result?.base64 === "string") {
+      const b64 = ans.result.base64;
+      onDownload = () => downloadArtifactLocal(title, mime, "base64", b64);
+      if (mime.startsWith("image/")) {
+        bodyEl.innerHTML = `<div class="artifact-viewer-img"><img alt="" src="data:${escapeHtml(mime)};base64,${b64}" /></div>`;
+      } else {
+        bodyEl.innerHTML = `<p class="muted">${escapeHtml(t("artifacts.binaryHint"))}</p>
+          <p><button type="button" class="primary" data-artifact-download-inline>${escapeHtml(t("artifacts.download"))}</button></p>`;
+        bodyEl
+          .querySelector("[data-artifact-download-inline]")
+          ?.addEventListener("click", () => onDownload?.());
+      }
+    } else {
+      bodyEl.innerHTML = `<p class="muted">${escapeHtml(t("artifacts.binaryHint"))}</p>`;
+    }
+    if (onDownload && dlBtn) {
+      dlBtn.hidden = false;
+      dlBtn.addEventListener("click", () => onDownload?.());
+    }
+    if (canMintLink && copyBtn) {
+      const minted = await rpc("home.getArtifactUrl", {
+        accountId: opts.accountId,
+        path: opts.path,
+      });
+      const link = minted.result?.url ? String(minted.result.url) : "";
+      if (!minted.error && isReachablePublicArtifactUrl(link)) {
+        copyBtn.hidden = false;
+        copyBtn.addEventListener("click", async () => {
+          try {
+            if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(link);
+            else throw new Error("clipboard unavailable");
+            showToast(t("artifacts.copied"));
+          } catch {
+            showToast(t("artifacts.copyFailed"), "err");
+          }
+        });
+      }
+    }
+  } catch (err) {
+    if (bodyEl) {
+      const raw = String(err?.message || err);
+      const tooLarge = /8 MiB|exceeds .*bytes/i.test(raw);
+      bodyEl.innerHTML = `<p class="le-error">${escapeHtml(
+        tooLarge ? t("artifacts.tooLarge") : raw,
+      )}</p>`;
+    }
+  }
 }
 
 /**

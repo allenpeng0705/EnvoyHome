@@ -27,6 +27,14 @@ import {
   assertDeviceAccountBound,
   type PairingStore,
 } from "./pairing.js";
+import {
+  HouseholdError,
+  assertOwnerExclusiveBind,
+  isHouseholdOwner,
+  mayActForSeat,
+  memoryTrustForTurn,
+  type HouseholdStore,
+} from "./household.js";
 import type { MeshStatus } from "./mesh-host.js";
 import { collectDoctorIssues, applyDoctorFixes } from "./doctor/index.js";
 import {
@@ -34,6 +42,7 @@ import {
   wireSourceRecord,
 } from "./object-registry.js";
 import type { ActuationService } from "./actuation-service.js";
+import { getHomeFsInfo, listHomeFsEntries } from "./home-fs.js";
 import { MemoryError, type MemoryFacade } from "@envoyhome/memory";
 import { ChannelError, type ChannelService } from "./channels/service.js";
 import { HARNESS_CATALOG, DEFAULT_HARNESS_ID } from "@envoyhome/harness-host";
@@ -46,11 +55,9 @@ import type { ArtifactService } from "./artifacts.js";
 import type { PushTokenStore, PushPlatform } from "./push-tokens.js";
 import type { PushDispatcher } from "./push-dispatch.js";
 import type { ScheduleService } from "./schedule/service.js";
-import type { SchedulePayload } from "./schedule/types.js";
-import {
-  normalizeScheduleSpec,
-  normalizeUserSchedulePayload,
-} from "./schedule/validate-payload.js";
+import type { SchedulePayload, ScheduleSpec } from "./schedule/types.js";
+import { normalizeScheduleSpec } from "./schedule/validate-payload.js";
+import { resolveAndValidateUserSchedulePayload } from "./schedule/resolve-user-payload.js";
 import { listWorkflowTools, workflowToolNameSet } from "./workflow-tools.js";
 import {
   draftWorkflowFromText,
@@ -63,34 +70,26 @@ async function resolveUserSchedulePayload(
   accountId: string,
   raw: unknown,
 ): Promise<SchedulePayload> {
-  const parsed = normalizeUserSchedulePayload(raw);
-  if (!parsed.ok) {
-    throw Object.assign(new Error(`envoyhome.bad_params: ${parsed.reason}`), {
-      rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", parsed.reason),
-    });
-  }
-  const payload = parsed.payload;
-  if (payload.kind === "workflow") {
+  try {
     await deps.workflows.ensureLoaded();
-    const wf = deps.workflows.getWorkflow(payload.workflowId!, accountId);
-    if (!wf) {
-      throw Object.assign(new Error("envoyhome.bad_params: unknown workflow"), {
-        rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "unknown workflow"),
-      });
-    }
-  }
-  if (payload.kind === "tool") {
-    const known = await workflowToolNameSet({
-      skills: deps.skills,
-      channels: deps.channels,
+    return await resolveAndValidateUserSchedulePayload({
+      raw,
+      accountId,
+      hasWorkflow: (workflowId, aid) => !!deps.workflows.getWorkflow(workflowId, aid),
+      knownToolNames: workflowToolNameSet({
+        skills: deps.skills,
+        channels: deps.channels,
+        webSearch: deps.webSearch,
+        browserControl: deps.browserControl,
+      }),
     });
-    if (!known.has(payload.toolName!)) {
-      throw Object.assign(new Error("envoyhome.bad_params: unknown tool"), {
-        rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "unknown tool"),
-      });
-    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const reason = msg.replace(/^envoyhome\.bad_params:\s*/, "");
+    throw Object.assign(err instanceof Error ? err : new Error(msg), {
+      rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", reason),
+    });
   }
-  return payload;
 }
 
 export interface RouterDeps {
@@ -103,6 +102,7 @@ export interface RouterDeps {
   onShutdown: (reason: string, graceSec: number) => void;
   packageVersion: string;
   accounts: AccountStore;
+  household: HouseholdStore;
   bindings: BindingStore;
   pairing: PairingStore;
   meshStatus: () => MeshStatus;
@@ -120,6 +120,10 @@ export interface RouterDeps {
   schedules: ScheduleService;
   skills: SkillService;
   artifacts: ArtifactService;
+  /** Design §9.5f household web search. */
+  webSearch: import("./web-search.js").WebSearchService;
+  /** Design §9.5g browser control. */
+  browserControl: import("./browser-control.js").BrowserControlService;
   /** B14 actuation journal (owner-scope reads). */
   actuations: ActuationService;
   /** Mobile APNs/FCM token registry. */
@@ -150,6 +154,7 @@ function scopeDenied(
 function assertScope(
   method: string,
   session: HomeSession | undefined,
+  ownerAccountId: string | null,
 ): { error: ReturnType<typeof makeError> } | null {
   const scope = scopeOf(method);
   if (!scope) return null;
@@ -160,7 +165,7 @@ function assertScope(
   if (scope === "loopback-owner" && caller.kind !== "loopback-owner") {
     return scopeDenied(method, `${method} requires loopback-owner`);
   }
-  if (scope === "owner-scope" && caller.kind !== "loopback-owner" && !caller.ownerTrusted) {
+  if (scope === "owner-scope" && !isHouseholdOwner(caller, ownerAccountId)) {
     return scopeDenied(method, `${method} requires owner-scope`);
   }
   return null;
@@ -193,6 +198,8 @@ function throwRpc(
     | "bad_params"
     | "auth"
     | "account_not_bound"
+    | "owner_required"
+    | "workspace_root_owner_only"
     | "version_too_low"
     | "pairing_app_mismatch",
   detail: string,
@@ -259,18 +266,26 @@ function mapStoreError(err: unknown): never {
     }
     throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", err.message);
   }
+  if (err instanceof HouseholdError) {
+    if (err.kind === "forbidden" || err.kind === "auth") {
+      throwRpc(TRANSPORT_CODE_UNAUTHORIZED, "auth", err.message);
+    }
+    throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", err.message);
+  }
   if (err instanceof AccountError || err instanceof BindingError || err instanceof PairingError) {
     if (err.kind === "auth" || err.kind === "pairing_app_mismatch") {
       const detail = err.message.replace(/^envoyhome\.[a-z_]+:\s*/, "");
-      throwRpc(
-        TRANSPORT_CODE_UNAUTHORIZED,
+      const name =
         err.kind === "pairing_app_mismatch"
           ? "pairing_app_mismatch"
           : err.message.includes("account_not_bound")
             ? "account_not_bound"
-            : "auth",
-        detail,
-      );
+            : err.message.includes("workspace_root_owner_only")
+              ? "workspace_root_owner_only"
+              : err.message.includes("owner_required")
+                ? "owner_required"
+                : "auth";
+      throwRpc(TRANSPORT_CODE_UNAUTHORIZED, name, detail);
     }
     if (err.kind === "rate_limited") {
       throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", err.message);
@@ -325,11 +340,24 @@ function wireAccount(rec: {
   accountId: string;
   displayName: string;
   createdAt: string;
-}): { accountId: string; displayName: string; createdAt: string } {
+  locale?: string;
+  timeZone?: string;
+  toolPolicy?: string;
+}): {
+  accountId: string;
+  displayName: string;
+  createdAt: string;
+  locale?: string;
+  timeZone?: string;
+  toolPolicy?: string;
+} {
   return {
     accountId: rec.accountId,
     displayName: rec.displayName,
     createdAt: rec.createdAt,
+    ...(rec.locale ? { locale: rec.locale } : {}),
+    ...(rec.timeZone ? { timeZone: rec.timeZone } : {}),
+    ...(rec.toolPolicy ? { toolPolicy: rec.toolPolicy } : {}),
   };
 }
 
@@ -366,7 +394,8 @@ export function createDispatcher(deps: RouterDeps) {
       throw Object.assign(new Error(err.message), { rpcError: err });
     }
 
-    const scopeErr = assertScope(method, session);
+    const ownerAccountId = deps.household.getOwnerAccountId();
+    const scopeErr = assertScope(method, session, ownerAccountId);
     if (scopeErr) {
       throw Object.assign(new Error(scopeErr.error.message), { rpcError: scopeErr.error });
     }
@@ -509,12 +538,19 @@ export function createDispatcher(deps: RouterDeps) {
       }
       case "home.createAccount": {
         try {
-          const input: { displayName: string; accountId?: string; locale?: string } = {
+          const input: {
+            displayName: string;
+            accountId?: string;
+            locale?: string;
+            timeZone?: string;
+          } = {
             displayName: params.displayName as string,
           };
           if (typeof params.accountId === "string") input.accountId = params.accountId;
           if (typeof params.locale === "string") input.locale = params.locale;
+          if (typeof params.timeZone === "string") input.timeZone = params.timeZone;
           const account = await deps.accounts.create(input);
+          await deps.household.onAccountCreated(account.accountId);
           return { account: wireAccount(account) };
         } catch (err) {
           mapStoreError(err);
@@ -522,14 +558,33 @@ export function createDispatcher(deps: RouterDeps) {
       }
       case "home.updateAccount": {
         try {
+          const accountId = params.accountId as string;
+          if (!mayActForSeat(caller, accountId, ownerAccountId)) {
+            throwRpc(
+              TRANSPORT_CODE_UNAUTHORIZED,
+              "account_not_bound",
+              `envoyhome.account_not_bound: cannot update account ${accountId}`,
+            );
+          }
+          if (params.toolPolicy !== undefined) {
+            if (!isHouseholdOwner(caller, ownerAccountId)) {
+              throwRpc(
+                TRANSPORT_CODE_UNAUTHORIZED,
+                "owner_required",
+                "toolPolicy requires household Owner",
+              );
+            }
+          }
           const input: {
             accountId: string;
             displayName?: string;
             locale?: string;
+            timeZone?: string;
             toolPolicy?: "standard" | "restricted";
-          } = { accountId: params.accountId as string };
+          } = { accountId };
           if (typeof params.displayName === "string") input.displayName = params.displayName;
           if (typeof params.locale === "string") input.locale = params.locale;
+          if (typeof params.timeZone === "string") input.timeZone = params.timeZone;
           if (params.toolPolicy === "standard" || params.toolPolicy === "restricted") {
             input.toolPolicy = params.toolPolicy;
           }
@@ -542,6 +597,7 @@ export function createDispatcher(deps: RouterDeps) {
       case "home.deleteAccount": {
         try {
           const accountId = params.accountId as string;
+          await deps.household.assertDeletable(accountId);
           await deps.accounts.delete({
             accountId,
             confirm: params.confirm === true,
@@ -553,12 +609,147 @@ export function createDispatcher(deps: RouterDeps) {
           mapStoreError(err);
         }
       }
+      case "home.getHouseholdOwner": {
+        try {
+          const id = deps.household.getOwnerAccountId();
+          if (!id) {
+            throw new HouseholdError(
+              "not_found",
+              "no household Owner set — run Doctor Fix or create the first profile",
+            );
+          }
+          const rec = await deps.accounts.get(id);
+          return {
+            ownerAccountId: id,
+            ...(rec?.displayName ? { displayName: rec.displayName } : {}),
+          };
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.transferHouseholdOwner": {
+        try {
+          if (params.confirm !== true) {
+            throw new HouseholdError("bad_params", "confirm must be true");
+          }
+          const toAccountId = params.toAccountId as string;
+          if (!(await deps.accounts.get(toAccountId))) {
+            throw new HouseholdError("not_found", `unknown account: ${toAccountId}`);
+          }
+          const next = await deps.household.transfer(toAccountId);
+          // R3: former Owner (and any other seat) must not keep filesystem-root workspace.
+          await deps.accounts.clearNonOwnerFilesystemRoots(next);
+          // R2: new Owner must not remain dual-bound with other seats on one device.
+          await deps.bindings.enforceOwnerExclusiveBinds(next);
+          return { ownerAccountId: next };
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.getWorkspace": {
+        try {
+          const accountId =
+            typeof params.accountId === "string" ? params.accountId : "";
+          if (!accountId) {
+            throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "accountId is required");
+          }
+          if (!mayActForSeat(caller, accountId, ownerAccountId)) {
+            throwRpc(
+              TRANSPORT_CODE_UNAUTHORIZED,
+              "account_not_bound",
+              `envoyhome.account_not_bound: cannot get workspace for ${accountId}`,
+            );
+          }
+          return await deps.accounts.getWorkspacePublic(accountId, ownerAccountId);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.setWorkspace": {
+        try {
+          const accountId = params.accountId as string;
+          const mode = params.mode === "rw" ? "rw" : "ro";
+          await deps.accounts.setWorkspace({
+            accountId,
+            hostPath: params.hostPath as string,
+            mode,
+            ...(typeof params.id === "string" ? { id: params.id } : {}),
+            ownerAccountId,
+          });
+          return await deps.accounts.getWorkspacePublic(accountId, ownerAccountId);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.upsertWorkspaceMount": {
+        try {
+          const accountId = params.accountId as string;
+          const mode = params.mode === "rw" ? "rw" : "ro";
+          await deps.accounts.upsertWorkspaceMount({
+            accountId,
+            hostPath: params.hostPath as string,
+            mode,
+            ...(typeof params.id === "string" ? { id: params.id } : {}),
+            ownerAccountId,
+          });
+          return await deps.accounts.getWorkspacePublic(accountId, ownerAccountId);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.removeWorkspaceMount": {
+        try {
+          const accountId = params.accountId as string;
+          const id = typeof params.id === "string" ? params.id : "";
+          if (!id) {
+            throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "id is required");
+          }
+          await deps.accounts.removeWorkspaceMount({ accountId, id });
+          return await deps.accounts.getWorkspacePublic(accountId, ownerAccountId);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.clearWorkspace": {
+        try {
+          const accountId = params.accountId as string;
+          await deps.accounts.clearWorkspace(accountId);
+          return { ok: true };
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.getHomeFsInfo": {
+        // Owner-scope via assertScope / METHODS.scope
+        return getHomeFsInfo();
+      }
+      case "home.listHomeFsEntries": {
+        try {
+          return listHomeFsEntries({
+            ...(typeof params.path === "string" ? { path: params.path } : {}),
+            dirsOnly: params.dirsOnly !== false,
+          });
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
       case "home.listBindings": {
         try {
           const filter: { accountId?: string; deviceId?: string } = {};
           if (typeof params.accountId === "string") filter.accountId = params.accountId;
           if (typeof params.deviceId === "string") filter.deviceId = params.deviceId;
-          const bindings = await deps.bindings.list(filter);
+          if (filter.accountId && !mayActForSeat(caller, filter.accountId, ownerAccountId)) {
+            throwRpc(
+              TRANSPORT_CODE_UNAUTHORIZED,
+              "account_not_bound",
+              `envoyhome.account_not_bound: cannot list bindings for ${filter.accountId}`,
+            );
+          }
+          let bindings = await deps.bindings.list(filter);
+          if (!isHouseholdOwner(caller, ownerAccountId)) {
+            const allowed = new Set(caller.accountIds);
+            bindings = bindings.filter((b) => allowed.has(String((b as { accountId?: string }).accountId)));
+          }
           return { bindings };
         } catch (err) {
           mapStoreError(err);
@@ -569,6 +760,19 @@ export function createDispatcher(deps: RouterDeps) {
           const accountId = params.accountId as string;
           if (!(await deps.accounts.get(accountId))) {
             throw new BindingError("not_found", `unknown account: ${accountId}`);
+          }
+          if (typeof params.deviceId === "string") {
+            const deviceId = params.deviceId;
+            const existing = (await deps.bindings.list({ deviceId })).filter(
+              (b) => (b as { kind?: string }).kind === "device",
+            );
+            const nextIds = [
+              ...new Set([
+                ...existing.map((b) => String((b as { accountId: string }).accountId)),
+                accountId,
+              ]),
+            ];
+            assertOwnerExclusiveBind(nextIds, ownerAccountId);
           }
           const result = await deps.bindings.set(params, caller);
           return result;
@@ -613,6 +817,7 @@ export function createDispatcher(deps: RouterDeps) {
                 throw new PairingError("bad_params", `unknown account: ${accountId}`);
               }
             }
+            assertOwnerExclusiveBind(input.accountIds, ownerAccountId);
           }
           if (typeof params.token === "string") input.token = params.token;
           if (typeof params.fresh === "boolean") input.fresh = params.fresh;
@@ -660,6 +865,7 @@ export function createDispatcher(deps: RouterDeps) {
               throw new PairingError("bad_params", `unknown account: ${accountId}`);
             }
           }
+          assertOwnerExclusiveBind(accountIds, ownerAccountId);
           const device = await deps.pairing.setDeviceAccounts(
             params.deviceId as string,
             accountIds,
@@ -782,8 +988,25 @@ export function createDispatcher(deps: RouterDeps) {
             ...(Object.keys(set).length > 0 ? { set } : {}),
             ...(removeKeys !== undefined ? { removeKeys } : {}),
             source: "user_tool",
-            trust: caller.kind === "loopback-owner" || caller.ownerTrusted ? "owner" : "agent",
+            trust: memoryTrustForTurn(caller, accountId, ownerAccountId),
           });
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.getIdentity": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          return await deps.memory.getIdentity(accountId);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.setIdentity": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          const markdown = typeof params.markdown === "string" ? params.markdown : "";
+          return await deps.memory.setIdentity(accountId, markdown);
         } catch (err) {
           mapStoreError(err);
         }
@@ -862,6 +1085,9 @@ export function createDispatcher(deps: RouterDeps) {
             reviewEnabled: next.reviewEnabled,
             sessionRetentionDays: next.sessionRetentionDays,
           });
+          await deps.schedules.watchAccount(accountId, {
+            reviewEnabled: next.reviewEnabled,
+          });
           return {
             ok: true,
             flushEnabled: next.flushEnabled,
@@ -911,7 +1137,7 @@ export function createDispatcher(deps: RouterDeps) {
         try {
           const accountId = requireBoundAccount(method, caller, params);
           const trust =
-            caller.kind === "loopback-owner" || caller.ownerTrusted ? "owner" : "agent";
+            memoryTrustForTurn(caller, accountId, ownerAccountId);
           const result = await deps.memory.compactMemory(accountId, { trust });
           return {
             ok: result.ok,
@@ -1060,6 +1286,82 @@ export function createDispatcher(deps: RouterDeps) {
           mapChannelError(err);
         }
       }
+      case "home.getWebSearchConfig": {
+        return await deps.webSearch.getPublicConfig();
+      }
+      case "home.setWebSearchConfig": {
+        try {
+          const patch: {
+            enabled?: boolean;
+            provider?: string;
+            apiKey?: string | null;
+            fallback?: string;
+            browserEngines?: string[];
+            unattendedBrowser?: boolean;
+          } = {};
+          if (typeof params.enabled === "boolean") patch.enabled = params.enabled;
+          if (typeof params.provider === "string") patch.provider = params.provider;
+          if (typeof params.apiKey === "string") patch.apiKey = params.apiKey;
+          if (typeof params.fallback === "string") patch.fallback = params.fallback;
+          if (Array.isArray(params.browserEngines)) {
+            patch.browserEngines = params.browserEngines.filter(
+              (x): x is string => typeof x === "string",
+            );
+          }
+          if (typeof params.unattendedBrowser === "boolean") {
+            patch.unattendedBrowser = params.unattendedBrowser;
+          }
+          return await deps.webSearch.setConfig(patch);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.getBrowserControlConfig": {
+        return await deps.browserControl.getPublicConfig();
+      }
+      case "home.setBrowserControlConfig": {
+        try {
+          const patch: {
+            enabled?: boolean;
+            unattendedEnabled?: boolean;
+            defaultProfile?: string;
+            personalEnabled?: boolean;
+            personalCdpEndpoint?: string;
+            remoteEnabled?: boolean;
+            remoteCdpUrl?: string;
+            remoteToken?: string | null;
+            acknowledgeElevated?: boolean;
+          } = {};
+          if (typeof params.enabled === "boolean") patch.enabled = params.enabled;
+          if (typeof params.unattendedEnabled === "boolean") {
+            patch.unattendedEnabled = params.unattendedEnabled;
+          }
+          if (typeof params.defaultProfile === "string") {
+            patch.defaultProfile = params.defaultProfile;
+          }
+          if (typeof params.personalEnabled === "boolean") {
+            patch.personalEnabled = params.personalEnabled;
+          }
+          if (typeof params.personalCdpEndpoint === "string") {
+            patch.personalCdpEndpoint = params.personalCdpEndpoint;
+          }
+          if (typeof params.remoteEnabled === "boolean") {
+            patch.remoteEnabled = params.remoteEnabled;
+          }
+          if (typeof params.remoteCdpUrl === "string") {
+            patch.remoteCdpUrl = params.remoteCdpUrl;
+          }
+          if (typeof params.remoteToken === "string") {
+            patch.remoteToken = params.remoteToken;
+          }
+          if (params.acknowledgeElevated === true) {
+            patch.acknowledgeElevated = true;
+          }
+          return await deps.browserControl.setConfig(patch);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
 
       /* ---- B6 chat / turns ---- */
       case "home.openSession": {
@@ -1070,7 +1372,9 @@ export function createDispatcher(deps: RouterDeps) {
             ...(typeof params.agentId === "string" ? { agentId: params.agentId } : {}),
             ...(typeof params.title === "string" ? { title: params.title } : {}),
             ...(typeof params.channel === "string" ? { channel: params.channel } : {}),
-            ...(params.purpose === "home" || params.purpose === "general"
+            ...(params.purpose === "home" ||
+            params.purpose === "general" ||
+            params.purpose === "schedules"
               ? { purpose: params.purpose }
               : {}),
           });
@@ -1084,13 +1388,17 @@ export function createDispatcher(deps: RouterDeps) {
           const { homePaths } = await import("./home-paths.js");
           const { storeChatMedia, ChatMediaError } = await import("./chat-media.js");
           try {
-            return await storeChatMedia({
+            const stored = await storeChatMedia({
               paths: homePaths(deps.config.stateDir),
               accountId,
               fileName: params.fileName as string,
               contentBase64: params.contentBase64 as string,
               ...(typeof params.mimeType === "string" ? { mimeType: params.mimeType } : {}),
             });
+            // Wire result omits in-process extractText (full GFM stays on disk / turn inject).
+            const { extractText: _drop, ...wire } = stored;
+            void _drop;
+            return wire;
           } catch (err) {
             if (err instanceof ChatMediaError) {
               throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", err.message);
@@ -1114,15 +1422,19 @@ export function createDispatcher(deps: RouterDeps) {
             }
             throw err;
           }
+          const { normalizeClientContext } = await import("./client-context.js");
+          const clientContext = normalizeClientContext(params.clientContext);
           return await deps.turns.sendMessage({
             accountId,
             sessionId: params.sessionId as string,
             text: params.text as string,
             callerKind: caller.kind,
+            memoryTrust: memoryTrustForTurn(caller, accountId, ownerAccountId),
             ...(media.length ? { media } : {}),
             ...(typeof params.clientTurnId === "string"
               ? { clientTurnId: params.clientTurnId }
               : {}),
+            ...(clientContext ? { clientContext } : {}),
           });
         } catch (err) {
           mapStoreError(err);
@@ -1131,7 +1443,9 @@ export function createDispatcher(deps: RouterDeps) {
       case "home.listSessions": {
         try {
           const accountId = requireBoundAccount(method, caller, params);
-          return await deps.turns.listSessions(accountId);
+          return await deps.turns.listSessions(accountId, {
+            includeArchived: params.includeArchived === true,
+          });
         } catch (err) {
           mapStoreError(err);
         }
@@ -1149,6 +1463,66 @@ export function createDispatcher(deps: RouterDeps) {
           const accountId = requireBoundAccount(method, caller, params);
           const messages = await deps.turns.getTranscript(accountId, params.sessionId as string);
           return { messages };
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.clearTranscript": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          return await deps.turns.clearTranscript(accountId, params.sessionId as string);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.deleteTranscriptMessages": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          const rawIds = params.messageIds;
+          const messageIds = Array.isArray(rawIds)
+            ? rawIds.filter((x): x is string => typeof x === "string" && x.length > 0)
+            : [];
+          return await deps.turns.deleteTranscriptMessages(
+            accountId,
+            params.sessionId as string,
+            messageIds,
+          );
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.archiveSession": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          return await deps.turns.archiveSession(accountId, params.sessionId as string);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.unarchiveSession": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          return await deps.turns.unarchiveSession(accountId, params.sessionId as string);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.removeSession": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          return await deps.turns.removeSession(accountId, params.sessionId as string);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.renameSession": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          return await deps.turns.renameSession(
+            accountId,
+            params.sessionId as string,
+            params.title as string,
+          );
         } catch (err) {
           mapStoreError(err);
         }
@@ -1186,36 +1560,59 @@ export function createDispatcher(deps: RouterDeps) {
       }
       case "home.listGrants": {
         try {
-          if (caller.kind !== "loopback-owner" && !caller.ownerTrusted) {
-            throw Object.assign(new Error("home.listGrants requires owner-scope"), {
-              rpcError: makeError(
-                TRANSPORT_CODE_UNAUTHORIZED,
-                "auth",
-                "home.listGrants requires owner-scope",
-              ),
-            });
-          }
           const accountId =
             typeof params.accountId === "string" && params.accountId.length > 0
               ? params.accountId
               : undefined;
-          return await deps.turns.listGrants(accountId);
+          if (accountId) {
+            if (!mayActForSeat(caller, accountId, ownerAccountId)) {
+              throwRpc(
+                TRANSPORT_CODE_UNAUTHORIZED,
+                "account_not_bound",
+                `envoyhome.account_not_bound: cannot list grants for ${accountId}`,
+              );
+            }
+            return await deps.turns.listGrants(accountId);
+          }
+          if (isHouseholdOwner(caller, ownerAccountId)) {
+            return await deps.turns.listGrants();
+          }
+          const grants: unknown[] = [];
+          for (const id of caller.accountIds) {
+            const row = await deps.turns.listGrants(id);
+            const list = (row as { grants?: unknown[] }).grants ?? [];
+            grants.push(...list);
+          }
+          return { grants };
         } catch (err) {
           mapStoreError(err);
         }
       }
       case "home.revokeGrant": {
         try {
-          if (caller.kind !== "loopback-owner" && !caller.ownerTrusted) {
-            throw Object.assign(new Error("home.revokeGrant requires owner-scope"), {
-              rpcError: makeError(
-                TRANSPORT_CODE_UNAUTHORIZED,
-                "auth",
-                "home.revokeGrant requires owner-scope",
-              ),
-            });
+          const grantId = params.id as string;
+          let grantAccountId: string | undefined;
+          const seats = isHouseholdOwner(caller, ownerAccountId)
+            ? (await deps.accounts.list()).map((a) => a.accountId)
+            : [...caller.accountIds];
+          for (const seat of seats) {
+            const { grants } = (await deps.turns.listGrants(seat)) as {
+              grants: Array<{ id?: string; accountId?: string }>;
+            };
+            const hit = grants.find((g) => g.id === grantId);
+            if (hit) {
+              grantAccountId = hit.accountId ?? seat;
+              break;
+            }
           }
-          await deps.turns.revokeGrant(params.id as string);
+          if (!grantAccountId || !mayActForSeat(caller, grantAccountId, ownerAccountId)) {
+            throwRpc(
+              TRANSPORT_CODE_UNAUTHORIZED,
+              "auth",
+              "envoyhome.account_not_bound: cannot revoke grant for another seat",
+            );
+          }
+          await deps.turns.revokeGrant(grantId);
           return { ok: true };
         } catch (err) {
           mapStoreError(err);
@@ -1236,7 +1633,7 @@ export function createDispatcher(deps: RouterDeps) {
       }
       case "home.setProvider": {
         try {
-          if (caller.kind !== "loopback-owner" && !caller.ownerTrusted) {
+          if (!isHouseholdOwner(caller, ownerAccountId)) {
             throw Object.assign(new Error("home.setProvider requires owner-scope"), {
               rpcError: makeError(
                 TRANSPORT_CODE_UNAUTHORIZED,
@@ -1297,7 +1694,7 @@ export function createDispatcher(deps: RouterDeps) {
       }
       case "home.removeProvider": {
         try {
-          if (caller.kind !== "loopback-owner" && !caller.ownerTrusted) {
+          if (!isHouseholdOwner(caller, ownerAccountId)) {
             throw Object.assign(new Error("home.removeProvider requires owner-scope"), {
               rpcError: makeError(
                 TRANSPORT_CODE_UNAUTHORIZED,
@@ -1314,7 +1711,7 @@ export function createDispatcher(deps: RouterDeps) {
       }
       case "home.setProviderSecret": {
         try {
-          if (caller.kind !== "loopback-owner" && !caller.ownerTrusted) {
+          if (!isHouseholdOwner(caller, ownerAccountId)) {
             throw Object.assign(new Error("home.setProviderSecret requires owner-scope"), {
               rpcError: makeError(
                 TRANSPORT_CODE_UNAUTHORIZED,
@@ -1331,7 +1728,7 @@ export function createDispatcher(deps: RouterDeps) {
       }
       case "home.testProvider": {
         try {
-          if (caller.kind !== "loopback-owner" && !caller.ownerTrusted) {
+          if (!isHouseholdOwner(caller, ownerAccountId)) {
             throw Object.assign(new Error("home.testProvider requires owner-scope"), {
               rpcError: makeError(
                 TRANSPORT_CODE_UNAUTHORIZED,
@@ -1511,7 +1908,7 @@ export function createDispatcher(deps: RouterDeps) {
       }
       case "home.setHarness": {
         try {
-          if (caller.kind !== "loopback-owner" && !caller.ownerTrusted) {
+          if (!isHouseholdOwner(caller, ownerAccountId)) {
             throw Object.assign(new Error("home.setHarness requires owner-scope"), {
               rpcError: makeError(
                 TRANSPORT_CODE_UNAUTHORIZED,
@@ -1539,10 +1936,14 @@ export function createDispatcher(deps: RouterDeps) {
             accounts: deps.accounts,
             bindings: deps.bindings,
             channels: deps.channels,
+            webSearch: deps.webSearch,
+            browserControl: deps.browserControl,
+            schedules: deps.schedules,
           },
           {
             dualModeNotes: deps.meshDualModeNotes?.() ?? [],
             meshStatus: deps.meshStatus(),
+            ownerAccountId,
             ...(typeof params.homeClawRoot === "string"
               ? { homeClawRoot: params.homeClawRoot }
               : {}),
@@ -1552,7 +1953,7 @@ export function createDispatcher(deps: RouterDeps) {
         return { ok: issues.every((i) => i.severity !== "error"), issues };
       }
       case "home.doctorFix": {
-        if (caller.kind !== "loopback-owner" && !caller.ownerTrusted) {
+        if (!isHouseholdOwner(caller, ownerAccountId)) {
           throw Object.assign(new Error("home.doctorFix requires owner-scope"), {
             rpcError: makeError(
               TRANSPORT_CODE_UNAUTHORIZED,
@@ -1570,14 +1971,20 @@ export function createDispatcher(deps: RouterDeps) {
             accounts: deps.accounts,
             bindings: deps.bindings,
             channels: deps.channels,
+            webSearch: deps.webSearch,
+            browserControl: deps.browserControl,
+            schedules: deps.schedules,
           },
-          { meshStatus: deps.meshStatus() },
+          { meshStatus: deps.meshStatus(), ownerAccountId },
         );
         const result = await applyDoctorFixes({
           issueIds,
           issues,
           stateDir: deps.config.stateDir,
           config: deps.config,
+          accounts: deps.accounts,
+          bindings: deps.bindings,
+          household: deps.household,
         });
         return { fixed: result.fixed, failed: result.failed, diffs: result.diffs };
       }
@@ -1585,7 +1992,7 @@ export function createDispatcher(deps: RouterDeps) {
       case "home.listSources": {
         // Still require a bound account for device callers (auth), but do not filter by binder —
         // household registry is shared (Design 2026-10-16l).
-        if (caller.kind !== "loopback-owner" && !caller.ownerTrusted) {
+        if (!isHouseholdOwner(caller, ownerAccountId)) {
           requireBoundAccount(method, caller, params);
         }
         // pruneUnbound runs inside list(); re-run for an accurate capped flag.
@@ -1601,7 +2008,7 @@ export function createDispatcher(deps: RouterDeps) {
         };
       }
       case "home.setSourceBinding": {
-        if (caller.kind !== "loopback-owner" && !caller.ownerTrusted) {
+        if (!isHouseholdOwner(caller, ownerAccountId)) {
           throw Object.assign(new Error("home.setSourceBinding requires owner-scope"), {
             rpcError: makeError(
               TRANSPORT_CODE_UNAUTHORIZED,
@@ -1649,7 +2056,7 @@ export function createDispatcher(deps: RouterDeps) {
         }
       }
       case "home.removeSourceBinding": {
-        if (caller.kind !== "loopback-owner" && !caller.ownerTrusted) {
+        if (!isHouseholdOwner(caller, ownerAccountId)) {
           throw Object.assign(new Error("home.removeSourceBinding requires owner-scope"), {
             rpcError: makeError(
               TRANSPORT_CODE_UNAUTHORIZED,
@@ -1673,7 +2080,7 @@ export function createDispatcher(deps: RouterDeps) {
         }
       }
       case "home.listActuations": {
-        if (caller.kind !== "loopback-owner" && !caller.ownerTrusted) {
+        if (!isHouseholdOwner(caller, ownerAccountId)) {
           throw Object.assign(new Error("home.listActuations requires owner-scope"), {
             rpcError: makeError(
               TRANSPORT_CODE_UNAUTHORIZED,
@@ -1743,9 +2150,21 @@ export function createDispatcher(deps: RouterDeps) {
         return { ok: true, count };
       }
       case "home.listWorkflowTools": {
+        const forAccountId: string | null =
+          caller?.kind === "device" && caller.accountIds.length > 0
+            ? (caller.accountIds[0] ?? null)
+            : caller?.kind === "loopback-owner"
+              ? ownerAccountId
+              : typeof params.accountId === "string"
+                ? params.accountId
+                : null;
         const tools = await listWorkflowTools({
           skills: deps.skills,
           channels: deps.channels,
+          webSearch: deps.webSearch,
+          browserControl: deps.browserControl,
+          forAccountId,
+          ownerAccountId: ownerAccountId ?? null,
         });
         return {
           tools: tools.map((row) => ({
@@ -1779,6 +2198,8 @@ export function createDispatcher(deps: RouterDeps) {
           const tools = await listWorkflowTools({
             skills: deps.skills,
             channels: deps.channels,
+            webSearch: deps.webSearch,
+            browserControl: deps.browserControl,
           });
           const hintRaw = Array.isArray(params.hintTools) ? params.hintTools : [];
           const hintTools = hintRaw.filter((x): x is string => typeof x === "string" && x.length > 0);
@@ -1787,6 +2208,8 @@ export function createDispatcher(deps: RouterDeps) {
           const known = await workflowToolNameSet({
             skills: deps.skills,
             channels: deps.channels,
+            webSearch: deps.webSearch,
+            browserControl: deps.browserControl,
           });
           const drafted = await draftWorkflowFromText({
             text: String(params.text ?? ""),
@@ -1909,6 +2332,8 @@ export function createDispatcher(deps: RouterDeps) {
         const known = await workflowToolNameSet({
           skills: deps.skills,
           channels: deps.channels,
+            webSearch: deps.webSearch,
+            browserControl: deps.browserControl,
         });
         const result = deps.workflows.validate(String(params.yaml ?? ""), known);
         if (result.ok) return { ok: true, id: result.id };
@@ -1923,6 +2348,8 @@ export function createDispatcher(deps: RouterDeps) {
           const known = await workflowToolNameSet({
             skills: deps.skills,
             channels: deps.channels,
+            webSearch: deps.webSearch,
+            browserControl: deps.browserControl,
           });
           const { id } = await deps.workflows.put(
             String(params.yaml ?? ""),
@@ -2031,6 +2458,7 @@ export function createDispatcher(deps: RouterDeps) {
         const accountId = requireBoundAccount(method, caller, params);
         await deps.schedules.watchAccount(accountId);
         const jobs = await deps.schedules.store.listJobs(accountId);
+        const dismissed = await deps.schedules.listDismissed(accountId);
         return {
           jobs: jobs.map((j) => ({
             id: j.id,
@@ -2039,13 +2467,66 @@ export function createDispatcher(deps: RouterDeps) {
             kind: j.spec.kind,
             source: j.source,
             payloadKind: j.payload.kind,
+            timeZone: j.spec.timeZone,
             ...(j.nextRunAt ? { nextRunAt: j.nextRunAt } : {}),
             ...(j.lastStatus ? { lastStatus: j.lastStatus } : {}),
             ...(j.payload.message ? { message: j.payload.message } : {}),
             ...(j.payload.workflowId ? { workflowId: j.payload.workflowId } : {}),
             ...(j.payload.toolName ? { toolName: j.payload.toolName } : {}),
+            ...(j.payload.prompt ? { prompt: j.payload.prompt } : {}),
+            ...(j.spec.cronExpr ? { cronExpr: j.spec.cronExpr } : {}),
+            ...(typeof j.spec.everyMs === "number" ? { everyMs: j.spec.everyMs } : {}),
+            ...(j.spec.whenInstant ? { whenInstant: j.spec.whenInstant } : {}),
+          })),
+          dismissed: dismissed.map((d) => ({
+            proposalId: d.proposalId,
+            status: d.status,
+            resolvedLocal: d.resolvedLocal,
+            name: d.name,
+            kind: d.kind,
+            closedAt: d.closedAt,
+            ...(d.expiresAt ? { expiresAt: d.expiresAt } : {}),
+            ...(d.message ? { message: d.message } : {}),
+            ...(d.timeZone ? { timeZone: d.timeZone } : {}),
           })),
         };
+      }
+      case "home.cancelScheduleProposal": {
+        const accountId = requireBoundAccount(method, caller, params);
+        try {
+          const dismissed = await deps.schedules.cancelProposal(
+            accountId,
+            String(params.proposalId),
+          );
+          if (dismissed.sessionId) {
+            await deps.turns.clearPendingScheduleConfirm(accountId, dismissed.sessionId);
+          }
+          return {
+            dismissed: {
+              proposalId: dismissed.proposalId,
+              status: dismissed.status,
+              resolvedLocal: dismissed.resolvedLocal,
+              name: dismissed.name,
+              kind: dismissed.kind,
+              closedAt: dismissed.closedAt,
+              ...(dismissed.expiresAt ? { expiresAt: dismissed.expiresAt } : {}),
+              ...(dismissed.message ? { message: dismissed.message } : {}),
+              ...(dismissed.timeZone ? { timeZone: dismissed.timeZone } : {}),
+            },
+          };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes("bad_params")) {
+            throw Object.assign(err instanceof Error ? err : new Error(msg), {
+              rpcError: makeError(
+                TRANSPORT_CODE_BAD_PARAMS,
+                "bad_params",
+                msg.replace(/^envoyhome\.bad_params:\s*/, ""),
+              ),
+            });
+          }
+          throw err;
+        }
       }
       case "home.proposeSchedule": {
         const accountId = requireBoundAccount(method, caller, params);
@@ -2054,10 +2535,16 @@ export function createDispatcher(deps: RouterDeps) {
           typeof params.timeZone === "string" && params.timeZone.length > 0
             ? params.timeZone
             : undefined;
-        const proposal = await deps.schedules.proposeFromText(accountId, text, timeZone);
+        const { normalizeClientContext } = await import("./client-context.js");
+        const clientContext = normalizeClientContext(params.clientContext);
+        const proposal = await deps.schedules.proposeFromText(accountId, text, timeZone, {
+          ...(clientContext ? { clientContext } : {}),
+        });
         if ("error" in proposal) {
-          throw Object.assign(new Error(`envoyhome.bad_params: ${proposal.reason}`), {
-            rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", proposal.reason),
+          const { formatProposeFailure } = await import("./schedule/service.js");
+          const detail = formatProposeFailure(proposal);
+          throw Object.assign(new Error(`envoyhome.bad_params: ${detail}`), {
+            rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", detail),
           });
         }
         return {
@@ -2065,6 +2552,8 @@ export function createDispatcher(deps: RouterDeps) {
           resolvedLocal: proposal.resolvedLocal,
           kind: proposal.spec.kind,
           timeZone: proposal.spec.timeZone,
+          ...(proposal.relativeHint ? { relativeHint: proposal.relativeHint } : {}),
+          ...(proposal.nextRunAt ? { nextRunAt: proposal.nextRunAt } : {}),
           ...(proposal.spec.whenInstant ? { whenInstant: proposal.spec.whenInstant } : {}),
           ...(proposal.spec.cronExpr ? { cronExpr: proposal.spec.cronExpr } : {}),
           ...(proposal.spec.everyMs !== undefined ? { everyMs: proposal.spec.everyMs } : {}),
@@ -2083,19 +2572,36 @@ export function createDispatcher(deps: RouterDeps) {
         if (params.payload !== undefined) {
           overrides.payload = await resolveUserSchedulePayload(deps, accountId, params.payload);
         }
-        const job = await deps.schedules.confirmProposal(String(params.proposalId), overrides);
-        if (job.accountId !== accountId) {
-          throw Object.assign(new Error("envoyhome.bad_params: proposal account mismatch"), {
-            rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "proposal account mismatch"),
-          });
+        try {
+          const peek = deps.schedules.store.getProposal(String(params.proposalId));
+          const job = await deps.schedules.confirmProposal(
+            accountId,
+            String(params.proposalId),
+            overrides,
+          );
+          if (peek?.sessionId) {
+            await deps.turns.clearPendingScheduleConfirm(accountId, peek.sessionId);
+          }
+          return {
+            job: {
+              id: job.id,
+              enabled: job.enabled,
+              ...(job.nextRunAt ? { nextRunAt: job.nextRunAt } : {}),
+            },
+          };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes("bad_params")) {
+            throw Object.assign(err instanceof Error ? err : new Error(msg), {
+              rpcError: makeError(
+                TRANSPORT_CODE_BAD_PARAMS,
+                "bad_params",
+                msg.replace(/^envoyhome\.bad_params:\s*/, ""),
+              ),
+            });
+          }
+          throw err;
         }
-        return {
-          job: {
-            id: job.id,
-            enabled: job.enabled,
-            ...(job.nextRunAt ? { nextRunAt: job.nextRunAt } : {}),
-          },
-        };
       }
       case "home.putSchedule": {
         const accountId = requireBoundAccount(method, caller, params);
@@ -2130,21 +2636,93 @@ export function createDispatcher(deps: RouterDeps) {
       }
       case "home.updateSchedule": {
         const accountId = requireBoundAccount(method, caller, params);
-        const job = await deps.schedules.updateJob(accountId, String(params.jobId), {
-          ...(typeof params.enabled === "boolean" ? { enabled: params.enabled } : {}),
-        });
+        const patch: {
+          enabled?: boolean;
+          name?: string;
+          spec?: ScheduleSpec;
+          payload?: SchedulePayload;
+        } = {};
+        if (typeof params.enabled === "boolean") patch.enabled = params.enabled;
+        if (typeof params.name === "string" && params.name.trim().length > 0) {
+          patch.name = params.name.trim();
+        }
+        if (params.spec !== undefined) {
+          const specParsed = normalizeScheduleSpec(params.spec);
+          if (!specParsed.ok) {
+            throw Object.assign(new Error(`envoyhome.bad_params: ${specParsed.reason}`), {
+              rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", specParsed.reason),
+            });
+          }
+          patch.spec = specParsed.spec;
+        }
+        if (params.payload !== undefined) {
+          patch.payload = await resolveUserSchedulePayload(deps, accountId, params.payload);
+        }
+        try {
+          const job = await deps.schedules.updateJob(accountId, String(params.jobId), patch);
+          return {
+            job: {
+              id: job.id,
+              enabled: job.enabled,
+              ...(job.nextRunAt ? { nextRunAt: job.nextRunAt } : {}),
+            },
+          };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes("bad_params")) {
+            throw Object.assign(err instanceof Error ? err : new Error(msg), {
+              rpcError: makeError(
+                TRANSPORT_CODE_BAD_PARAMS,
+                "bad_params",
+                msg.replace(/^envoyhome\.bad_params:\s*/, ""),
+              ),
+            });
+          }
+          throw err;
+        }
+      }
+      case "home.listScheduleReceipts": {
+        const accountId = requireBoundAccount(method, caller, params);
+        await deps.schedules.watchAccount(accountId);
+        const jobId =
+          typeof params.jobId === "string" && params.jobId.trim().length > 0
+            ? params.jobId.trim()
+            : undefined;
+        const limitRaw = typeof params.limit === "number" ? params.limit : 50;
+        const limit = Math.max(1, Math.min(200, Math.floor(limitRaw)));
+        let receipts = await deps.schedules.listUserReceipts(accountId, jobId);
+        receipts = receipts.slice(-limit).reverse();
         return {
-          job: {
-            id: job.id,
-            enabled: job.enabled,
-            ...(job.nextRunAt ? { nextRunAt: job.nextRunAt } : {}),
-          },
+          receipts: receipts.map((r) => ({
+            jobId: r.jobId,
+            accountId: r.accountId,
+            scheduledFor: r.scheduledFor,
+            startedAt: r.startedAt,
+            finishedAt: r.finishedAt,
+            execStatus: r.execStatus,
+            deliveryStatus: r.deliveryStatus,
+            ...(r.error !== undefined ? { error: r.error } : {}),
+          })),
         };
       }
       case "home.removeSchedule": {
         const accountId = requireBoundAccount(method, caller, params);
-        await deps.schedules.removeJob(accountId, String(params.jobId));
-        return { ok: true };
+        try {
+          await deps.schedules.removeJob(accountId, String(params.jobId));
+          return { ok: true };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes("bad_params")) {
+            throw Object.assign(err instanceof Error ? err : new Error(msg), {
+              rpcError: makeError(
+                TRANSPORT_CODE_BAD_PARAMS,
+                "bad_params",
+                msg.replace(/^envoyhome\.bad_params:\s*/, ""),
+              ),
+            });
+          }
+          throw err;
+        }
       }
       case "home.runSchedule": {
         const accountId = requireBoundAccount(method, caller, params);
@@ -2229,6 +2807,24 @@ export function createDispatcher(deps: RouterDeps) {
         const artifacts = await deps.artifacts.listArtifacts(accountId, sessionId);
         return { artifacts };
       }
+      case "home.listSandboxEntries": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          const path =
+            typeof params.path === "string" ? params.path : undefined;
+          return await deps.artifacts.listSandboxEntries(accountId, path);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.getArtifactContent": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          return await deps.artifacts.getContent(accountId, params.path as string);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
       case "home.getArtifactUrl": {
         const accountId = requireBoundAccount(method, caller, params);
         return await deps.artifacts.mintUrl({
@@ -2261,7 +2857,10 @@ export function createDispatcher(deps: RouterDeps) {
 
 async function syncWorkflowSchedules(deps: RouterDeps): Promise<void> {
   for (const a of await deps.accounts.list()) {
-    await deps.schedules.watchAccount(a.accountId);
+    const pol = await deps.turns.policy.get(a.accountId);
+    await deps.schedules.watchAccount(a.accountId, {
+      reviewEnabled: pol.reviewEnabled,
+    });
     const defs = deps.workflows.mergedForAccount(a.accountId);
     await deps.schedules.syncWorkflowSchedules(
       a.accountId,

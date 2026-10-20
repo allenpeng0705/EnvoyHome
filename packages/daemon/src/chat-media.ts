@@ -1,14 +1,23 @@
 // Chat media upload + materialize — Design A.6 `media[]` on home.sendMessage.
+// Design §9.5a: Office/PDF → GFM extract sidecar + capped inline for the model.
 
-import { mkdir, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { basename, extname, join } from "node:path";
 import { randomUUID } from "node:crypto";
+import {
+  DOCUMENT_TEXT_EXTRACTOR_ID,
+  extractDocumentText,
+  extractSidecarUri,
+  isExtractableExtension,
+} from "./document-extract.js";
 import { safeJoin } from "./fs-jail.js";
 import type { HomePaths } from "./home-paths.js";
 
 export const CHAT_MEDIA_MAX_BYTES = 8 * 1024 * 1024;
 export const CHAT_MEDIA_MAX_FILES = 8;
 export const CHAT_MEDIA_UPLOAD_DIR = "uploads";
+/** Max GFM chars inlined into the turn (Design §9.5a). Full extract stays on disk. */
+export const CHAT_MEDIA_EXTRACT_INLINE_CHARS = 24_000;
 
 export type ChatMediaKind = "image" | "audio" | "video" | "file";
 
@@ -18,6 +27,12 @@ export interface ChatMediaItem {
   fileName?: string;
   mimeType?: string;
   bytes?: number;
+  /** Sandbox-relative GFM sidecar from §9.5a extract. */
+  extractUri?: string;
+  extractor?: string;
+  extractChars?: number;
+  /** In-process only — loaded for turn inject; not required on the wire. */
+  extractText?: string;
 }
 
 export class ChatMediaError extends Error {
@@ -53,6 +68,7 @@ function sanitizeFileName(name: string): string {
 /**
  * Write base64 content into `accounts/<id>/files/uploads/<uuid>-<name>` and
  * return a sandbox-relative uri for `home.sendMessage` media[].
+ * Extractable Office/PDF/text also get a `*.extract.md` sidecar (§9.5a).
  */
 export async function storeChatMedia(input: {
   paths: HomePaths;
@@ -85,13 +101,30 @@ export async function storeChatMedia(input: {
     recursive: true,
   });
   await writeFile(abs, buf);
-  return {
+
+  const item: ChatMediaItem = {
     kind,
     uri: rel.replace(/\\/g, "/"),
     fileName,
     ...(input.mimeType ? { mimeType: input.mimeType } : {}),
     bytes: buf.length,
   };
+
+  const ext = extname(fileName);
+  if (kind === "file" && isExtractableExtension(ext)) {
+    const gfm = await extractDocumentText(ext, buf);
+    if (gfm) {
+      const extractUri = extractSidecarUri(item.uri);
+      const extractAbs = safeJoin(input.paths.accountFiles(input.accountId), extractUri);
+      await writeFile(extractAbs, gfm, "utf8");
+      item.extractUri = extractUri;
+      item.extractor = DOCUMENT_TEXT_EXTRACTOR_ID;
+      item.extractChars = gfm.length;
+      item.extractText = gfm;
+    }
+  }
+
+  return item;
 }
 
 /** Normalize wire media[]; reject oversized lists. */
@@ -130,6 +163,23 @@ export function normalizeMediaList(raw: unknown): ChatMediaItem[] {
         "envoyhome.bad_params: media.uri must be under uploads/",
       );
     }
+    const extractUri =
+      typeof rec.extractUri === "string" && rec.extractUri.trim()
+        ? rec.extractUri.trim().replace(/\\/g, "/")
+        : undefined;
+    if (extractUri) {
+      if (
+        extractUri.includes("..") ||
+        extractUri.startsWith("/") ||
+        /^[A-Za-z]:[\\/]/.test(extractUri) ||
+        !extractUri.startsWith(`${CHAT_MEDIA_UPLOAD_DIR}/`)
+      ) {
+        throw new ChatMediaError(
+          "bad_params",
+          "envoyhome.bad_params: media.extractUri must be sandbox-relative under uploads/",
+        );
+      }
+    }
     out.push({
       kind,
       uri: uri.replace(/\\/g, "/"),
@@ -138,25 +188,75 @@ export function normalizeMediaList(raw: unknown): ChatMediaItem[] {
       ...(typeof rec.bytes === "number" && Number.isFinite(rec.bytes)
         ? { bytes: Math.floor(rec.bytes) }
         : {}),
+      ...(extractUri ? { extractUri } : {}),
+      ...(typeof rec.extractor === "string" ? { extractor: rec.extractor } : {}),
+      ...(typeof rec.extractChars === "number" && Number.isFinite(rec.extractChars)
+        ? { extractChars: Math.floor(rec.extractChars) }
+        : {}),
     });
   }
   return out;
 }
 
-/** Append a readable attachment block so the model can call read_file on paths. */
+/**
+ * Load `*.extract.md` sidecars for turn inject (clients may omit extractUri).
+ */
+export async function enrichMediaExtracts(
+  paths: HomePaths,
+  accountId: string,
+  media: ChatMediaItem[],
+): Promise<ChatMediaItem[]> {
+  const out: ChatMediaItem[] = [];
+  for (const m of media) {
+    const next = { ...m };
+    const candidate = m.extractUri || extractSidecarUri(m.uri);
+    try {
+      const abs = safeJoin(paths.accountFiles(accountId), candidate);
+      const text = await readFile(abs, "utf8");
+      if (text.trim()) {
+        next.extractUri = candidate;
+        next.extractText = text;
+        next.extractor = m.extractor || DOCUMENT_TEXT_EXTRACTOR_ID;
+        next.extractChars = text.length;
+      }
+    } catch {
+      /* no sidecar — leave as-is */
+    }
+    out.push(next);
+  }
+  return out;
+}
+
+/** Append a readable attachment block so the model sees GFM extract (§9.5a). */
 export function appendMediaToUserText(text: string, media: ChatMediaItem[]): string {
   if (media.length === 0) return text;
-  const lines = media.map((m) => {
+  const lines: string[] = [];
+  const extracts: string[] = [];
+  for (const m of media) {
     const name = m.fileName || basename(m.uri);
     const size =
       typeof m.bytes === "number" && m.bytes > 0
         ? `, ${m.bytes < 1024 ? `${m.bytes} B` : `${Math.round(m.bytes / 1024)} KB`}`
         : "";
-    return `- ${name} (${m.kind}${size}) · path \`${m.uri}\``;
-  });
+    const extractNote = m.extractUri ? ` · extract \`${m.extractUri}\`` : "";
+    lines.push(`- ${name} (${m.kind}${size}) · path \`${m.uri}\`${extractNote}`);
+    if (m.extractText && m.extractText.trim()) {
+      const full = m.extractText.trim();
+      const truncated = full.length > CHAT_MEDIA_EXTRACT_INLINE_CHARS;
+      const body = truncated
+        ? `${full.slice(0, CHAT_MEDIA_EXTRACT_INLINE_CHARS).trimEnd()}\n\n…[truncated — use read_file on \`${m.extractUri || extractSidecarUri(m.uri)}\` for the remainder]`
+        : full;
+      extracts.push(`--- extract: ${name} ---\n${body}\n--- end extract ---`);
+    } else if (m.kind === "file" && isExtractableExtension(extname(m.fileName || m.uri))) {
+      extracts.push(
+        `--- extract: ${name} ---\n(extract unavailable — original at \`${m.uri}\`; scanned PDFs need OCR which is not enabled)\n--- end extract ---`,
+      );
+    }
+  }
   const block = [
-    "[Attached files — paths are under the account sandbox `files/`; use read_file to inspect contents]",
+    "[Attached files — paths are under the account sandbox `files/`; prefer the extract block below for Office/PDF; use read_file for originals or remainder]",
     ...lines,
+    ...(extracts.length ? ["", ...extracts] : []),
   ].join("\n");
   const body = text.trim();
   return body ? `${body}\n\n${block}` : block;

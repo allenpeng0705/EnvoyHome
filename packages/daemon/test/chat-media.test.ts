@@ -69,14 +69,96 @@ test("storeChatMedia writes under account files/uploads and appendMediaToUserTex
     assert.match(stored.uri, /^uploads\/.+-hello\.txt$/);
     assert.equal(stored.fileName, "hello.txt");
     assert.equal(stored.bytes, 12);
+    assert.ok(stored.extractUri?.endsWith(".extract.md"));
+    assert.equal(stored.extractor, "anydoc-v1");
     const abs = join(paths.accountFiles("alice"), stored.uri);
     assert.equal(await readFile(abs, "utf8"), "hello attach");
+    const extractAbs = join(paths.accountFiles("alice"), stored.extractUri!);
+    assert.equal(await readFile(extractAbs, "utf8"), "hello attach");
 
     const withText = appendMediaToUserText("Summarize this", [stored]);
     assert.match(withText, /Summarize this/);
     assert.match(withText, /hello\.txt/);
     assert.match(withText, /`uploads\//);
+    assert.match(withText, /--- extract: hello\.txt ---/);
+    assert.match(withText, /hello attach/);
     assert.match(appendMediaToUserText("", [stored]), /Attached files/);
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("storeChatMedia docx writes extract sidecar; enrich reloads for send", async () => {
+  const { execSync } = await import("node:child_process");
+  const { randomUUID } = await import("node:crypto");
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const stateDir = await mkdtemp(join(tmpdir(), "eh-chat-docx-"));
+  const workDir = join(tmpdir(), `eh-docx-up-${randomUUID()}`);
+  try {
+    await mkdir(join(workDir, "word", "_rels"), { recursive: true });
+    await mkdir(join(workDir, "_rels"), { recursive: true });
+    await writeFile(
+      join(workDir, "[Content_Types].xml"),
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>',
+    );
+    await writeFile(
+      join(workDir, "_rels", ".rels"),
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>',
+    );
+    await writeFile(
+      join(workDir, "word", "document.xml"),
+      '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>Quarterly budget summary</w:t></w:r></w:p></w:body></w:document>',
+    );
+    const docxPath = join(stateDir, "budget.docx");
+    execSync(`cd "${workDir}" && zip -qr "${docxPath}" .`);
+
+    const paths = homePaths(stateDir);
+    const buf = await readFile(docxPath);
+    const stored = await storeChatMedia({
+      paths,
+      accountId: "alice",
+      fileName: "budget.docx",
+      mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      contentBase64: buf.toString("base64"),
+    });
+    assert.ok(stored.extractUri, "docx should yield extractUri");
+    assert.match(await readFile(join(paths.accountFiles("alice"), stored.extractUri!), "utf8"), /Quarterly budget summary/);
+
+    // Client may omit extract fields — enrich reloads sidecar.
+    const { enrichMediaExtracts } = await import("../dist/chat-media.js");
+    const enriched = await enrichMediaExtracts(paths, "alice", [
+      { kind: "file", uri: stored.uri, fileName: "budget.docx", bytes: stored.bytes },
+    ]);
+    assert.ok(enriched[0]?.extractText?.includes("Quarterly budget summary"));
+    const turn = appendMediaToUserText("Summarize", enriched);
+    assert.match(turn, /--- extract: budget\.docx ---/);
+    assert.match(turn, /Quarterly budget summary/);
+  } finally {
+    await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("image attach has no extract", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "eh-chat-img-"));
+  try {
+    const paths = homePaths(stateDir);
+    // Minimal 1x1 PNG
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    const stored = await storeChatMedia({
+      paths,
+      accountId: "alice",
+      fileName: "dot.png",
+      mimeType: "image/png",
+      contentBase64: png.toString("base64"),
+    });
+    assert.equal(stored.kind, "image");
+    assert.equal(stored.extractUri, undefined);
+    const turn = appendMediaToUserText("see", [stored]);
+    assert.doesNotMatch(turn, /--- extract:/);
   } finally {
     await rm(stateDir, { recursive: true, force: true });
   }

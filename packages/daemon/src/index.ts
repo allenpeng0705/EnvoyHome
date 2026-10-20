@@ -44,6 +44,15 @@ export {
   type HomeSession,
 } from "./auth.js";
 
+export {
+  HouseholdStore,
+  HouseholdError,
+  isHouseholdOwner,
+  memoryTrustForTurn,
+  mayActForSeat,
+  assertOwnerExclusiveBind,
+} from "./household.js";
+
 export { SubscriptionRegistry } from "./events.js";
 
 export {
@@ -119,6 +128,8 @@ export {
   PathJailError,
   safeJoin,
   resolveSandboxPath,
+  isFilesystemRoot,
+  type WorkspaceMode,
 } from "./fs-jail.js";
 
 export {
@@ -139,6 +150,7 @@ export {
 export {
   AccountStore,
   AccountError,
+  assertIanaTimeZone,
   type AccountRecord,
   type AccountProfileFile,
   type ToolPolicyPreset,
@@ -245,11 +257,23 @@ export {
   CHAT_MEDIA_MAX_BYTES,
   CHAT_MEDIA_MAX_FILES,
   CHAT_MEDIA_UPLOAD_DIR,
+  CHAT_MEDIA_EXTRACT_INLINE_CHARS,
   ChatMediaError,
   kindFromMime,
   storeChatMedia,
   normalizeMediaList,
+  enrichMediaExtracts,
   appendMediaToUserText,
   type ChatMediaKind,
   type ChatMediaItem,
 } from "./chat-media.js";
+export {
+  DOCUMENT_TEXT_EXTRACTOR_ID,
+  extractDocumentText,
+  extractSidecarUri,
+  isExtractableExtension,
+  isAnydocExtension,
+  isNativeTextExtension,
+  normalizeExtension,
+  normalizeGfmMarkdown,
+} from "./document-extract.js";

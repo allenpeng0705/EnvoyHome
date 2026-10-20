@@ -1,7 +1,11 @@
 // Model-aware inject packages — Memory Design §4.2.1 (V-MEM-22).
 // Target package aligns with OpenClaw bootstrap caps (2026-10-13l / 2026-10-13m).
+// Identity (floor + persona) is reserved outside the L1–L3 package.
 
+import { IDENTITY_STANDING_RESERVE } from "./agent-identity.js";
 import { INJECT_BUDGET, RAW_SOFT_CAP } from "./bootstrap-inject.js";
+
+export { IDENTITY_STANDING_RESERVE };
 
 export type InjectBudgetMode = "auto" | "baseline" | "custom";
 export type InjectProfileId = "cloud" | "local";
@@ -65,11 +69,12 @@ export function splitInjectTotal(total: number): InjectAssetBudgets {
 }
 
 /**
- * Derive one inject package from contextTokens (Memory Design §4.2.1).
- * Target = OpenClaw package; scale down when the window cannot afford it.
- * - Unknown cloud → full OpenClaw baseline.
- * - Unknown local → HARD_MIN package (do not dump 44k into a small GGUF).
- * - Known context → never exceed affordable (MAX_FRACTION of contextChars).
+ * Derive one L1–L3 inject package from contextTokens (Memory Design §4.2.1).
+ * Identity (floor + persona) is reserved first via IDENTITY_STANDING_RESERVE so
+ * total standing (identity + L1–L3) stays within MAX_FRACTION / CEILING.
+ * - Unknown cloud → full OpenClaw baseline (identity still reserved at inject).
+ * - Unknown local → HARD_MIN L1–L3 package (do not dump 44k into a small GGUF).
+ * - Known context → never exceed affordable after identity reserve.
  */
 export function deriveInjectPackage(
   contextTokens: number | undefined,
@@ -84,13 +89,14 @@ export function deriveInjectPackage(
     return baselineInjectPackage();
   }
   const contextChars = contextTokens * CHARS_PER_TOKEN;
-  const affordable = Math.floor(contextChars * MAX_FRACTION);
-  if (affordable >= BASELINE_TOTAL) {
+  const affordableStanding = Math.floor(contextChars * MAX_FRACTION);
+  const ceilingL123 = Math.max(0, CEILING_TOTAL - IDENTITY_STANDING_RESERVE);
+  if (affordableStanding >= BASELINE_TOTAL + IDENTITY_STANDING_RESERVE) {
     return baselineInjectPackage();
   }
-  // Never inflate above affordable (HARD_MIN is only for unknown-local, not a
-  // license to exceed MAX_FRACTION on tiny windows).
-  const total = Math.min(Math.max(affordable, 0), BASELINE_TOTAL, CEILING_TOTAL);
+  // L1–L3 share what remains after identity reserve; never above baseline/ceiling.
+  const affordableL123 = Math.max(0, affordableStanding - IDENTITY_STANDING_RESERVE);
+  const total = Math.min(affordableL123, BASELINE_TOTAL, ceilingL123);
   return splitInjectTotal(total);
 }
 

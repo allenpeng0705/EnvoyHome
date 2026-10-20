@@ -49,6 +49,9 @@ export const EVENTS: Readonly<Record<string, EventSpec>> = {
         kind: enumOf("text", "tool_call", "tool_result", "format", "error"),
         text: str(),
         format: enumOf("plain", "markdown", "link"),
+        /** Relative path under accounts/<id>/files/ — preferred for thin-client open. */
+        artifactPath: str(),
+        /** Optional signed HTTP URL when publicBaseUrl is reachable (LAN/tunnel). */
         artifactUrl: str(),
         tool: obj({ name: str({ minLength: 1 }), id: str() }, ["name"]),
       },
@@ -124,6 +127,7 @@ export const EVENTS: Readonly<Record<string, EventSpec>> = {
         accountId: str({ minLength: 1 }),
         kind: enumOf(
           "profile_patch",
+          "identity_append",
           "memory_append",
           "memory_edit",
           "skill_create",
@@ -215,6 +219,35 @@ export const EVENTS: Readonly<Record<string, EventSpec>> = {
         reason: str(),
       },
       ["jobId", "accountId", "status"],
+    ),
+  },
+  "home:schedule-proposed": {
+    summary: "Unarmed schedule proposal ready for Confirm/Cancel in chat (Design §7.4)",
+    data: obj(
+      {
+        proposalId: str({ minLength: 1 }),
+        accountId: str({ minLength: 1 }),
+        sessionId: str({ minLength: 1 }),
+        resolvedLocal: str({ minLength: 1 }),
+        expiresAt: iso(),
+        name: str(),
+        message: str(),
+        kind: enumOf("at", "every", "cron"),
+      },
+      ["proposalId", "accountId", "resolvedLocal", "expiresAt"],
+    ),
+  },
+  "home:schedule-proposal-closed": {
+    summary: "Schedule proposal confirmed, canceled, or expired (Design §7.4)",
+    data: obj(
+      {
+        proposalId: str({ minLength: 1 }),
+        accountId: str({ minLength: 1 }),
+        sessionId: str({ minLength: 1 }),
+        status: enumOf("confirmed", "canceled", "expired"),
+        jobId: str({ minLength: 1 }),
+      },
+      ["proposalId", "accountId", "status"],
     ),
   },
   "home:workflow-step": {

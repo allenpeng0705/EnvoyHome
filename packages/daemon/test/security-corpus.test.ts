@@ -10,6 +10,7 @@ import {
   PATH_TRAVERSAL_CORPUS,
   PathJailError,
   AccountStore,
+  HouseholdStore,
   BindingStore,
   DeviceCredentialStore,
   DaemonLogger,
@@ -35,6 +36,8 @@ import { WorkflowStepTemplateStore } from "../dist/workflow-step-templates.js";
 import { ScheduleService } from "../dist/schedule/service.js";
 import { SkillService } from "../dist/skills.js";
 import { ArtifactService } from "../dist/artifacts.js";
+import { WebSearchService } from "../dist/web-search.js";
+import { BrowserControlService } from "../dist/browser-control.js";
 
 const daemons: RunningDaemon[] = [];
 
@@ -80,6 +83,7 @@ function routerDeps(stateDir: string, devices = new DeviceCredentialStore()): Ro
     onShutdown: () => undefined,
     packageVersion: "0.0.0-test",
     accounts,
+    household: new HouseholdStore(stateDir),
     bindings,
     pairing,
     memory: new MemoryFacade({ stateDir }),
@@ -92,6 +96,8 @@ function routerDeps(stateDir: string, devices = new DeviceCredentialStore()): Ro
     schedules: new ScheduleService({ paths }),
     skills: new SkillService(paths),
     artifacts: new ArtifactService(paths, () => "http://127.0.0.1:1"),
+    webSearch: new WebSearchService(paths),
+    browserControl: new BrowserControlService(paths),
     actuations: new ActuationService(paths),
     pushTokens: new PushTokenStore(paths),
     push: {
@@ -236,15 +242,28 @@ test("V-SEC-1: member device cannot call owner-scope account mutate", async () =
     const deps = routerDeps(stateDir);
     await deps.accounts.ensureLayout();
     await deps.accounts.create({ accountId: "alice", displayName: "Alice" });
+    await deps.household.onAccountCreated("alice");
+    await deps.accounts.create({ accountId: "bob", displayName: "Bob" });
 
+    // Seat-or-Owner: member may rename own displayName (§4.1.1).
+    const rename = await dispatchForTest(
+      deps,
+      "home.updateAccount",
+      { accountId: "bob", displayName: "Robert" },
+      memberSession(["bob"]),
+    );
+    assert.ok("result" in rename);
+
+    // toolPolicy remains Owner-scope (exclusive-Owner device only).
     const denied = await dispatchForTest(
       deps,
       "home.updateAccount",
-      { accountId: "alice", displayName: "Hacked" },
-      memberSession(["alice"]),
+      { accountId: "bob", toolPolicy: "restricted" },
+      memberSession(["bob"]),
     );
     assert.ok("error" in denied);
     assert.equal(denied.error.code, "UNAUTHORIZED");
+    assert.match(String(denied.error.message), /owner_required/);
   } finally {
     await rm(stateDir, { recursive: true, force: true });
   }
@@ -407,6 +426,7 @@ test("B3 RPC: create/list/update/delete accounts + sender/device bindings", asyn
     onShutdown: () => undefined,
     packageVersion: "0.0.0-test",
     accounts: daemon.accounts,
+    household: daemon.household,
     bindings: daemon.bindings,
     pairing: daemon.pairing,
     memory: daemon.memory,
@@ -419,6 +439,8 @@ test("B3 RPC: create/list/update/delete accounts + sender/device bindings", asyn
     schedules: daemon.schedules,
     skills: daemon.skills,
     artifacts: daemon.artifacts,
+    webSearch: daemon.webSearch,
+    browserControl: daemon.browserControl,
     actuations: daemon.actuations,
     pushTokens: daemon.pushTokens,
     push: daemon.push,
@@ -499,11 +521,12 @@ test("B3 RPC: create/list/update/delete accounts + sender/device bindings", asyn
   const deviceBind = await dispatchForTest(deps, "home.setBinding", {
     deviceId: "phone-alice",
     accountId: "alice",
-    ownerTrusted: true,
+    ownerTrusted: true, // deprecated no-op (§4.1.1)
   });
   assert.ok("result" in deviceBind);
   assert.equal(daemon.devices.getById("phone-alice")?.accountIds.includes("alice"), true);
-  assert.equal(daemon.devices.getById("phone-alice")?.ownerTrusted, true);
+  // ownerTrusted must not stick — Owner-scope is exclusive bind only.
+  assert.equal(daemon.devices.getById("phone-alice")?.ownerTrusted, false);
 
   const bindings = await dispatchForTest(deps, "home.listBindings", { accountId: "alice" });
   assert.ok("result" in bindings);

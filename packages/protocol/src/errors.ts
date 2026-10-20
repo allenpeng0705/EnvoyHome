@@ -24,6 +24,10 @@ export const ENVOYHOME_ERRORS = {
     "client sent a method this daemon no longer has (Design §3.7 rule 4); also used for a plugin newer than the daemon",
   bad_params: "params failed the method's Appendix A schema (Design §3.7 rule 4)",
   account_not_bound: "the device/principal is not bound to the account it named (Design §4.1)",
+  owner_required:
+    "household Owner-scope required for this field or method (Design §4.1.1; e.g. toolPolicy)",
+  workspace_root_owner_only:
+    "filesystem/volume-root workspace hostPath is only for the household Owner seat (Design §4.1.1 R3)",
   pairing_app_mismatch:
     "a pairing code was minted by another product; raised by `pairingAppMismatch` at pair time (Design §3.1, V-RPC-4)",
   approval_expired: "the approval's TTL passed; resolves as DENY, never allow (Design §4.4)",

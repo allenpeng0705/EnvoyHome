@@ -80,6 +80,7 @@ test("home.doctor includes migrate.homeclaw.plan when ENVOYHOME_HOMECLAW_ROOT se
         onShutdown: () => undefined,
         packageVersion: "0.0.0-test",
         accounts: daemon.accounts,
+        household: daemon.household,
         bindings: daemon.bindings,
         pairing: daemon.pairing,
         memory: daemon.memory,
@@ -91,6 +92,8 @@ test("home.doctor includes migrate.homeclaw.plan when ENVOYHOME_HOMECLAW_ROOT se
         workflowStepTemplates: daemon.workflowStepTemplates,
         skills: daemon.skills,
         artifacts: daemon.artifacts,
+    webSearch: daemon.webSearch,
+    browserControl: daemon.browserControl,
         actuations: daemon.actuations,
         pushTokens: daemon.pushTokens,
         push: daemon.push,
@@ -123,6 +126,7 @@ test("fresh install doctor ok", async () => {
     const issues = await collectDoctorIssues({
       config: daemon.config,
       accounts: daemon.accounts,
+      household: daemon.household,
       bindings: daemon.bindings,
       channels: daemon.channels,
     });

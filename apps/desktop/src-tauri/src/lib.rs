@@ -100,6 +100,19 @@ fn kill_pid(pid: u32, force: bool) {
   }
 }
 
+fn wait_pid_exit(pid: u32) {
+  for _ in 0..20 {
+    if !process_alive(pid) {
+      return;
+    }
+    thread::sleep(Duration::from_millis(50));
+  }
+  if process_alive(pid) {
+    kill_pid(pid, true);
+    thread::sleep(Duration::from_millis(100));
+  }
+}
+
 /// Stop a leftover `managedBy=app` daemon from a prior launch so we always
 /// boot the current `dist/` (otherwise RPCs like `home.startDemoHa` fail with
 /// `version_too_low` against a stale process holding the claim port).
@@ -123,17 +136,70 @@ fn stop_stale_claim_daemon(state_dir: &PathBuf) {
   }
   eprintln!("EnvoyHome: replacing stale managed daemon pid={pid}");
   kill_pid(pid, false);
-  for _ in 0..20 {
-    if !process_alive(pid) {
-      break;
+  wait_pid_exit(pid);
+}
+
+/// Claim files may live in a different state dir than this launch (dev cwd
+/// `.envoyhome` vs `~/.envoyhome`). Sweep common locations before bind.
+fn stop_stale_claim_daemons(primary: &PathBuf) {
+  let mut dirs = vec![primary.clone()];
+  dirs.push(default_state_dir());
+  if let Ok(cwd) = std::env::current_dir() {
+    dirs.push(cwd.join(".envoyhome"));
+    if let Some(parent) = cwd.parent() {
+      dirs.push(parent.join(".envoyhome"));
     }
-    thread::sleep(Duration::from_millis(50));
   }
-  if process_alive(pid) {
-    kill_pid(pid, true);
-    thread::sleep(Duration::from_millis(100));
+  let mut seen = std::collections::HashSet::new();
+  for dir in dirs {
+    let key = dir.to_string_lossy().to_string();
+    if !seen.insert(key) {
+      continue;
+    }
+    stop_stale_claim_daemon(&dir);
   }
 }
+
+/// If an orphan `envoyhome-daemon.js` still holds the default WS/HTTP ports
+/// (claim missing or wrong state dir), free them so spawn does not EADDRINUSE-loop.
+#[cfg(unix)]
+fn stop_orphan_daemon_on_port(port: u16) {
+  let output = Command::new("lsof")
+    .args(["-nP", &format!("-iTCP:{port}"), "-sTCP:LISTEN", "-t"])
+    .stdout(Stdio::piped())
+    .stderr(Stdio::null())
+    .output();
+  let Ok(out) = output else {
+    return;
+  };
+  let text = String::from_utf8_lossy(&out.stdout);
+  for line in text.lines() {
+    let Ok(pid) = line.trim().parse::<u32>() else {
+      continue;
+    };
+    if !process_alive(pid) {
+      continue;
+    }
+    // Only reclaim our own binary — never kill unrelated listeners.
+    let cmd = Command::new("ps")
+      .args(["-p", &pid.to_string(), "-o", "command="])
+      .stdout(Stdio::piped())
+      .stderr(Stdio::null())
+      .output()
+      .ok()
+      .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+      .unwrap_or_default();
+    if !cmd.contains("envoyhome-daemon") {
+      continue;
+    }
+    eprintln!("EnvoyHome: freeing port {port} held by orphan daemon pid={pid}");
+    kill_pid(pid, false);
+    wait_pid_exit(pid);
+  }
+}
+
+#[cfg(not(unix))]
+fn stop_orphan_daemon_on_port(_port: u16) {}
 
 fn spawn_daemon(app: &tauri::AppHandle) -> Result<(), String> {
   let state = app.state::<DaemonState>();
@@ -164,14 +230,22 @@ fn spawn_daemon(app: &tauri::AppHandle) -> Result<(), String> {
     .map(PathBuf::from)
     .unwrap_or_else(|_| default_state_dir());
 
-  stop_stale_claim_daemon(&state_dir);
+  stop_stale_claim_daemons(&state_dir);
+  // Default ports from packages/daemon (ENVOYHOME_WS_PORT / HTTP = WS+1).
+  let ws_port: u16 = std::env::var("ENVOYHOME_WS_PORT")
+    .ok()
+    .and_then(|s| s.parse().ok())
+    .unwrap_or(4780);
+  stop_orphan_daemon_on_port(ws_port);
+  stop_orphan_daemon_on_port(ws_port.saturating_add(1));
 
   let child = Command::new("node")
     .arg(&script)
     .env("ENVOYHOME_STATE_DIR", &state_dir)
     .env("ENVOYHOME_MANAGED_BY", "app")
     .stdout(Stdio::null())
-    .stderr(Stdio::null())
+    // Inherit stderr so EADDRINUSE / claim errors show in the Tauri console.
+    .stderr(Stdio::inherit())
     .spawn()
     .map_err(|e| format!("spawn daemon: {e}"))?;
 
@@ -213,6 +287,22 @@ fn pick_skill_folder() -> Result<Option<String>, String> {
   let path = rfd::FileDialog::new()
     .set_title("Select skill folder")
     .pick_folder();
+  Ok(path.map(|p| p.to_string_lossy().into_owned()))
+}
+
+/// Native folder picker for profile workspace root (Design §4.2.1).
+/// Works on macOS / Windows / Linux (rfd). Starts in the user home directory
+/// when available so “Add folder” is consistent across platforms.
+#[tauri::command]
+fn pick_workspace_folder() -> Result<Option<String>, String> {
+  let mut dialog = rfd::FileDialog::new()
+    .set_title("Select workspace folder (or computer root)");
+  // HOME (Unix) / USERPROFILE (Windows) — avoid a new crate just for this.
+  let home = std::env::var_os("HOME").or_else(|| std::env::var_os("USERPROFILE"));
+  if let Some(home) = home {
+    dialog = dialog.set_directory(home);
+  }
+  let path = dialog.pick_folder();
   Ok(path.map(|p| p.to_string_lossy().into_owned()))
 }
 
@@ -291,6 +381,7 @@ pub fn run() {
       daemon_status,
       pick_skill_folder,
       pick_skill_file,
+      pick_workspace_folder,
       open_external_url
     ])
     .setup(|app| {

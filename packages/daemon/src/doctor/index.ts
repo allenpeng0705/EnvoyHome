@@ -6,6 +6,9 @@ import type { AccountStore } from "../accounts.js";
 import type { BindingStore } from "../bindings.js";
 import type { ChannelService } from "../channels/service.js";
 import type { ObjectRegistry } from "../object-registry.js";
+import type { WebSearchService } from "../web-search.js";
+import type { BrowserControlService } from "../browser-control.js";
+import { isFilesystemRoot } from "../fs-jail.js";
 import type { DoctorIssue } from "./issues.js";
 import { doctorStateSchemaIssue } from "./migrations.js";
 import { doctorHomeClawPlanIssue, planHomeClawMigrate } from "./homeclaw-import.js";
@@ -23,6 +26,8 @@ export interface CollectDoctorOptions {
   importChat?: boolean;
   /** Live mesh status for hosting-failed probe. */
   meshStatus?: import("../mesh-host.js").MeshStatus;
+  /** Current household Owner (Design §4.1.1). */
+  ownerAccountId?: string | null;
 }
 
 export async function collectDoctorIssues(
@@ -31,6 +36,16 @@ export async function collectDoctorIssues(
     accounts: AccountStore;
     bindings: BindingStore;
     channels: ChannelService;
+    /** Design §9.5f.1 — warn when browser fallback on but Chromium missing. */
+    webSearch?: WebSearchService | null;
+    /** Design §9.5g — warn when browser control on but Chromium missing. */
+    browserControl?: BrowserControlService | null;
+    /** Design §7.4 accuracy — late-fire + TZ signals. */
+    schedules?: {
+      store: {
+        listReceipts: (accountId: string) => Promise<Array<{ latenessMs?: number }>>;
+      };
+    } | null;
   },
   options: CollectDoctorOptions = {},
 ): Promise<DoctorIssue[]> {
@@ -49,7 +64,59 @@ export async function collectDoctorIssues(
   const schema = doctorStateSchemaIssue(deps.config);
   if (schema) issues.push(schema);
 
-  const accountIds = new Set((await deps.accounts.list()).map((a) => a.accountId));
+  const accountRows = await deps.accounts.list();
+  const accountIds = new Set(accountRows.map((a) => a.accountId));
+  const ownerAccountId =
+    options.ownerAccountId !== undefined ? options.ownerAccountId : null;
+
+  if (accountRows.length > 0 && !ownerAccountId) {
+    issues.push({
+      id: "household.owner_missing",
+      severity: "error",
+      message: "accounts exist but household Owner is unset",
+      fixable: true,
+    });
+  } else if (
+    ownerAccountId &&
+    accountRows.length > 0 &&
+    !accountIds.has(ownerAccountId)
+  ) {
+    issues.push({
+      id: "household.owner_missing",
+      severity: "error",
+      message: `household Owner ${ownerAccountId} is not a known account`,
+      fixable: true,
+    });
+  }
+
+  if (ownerAccountId) {
+    const violations = await deps.bindings.listOwnerExclusiveViolations(ownerAccountId);
+    if (violations.length > 0) {
+      issues.push({
+        id: "household.owner_bind_exclusive",
+        severity: "error",
+        message: `${violations.length} device(s) bind Owner with other seats (Design §4.1.1 R2)`,
+        fixable: true,
+      });
+    }
+    const staleRootIds: string[] = [];
+    for (const a of accountRows) {
+      if (a.accountId === ownerAccountId) continue;
+      const mounts = await deps.accounts.getWorkspaceMounts(a.accountId);
+      if (mounts.some((m) => isFilesystemRoot(m.hostPath))) {
+        staleRootIds.push(a.accountId);
+      }
+    }
+    if (staleRootIds.length > 0) {
+      issues.push({
+        id: "household.workspace_root_non_owner",
+        severity: "error",
+        message: `filesystem-root workspace on non-Owner seat(s): ${staleRootIds.join(", ")}`,
+        fixable: true,
+      });
+    }
+  }
+
   for (const binding of await deps.bindings.list({})) {
     if (binding.accountId && !accountIds.has(binding.accountId)) {
       issues.push({
@@ -79,6 +146,64 @@ export async function collectDoctorIssues(
   });
   if (plan) {
     issues.push(doctorHomeClawPlanIssue(plan));
+  }
+
+  if (deps.webSearch) {
+    const ws = await deps.webSearch.getPublicConfig();
+    if (ws.fallback === "browser" && ws.browserRuntime === "missing") {
+      issues.push({
+        id: "websearch.browser_runtime_missing",
+        severity: "warn",
+        message: `web_search browser fallback is on but Chromium is missing on the daemon host — run: ${ws.browserInstallHint}`,
+        fixable: false,
+      });
+    }
+  }
+
+  if (deps.browserControl) {
+    const bc = await deps.browserControl.getPublicConfig();
+    // Warn only when managed Chromium is needed (default managed, or personal/remote
+    // not the sole ready path).
+    const needsManaged =
+      bc.enabled &&
+      (bc.defaultProfile === "managed" ||
+        (!bc.personalReady && !bc.remoteReady));
+    if (needsManaged && bc.browserRuntime === "missing") {
+      issues.push({
+        id: "browser.runtime_missing",
+        severity: "warn",
+        message: `browser control needs managed Chromium on the daemon host — run: ${bc.browserInstallHint}`,
+        fixable: false,
+      });
+    }
+  }
+
+  const missingTz = accountRows.filter((a) => !a.timeZone).map((a) => a.accountId);
+  if (missingTz.length > 0) {
+    issues.push({
+      id: "accounts.timezone_unset",
+      severity: "warn",
+      message: `${missingTz.length} profile(s) lack IANA timeZone — schedule wall times use host default until set (System → Profiles)`,
+      fixable: false,
+    });
+  }
+
+  if (deps.schedules) {
+    const LATE_MS = 5 * 60_000;
+    let lateCount = 0;
+    for (const a of accountRows) {
+      const receipts = await deps.schedules.store.listReceipts(a.accountId);
+      const recent = receipts.slice(-20);
+      lateCount += recent.filter((r) => (r.latenessMs ?? 0) >= LATE_MS).length;
+    }
+    if (lateCount > 0) {
+      issues.push({
+        id: "schedule.late_fire",
+        severity: "warn",
+        message: `${lateCount} recent schedule fire(s) ran ≥5 minutes late — check daemon uptime / host clock`,
+        fixable: false,
+      });
+    }
   }
 
   return issues;

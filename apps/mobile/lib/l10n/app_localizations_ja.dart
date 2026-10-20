@@ -133,9 +133,6 @@ class AppLocalizationsJa extends AppLocalizations {
       'この端末はすでにペアリング済みです。再接続するか、別のホームなら再度ペアリングしてください。';
 
   @override
-  String get settingsNeedConnect => '接続すると LLM・接続・スキル・システムを設定できます。';
-
-  @override
   String get shellProfilePending => 'プロファイルはこのデバイスのペアリングから選ばれます。';
 
   @override
@@ -181,6 +178,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get navHomeChat => 'Home';
 
   @override
+  String get navSchedulesChat => 'スケジュール';
+
+  @override
   String get navSettings => 'Settings';
 
   @override
@@ -196,6 +196,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get navSystem => 'System';
 
   @override
+  String get navProfiles => 'Profiles';
+
+  @override
   String get navApprovals => '承認';
 
   @override
@@ -209,6 +212,10 @@ class AppLocalizationsJa extends AppLocalizations {
       'Configure the home daemon from your phone. Some owner-only actions need a trusted device.';
 
   @override
+  String get settingsProfilesSubtitle =>
+      'Owner, workspace folders, tool policy';
+
+  @override
   String get settingsLlmSubtitle => 'Models, Local, Routing, Memory';
 
   @override
@@ -219,7 +226,248 @@ class AppLocalizationsJa extends AppLocalizations {
   String get settingsSkillsSubtitle => 'Skills, Workflows, Schedules';
 
   @override
-  String get settingsSystemSubtitle => 'Shared files, Health, Grants';
+  String get settingsSystemSubtitle => 'Profiles, Shared files, Health, Grants';
+
+  @override
+  String get settingsNeedConnect => '接続すると LLM・接続・スキル・システムを設定できます。';
+
+  @override
+  String get profilesIntro =>
+      'Each person has a profile. The household Owner configures workspace folders and can transfer ownership.';
+
+  @override
+  String get profilesMemberHint =>
+      'This device is not the household Owner — workspace is read-only here.';
+
+  @override
+  String get profilesRefresh => 'Refresh';
+
+  @override
+  String get profilesAddTitle => 'Add profile';
+
+  @override
+  String get profilesOwnerBadge => 'Owner';
+
+  @override
+  String get profilesActiveBadge => 'Active';
+
+  @override
+  String get profilesWorkspaceTitle => 'Workspace folders';
+
+  @override
+  String get profilesWorkspaceHint =>
+      'Add host folders on the home machine (up to 16). The agent reaches them via workspace/<id>/… paths.';
+
+  @override
+  String get profilesWorkspacePath => 'Host path';
+
+  @override
+  String get profilesWorkspaceBrowse => 'Browse folders';
+
+  @override
+  String get profilesWorkspaceBrowseHint => 'Tap to browse the home machine';
+
+  @override
+  String get profilesWorkspaceUnset => 'Not set (sandbox only)';
+
+  @override
+  String get profilesWorkspaceSet => 'Configured';
+
+  @override
+  String get profilesWorkspaceWholeMachine => 'Whole machine';
+
+  @override
+  String get profilesWorkspaceRo => 'Read only';
+
+  @override
+  String get profilesWorkspaceRw => 'Read & write';
+
+  @override
+  String get profilesWorkspaceUseRoot => 'Add computer root';
+
+  @override
+  String get profilesWorkspaceClear => 'Clear all';
+
+  @override
+  String get profilesWorkspaceRemove => 'Remove';
+
+  @override
+  String get profilesWorkspaceApply => 'Add';
+
+  @override
+  String get profilesWorkspaceEdit => 'Add folder';
+
+  @override
+  String get profilesWorkspaceRootTitle => 'Allow whole-computer access?';
+
+  @override
+  String get profilesWorkspaceRootBody =>
+      'This lets the agent read (and write, if selected) files under the computer root via workspace/… — including from this phone.';
+
+  @override
+  String get profilesWorkspaceRootOk => 'Allow';
+
+  @override
+  String get profilesWorkspaceMemberNote =>
+      'Only the household Owner can change workspace folders.';
+
+  @override
+  String get profilesWorkspaceCrossTitle =>
+      'Add workspace folder for another profile?';
+
+  @override
+  String profilesWorkspaceCrossBody(String name) {
+    return 'This adds a host folder for $name. Continue only if you intend to configure their workspace.';
+  }
+
+  @override
+  String get profilesWorkspaceDenied => 'Not visible on this device';
+
+  @override
+  String get profilesWorkspaceInactive =>
+      'Configured but inactive (filesystem-root only applies to Owner)';
+
+  @override
+  String get profilesRename => 'Rename';
+
+  @override
+  String get profilesRenameTitle => 'Rename profile';
+
+  @override
+  String get profilesRenameSave => 'Save';
+
+  @override
+  String get profilesTimeZoneUnset =>
+      'Time zone: not set (schedules use host default)';
+
+  @override
+  String profilesTimeZoneValue(String tz) {
+    return 'Time zone: $tz';
+  }
+
+  @override
+  String get profilesTimeZoneEdit => 'Time zone';
+
+  @override
+  String get profilesTimeZoneTitle => 'Account time zone';
+
+  @override
+  String get profilesTimeZoneHint => 'IANA name, e.g. Asia/Shanghai';
+
+  @override
+  String get profilesTimeZoneSave => 'Save';
+
+  @override
+  String profilesTimeZoneDone(String tz) {
+    return 'Time zone set to $tz';
+  }
+
+  @override
+  String get profilesShareLocationTitle => 'Home と位置情報を共有';
+
+  @override
+  String get profilesShareLocationSubtitle =>
+      'チャットターンに概算 GPS を付与します。権限はこの画面で一度だけ要求し、送信のたびに問いません。一時注入のみ — メモリには保存しません。';
+
+  @override
+  String get profilesShareLocationDenied => '位置情報の許可がありません。共有はオフのままです。';
+
+  @override
+  String get profilesShareLocationOn => 'この端末で位置情報の共有をオンにしました';
+
+  @override
+  String get profilesDelete => 'Delete';
+
+  @override
+  String get profilesDeleteTitle => 'Delete profile?';
+
+  @override
+  String profilesDeleteBody(String name) {
+    return 'Delete $name? Their sandbox and workspace config are removed. This cannot be undone.';
+  }
+
+  @override
+  String get profilesDeleteConfirm => 'Delete';
+
+  @override
+  String profilesDeleteDone(String name) {
+    return 'Deleted $name';
+  }
+
+  @override
+  String get profilesDeleteOwnerBlocked =>
+      'Cannot delete the household Owner. Transfer ownership first.';
+
+  @override
+  String get profilesTransferTitle => 'Transfer household Owner?';
+
+  @override
+  String profilesTransferBody(String name) {
+    return 'Make $name the household Owner. They will control pairing, bindings, and household Settings.';
+  }
+
+  @override
+  String get profilesTransferConfirm => 'Transfer';
+
+  @override
+  String profilesTransferDone(String name) {
+    return 'Owner is now $name';
+  }
+
+  @override
+  String profilesTransferFailed(String error) {
+    return 'Transfer failed: $error';
+  }
+
+  @override
+  String profilesTransferTo(String name) {
+    return 'Transfer to $name';
+  }
+
+  @override
+  String get profilesToolPolicy => 'Tool policy';
+
+  @override
+  String get profilesToolPolicyStandard => 'Standard';
+
+  @override
+  String get profilesToolPolicyRestricted => 'Restricted';
+
+  @override
+  String get connMintPairing => 'Mint pairing code';
+
+  @override
+  String get connMintOk => 'Pairing code minted';
+
+  @override
+  String get connMintUriHint => 'Scan or paste this URI on the new device.';
+
+  @override
+  String get connPairingOwnerOnly =>
+      'Mint / revoke pairing requires the household Owner device.';
+
+  @override
+  String get connRevokeDevice => 'Revoke';
+
+  @override
+  String get connForgetDevice => 'Forget';
+
+  @override
+  String connRevokeConfirm(String id) {
+    return 'Revoke device $id? It will need to pair again.';
+  }
+
+  @override
+  String connForgetConfirm(String id) {
+    return 'Forget device $id? The pairing record is removed permanently.';
+  }
+
+  @override
+  String get connOwnerWriteOnly =>
+      'Only the household Owner device can change this setting.';
+
+  @override
+  String get connAccountsHint => 'Household profiles';
 
   @override
   String get homeChatSessionTitle => 'Phone home chat';
@@ -233,6 +481,18 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get homeChatHint => 'Ask about lights, locks, climate…';
+
+  @override
+  String get schedulesChatSessionTitle => 'スケジュール';
+
+  @override
+  String get schedulesChatEmptyTitle => 'リマインダー';
+
+  @override
+  String get schedulesChatEmptyHint => 'この会話はリマインダー向けです。有効化の前に時刻を確認します。';
+
+  @override
+  String get schedulesChatHint => 'リマインドして…';
 
   @override
   String get chatAttach => 'Attach';
@@ -351,6 +611,159 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get connTabChannels => 'Channels';
+
+  @override
+  String get connTabWebSearch => 'Web search';
+
+  @override
+  String get connTabBrowser => 'Browser';
+
+  @override
+  String get browserControlLede =>
+      'Control a managed Chromium tab from chat. Off by default. Not your personal Chrome.';
+
+  @override
+  String get browserControlEnabled => 'Enable browser tool';
+
+  @override
+  String get browserControlUnattended => 'Allow for schedules';
+
+  @override
+  String get browserControlReady => 'Ready';
+
+  @override
+  String get browserControlNotReady => 'Not ready';
+
+  @override
+  String get browserControlSave => 'Save';
+
+  @override
+  String get browserControlSaved => 'Browser settings saved.';
+
+  @override
+  String get browserControlSaveFailed => 'Could not save browser settings.';
+
+  @override
+  String get browserControlDefaultProfile => 'Default profile';
+
+  @override
+  String get browserControlProfileManaged => 'Managed (isolated)';
+
+  @override
+  String get browserControlProfilePersonal => 'Personal Chrome';
+
+  @override
+  String get browserControlProfileRemote => 'Remote CDP';
+
+  @override
+  String get browserControlElevatedWarn =>
+      'Personal/remote can act as you on logged-in sites. Owner only; never schedules.';
+
+  @override
+  String get browserControlAcknowledge => 'I understand elevated browser risk';
+
+  @override
+  String get browserControlPersonalEnabled => 'Enable personal Chrome';
+
+  @override
+  String get browserControlPersonalCdp => 'Personal CDP (loopback)';
+
+  @override
+  String get browserControlPersonalReady => 'Personal CDP up';
+
+  @override
+  String get browserControlPersonalNotReady => 'Personal CDP down';
+
+  @override
+  String get browserControlRemoteEnabled => 'Enable remote CDP';
+
+  @override
+  String get browserControlRemoteCdp => 'Remote CDP URL';
+
+  @override
+  String get browserControlRemoteToken => 'Remote CDP token';
+
+  @override
+  String get browserControlTokenSet => 'set';
+
+  @override
+  String get browserControlTokenPlaceholder => 'Leave blank to keep';
+
+  @override
+  String get browserControlRemoteReady => 'Remote CDP up';
+
+  @override
+  String get browserControlRemoteNotReady => 'Remote CDP down';
+
+  @override
+  String get browserControlOwnerOnly =>
+      'Only the household Owner device can change browser control settings.';
+
+  @override
+  String get browserControlAcknowledged =>
+      'Elevated risk acknowledged. Disable personal/remote to stop using them.';
+
+  @override
+  String get webSearchLede =>
+      'Search the public web from chat. DuckDuckGo needs no key; Brave and Tavily need an Owner API key.';
+
+  @override
+  String get webSearchEnabled => 'Enable web_search';
+
+  @override
+  String get webSearchProvider => 'Provider';
+
+  @override
+  String get webSearchApiKey => 'API key';
+
+  @override
+  String get webSearchApiKeyHint => 'Leave blank to keep the current key';
+
+  @override
+  String get webSearchReady => 'Ready';
+
+  @override
+  String get webSearchNotReady => 'Not ready';
+
+  @override
+  String get webSearchSave => 'Save';
+
+  @override
+  String get webSearchSaved => 'Web search settings saved.';
+
+  @override
+  String get webSearchSaveFailed => 'Could not save web search settings.';
+
+  @override
+  String get webSearchOwnerOnly =>
+      'Only the Household Owner device can change web search.';
+
+  @override
+  String get webSearchBrowserFallback =>
+      'Browser fallback (Bing/Google when API/DDG fails)';
+
+  @override
+  String get webSearchBrowserFallbackHint =>
+      'Off by default. Attended chats still ask before the browser leg. SERP pages may CAPTCHA or block.';
+
+  @override
+  String get webSearchBrowserReady =>
+      'Playwright Chromium ready on daemon host';
+
+  @override
+  String get webSearchBrowserMissing =>
+      'Playwright Chromium not installed on daemon host';
+
+  @override
+  String get webSearchInstallHintNote =>
+      'Playwright is already part of the daemon. Download Chromium on the home computer that runs EnvoyHome (not this phone), then reopen Settings; restart the daemon if status stays missing.';
+
+  @override
+  String get webSearchCopyHint => 'Copy install command';
+
+  @override
+  String get webSearchUnattendedBrowser =>
+      'Allow browser fallback for schedules';
 
   @override
   String get connPairingHint =>
@@ -481,6 +894,77 @@ class AppLocalizationsJa extends AppLocalizations {
   String get schedToolName => 'Tool name';
 
   @override
+  String get schedKindAgent => 'Agent';
+
+  @override
+  String get schedAgentPrompt => 'Agent prompt';
+
+  @override
+  String get schedTabRepeating => '繰り返し';
+
+  @override
+  String get schedTabOnce => '一度だけ';
+
+  @override
+  String get schedTabHistory => '履歴';
+
+  @override
+  String get schedNoneRepeating => '繰り返しスケジュールはまだありません。';
+
+  @override
+  String get schedNoneOnce => '一度きりのリマインダーはありません。';
+
+  @override
+  String get schedNoReceipts => '実行履歴はまだありません。';
+
+  @override
+  String get schedHistoryNotSet => 'Not set';
+
+  @override
+  String get schedHistoryRuns => 'Runs';
+
+  @override
+  String get schedNoDismissed => 'No canceled or expired proposals.';
+
+  @override
+  String get schedDismissedCanceled => 'canceled';
+
+  @override
+  String get schedDismissedExpired => 'expired';
+
+  @override
+  String get schedNext => '次回';
+
+  @override
+  String get schedKindRepeating => '繰り返し';
+
+  @override
+  String get schedKindOnce => '一度';
+
+  @override
+  String get schedKindDaily => '毎日';
+
+  @override
+  String get schedKindWeekdays => '平日';
+
+  @override
+  String get schedKindWeekly => '毎週';
+
+  @override
+  String get schedKindMonthly => '毎月';
+
+  @override
+  String get schedKindYearly => '毎年';
+
+  @override
+  String get schedKindEvery => '毎';
+
+  @override
+  String schedDayOfMonth(String d) {
+    return '$d日';
+  }
+
+  @override
   String get wfEditorTitle => 'Workflow';
 
   @override
@@ -529,7 +1013,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get wfRan => 'Run started';
 
   @override
-  String get sysTabFiles => 'Shared files';
+  String get sysTabFiles => 'Files';
 
   @override
   String get sysTabHealth => 'Health';
@@ -577,6 +1061,162 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chatHint => 'メッセージ…';
+
+  @override
+  String get chatThought => '思考';
+
+  @override
+  String get chatNew => '新しいチャット';
+
+  @override
+  String get chatNewNamePrompt => 'チャット名';
+
+  @override
+  String get chatNewNamePlaceholder => '例：週末の予定';
+
+  @override
+  String get chatNewNameHint => '今すぐ名前を付けるか、名前なしで開始（最初のメッセージがタイトルになります）。';
+
+  @override
+  String get chatNewSkip => '名前なしで開始';
+
+  @override
+  String get chatNewCreate => '作成';
+
+  @override
+  String get chatNewNeedName => '名前を入力するか、「名前なしで開始」を選んでください。';
+
+  @override
+  String get chatNewStart => '開始';
+
+  @override
+  String get chatOpenArtifact => '全文を開く';
+
+  @override
+  String get chatRecents => '履歴';
+
+  @override
+  String get chatRecentsEmpty => '以前のチャットはありません。';
+
+  @override
+  String get chatSessionsEmpty => 'チャットはまだありません。新規作成してください。';
+
+  @override
+  String get chatUntitled => '無題のチャット';
+
+  @override
+  String get chatRenameAction => '名前を変更';
+
+  @override
+  String get chatRenamePrompt => 'チャット名';
+
+  @override
+  String get chatRenameDone => '名前を変更しました。';
+
+  @override
+  String get chatRenameEmpty => '名前を空にはできません。';
+
+  @override
+  String get chatRenameNeedSession => '先にメッセージを送ってから名前を変更してください。';
+
+  @override
+  String get chatBusyTurn => '現在の返信が終わるまで待つか、キャンセルしてください。';
+
+  @override
+  String get chatEmptyAction => 'チャットを空に';
+
+  @override
+  String get chatEmptyConfirmTitle => 'このチャットを空にしますか？';
+
+  @override
+  String get chatEmptyConfirmBody => 'このスレッドのメッセージはすべて削除されます。チャット自体は残ります。';
+
+  @override
+  String get chatTrashMenu => 'チャット操作';
+
+  @override
+  String get chatArchiveAction => 'チャットをアーカイブ';
+
+  @override
+  String get chatUnarchiveAction => 'チャット一覧に戻す';
+
+  @override
+  String get chatUnarchiveDone => 'チャットを復元しました。';
+
+  @override
+  String get chatArchivedOpen => 'アーカイブ';
+
+  @override
+  String get chatTabActive => 'Chats';
+
+  @override
+  String get chatTabArchived => 'Archived';
+
+  @override
+  String get homeFolderTitle => 'Choose folder';
+
+  @override
+  String get homeFolderSelect => 'Select';
+
+  @override
+  String get homeFolderDrives => 'Drives';
+
+  @override
+  String get homeFolderComputer => 'Computer';
+
+  @override
+  String get homeFolderHome => 'Home';
+
+  @override
+  String get homeFolderParent => 'Parent folder';
+
+  @override
+  String get homeFolderNoSubfolders => 'No subfolders';
+
+  @override
+  String get chatArchivedTitle => 'アーカイブ済みチャット';
+
+  @override
+  String get chatArchivedBack => 'チャット一覧に戻る';
+
+  @override
+  String get chatArchivedEmpty => 'アーカイブ済みチャットはありません。';
+
+  @override
+  String get chatRemoveAction => 'チャットを削除';
+
+  @override
+  String get chatArchiveConfirmTitle => 'このチャットをアーカイブしますか？';
+
+  @override
+  String get chatArchiveConfirmBody => '履歴から隠れますがディスク上に残ります。';
+
+  @override
+  String get chatRemoveConfirmTitle => 'このチャットを削除しますか？';
+
+  @override
+  String get chatRemoveConfirmBody => 'チャットとすべてのメッセージを完全に削除します。';
+
+  @override
+  String get chatRemoveDone => 'チャットを削除しました。';
+
+  @override
+  String get chatNoSession => 'アクティブなチャットがありません。';
+
+  @override
+  String get chatDeleteFailed => 'サーバーでメッセージを削除できませんでした。';
+
+  @override
+  String get chatDeleteMessage => 'メッセージを削除';
+
+  @override
+  String get chatCopyMessage => 'メッセージをコピー';
+
+  @override
+  String get chatCopied => 'コピーしました';
+
+  @override
+  String get chatCancel => 'キャンセル';
 
   @override
   String chatSubscribeFailed(String error) {
@@ -743,7 +1383,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get artifactsTitle => '成果物';
 
   @override
-  String get artifactsHint => 'ホームデーモンの署名付きリンク。タップで開きます。';
+  String get artifactsHint => 'ホーム接続経由でアプリ内表示（公開 URL 不要）。';
 
   @override
   String get artifactsNeedAccount => '成果物を一覧するにはアカウントを選んでください。';
@@ -760,6 +1400,57 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String artifactsOpenFailed(String error) {
     return 'オープン失敗: $error';
+  }
+
+  @override
+  String get artifactsTooLarge =>
+      'This file is larger than the 8 MB in-app open limit. Ask the agent for a smaller export, or open it on the home machine.';
+
+  @override
+  String get artifactsRefresh => '更新';
+
+  @override
+  String get artifactsRetry => '再試行';
+
+  @override
+  String get artifactsBinaryHint =>
+      'このファイル形式はここではプレビューできません。共有/保存で他のアプリを開くか、テキストまたは Markdown の書き出しを依頼してください。';
+
+  @override
+  String get artifactsShare => '共有 / 保存';
+
+  @override
+  String artifactsShareFailed(String error) {
+    return '共有できませんでした: $error';
+  }
+
+  @override
+  String get artifactsCopyLink => 'Copy signed link';
+
+  @override
+  String get artifactsLinkCopied => 'Signed link copied';
+
+  @override
+  String get artifactsCopyLinkFailed => 'Could not copy link';
+
+  @override
+  String get artifactsOpenInBrowser => 'Open in browser';
+
+  @override
+  String get artifactsOpenInBrowserFailed => 'Could not open in browser';
+
+  @override
+  String get filesParent => 'Parent';
+
+  @override
+  String get filesRoots => 'Roots';
+
+  @override
+  String get filesEmptyFolder => 'This folder is empty';
+
+  @override
+  String chatOpenFile(String name) {
+    return '$name を開く';
   }
 
   @override

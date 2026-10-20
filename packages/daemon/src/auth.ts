@@ -1,9 +1,11 @@
 // Session identity for reuse-host (Design §3.3.1).
 // Loopback → loopback-owner. Token → device session. Unknown token → null (refused).
 // B4: credentials are verified by SHA-256 hash; raw tokens are never persisted.
+// Owner-scope = exclusive bind to household ownerAccountId (Design §4.1.1) — not ownerTrusted.
 
 import { createHash } from "node:crypto";
 import type { SessionIdentityResolver } from "@envoymesh/reuse-host";
+import { isHouseholdOwner } from "./household.js";
 
 /** Caller context handed back through HostRpcDispatcher. Opaque to the transport. */
 export type CallerKind = "loopback-owner" | "device" | "hatch";
@@ -13,6 +15,10 @@ export interface HomeCaller {
   deviceId?: string;
   /** Accounts this principal may act for. Empty ⇒ zero-binding scope (§4.1 rule 4). */
   accountIds: string[];
+  /**
+   * Deprecated wire/disk bit — ignored for method scope (Design §4.1.1).
+   * Kept so older clients do not break; never grant Owner-scope by itself.
+   */
   ownerTrusted: boolean;
 }
 
@@ -132,6 +138,8 @@ export interface SessionIdentityOptions {
    * (EnvoyCoder paired-devices resolveSession side effect).
    */
   onDeviceSeen?: (deviceId: string) => void;
+  /** Current household Owner account id (Design §4.1.1). */
+  getOwnerAccountId?: () => string | null;
 }
 
 export function createSessionIdentity(
@@ -148,17 +156,19 @@ export function createSessionIdentity(
       } catch {
         // Best-effort — never refuse auth because persist failed.
       }
+      const caller: HomeCaller = {
+        kind: "device",
+        deviceId: rec.deviceId,
+        accountIds: [...rec.accountIds],
+        ownerTrusted: rec.ownerTrusted,
+      };
+      const ownerAccountId = options.getOwnerAccountId?.() ?? null;
       return {
         scopeKey: rec.deviceId,
         ownerId: rec.deviceId,
-        isOwnerScope: rec.ownerTrusted,
+        isOwnerScope: isHouseholdOwner(caller, ownerAccountId),
         deviceId: rec.deviceId,
-        caller: {
-          kind: "device",
-          deviceId: rec.deviceId,
-          accountIds: [...rec.accountIds],
-          ownerTrusted: rec.ownerTrusted,
-        },
+        caller,
       };
     },
   };

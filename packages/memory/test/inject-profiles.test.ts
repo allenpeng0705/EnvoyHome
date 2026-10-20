@@ -5,12 +5,26 @@ import {
   BASELINE_TOTAL,
   CEILING_TOTAL,
   HARD_MIN_TOTAL,
+  IDENTITY_STANDING_RESERVE,
   baselineInjectPackage,
   deriveInjectPackage,
   resolveInjectProfiles,
   splitInjectTotal,
 } from "../dist/inject-profiles.js";
 import { INJECT_BUDGET } from "../dist/bootstrap-inject.js";
+
+function expectedL123Total(contextTokens: number): number {
+  const affordableStanding = Math.floor(contextTokens * 4 * 0.2);
+  if (affordableStanding >= BASELINE_TOTAL + IDENTITY_STANDING_RESERVE) {
+    return BASELINE_TOTAL;
+  }
+  const affordableL123 = Math.max(0, affordableStanding - IDENTITY_STANDING_RESERVE);
+  return Math.min(
+    affordableL123,
+    BASELINE_TOTAL,
+    Math.max(0, CEILING_TOTAL - IDENTITY_STANDING_RESERVE),
+  );
+}
 
 test("baseline package matches OpenClaw §4.2 table", () => {
   const b = baselineInjectPackage();
@@ -33,22 +47,24 @@ test("unknown cloud → OpenClaw baseline; unknown local → HARD_MIN", () => {
   assert.deepEqual(deriveInjectPackage(Number.NaN, "local"), splitInjectTotal(HARD_MIN_TOTAL));
 });
 
-test("8k local scales to affordable (never above MAX_FRACTION)", () => {
+test("8k local scales to affordable after identity reserve", () => {
   const pkg = deriveInjectPackage(8192, "local");
-  const affordable = Math.floor(8192 * 4 * 0.2); // 6553
-  assert.equal(pkg.l1 + pkg.l2 + pkg.l3, affordable);
-  assert.equal(pkg.l1, Math.floor((affordable * 4000) / 44_000));
-  assert.equal(pkg.l2, Math.floor((affordable * 20_000) / 44_000));
-  assert.equal(pkg.l3, affordable - pkg.l1 - pkg.l2);
+  const total = expectedL123Total(8192);
+  assert.equal(pkg.l1 + pkg.l2 + pkg.l3, total);
+  assert.equal(pkg.l1, Math.floor((total * 4000) / 44_000));
+  assert.equal(pkg.l2, Math.floor((total * 20_000) / 44_000));
+  assert.equal(pkg.l3, total - pkg.l1 - pkg.l2);
+  // identity + L1–L3 stays within MAX_FRACTION of context
+  assert.ok(total + IDENTITY_STANDING_RESERVE <= Math.floor(8192 * 4 * 0.2));
 });
 
-test("tiny known context never inflates above affordable", () => {
-  // 4096 tokens → affordable 3276 < HARD_MIN — must stay at 3276, not 6000
+test("tiny known context never inflates above affordable after identity reserve", () => {
+  // 4096 tokens → affordableStanding 3276; L1–L3 gets remainder after identity
   const pkg = deriveInjectPackage(4096, "local");
-  const affordable = Math.floor(4096 * 4 * 0.2);
-  assert.equal(affordable, 3276);
-  assert.ok(affordable < HARD_MIN_TOTAL);
-  assert.equal(pkg.l1 + pkg.l2 + pkg.l3, affordable);
+  const affordableStanding = Math.floor(4096 * 4 * 0.2);
+  assert.equal(affordableStanding, 3276);
+  assert.ok(affordableStanding < HARD_MIN_TOTAL);
+  assert.equal(pkg.l1 + pkg.l2 + pkg.l3, expectedL123Total(4096));
 });
 
 test("128k cloud gets full OpenClaw package", () => {
@@ -56,11 +72,11 @@ test("128k cloud gets full OpenClaw package", () => {
   assert.deepEqual(pkg, baselineInjectPackage());
 });
 
-test("32k local scales below OpenClaw package", () => {
+test("32k local scales below OpenClaw package after identity reserve", () => {
   const local = deriveInjectPackage(32_000, "local");
   const total = local.l1 + local.l2 + local.l3;
   assert.ok(total < BASELINE_TOTAL);
-  assert.equal(total, 25_600); // floor(128000 * 0.20)
+  assert.equal(total, expectedL123Total(32_000));
 });
 
 test("splitInjectTotal preserves total and OpenClaw ratios at baseline", () => {
@@ -88,7 +104,7 @@ test("resolveInjectProfiles: active selects caps; both profiles reported", () =>
   assert.equal(r.injectProfiles.cloud.l2, 20_000);
   assert.equal(
     r.injectProfiles.local.l1 + r.injectProfiles.local.l2 + r.injectProfiles.local.l3,
-    Math.floor(8192 * 4 * 0.2),
+    expectedL123Total(8192),
   );
   assert.equal(r.caps.l2?.injectBudget, r.injectProfiles.local.l2);
   assert.equal(r.injectProfiles.cloud.sourceProviderId, "openai");

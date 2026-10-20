@@ -75,6 +75,7 @@
   },
   "navChat": "チャット",
   "navHomeChat": "Home",
+  "navSchedulesChat": "スケジュール",
   "navSettings": "Settings",
   "navLlm": "LLM",
   "navConnections": "Connections",
@@ -87,11 +88,15 @@
   "settingsLlmSubtitle": "Models, Local, Routing, Memory",
   "settingsConnectionsSubtitle": "Pairing, Home Assistant, MQTT, Channels",
   "settingsSkillsSubtitle": "Skills, Workflows, Schedules",
-  "settingsSystemSubtitle": "Shared files, Health, Grants",
+  "settingsSystemSubtitle": "Profiles, Shared files, Health, Grants",
   "homeChatSessionTitle": "Phone home chat",
   "homeChatEmptyTitle": "Talk to your home",
   "homeChatEmptyHint": "Smart-home tools stay available here. Approvals still gate actuations.",
   "homeChatHint": "Ask about lights, locks, climate…",
+  "schedulesChatSessionTitle": "スケジュール",
+  "schedulesChatEmptyTitle": "リマインダー",
+  "schedulesChatEmptyHint": "この会話はリマインダー向けです。有効化の前に時刻を確認します。",
+  "schedulesChatHint": "リマインドして…",
   "chatAttach": "Attach",
   "chatAttachTooMany": "At most {n} files",
   "@chatAttachTooMany": {
@@ -159,6 +164,53 @@
   "connTabHa": "Home Assistant",
   "connTabMqtt": "MQTT",
   "connTabChannels": "Channels",
+  "connTabWebSearch": "Web search",
+  "connTabBrowser": "Browser",
+  "browserControlLede": "Control a managed Chromium tab from chat. Off by default. Not your personal Chrome.",
+  "browserControlEnabled": "Enable browser tool",
+  "browserControlUnattended": "Allow for schedules",
+  "browserControlReady": "Ready",
+  "browserControlNotReady": "Not ready",
+  "browserControlSave": "Save",
+  "browserControlSaved": "Browser settings saved.",
+  "browserControlSaveFailed": "Could not save browser settings.",
+  "browserControlDefaultProfile": "Default profile",
+  "browserControlProfileManaged": "Managed (isolated)",
+  "browserControlProfilePersonal": "Personal Chrome",
+  "browserControlProfileRemote": "Remote CDP",
+  "browserControlElevatedWarn": "Personal/remote can act as you on logged-in sites. Owner only; never schedules.",
+  "browserControlAcknowledge": "I understand elevated browser risk",
+  "browserControlPersonalEnabled": "Enable personal Chrome",
+  "browserControlPersonalCdp": "Personal CDP (loopback)",
+  "browserControlPersonalReady": "Personal CDP up",
+  "browserControlPersonalNotReady": "Personal CDP down",
+  "browserControlRemoteEnabled": "Enable remote CDP",
+  "browserControlRemoteCdp": "Remote CDP URL",
+  "browserControlRemoteToken": "Remote CDP token",
+  "browserControlTokenSet": "set",
+  "browserControlTokenPlaceholder": "Leave blank to keep",
+  "browserControlRemoteReady": "Remote CDP up",
+  "browserControlRemoteNotReady": "Remote CDP down",
+  "browserControlOwnerOnly": "Only the household Owner device can change browser control settings.",
+  "browserControlAcknowledged": "Elevated risk acknowledged. Disable personal/remote to stop using them.",
+  "webSearchLede": "Search the public web from chat. DuckDuckGo needs no key; Brave and Tavily need an Owner API key.",
+  "webSearchEnabled": "Enable web_search",
+  "webSearchProvider": "Provider",
+  "webSearchApiKey": "API key",
+  "webSearchApiKeyHint": "Leave blank to keep the current key",
+  "webSearchReady": "Ready",
+  "webSearchNotReady": "Not ready",
+  "webSearchSave": "Save",
+  "webSearchSaved": "Web search settings saved.",
+  "webSearchSaveFailed": "Could not save web search settings.",
+  "webSearchOwnerOnly": "Only the Household Owner device can change web search.",
+  "webSearchBrowserFallback": "Browser fallback (Bing/Google when API/DDG fails)",
+  "webSearchBrowserFallbackHint": "Off by default. Attended chats still ask before the browser leg. SERP pages may CAPTCHA or block.",
+  "webSearchBrowserReady": "Playwright Chromium ready on daemon host",
+  "webSearchBrowserMissing": "Playwright Chromium not installed on daemon host",
+  "webSearchInstallHintNote": "Playwright is already part of the daemon. Download Chromium on the home computer that runs EnvoyHome (not this phone), then reopen Settings; restart the daemon if status stays missing.",
+  "webSearchCopyHint": "Copy install command",
+  "webSearchUnattendedBrowser": "Allow browser fallback for schedules",
   "connPairingHint": "Mint and revoke phones from desktop Settings → Pair devices. This list is read-only on mobile.",
   "connNoDevices": "No paired devices listed.",
   "connEnabled": "Enabled",
@@ -207,6 +259,34 @@
   "schedKindTool": "Tool",
   "schedWorkflowId": "Workflow id",
   "schedToolName": "Tool name",
+  "schedKindAgent": "Agent",
+  "schedAgentPrompt": "Agent prompt",
+  "schedTabRepeating": "繰り返し",
+  "schedTabOnce": "一度だけ",
+  "schedTabHistory": "履歴",
+  "schedNoneRepeating": "繰り返しスケジュールはまだありません。",
+  "schedNoneOnce": "一度きりのリマインダーはありません。",
+  "schedNoReceipts": "実行履歴はまだありません。",
+  "schedHistoryNotSet": "Not set",
+  "schedHistoryRuns": "Runs",
+  "schedNoDismissed": "No canceled or expired proposals.",
+  "schedDismissedCanceled": "canceled",
+  "schedDismissedExpired": "expired",
+  "schedNext": "次回",
+  "schedKindRepeating": "繰り返し",
+  "schedKindOnce": "一度",
+  "schedKindDaily": "毎日",
+  "schedKindWeekdays": "平日",
+  "schedKindWeekly": "毎週",
+  "schedKindMonthly": "毎月",
+  "schedKindYearly": "毎年",
+  "schedKindEvery": "毎",
+  "schedDayOfMonth": "{d}日",
+  "@schedDayOfMonth": {
+    "placeholders": {
+      "d": { "type": "String" }
+    }
+  },
   "wfEditorTitle": "Workflow",
   "wfEnable": "Enable",
   "wfDisable": "Disable",
@@ -223,7 +303,7 @@
   "wfDrafted": "Draft applied",
   "wfSaved": "Saved",
   "wfRan": "Run started",
-  "sysTabFiles": "Shared files",
+  "sysTabFiles": "Files",
   "sysTabHealth": "Health",
   "sysTabGrants": "Grants",
   "sysTestPush": "Send test push",
@@ -246,6 +326,49 @@
   "chatEmptyTitle": "ホームエージェントにメッセージ",
   "chatEmptyHint": "ターンはホームデーモンで実行されます。許可が必要なときは、ここで許可/拒否できます。",
   "chatHint": "メッセージ…",
+  "chatThought": "思考",
+  "chatNew": "新しいチャット",
+  "chatNewNamePrompt": "チャット名",
+  "chatNewNamePlaceholder": "例：週末の予定",
+  "chatNewNameHint": "今すぐ名前を付けるか、名前なしで開始（最初のメッセージがタイトルになります）。",
+  "chatNewSkip": "名前なしで開始",
+  "chatNewCreate": "作成",
+  "chatNewNeedName": "名前を入力するか、「名前なしで開始」を選んでください。",
+  "chatNewStart": "開始",
+  "chatOpenArtifact": "全文を開く",
+  "chatRecents": "履歴",
+  "chatSessionsEmpty": "チャットはまだありません。新規作成してください。",
+  "chatRecentsEmpty": "以前のチャットはありません。",
+  "chatUntitled": "無題のチャット",
+  "chatRenameAction": "名前を変更",
+  "chatRenamePrompt": "チャット名",
+  "chatRenameDone": "名前を変更しました。",
+  "chatRenameEmpty": "名前を空にはできません。",
+  "chatRenameNeedSession": "先にメッセージを送ってから名前を変更してください。",
+  "chatBusyTurn": "現在の返信が終わるまで待つか、キャンセルしてください。",
+  "chatEmptyAction": "チャットを空に",
+  "chatEmptyConfirmTitle": "このチャットを空にしますか？",
+  "chatEmptyConfirmBody": "このスレッドのメッセージはすべて削除されます。チャット自体は残ります。",
+  "chatTrashMenu": "チャット操作",
+  "chatArchiveAction": "チャットをアーカイブ",
+  "chatUnarchiveAction": "チャット一覧に戻す",
+  "chatUnarchiveDone": "チャットを復元しました。",
+  "chatArchivedOpen": "アーカイブ",
+  "chatArchivedTitle": "アーカイブ済みチャット",
+  "chatArchivedBack": "チャット一覧に戻る",
+  "chatArchivedEmpty": "アーカイブ済みチャットはありません。",
+  "chatRemoveAction": "チャットを削除",
+  "chatArchiveConfirmTitle": "このチャットをアーカイブしますか？",
+  "chatArchiveConfirmBody": "履歴から隠れますがディスク上に残ります。",
+  "chatRemoveConfirmTitle": "このチャットを削除しますか？",
+  "chatRemoveConfirmBody": "チャットとすべてのメッセージを完全に削除します。",
+  "chatRemoveDone": "チャットを削除しました。",
+  "chatNoSession": "アクティブなチャットがありません。",
+  "chatDeleteFailed": "サーバーでメッセージを削除できませんでした。",
+  "chatCopyMessage": "メッセージをコピー",
+  "chatCopied": "コピーしました",
+  "chatDeleteMessage": "メッセージを削除",
+  "chatCancel": "キャンセル",
   "chatSubscribeFailed": "購読失敗: {error}",
   "@chatSubscribeFailed": {
     "placeholders": {
@@ -351,15 +474,35 @@
     }
   },
   "artifactsTitle": "成果物",
-  "artifactsHint": "ホームデーモンの署名付きリンク。タップで開きます。",
+  "artifactsHint": "ホーム接続経由でアプリ内表示（公開 URL 不要）。",
   "artifactsNeedAccount": "成果物を一覧するにはアカウントを選んでください。",
   "artifactsEmptyTitle": "成果物はまだありません",
   "artifactsEmptyHint": "エージェントがファイルを出したあと引っ張って更新。",
   "artifactsUrlCopied": "開けません — URL をコピーしました",
   "artifactsOpenFailed": "オープン失敗: {error}",
+  "artifactsRefresh": "更新",
+  "artifactsRetry": "再試行",
+  "artifactsBinaryHint": "このファイル形式はここではプレビューできません。共有/保存で他のアプリを開くか、テキストまたは Markdown の書き出しを依頼してください。",
   "@artifactsOpenFailed": {
     "placeholders": {
       "error": {
+        "type": "String"
+      }
+    }
+  },
+  "artifactsShare": "共有 / 保存",
+  "artifactsShareFailed": "共有できませんでした: {error}",
+  "@artifactsShareFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatOpenFile": "{name} を開く",
+  "@chatOpenFile": {
+    "placeholders": {
+      "name": {
         "type": "String"
       }
     }
@@ -371,5 +514,166 @@
         "type": "int"
       }
     }
-  }
+  },
+  "navProfiles": "Profiles",
+  "settingsProfilesSubtitle": "Owner, workspace folders, tool policy",
+  "profilesIntro": "Each person has a profile. The household Owner configures workspace folders and can transfer ownership.",
+  "profilesMemberHint": "This device is not the household Owner — workspace is read-only here.",
+  "profilesRefresh": "Refresh",
+  "profilesAddTitle": "Add profile",
+  "profilesOwnerBadge": "Owner",
+  "profilesActiveBadge": "Active",
+  "profilesWorkspaceTitle": "Workspace folders",
+  "profilesWorkspaceHint": "Add host folders on the home machine (up to 16). The agent reaches them via workspace/<id>/… paths.",
+  "profilesWorkspacePath": "Host path",
+  "profilesWorkspaceUnset": "Not set (sandbox only)",
+  "profilesWorkspaceSet": "Configured",
+  "profilesWorkspaceWholeMachine": "Whole machine",
+  "profilesWorkspaceRo": "Read only",
+  "profilesWorkspaceRw": "Read & write",
+  "profilesWorkspaceUseRoot": "Add computer root",
+  "profilesWorkspaceClear": "Clear all",
+  "profilesWorkspaceRemove": "Remove",
+  "profilesWorkspaceApply": "Add",
+  "profilesWorkspaceEdit": "Add folder",
+  "profilesWorkspaceRootTitle": "Allow whole-computer access?",
+  "profilesWorkspaceRootBody": "This lets the agent read (and write, if selected) files under the computer root via workspace/… — including from this phone.",
+  "profilesWorkspaceRootOk": "Allow",
+  "profilesWorkspaceMemberNote": "Only the household Owner can change workspace folders.",
+  "profilesTransferTitle": "Transfer household Owner?",
+  "profilesTransferBody": "Make {name} the household Owner. They will control pairing, bindings, and household Settings.",
+  "@profilesTransferBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "profilesTransferConfirm": "Transfer",
+  "profilesTransferDone": "Owner is now {name}",
+  "@profilesTransferDone": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "profilesTransferFailed": "Transfer failed: {error}",
+  "@profilesTransferFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "profilesTransferTo": "Transfer to {name}",
+  "@profilesTransferTo": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "profilesToolPolicy": "Tool policy",
+  "profilesToolPolicyStandard": "Standard",
+  "profilesToolPolicyRestricted": "Restricted",
+  "connMintPairing": "Mint pairing code",
+  "connMintOk": "Pairing code minted",
+  "connMintUriHint": "Scan or paste this URI on the new device.",
+  "connPairingOwnerOnly": "Mint / revoke pairing requires the household Owner device.",
+  "connRevokeDevice": "Revoke",
+  "connForgetDevice": "Forget",
+  "connAccountsHint": "Household profiles",
+  "profilesWorkspaceCrossTitle": "Add workspace folder for another profile?",
+  "profilesWorkspaceCrossBody": "This adds a host folder for {name}. Continue only if you intend to configure their workspace.",
+  "@profilesWorkspaceCrossBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "profilesWorkspaceDenied": "Not visible on this device",
+  "profilesWorkspaceInactive": "Configured but inactive (filesystem-root only applies to Owner)",
+  "profilesRename": "Rename",
+  "profilesRenameTitle": "Rename profile",
+  "profilesRenameSave": "Save",
+  "profilesTimeZoneUnset": "Time zone: not set (schedules use host default)",
+  "profilesTimeZoneValue": "Time zone: {tz}",
+  "@profilesTimeZoneValue": {
+    "placeholders": {
+      "tz": { "type": "String" }
+    }
+  },
+  "profilesTimeZoneEdit": "Time zone",
+  "profilesTimeZoneTitle": "Account time zone",
+  "profilesTimeZoneHint": "IANA name, e.g. Asia/Shanghai",
+  "profilesTimeZoneSave": "Save",
+  "profilesTimeZoneDone": "Time zone set to {tz}",
+  "@profilesTimeZoneDone": {
+    "placeholders": {
+      "tz": { "type": "String" }
+    }
+  },
+  "profilesShareLocationTitle": "Home と位置情報を共有",
+  "profilesShareLocationSubtitle": "チャットターンに概算 GPS を付与します。権限はこの画面で一度だけ要求し、送信のたびに問いません。一時注入のみ — メモリには保存しません。",
+  "profilesShareLocationDenied": "位置情報の許可がありません。共有はオフのままです。",
+  "profilesShareLocationOn": "この端末で位置情報の共有をオンにしました",
+  "profilesDelete": "Delete",
+  "profilesDeleteTitle": "Delete profile?",
+  "profilesDeleteBody": "Delete {name}? Their sandbox and workspace config are removed. This cannot be undone.",
+  "@profilesDeleteBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "profilesDeleteConfirm": "Delete",
+  "profilesDeleteDone": "Deleted {name}",
+  "@profilesDeleteDone": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "profilesDeleteOwnerBlocked": "Cannot delete the household Owner. Transfer ownership first.",
+  "connRevokeConfirm": "Revoke device {id}? It will need to pair again.",
+  "@connRevokeConfirm": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "connForgetConfirm": "Forget device {id}? The pairing record is removed permanently.",
+  "@connForgetConfirm": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      }
+    }
+  },
+  "connOwnerWriteOnly": "Only the household Owner device can change this setting.",
+  "artifactsTooLarge": "This file is larger than the 8 MB in-app open limit. Ask the agent for a smaller export, or open it on the home machine.",
+  "artifactsCopyLink": "Copy signed link",
+  "artifactsLinkCopied": "Signed link copied",
+  "artifactsCopyLinkFailed": "Could not copy link",
+  "artifactsOpenInBrowser": "Open in browser",
+  "artifactsOpenInBrowserFailed": "Could not open in browser",
+  "filesParent": "Parent",
+  "filesRoots": "Roots",
+  "filesEmptyFolder": "This folder is empty",
+  "profilesWorkspaceBrowse": "Browse folders",
+  "profilesWorkspaceBrowseHint": "Tap to browse the home machine",
+  "chatTabActive": "Chats",
+  "chatTabArchived": "Archived",
+  "homeFolderTitle": "Choose folder",
+  "homeFolderSelect": "Select",
+  "homeFolderDrives": "Drives",
+  "homeFolderComputer": "Computer",
+  "homeFolderHome": "Home",
+  "homeFolderParent": "Parent folder",
+  "homeFolderNoSubfolders": "No subfolders"
 }

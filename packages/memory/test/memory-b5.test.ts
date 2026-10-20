@@ -93,10 +93,14 @@ test("V-MEM-3: supersede-by-key profile; L1 > L2 authority in inject order", asy
 
   await facade.remember(accountId, { text: "team decided on blue lights", target: "l2" });
   const inject = await facade.buildStandingInject(accountId);
+  const identityAt = inject.text.indexOf("## Identity");
   const profileAt = inject.text.indexOf("## Profile");
   const memoryAt = inject.text.indexOf("## MEMORY");
   const dailyAt = inject.text.indexOf("## Daily");
+  assert.ok(identityAt === 0, "product identity must lead standing inject");
+  assert.ok(inject.text.includes("You are **EnvoyHome**"));
   assert.ok(profileAt >= 0 && memoryAt > profileAt && dailyAt > memoryAt);
+  assert.ok(identityAt < profileAt);
   assert.ok(inject.text.includes("Alicia"));
 });
 

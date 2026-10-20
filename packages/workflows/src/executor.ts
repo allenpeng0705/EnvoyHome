@@ -62,6 +62,24 @@ function edgeKey(e: WorkflowEdge): string {
   return `${e.from}->${e.to}`;
 }
 
+/** Look up `step.nodeId`, `step.nodeId.field`, or a bare out key. */
+export function resolveOutputRef(
+  ref: string,
+  outputs: ReadonlyMap<string, string>,
+): string | undefined {
+  const trimmed = ref.trim();
+  const stepMatch = /^step\.([A-Za-z_][\w]*)(?:\.([A-Za-z_][\w]*))?$/.exec(trimmed);
+  if (stepMatch) {
+    const nodeId = stepMatch[1]!;
+    const field = stepMatch[2];
+    if (field) {
+      return outputs.get(`${nodeId}.${field}`) ?? outputs.get(field) ?? outputs.get(nodeId);
+    }
+    return outputs.get(nodeId);
+  }
+  return outputs.has(trimmed) ? outputs.get(trimmed) : undefined;
+}
+
 /**
  * Resolve Design-sketch refs like `step.extract_place.place` or a bare `out` key
  * against prior node outputs.
@@ -78,20 +96,48 @@ export function resolveArgsFrom(
       continue;
     }
     const ref = raw.trim();
-    const stepMatch = /^step\.([A-Za-z_][\w]*)(?:\.([A-Za-z_][\w]*))?$/.exec(ref);
-    if (stepMatch) {
-      const nodeId = stepMatch[1]!;
-      const field = stepMatch[2];
-      if (field) {
-        out[key] = outputs.get(field) ?? outputs.get(`${nodeId}.${field}`) ?? outputs.get(nodeId) ?? "";
-      } else {
-        out[key] = outputs.get(nodeId) ?? "";
-      }
-      continue;
-    }
-    out[key] = outputs.has(ref) ? outputs.get(ref)! : ref;
+    const resolved = resolveOutputRef(ref, outputs);
+    out[key] = resolved !== undefined ? resolved : ref;
   }
   return out;
+}
+
+/**
+ * Interpolate `{{step.nodeId}}` / `{{step.nodeId.field}}` / `{{outKey}}` in LLM prompts
+ * so extract → summarize → export chains can pass Markdown between steps (Design §7 / §9.5c).
+ */
+export function resolvePromptTemplate(
+  prompt: string,
+  outputs: ReadonlyMap<string, string>,
+): string {
+  return prompt.replace(/\{\{\s*([A-Za-z_][\w.]*)\s*\}\}/g, (_m, raw: string) => {
+    const resolved = resolveOutputRef(raw, outputs);
+    return resolved !== undefined ? resolved : "";
+  });
+}
+
+/** Flatten JSON tool results so `step.extract.text` / `step.extract.uri` resolve. */
+export function recordNodeOutput(
+  outputs: Map<string, string>,
+  nodeId: string,
+  output: string,
+  outKey?: string,
+): void {
+  outputs.set(nodeId, output);
+  if (outKey) outputs.set(outKey, output);
+  try {
+    const parsed: unknown = JSON.parse(output);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+        const s = String(v);
+        outputs.set(`${nodeId}.${k}`, s);
+        if (outKey) outputs.set(`${outKey}.${k}`, s);
+      }
+    }
+  } catch {
+    /* not JSON — fine for plain tool strings */
+  }
 }
 
 async function runNode(
@@ -113,12 +159,11 @@ async function runNode(
         : typeof result === "string"
           ? result
           : JSON.stringify(result);
-    outputs.set(node.id, output);
-    if (node.out) outputs.set(node.out, output);
+    recordNodeOutput(outputs, node.id, output, node.out);
     return { ok: true, output };
   }
   if (node.type === "llm_fill" || node.type === "llm_summarize") {
-    const prompt = String(node.prompt ?? "");
+    const prompt = resolvePromptTemplate(String(node.prompt ?? ""), outputs);
     const raw = await deps.llm(prompt);
     const text = normalizeLlmOutput(raw, node.type === "llm_fill" ? "fill" : "summarize");
     if (node.type === "llm_fill" && !text) {
@@ -128,8 +173,7 @@ async function runNode(
         output: String(raw ?? "").slice(0, 200),
       };
     }
-    outputs.set(node.id, text);
-    if (node.out) outputs.set(node.out, text);
+    recordNodeOutput(outputs, node.id, text, node.out);
     return { ok: true, output: text };
   }
   return { ok: false, detail: "unknown step" };

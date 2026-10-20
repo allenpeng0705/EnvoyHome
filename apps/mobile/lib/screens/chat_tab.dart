@@ -1,14 +1,22 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:speech_to_text/speech_to_text.dart';
 
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../chat_format.dart';
+import '../chat_think.dart';
+import '../client_context.dart';
 import '../l10n/app_localizations.dart';
+import '../sandbox_paths.dart';
 import '../state/session_controller.dart';
+import 'artifact_viewer_screen.dart';
 
 const _kChatAttachMaxFiles = 8;
 const _kChatAttachMaxBytes = 8 * 1024 * 1024;
@@ -32,13 +40,56 @@ class _ChatBubble {
     required this.role,
     required this.text,
     this.media = const [],
+    this.messageId,
+    this.format,
+    this.artifactPath,
+    this.artifactUrl,
   });
   final String role;
   final String text;
   final List<Map<String, dynamic>> media;
+  final String? messageId;
+  /// Design §9.5: plain | markdown | link
+  final String? format;
+  /// Relative path under accounts/<id>/files/ — preferred open (mesh/paired).
+  final String? artifactPath;
+  /// Optional signed HTTP URL when publicBaseUrl is reachable.
+  final String? artifactUrl;
 }
 
-/// General Chat (`purpose: general`) or Home chat (`purpose: home`).
+/// Compact icon-only action — peer EnvoyGo `_EhBubbleIconButton` / EnvoyMesh Social.
+class _BubbleIconButton extends StatelessWidget {
+  const _BubbleIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        type: MaterialType.transparency,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Icon(icon, size: 16, color: scheme.onSurfaceVariant),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// General Chat (`purpose: general`), Home chat (`home`), or Schedules (`schedules`).
 class ChatTab extends StatefulWidget {
   const ChatTab({
     super.key,
@@ -68,8 +119,15 @@ class _ChatTabState extends State<ChatTab> {
   final _speech = SpeechToText();
 
   String? _sessionId;
+  /// Optional title chosen at New chat; applied on first `openSession`.
+  String _pendingNewChatTitle = '';
   String? _turnId;
   String? _assistantDraft;
+  String? _draftFormat;
+  String? _draftArtifactPath;
+  String? _draftArtifactUrl;
+  String? _trackedAccountId;
+  bool _wasConnected = false;
   bool _sending = false;
   bool _subscribed = false;
   bool _listening = false;
@@ -77,19 +135,41 @@ class _ChatTabState extends State<ChatTab> {
   List<Map<String, dynamic>> _pending = [];
   List<Map<String, dynamic>> _boundSources = [];
   bool _approvalsLoading = false;
+  /// General Chats: ChatGPT-style list ↔ thread (Home stays single-thread).
+  bool _showSessionList = true;
+  /// When true, the session list shows archived chats (includeArchived).
+  bool _showArchived = false;
+  List<Map<String, dynamic>> _sessionRows = [];
+  bool _sessionsLoading = false;
 
   bool get _isHome => widget.purpose == 'home';
+  bool get _isSchedules => widget.purpose == 'schedules';
+  /// Home and Schedules are one thread per profile (no Chats list).
+  bool get _singleThread => _isHome || _isSchedules;
 
-  String _sessionStorageKey(String accountId) =>
-      'envoyhome.${_isHome ? 'homeChat' : 'chat'}SessionId.$accountId';
+  String _sessionStorageKey(String accountId) {
+    final slot = _isHome
+        ? 'homeChat'
+        : _isSchedules
+            ? 'schedulesChat'
+            : 'chat';
+    return 'envoyhome.${slot}SessionId.$accountId';
+  }
 
   @override
   void initState() {
     super.initState();
+    _trackedAccountId = widget.session.accountId;
+    _wasConnected = widget.session.isConnected;
     widget.session.addListener(_onSessionChanged);
     _ensureSubscribed();
     unawaited(_initSpeech());
-    unawaited(_restoreSession());
+    if (_singleThread) {
+      _showSessionList = false;
+      unawaited(_restoreSession());
+    } else {
+      unawaited(_loadSessionList());
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         unawaited(_refreshApprovals());
@@ -105,10 +185,10 @@ class _ChatTabState extends State<ChatTab> {
       oldWidget.session.removeListener(_onSessionChanged);
       widget.session.addListener(_onSessionChanged);
     }
-    if (oldWidget.session.session != widget.session.session ||
-        oldWidget.purpose != widget.purpose) {
+    if (oldWidget.purpose != widget.purpose) {
       _teardownSubs();
       _sessionId = null;
+      _pendingNewChatTitle = '';
       _subscribed = false;
       _bubbles.clear();
       _pendingFiles.clear();
@@ -130,6 +210,31 @@ class _ChatTabState extends State<ChatTab> {
   }
 
   void _onSessionChanged() {
+    final connected = widget.session.isConnected;
+    final accountId = widget.session.accountId;
+    if (accountId != _trackedAccountId) {
+      _trackedAccountId = accountId;
+      _sessionId = null;
+      _pendingNewChatTitle = '';
+      _bubbles.clear();
+      _assistantDraft = null;
+      if (_singleThread) {
+        _showSessionList = false;
+        unawaited(_restoreSession());
+      } else {
+        _showSessionList = true;
+        unawaited(_loadSessionList());
+      }
+    } else if (connected && !_wasConnected) {
+      // SessionController is the same object — compare connected edge, not
+      // oldWidget.session.session (already updated when didUpdateWidget runs).
+      if (_singleThread) {
+        unawaited(_restoreSession());
+      } else {
+        unawaited(_loadSessionList());
+      }
+    }
+    _wasConnected = connected;
     unawaited(_refreshApprovals());
     if (_isHome) unawaited(_loadBoundSources());
   }
@@ -155,12 +260,50 @@ class _ChatTabState extends State<ChatTab> {
 
   Future<void> _restoreSession() async {
     final accountId = widget.session.accountId;
-    if (accountId == null || accountId.isEmpty) return;
+    final home = widget.session.session;
+    if (accountId == null || accountId.isEmpty || home == null) return;
     final prefs = await SharedPreferences.getInstance();
-    final id = prefs.getString(_sessionStorageKey(accountId));
-    if (id == null || id.isEmpty || !mounted) return;
-    setState(() => _sessionId = id);
-    unawaited(_reloadTranscript(id));
+    var id = prefs.getString(_sessionStorageKey(accountId));
+    if (id != null && id.isNotEmpty) {
+      if (!mounted) return;
+      setState(() => _sessionId = id);
+      try {
+        await _reloadTranscript(id);
+        return;
+      } catch (_) {
+        // Stale pointer — fall through (Home may still have a daemon session).
+        await prefs.remove(_sessionStorageKey(accountId));
+        if (mounted) {
+          setState(() {
+            _sessionId = null;
+            _bubbles.clear();
+          });
+        }
+        id = null;
+      }
+    }
+    // Dedicated chat: one session per profile — reuse from daemon list if present.
+    if (_singleThread) {
+      try {
+        final body = await home.listSessions(accountId: accountId);
+        final raw = body['sessions'];
+        if (raw is List) {
+          for (final s in raw) {
+            if (s is! Map) continue;
+            if ((s['purpose']?.toString() ?? 'general') != widget.purpose) continue;
+            final sid = s['sessionId']?.toString();
+            if (sid == null || sid.isEmpty) continue;
+            await _persistSession(sid);
+            if (!mounted) return;
+            setState(() => _sessionId = sid);
+            await _reloadTranscript(sid);
+            return;
+          }
+        }
+      } catch (_) {
+        /* open on first send */
+      }
+    }
   }
 
   Future<void> _persistSession(String sessionId) async {
@@ -168,6 +311,57 @@ class _ChatTabState extends State<ChatTab> {
     if (accountId == null || accountId.isEmpty) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_sessionStorageKey(accountId), sessionId);
+  }
+
+  /// Home: prefer an existing daemon home session before minting.
+  Future<String?> _ensureSessionId() async {
+    if (_sessionId != null && _sessionId!.isNotEmpty) return _sessionId;
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    final l10n = AppLocalizations.of(context);
+    if (home == null || accountId == null) return null;
+    if (_singleThread) {
+      try {
+        final body = await home.listSessions(accountId: accountId);
+        final raw = body['sessions'];
+        if (raw is List) {
+          for (final s in raw) {
+            if (s is! Map) continue;
+            if ((s['purpose']?.toString() ?? 'general') != widget.purpose) continue;
+            final sid = s['sessionId']?.toString();
+            if (sid == null || sid.isEmpty) continue;
+            await _persistSession(sid);
+            if (mounted) setState(() => _sessionId = sid);
+            return sid;
+          }
+        }
+      } catch (_) {
+        /* mint below */
+      }
+    }
+    final pendingTitle = !_singleThread ? _pendingNewChatTitle.trim() : '';
+    final opened = await home.openSession(
+      accountId: accountId,
+      // Dedicated: fixed title. General: optional New-chat name; else first-message auto-title.
+      title: _isHome
+          ? l10n.homeChatSessionTitle
+          : _isSchedules
+              ? l10n.schedulesChatSessionTitle
+              : (pendingTitle.isEmpty ? null : pendingTitle),
+      purpose: widget.purpose,
+    );
+    final sid = opened['sessionId'] as String?;
+    if (sid == null || sid.isEmpty) return null;
+    await _persistSession(sid);
+    if (mounted) {
+      setState(() {
+        _sessionId = sid;
+        if (!_singleThread) _pendingNewChatTitle = '';
+      });
+    } else if (!_singleThread) {
+      _pendingNewChatTitle = '';
+    }
+    return sid;
   }
 
   void _teardownSubs() {
@@ -310,26 +504,53 @@ class _ChatTabState extends State<ChatTab> {
   void _onTurnDelta(dynamic data) {
     if (data is! Map) return;
     final map = Map<String, dynamic>.from(data);
+    // Ignore turns for other sessions (Home + Chats both stay mounted).
+    final sid = map['sessionId']?.toString();
+    if (sid == null || sid.isEmpty || sid != _sessionId) return;
     if (map['kind']?.toString() != 'text') return;
     final text = map['text']?.toString();
     if (text == null || text.isEmpty) return;
     if (!mounted) return;
     setState(() {
-      _assistantDraft = (_assistantDraft ?? '') + text;
       final tid = map['turnId']?.toString();
       if (tid != null && tid.isNotEmpty) _turnId = tid;
+      final fmt = normalizeChatFormat(map['format']);
+      if (fmt != null) _draftFormat = fmt;
+      final path = map['artifactPath']?.toString();
+      if (path != null && path.isNotEmpty) _draftArtifactPath = path;
+      final art = map['artifactUrl']?.toString();
+      if (art != null && art.isNotEmpty) _draftArtifactUrl = art;
+      // Thin-client spill: `link` + artifactPath replaces the streamed draft (not append).
+      if (fmt == 'link' && path != null && path.isNotEmpty) {
+        _assistantDraft = text;
+      } else {
+        _assistantDraft = (_assistantDraft ?? '') + text;
+      }
     });
     _scrollToEnd();
   }
 
   void _onTurnFinished(dynamic data) {
     if (!mounted) return;
+    if (data is Map) {
+      final sid = data['sessionId']?.toString();
+      if (sid == null || sid.isEmpty || sid != _sessionId) return;
+    }
     setState(() {
       final draft = _assistantDraft?.trim();
       if (draft != null && draft.isNotEmpty) {
-        _bubbles.add(_ChatBubble(role: 'assistant', text: draft));
+        _bubbles.add(_ChatBubble(
+          role: 'assistant',
+          text: draft,
+          format: _draftFormat ?? classifyChatFormat(draft),
+          artifactPath: _draftArtifactPath,
+          artifactUrl: _draftArtifactUrl,
+        ));
       }
       _assistantDraft = null;
+      _draftFormat = null;
+      _draftArtifactPath = null;
+      _draftArtifactUrl = null;
       _turnId = null;
       _sending = false;
     });
@@ -337,6 +558,7 @@ class _ChatTabState extends State<ChatTab> {
     if (sessionId != null) {
       unawaited(_reloadTranscript(sessionId));
     }
+    if (!_singleThread) unawaited(_loadSessionList());
     unawaited(_refreshApprovals());
     _scrollToEnd();
   }
@@ -344,40 +566,786 @@ class _ChatTabState extends State<ChatTab> {
   Future<void> _reloadTranscript(String sessionId) async {
     final home = widget.session.session;
     final accountId = widget.session.accountId;
-    if (home == null || accountId == null) return;
-    try {
-      final body = await home.getTranscript(
-        accountId: accountId,
-        sessionId: sessionId,
-        limit: 80,
-      );
-      final messages = body['messages'];
-      if (messages is! List || !mounted) return;
-      final next = <_ChatBubble>[];
-      for (final m in messages) {
-        if (m is! Map) continue;
-        final role = (m['role'] ?? m['speaker'] ?? 'unknown').toString();
-        final text = (m['text'] ?? m['content'] ?? '').toString();
-        final mediaRaw = m['media'];
-        final media = <Map<String, dynamic>>[];
-        if (mediaRaw is List) {
-          for (final item in mediaRaw) {
-            if (item is Map) media.add(Map<String, dynamic>.from(item));
-          }
+    if (home == null || accountId == null) {
+      throw StateError('not connected');
+    }
+    final body = await home.getTranscript(
+      accountId: accountId,
+      sessionId: sessionId,
+      limit: 80,
+    );
+    final messages = body['messages'];
+    if (messages is! List) {
+      throw StateError('bad transcript');
+    }
+    if (!mounted) return;
+    final next = <_ChatBubble>[];
+    for (final m in messages) {
+      if (m is! Map) continue;
+      final role = (m['role'] ?? m['speaker'] ?? 'unknown').toString();
+      final text = (m['text'] ?? m['content'] ?? '').toString();
+      final messageId = m['messageId']?.toString();
+      final mediaRaw = m['media'];
+      final media = <Map<String, dynamic>>[];
+      if (mediaRaw is List) {
+        for (final item in mediaRaw) {
+          if (item is Map) media.add(Map<String, dynamic>.from(item));
         }
-        if (text.isEmpty && media.isEmpty) continue;
-        next.add(_ChatBubble(role: role, text: text, media: media));
       }
-      if (next.isNotEmpty) {
-        setState(() {
-          _bubbles
-            ..clear()
-            ..addAll(next);
-        });
-        _scrollToEnd();
+      if (text.isEmpty && media.isEmpty) continue;
+      final format = normalizeChatFormat(m['format']);
+      final artifactPath = m['artifactPath']?.toString();
+      final artifactUrl = m['artifactUrl']?.toString();
+      next.add(_ChatBubble(
+        role: role,
+        text: text,
+        media: media,
+        messageId: messageId,
+        format: role == 'assistant' ? (format ?? classifyChatFormat(text)) : format,
+        artifactPath: (artifactPath != null && artifactPath.isNotEmpty) ? artifactPath : null,
+        artifactUrl: (artifactUrl != null && artifactUrl.isNotEmpty) ? artifactUrl : null,
+      ));
+    }
+    setState(() {
+      _bubbles
+        ..clear()
+        ..addAll(next);
+    });
+    _scrollToEnd();
+  }
+
+  /// Chats list: only user-messaged general sessions (hide schedule/inbound/empty).
+  bool _isUserFacingGeneralChat(Map s) {
+    final purpose = s['purpose']?.toString() ?? 'general';
+    if (purpose != 'general') return false;
+    final count = s['messageCount'];
+    final n = count is num ? count.toInt() : 0;
+    if (n <= 0) return false;
+    final channel = s['channel']?.toString();
+    if (channel != null && channel.isNotEmpty) return false;
+    final title = (s['title']?.toString() ?? '').trim();
+    if (title.isEmpty) return true;
+    final lower = title.toLowerCase();
+    if (lower.startsWith('schedule:')) return false;
+    if (lower.startsWith('workflow-test:')) return false;
+    if (lower == 'hatch') return false;
+    if (lower.endsWith(' inbound')) return false;
+    return true;
+  }
+
+  Future<void> _loadSessionList() async {
+    if (_singleThread) return;
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    if (home == null || accountId == null) return;
+    if (mounted) setState(() => _sessionsLoading = true);
+    try {
+      final body = await home.listSessions(
+        accountId: accountId,
+        includeArchived: _showArchived,
+      );
+      final raw = body['sessions'];
+      final rows = <Map<String, dynamic>>[];
+      if (raw is List) {
+        for (final s in raw) {
+          if (s is! Map) continue;
+          if (!_isUserFacingGeneralChat(s)) continue;
+          final archived = s['archivedAt'] != null;
+          if (_showArchived != archived) continue;
+          rows.add(Map<String, dynamic>.from(s));
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _sessionRows = rows.take(40).toList();
+        _sessionsLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _sessionsLoading = false);
+    }
+  }
+
+  Future<void> _startNewChat({bool askName = true}) async {
+    if (_singleThread) return;
+    if (_sending) {
+      final l10n = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.chatBusyTurn)));
+      return;
+    }
+    final l10n = AppLocalizations.of(context);
+    var title = '';
+    if (askName) {
+      final chosen = await _promptOptionalNewChatTitle(l10n);
+      if (chosen == null || !mounted) return;
+      title = chosen;
+    }
+    final accountId = widget.session.accountId;
+    // ChatGPT-style: don't mint a session until the first send — avoids empty
+    // list rows the user never messaged.
+    if (accountId != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_sessionStorageKey(accountId));
+    }
+    if (!mounted) return;
+    setState(() {
+      _sessionId = null;
+      _pendingNewChatTitle = title;
+      _bubbles.clear();
+      _assistantDraft = null;
+      _turnId = null;
+      _showSessionList = false;
+    });
+    unawaited(_pruneAndReloadSessions());
+  }
+
+  /// Returns null on cancel; empty string = untitled (auto-title later).
+  Future<String?> _promptOptionalNewChatTitle(AppLocalizations l10n) async {
+    final controller = TextEditingController();
+    final next = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        String? error;
+        return StatefulBuilder(
+          builder: (ctx, setLocal) {
+            void createNamed() {
+              final trimmed = controller.text.trim();
+              if (trimmed.isEmpty) {
+                setLocal(() => error = l10n.chatNewNeedName);
+                return;
+              }
+              Navigator.of(ctx).pop(trimmed.length > 120 ? trimmed.substring(0, 120) : trimmed);
+            }
+
+            return AlertDialog(
+              title: Text(l10n.chatNew),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    l10n.chatNewNameHint,
+                    style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(ctx).colorScheme.onSurface.withValues(alpha: 0.65),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    maxLength: 120,
+                    decoration: InputDecoration(
+                      labelText: l10n.chatNewNamePrompt,
+                      hintText: l10n.chatNewNamePlaceholder,
+                      errorText: error,
+                    ),
+                    onChanged: (_) {
+                      if (error != null) setLocal(() => error = null);
+                    },
+                    onSubmitted: (_) {
+                      final trimmed = controller.text.trim();
+                      // Enter: named if filled, otherwise start without name.
+                      Navigator.of(ctx).pop(
+                        trimmed.isEmpty
+                            ? ''
+                            : (trimmed.length > 120 ? trimmed.substring(0, 120) : trimmed),
+                      );
+                    },
+                  ),
+                ],
+              ),
+              actionsAlignment: MainAxisAlignment.end,
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text(l10n.chatCancel),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(''),
+                  child: Text(l10n.chatNewSkip),
+                ),
+                FilledButton(
+                  onPressed: createNamed,
+                  child: Text(l10n.chatNewCreate),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+    controller.dispose();
+    if (next == null) return null;
+    return next.trim().length > 120 ? next.trim().substring(0, 120) : next.trim();
+  }
+
+  Future<void> _pruneAndReloadSessions() async {
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    if (home == null || accountId == null) {
+      await _loadSessionList();
+      return;
+    }
+    try {
+      final body = await home.listSessions(accountId: accountId);
+      final raw = body['sessions'];
+      if (raw is List) {
+        for (final s in raw) {
+          if (s is! Map) continue;
+          if ((s['purpose']?.toString() ?? 'general') != 'general') continue;
+          final count = s['messageCount'];
+          final n = count is num ? count.toInt() : 0;
+          if (n > 0) continue;
+          final sid = s['sessionId']?.toString();
+          if (sid == null || sid.isEmpty || sid == _sessionId) continue;
+          await home.removeSession(accountId: accountId, sessionId: sid);
+        }
       }
     } catch (_) {
-      // keep streamed bubbles
+      /* best-effort cleanup */
+    }
+    await _loadSessionList();
+  }
+
+  Future<void> _renamePendingOrSession({String? sessionId, String? currentTitle}) async {
+    if (_singleThread) return;
+    if (_sending) {
+      final l10n = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.chatBusyTurn)));
+      return;
+    }
+    final l10n = AppLocalizations.of(context);
+    // Named New chat before first send — edit the pending title locally.
+    if (sessionId == null || sessionId.isEmpty) {
+      final controller = TextEditingController(text: _pendingNewChatTitle);
+      final next = await showDialog<String>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(l10n.chatRenameAction),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            maxLength: 120,
+            decoration: InputDecoration(
+              labelText: l10n.chatRenamePrompt,
+              hintText: l10n.chatNewNamePlaceholder,
+            ),
+            onSubmitted: (v) => Navigator.of(ctx).pop(v),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(MaterialLocalizations.of(ctx).cancelButtonLabel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(controller.text),
+              child: Text(l10n.chatRenameAction),
+            ),
+          ],
+        ),
+      );
+      controller.dispose();
+      if (next == null || !mounted) return;
+      final trimmed = next.trim();
+      setState(() {
+        _pendingNewChatTitle = trimmed.length > 120 ? trimmed.substring(0, 120) : trimmed;
+      });
+      return;
+    }
+    await _renameSession(sessionId, currentTitle: currentTitle);
+  }
+
+  Future<void> _renameSession(String sessionId, {String? currentTitle}) async {
+    if (_singleThread) return;
+    if (_sending) {
+      final l10n = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.chatBusyTurn)));
+      return;
+    }
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    final l10n = AppLocalizations.of(context);
+    if (home == null || accountId == null) return;
+    final initial = (currentTitle ?? '').trim();
+    final controller = TextEditingController(
+      text: initial.isEmpty || initial == l10n.chatUntitled || initial == l10n.chatNew
+          ? ''
+          : initial,
+    );
+    final next = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l10n.chatRenameAction),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 120,
+          decoration: InputDecoration(labelText: l10n.chatRenamePrompt),
+          onSubmitted: (v) => Navigator.of(ctx).pop(v),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(l10n.chatCancel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            child: Text(l10n.chatRenameAction),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (next == null || !mounted) return;
+    final trimmed = next.trim();
+    if (trimmed.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.chatRenameEmpty)));
+      return;
+    }
+    try {
+      final body = await home.renameSession(
+        accountId: accountId,
+        sessionId: sessionId,
+        title: trimmed,
+      );
+      final title = body['title']?.toString() ?? trimmed;
+      if (!mounted) return;
+      setState(() {
+        for (final s in _sessionRows) {
+          if (s['sessionId']?.toString() == sessionId) {
+            s['title'] = title;
+          }
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.chatRenameDone)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _selectSession(String sessionId, {bool fromArchive = false}) async {
+    if (_singleThread) return;
+    if (_sending) {
+      final l10n = AppLocalizations.of(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.chatBusyTurn)));
+      return;
+    }
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    if (fromArchive && home != null && accountId != null) {
+      try {
+        await home.unarchiveSession(accountId: accountId, sessionId: sessionId);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+        return;
+      }
+    }
+    await _persistSession(sessionId);
+    if (!mounted) return;
+    setState(() {
+      _sessionId = sessionId;
+      _pendingNewChatTitle = '';
+      _bubbles.clear();
+      _assistantDraft = null;
+      _showSessionList = false;
+      _showArchived = false;
+    });
+    try {
+      await _reloadTranscript(sessionId);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(AppLocalizations.of(context).chatError('$e'))),
+      );
+    }
+  }
+
+  Future<void> _unarchiveSession(String sessionId) async {
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    final l10n = AppLocalizations.of(context);
+    if (home == null || accountId == null) return;
+    if (_sending) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.chatBusyTurn)));
+      return;
+    }
+    try {
+      await home.unarchiveSession(accountId: accountId, sessionId: sessionId);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.chatUnarchiveDone)));
+      await _loadSessionList();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+    }
+  }
+
+  Future<void> _openSessionList() async {
+    if (_singleThread) return;
+    setState(() {
+      _showSessionList = true;
+      _showArchived = false;
+    });
+    await _loadSessionList();
+  }
+
+  Future<void> _openArchivedList() async {
+    if (_singleThread) return;
+    setState(() {
+      _showSessionList = true;
+      _showArchived = true;
+    });
+    await _loadSessionList();
+  }
+
+  Future<void> _showTrashMenu() async {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    if (_sending) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.chatBusyTurn)));
+      return;
+    }
+    final canAct = _sessionId != null || _pendingNewChatTitle.trim().isNotEmpty;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: theme.colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        final scheme = Theme.of(ctx).colorScheme;
+        Widget tile({
+          required IconData icon,
+          required String label,
+          required String value,
+          bool enabled = true,
+          bool danger = false,
+        }) {
+          final color = !enabled
+              ? scheme.onSurface.withValues(alpha: 0.28)
+              : danger
+                  ? scheme.error
+                  : scheme.onSurface;
+          return ListTile(
+            enabled: enabled,
+            leading: Icon(icon, color: color, size: 22),
+            title: Text(
+              label,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: color,
+                fontWeight: danger ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+            onTap: enabled ? () => Navigator.pop(ctx, value) : null,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+          );
+        }
+
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                  child: Text(
+                    l10n.chatTrashMenu,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                ),
+                if (!_singleThread)
+                  tile(
+                    icon: Icons.drive_file_rename_outline,
+                    label: l10n.chatRenameAction,
+                    value: 'rename',
+                    enabled: canAct,
+                  ),
+                tile(
+                  icon: Icons.delete_sweep_outlined,
+                  label: l10n.chatEmptyAction,
+                  value: 'empty',
+                  enabled: _sessionId != null && _bubbles.isNotEmpty,
+                ),
+                if (!_singleThread)
+                  tile(
+                    icon: Icons.archive_outlined,
+                    label: l10n.chatArchiveAction,
+                    value: 'archive',
+                    enabled: _sessionId != null,
+                  ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  child: Divider(
+                    height: 1,
+                    color: scheme.onSurface.withValues(alpha: 0.08),
+                  ),
+                ),
+                tile(
+                  icon: Icons.delete_outline,
+                  label: l10n.chatRemoveAction,
+                  value: 'remove',
+                  enabled: canAct,
+                  danger: true,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (!mounted || action == null) return;
+    // Let the sheet finish dismissing before opening another route (iOS).
+    await Future<void>.delayed(Duration.zero);
+    if (!mounted) return;
+    if (action == 'rename') {
+      await _renamePendingOrSession(
+        sessionId: _sessionId,
+        currentTitle: _threadTitle(l10n),
+      );
+    } else if (action == 'empty') {
+      await _emptyChat();
+    } else if (action == 'archive') {
+      await _archiveSession(_sessionId);
+    } else if (action == 'remove') {
+      if (_sessionId == null) {
+        setState(() {
+          _pendingNewChatTitle = '';
+          _bubbles.clear();
+          _assistantDraft = null;
+          _showSessionList = true;
+        });
+        return;
+      }
+      await _removeSession(_sessionId);
+    }
+  }
+
+  Future<bool> _confirm({
+    required String title,
+    required String body,
+    required String confirmLabel,
+    bool danger = false,
+  }) async {
+    final l10n = AppLocalizations.of(context);
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final scheme = Theme.of(ctx).colorScheme;
+        return AlertDialog(
+          title: Text(title),
+          content: Text(body),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(l10n.chatCancel),
+            ),
+            FilledButton(
+              style: danger
+                  ? FilledButton.styleFrom(
+                      backgroundColor: scheme.error,
+                      foregroundColor: scheme.onError,
+                    )
+                  : null,
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(confirmLabel),
+            ),
+          ],
+        );
+      },
+    );
+    return ok == true;
+  }
+
+  Future<void> _emptyChat() async {
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    final sessionId = _sessionId;
+    final l10n = AppLocalizations.of(context);
+    if (_sending) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.chatBusyTurn)));
+      return;
+    }
+    if (home == null || accountId == null) return;
+    if (sessionId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.chatNoSession)),
+      );
+      return;
+    }
+    final ok = await _confirm(
+      title: l10n.chatEmptyConfirmTitle,
+      body: l10n.chatEmptyConfirmBody,
+      confirmLabel: l10n.chatEmptyAction,
+    );
+    if (!ok || !mounted) return;
+    try {
+      await home.clearTranscript(accountId: accountId, sessionId: sessionId);
+      if (!mounted) return;
+      setState(() {
+        _bubbles.clear();
+        _assistantDraft = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.chatError('$e'))),
+      );
+    }
+  }
+
+  Future<void> _archiveSession(String? sessionId) async {
+    if (_singleThread || sessionId == null || sessionId.isEmpty) return;
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    final l10n = AppLocalizations.of(context);
+    if (_sending) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.chatBusyTurn)));
+      return;
+    }
+    if (home == null || accountId == null) return;
+    final ok = await _confirm(
+      title: l10n.chatArchiveConfirmTitle,
+      body: l10n.chatArchiveConfirmBody,
+      confirmLabel: l10n.chatArchiveAction,
+    );
+    if (!ok || !mounted) return;
+    try {
+      await home.archiveSession(accountId: accountId, sessionId: sessionId);
+      if (!mounted) return;
+      if (sessionId == _sessionId) {
+        setState(() {
+          _sessionId = null;
+          _pendingNewChatTitle = '';
+          _bubbles.clear();
+          _assistantDraft = null;
+          _showSessionList = true;
+        });
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_sessionStorageKey(accountId));
+      }
+      await _loadSessionList();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.chatError('$e'))),
+      );
+    }
+  }
+
+  Future<void> _removeSession(String? sessionId) async {
+    if (sessionId == null || sessionId.isEmpty) return;
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    final l10n = AppLocalizations.of(context);
+    if (_sending) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.chatBusyTurn)));
+      return;
+    }
+    if (home == null || accountId == null) return;
+    final ok = await _confirm(
+      title: l10n.chatRemoveConfirmTitle,
+      body: l10n.chatRemoveConfirmBody,
+      confirmLabel: l10n.chatRemoveAction,
+      danger: true,
+    );
+    if (!ok || !mounted) return;
+    try {
+      await home.removeSession(accountId: accountId, sessionId: sessionId);
+      if (!mounted) return;
+      if (sessionId == _sessionId) {
+        setState(() {
+          _sessionId = null;
+          _pendingNewChatTitle = '';
+          _bubbles.clear();
+          _assistantDraft = null;
+          if (!_singleThread) _showSessionList = true;
+        });
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_sessionStorageKey(accountId));
+      }
+      if (!_singleThread) await _loadSessionList();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.chatRemoveDone)),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.chatError('$e'))),
+      );
+    }
+  }
+
+  String _copyTextForBubble(_ChatBubble b) {
+    if (b.role == 'assistant') {
+      final visible = splitAssistantSegments(b.text)
+          .where((s) => !s.isThink)
+          .map((s) => s.text)
+          .join()
+          .trim();
+      if (visible.isNotEmpty) return visible;
+    }
+    return b.text.trim();
+  }
+
+  Future<void> _copyBubble(_ChatBubble b) async {
+    final text = _copyTextForBubble(b);
+    if (text.isEmpty) return;
+    final l10n = AppLocalizations.of(context);
+    await Clipboard.setData(ClipboardData(text: text));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l10n.chatCopied)),
+    );
+  }
+
+  Future<void> _deleteBubble(_ChatBubble b) async {
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    final sessionId = _sessionId;
+    final messageId = b.messageId;
+    final l10n = AppLocalizations.of(context);
+    if (_sending) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.chatBusyTurn)));
+      return;
+    }
+    if (home == null || accountId == null) return;
+    if (sessionId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.chatNoSession)),
+      );
+      return;
+    }
+    if (messageId == null || messageId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.chatDeleteFailed)),
+      );
+      return;
+    }
+    try {
+      final result = await home.deleteTranscriptMessages(
+        accountId: accountId,
+        sessionId: sessionId,
+        messageIds: [messageId],
+      );
+      final removed = result['removed'];
+      if (removed is num && removed < 1) {
+        throw StateError(l10n.chatDeleteFailed);
+      }
+      if (!mounted) return;
+      setState(() => _bubbles.remove(b));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.chatError('$e'))),
+      );
     }
   }
 
@@ -542,13 +1510,8 @@ class _ChatTabState extends State<ChatTab> {
           if (up['bytes'] != null) 'bytes': up['bytes'],
         });
       }
-      _sessionId ??= (await home.openSession(
-        accountId: accountId,
-        title: _isHome ? l10n.homeChatSessionTitle : l10n.chatSessionTitle,
-        purpose: widget.purpose,
-      ))['sessionId'] as String?;
-      if (_sessionId == null) throw StateError('no sessionId');
-      await _persistSession(_sessionId!);
+      final sessionId = await _ensureSessionId();
+      if (sessionId == null) throw StateError('no sessionId');
       if (!mounted) return;
       final displayText = text.isEmpty ? l10n.chatAttachedOnly : text;
       setState(() {
@@ -558,11 +1521,13 @@ class _ChatTabState extends State<ChatTab> {
         _pendingFiles.clear();
       });
       _scrollToEnd();
+      final clientContext = await buildClientContext(context);
       final sent = await home.sendMessage(
         accountId: accountId,
-        sessionId: _sessionId!,
+        sessionId: sessionId,
         text: text,
         media: media.isEmpty ? null : media,
+        clientContext: clientContext,
       );
       _turnId = sent['turnId']?.toString();
       final status = sent['status']?.toString();
@@ -572,7 +1537,15 @@ class _ChatTabState extends State<ChatTab> {
           _bubbles.add(_ChatBubble(role: 'system', text: l10n.chatStatus(status)));
           _sending = false;
         });
+      } else {
+        // Pick up durable messageIds so Delete works before the assistant finishes.
+        try {
+          await _reloadTranscript(sessionId);
+        } catch (_) {
+          /* keep optimistic bubbles */
+        }
       }
+      if (!_singleThread) unawaited(_loadSessionList());
       unawaited(_refreshApprovals());
     } catch (e) {
       if (!mounted) return;
@@ -584,8 +1557,240 @@ class _ChatTabState extends State<ChatTab> {
     }
   }
 
+  String _threadTitle(AppLocalizations l10n) {
+    if (_isHome) return l10n.navHomeChat;
+    if (_isSchedules) return l10n.navSchedulesChat;
+    if (_showSessionList) {
+      return _showArchived ? l10n.chatArchivedTitle : l10n.navChat;
+    }
+    if (_sessionId == null) {
+      final pending = _pendingNewChatTitle.trim();
+      return pending.isEmpty ? l10n.chatNew : pending;
+    }
+    for (final s in _sessionRows) {
+      if (s['sessionId']?.toString() == _sessionId) {
+        final t = s['title']?.toString().trim();
+        if (t != null && t.isNotEmpty) return t;
+      }
+    }
+    for (final b in _bubbles) {
+      if (b.role == 'user' && b.text.trim().isNotEmpty) {
+        final t = b.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+        return t.length > 40 ? '${t.substring(0, 40)}…' : t;
+      }
+    }
+    return l10n.chatUntitled;
+  }
+
+  Widget _chatChrome(AppLocalizations l10n, ThemeData theme) {
+    final inList = !_singleThread && _showSessionList;
+    return Material(
+      color: theme.scaffoldBackgroundColor,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+        child: Row(
+          children: [
+            if (!_singleThread && !inList)
+              IconButton(
+                tooltip: l10n.navChat,
+                onPressed: _sending ? null : () => unawaited(_openSessionList()),
+                icon: const Icon(Icons.arrow_back, size: 20),
+              ),
+            Expanded(
+              child: (!_singleThread && !inList)
+                  ? InkWell(
+                      onTap: _sending
+                          ? null
+                          : () {
+                              unawaited(
+                                _renamePendingOrSession(
+                                  sessionId: _sessionId,
+                                  currentTitle: _threadTitle(l10n),
+                                ),
+                              );
+                            },
+                      child: Text(
+                        _threadTitle(l10n),
+                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    )
+                  : Text(
+                      inList ? l10n.navChat : _threadTitle(l10n),
+                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+            ),
+            if (!_singleThread && inList && !_showArchived)
+              IconButton(
+                tooltip: l10n.chatNew,
+                onPressed: _sending ? null : _startNewChat,
+                icon: const Icon(Icons.add, size: 22),
+              ),
+            if (!inList)
+              IconButton(
+                tooltip: l10n.chatTrashMenu,
+                onPressed: _sending ? null : _showTrashMenu,
+                icon: const Icon(Icons.delete_outline, size: 20),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sessionList(AppLocalizations l10n, ThemeData theme) {
+    if (_sessionsLoading && _sessionRows.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_sessionRows.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _showArchived ? l10n.chatArchivedEmpty : l10n.chatSessionsEmpty,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+              if (!_showArchived) ...[
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: _sending ? null : _startNewChat,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: Text(l10n.chatNew),
+                ),
+              ],
+            ],
+          ),
+        ),
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _loadSessionList,
+      child: ListView.builder(
+        itemCount: _sessionRows.length,
+        itemBuilder: (_, i) {
+          final s = _sessionRows[i];
+          final sid = s['sessionId']?.toString() ?? '';
+          final title = (s['title']?.toString().trim().isNotEmpty == true)
+              ? s['title'].toString()
+              : l10n.chatUntitled;
+          final current = sid == _sessionId;
+          return ListTile(
+            selected: current,
+            selectedTileColor: theme.colorScheme.onSurface.withValues(alpha: 0.08),
+            title: Text(
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontWeight: current ? FontWeight.w600 : FontWeight.w500,
+              ),
+            ),
+            trailing: PopupMenuButton<String>(
+              tooltip: l10n.chatTrashMenu,
+              icon: Icon(
+                Icons.more_horiz,
+                size: 20,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
+              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              onSelected: (action) {
+                // Defer until the popup route has popped — otherwise iOS drops the confirm dialog.
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (!mounted) return;
+                  if (action == 'rename') {
+                    unawaited(_renameSession(sid, currentTitle: title));
+                  } else if (action == 'archive') {
+                    unawaited(_archiveSession(sid));
+                  } else if (action == 'unarchive') {
+                    unawaited(_unarchiveSession(sid));
+                  } else if (action == 'remove') {
+                    unawaited(_removeSession(sid));
+                  }
+                });
+              },
+              itemBuilder: (ctx) {
+                final scheme = Theme.of(ctx).colorScheme;
+                PopupMenuItem<String> item({
+                  required String value,
+                  required IconData icon,
+                  required String label,
+                  bool danger = false,
+                }) {
+                  final color = danger ? scheme.error : scheme.onSurface;
+                  return PopupMenuItem(
+                    value: value,
+                    child: Row(
+                      children: [
+                        Icon(icon, size: 20, color: color),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            label,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: color,
+                              fontWeight: danger ? FontWeight.w600 : FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                if (_showArchived) {
+                  return [
+                    item(
+                      value: 'unarchive',
+                      icon: Icons.unarchive_outlined,
+                      label: l10n.chatUnarchiveAction,
+                    ),
+                    const PopupMenuDivider(),
+                    item(
+                      value: 'remove',
+                      icon: Icons.delete_outline,
+                      label: l10n.chatRemoveAction,
+                      danger: true,
+                    ),
+                  ];
+                }
+                return [
+                  item(
+                    value: 'rename',
+                    icon: Icons.drive_file_rename_outline,
+                    label: l10n.chatRenameAction,
+                  ),
+                  item(
+                    value: 'archive',
+                    icon: Icons.archive_outlined,
+                    label: l10n.chatArchiveAction,
+                  ),
+                  const PopupMenuDivider(),
+                  item(
+                    value: 'remove',
+                    icon: Icons.delete_outline,
+                    label: l10n.chatRemoveAction,
+                    danger: true,
+                  ),
+                ];
+              },
+            ),
+            onTap: () => unawaited(_selectSession(sid, fromArchive: _showArchived)),
+          );
+        },
+      ),
+    );
+  }
+
   Widget _bubble(_ChatBubble b) {
     final theme = Theme.of(context);
+    final l10n = AppLocalizations.of(context);
     final isUser = b.role == 'user';
     final isSystem = b.role == 'system';
     if (isSystem) {
@@ -602,61 +1807,246 @@ class _ChatTabState extends State<ChatTab> {
         ),
       );
     }
+    final bodyChildren = <Widget>[];
+    if (isUser) {
+      if (b.text.isNotEmpty) {
+        bodyChildren.add(Text(b.text, style: theme.textTheme.bodyMedium));
+      }
+    } else {
+      bodyChildren.addAll(_assistantBody(b, theme, l10n));
+    }
+    if (b.media.isNotEmpty) {
+      if (bodyChildren.isNotEmpty) bodyChildren.add(const SizedBox(height: 6));
+      bodyChildren.add(
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          children: [
+            for (final m in b.media)
+              Chip(
+                avatar: Icon(
+                  _mediaIcon(m['kind']?.toString()),
+                  size: 16,
+                ),
+                label: Text(
+                  m['fileName']?.toString() ??
+                      m['uri']?.toString() ??
+                      m['kind']?.toString() ??
+                      'file',
+                ),
+                visualDensity: VisualDensity.compact,
+              ),
+          ],
+        ),
+      );
+    }
+    if (bodyChildren.isEmpty) return const SizedBox.shrink();
+    final canDelete =
+        b.messageId != null && b.messageId!.isNotEmpty && !_sending;
+    final canCopy = _copyTextForBubble(b).isNotEmpty && !_sending;
+    // EnvoyGo / EnvoyMesh Social peer: muted copy+delete icons *below* the bubble
+    // (not inside the tinted surface — that looked like a green block).
+    final bubble = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: isUser
+            ? theme.colorScheme.primary.withValues(alpha: 0.16)
+            : theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.only(
+          topLeft: const Radius.circular(16),
+          topRight: const Radius.circular(16),
+          bottomLeft: Radius.circular(isUser ? 16 : 4),
+          bottomRight: Radius.circular(isUser ? 4 : 16),
+        ),
+        border: Border.all(
+          color: theme.colorScheme.primary.withValues(alpha: isUser ? 0.35 : 0.08),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: bodyChildren,
+      ),
+    );
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: MediaQuery.sizeOf(context).width * 0.82,
         ),
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: isUser
-                ? theme.colorScheme.primary.withValues(alpha: 0.16)
-                : theme.colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(16),
-              topRight: const Radius.circular(16),
-              bottomLeft: Radius.circular(isUser ? 16 : 4),
-              bottomRight: Radius.circular(isUser ? 4 : 16),
-            ),
-            border: Border.all(
-              color: theme.colorScheme.primary.withValues(alpha: isUser ? 0.35 : 0.08),
-            ),
-          ),
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 8),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+                isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              if (b.text.isNotEmpty) Text(b.text, style: theme.textTheme.bodyMedium),
-              if (b.media.isNotEmpty) ...[
-                if (b.text.isNotEmpty) const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    for (final m in b.media)
-                      Chip(
-                        avatar: Icon(
-                          _mediaIcon(m['kind']?.toString()),
-                          size: 16,
+              bubble,
+              if (canCopy || canDelete)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (canCopy)
+                        _BubbleIconButton(
+                          icon: Icons.content_copy,
+                          tooltip: l10n.chatCopyMessage,
+                          onPressed: () => unawaited(_copyBubble(b)),
                         ),
-                        label: Text(
-                          m['fileName']?.toString() ??
-                              m['uri']?.toString() ??
-                              m['kind']?.toString() ??
-                              'file',
+                      if (canDelete)
+                        _BubbleIconButton(
+                          icon: Icons.delete_outline,
+                          tooltip: l10n.chatDeleteMessage,
+                          onPressed: () => unawaited(_deleteBubble(b)),
                         ),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
-              ],
             ],
           ),
         ),
       ),
     );
+  }
+
+  /// Collapsed-by-default think tiles + visible reply (EnvoyCoder `_ThoughtTile` peer).
+  /// Visible reply uses Design §9.5 format (plain Text vs markdown).
+  List<Widget> _assistantBody(_ChatBubble b, ThemeData theme, AppLocalizations l10n) {
+    final segments = splitAssistantSegments(humanizeScheduleChatText(b.text));
+    final format = b.format ?? classifyChatFormat(
+      segments.where((s) => !s.isThink).map((s) => s.text).join(),
+    );
+    final out = <Widget>[];
+    for (final seg in segments) {
+      if (seg.isThink) {
+        out.add(
+          Theme(
+            data: theme.copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 4),
+              dense: true,
+              visualDensity: VisualDensity.compact,
+              title: Text(
+                l10n.chatThought,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    seg.text,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      } else if (seg.text.isNotEmpty) {
+        if (format == 'plain') {
+          out.add(Text(seg.text, style: theme.textTheme.bodyMedium));
+        } else {
+          out.add(
+            MarkdownBody(
+              data: seg.text,
+              selectable: true,
+              styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+                p: theme.textTheme.bodyMedium,
+                code: theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: 'monospace',
+                  backgroundColor: theme.colorScheme.onSurface.withValues(alpha: 0.06),
+                ),
+              ),
+              onTapLink: (text, href, title) {
+                if (href == null || href.isEmpty) return;
+                unawaited(launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication));
+              },
+            ),
+          );
+        }
+      }
+    }
+    final path = b.artifactPath;
+    final artUrl = b.artifactUrl;
+    // Mesh-first: show open whenever artifactPath is set (EnvoyMesh libraryRead peer).
+    final canOpen =
+        (path != null && path.isNotEmpty) ||
+        (format == 'link' && artUrl != null && artUrl.isNotEmpty);
+    if (canOpen) {
+      out.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: TextButton.icon(
+            onPressed: () {
+              if (path != null && path.isNotEmpty) {
+                unawaited(
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => ArtifactViewerScreen(
+                        session: widget.session,
+                        path: path,
+                      ),
+                    ),
+                  ),
+                );
+                return;
+              }
+              // Fallback only when path is missing (legacy) and URL is reachable.
+              if (artUrl != null && artUrl.isNotEmpty) {
+                unawaited(launchUrl(Uri.parse(artUrl), mode: LaunchMode.externalApplication));
+              }
+            },
+            icon: const Icon(Icons.article_outlined, size: 16),
+            label: Text(l10n.chatOpenArtifact),
+          ),
+        ),
+      );
+    }
+    // Sandbox paths mentioned in the reply (e.g. export_document uri) — open over home.*.
+    final mentioned = extractSandboxFilePaths(b.text)
+        .where((p) => p != path)
+        .toList();
+    if (mentioned.isNotEmpty) {
+      out.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Wrap(
+            spacing: 4,
+            runSpacing: 0,
+            children: [
+              for (final p in mentioned)
+                TextButton.icon(
+                  onPressed: () {
+                    unawaited(
+                      Navigator.of(context).push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => ArtifactViewerScreen(
+                            session: widget.session,
+                            path: p,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.insert_drive_file_outlined, size: 16),
+                  label: Text(
+                    l10n.chatOpenFile(p.split('/').last),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+    return out;
   }
 
   IconData _mediaIcon(String? kind) {
@@ -758,8 +2148,46 @@ class _ChatTabState extends State<ChatTab> {
       );
     }
 
+    if (!_singleThread && _showSessionList) {
+      return Column(
+        children: [
+          _chatChrome(l10n, theme),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: SegmentedButton<bool>(
+              segments: [
+                ButtonSegment<bool>(
+                  value: false,
+                  label: Text(l10n.chatTabActive),
+                  icon: const Icon(Icons.chat_bubble_outline, size: 16),
+                ),
+                ButtonSegment<bool>(
+                  value: true,
+                  label: Text(l10n.chatTabArchived),
+                  icon: const Icon(Icons.archive_outlined, size: 16),
+                ),
+              ],
+              selected: {_showArchived},
+              onSelectionChanged: _sending
+                  ? null
+                  : (s) {
+                      final archived = s.first;
+                      if (archived) {
+                        unawaited(_openArchivedList());
+                      } else {
+                        unawaited(_openSessionList());
+                      }
+                    },
+            ),
+          ),
+          Expanded(child: _sessionList(l10n, theme)),
+        ],
+      );
+    }
+
     return Column(
       children: [
+        _chatChrome(l10n, theme),
         if (_isHome && _boundSources.isNotEmpty)
           SizedBox(
             height: 44,
@@ -818,20 +2246,32 @@ class _ChatTabState extends State<ChatTab> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          _isHome ? Icons.home_outlined : Icons.chat_bubble_outline,
+                          _isHome
+                              ? Icons.home_outlined
+                              : _isSchedules
+                                  ? Icons.event_outlined
+                                  : Icons.chat_bubble_outline,
                           size: 40,
                           color: theme.colorScheme.primary.withValues(alpha: 0.45),
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          _isHome ? l10n.homeChatEmptyTitle : l10n.chatEmptyTitle,
+                          _isHome
+                              ? l10n.homeChatEmptyTitle
+                              : _isSchedules
+                                  ? l10n.schedulesChatEmptyTitle
+                                  : l10n.chatEmptyTitle,
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          _isHome ? l10n.homeChatEmptyHint : l10n.chatEmptyHint,
+                          _isHome
+                              ? l10n.homeChatEmptyHint
+                              : _isSchedules
+                                  ? l10n.schedulesChatEmptyHint
+                                  : l10n.chatEmptyHint,
                           textAlign: TextAlign.center,
                           style: theme.textTheme.bodySmall,
                         ),
@@ -848,7 +2288,13 @@ class _ChatTabState extends State<ChatTab> {
                         (draft != null && draft.isNotEmpty ? 1 : 0),
                     itemBuilder: (_, i) {
                       if (i < _bubbles.length) return _bubble(_bubbles[i]);
-                      return _bubble(_ChatBubble(role: 'assistant', text: draft!));
+                      return _bubble(_ChatBubble(
+                        role: 'assistant',
+                        text: draft!,
+                        format: _draftFormat ?? classifyChatFormat(draft),
+                        artifactPath: _draftArtifactPath,
+                        artifactUrl: _draftArtifactUrl,
+                      ));
                     },
                   ),
                 ),
@@ -885,15 +2331,18 @@ class _ChatTabState extends State<ChatTab> {
                   IconButton(
                     tooltip: l10n.chatAttach,
                     onPressed: _sending ? null : _pickFiles,
-                    icon: const Icon(Icons.attach_file),
+                    icon: const Icon(Icons.attach_file_outlined, size: 22),
+                    visualDensity: VisualDensity.compact,
                   ),
                   IconButton(
                     tooltip: _listening ? l10n.chatVoiceStop : l10n.chatVoiceStart,
                     onPressed: _sending ? null : _toggleVoice,
                     icon: Icon(
-                      _listening ? Icons.mic : Icons.mic_none,
+                      _listening ? Icons.mic : Icons.mic_none_outlined,
+                      size: 22,
                       color: _listening ? theme.colorScheme.error : null,
                     ),
+                    visualDensity: VisualDensity.compact,
                   ),
                   Expanded(
                     child: TextField(
@@ -902,7 +2351,11 @@ class _ChatTabState extends State<ChatTab> {
                       maxLines: 5,
                       textInputAction: TextInputAction.send,
                       decoration: InputDecoration(
-                        hintText: _isHome ? l10n.homeChatHint : l10n.chatHint,
+                        hintText: _isHome
+                            ? l10n.homeChatHint
+                            : _isSchedules
+                                ? l10n.schedulesChatHint
+                                : l10n.chatHint,
                       ),
                       onSubmitted: (_) => _send(),
                     ),

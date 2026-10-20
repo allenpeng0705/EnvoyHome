@@ -3,6 +3,7 @@
 
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { DEFAULT_IDENTITY_MD } from "./agent-identity.js";
 import {
   emptyStandingSnapshots,
   snapshotFile,
@@ -34,6 +35,7 @@ export interface StandingPaths {
   accountRoot: string;
   profile: string;
   memory: string;
+  identity: string;
   memoryDir: string;
   daily(date: string): string;
   compactDir: string;
@@ -45,6 +47,7 @@ export function standingPaths(accountRoot: string): StandingPaths {
     accountRoot,
     profile: join(accountRoot, "profile.json"),
     memory: join(accountRoot, "MEMORY.md"),
+    identity: join(accountRoot, "IDENTITY.md"),
     memoryDir,
     daily: (date: string) => join(memoryDir, `${date}.md`),
     compactDir: join(memoryDir, "compact"),
@@ -54,6 +57,8 @@ export function standingPaths(accountRoot: string): StandingPaths {
 export interface LoadedStanding {
   profile: ProfileDocument;
   memoryMd: string;
+  /** Editable assistant persona (IDENTITY.md). */
+  identityMd: string;
   dailies: Map<string, string>;
   snapshots: StandingSnapshots;
   generation: number;
@@ -121,8 +126,15 @@ export class StandingStore {
     const p = this.paths(accountId);
     const profileRaw = await readTextOrNull(p.profile);
     const memoryRaw = await readTextOrNull(p.memory);
+    const identityRaw = await readTextOrNull(p.identity);
     const profile = profileRaw ? parseProfile(profileRaw) : emptyProfile();
     const memoryMd = memoryRaw ?? "# MEMORY\n";
+    // Seed default persona once so Settings / inject always have a body to edit.
+    let identityMd = identityRaw ?? "";
+    if (!identityRaw) {
+      identityMd = DEFAULT_IDENTITY_MD;
+      await writeFile(p.identity, identityMd.endsWith("\n") ? identityMd : `${identityMd}\n`, "utf8");
+    }
 
     const dailies = new Map<string, string>();
     let names: string[] = [];
@@ -138,10 +150,11 @@ export class StandingStore {
       if (content !== null) dailies.set(date, content);
     }
 
-    const snapshots = await this.buildSnapshots(p, profileRaw, memoryRaw, dailies);
+    const snapshots = await this.buildSnapshots(p, profileRaw, memoryRaw, identityMd, dailies);
     const loaded: LoadedStanding = {
       profile,
       memoryMd,
+      identityMd,
       dailies,
       snapshots,
       generation,
@@ -157,6 +170,7 @@ export class StandingStore {
     const p = this.paths(accountId);
     const profileRaw = await readTextOrNull(p.profile);
     const memoryRaw = await readTextOrNull(p.memory);
+    const identityRaw = await readTextOrNull(p.identity);
     const dailies = new Map<string, string>();
     for (const [date] of cached.dailies) {
       const content = await readTextOrNull(p.daily(date));
@@ -174,10 +188,12 @@ export class StandingStore {
     } catch {
       /* empty */
     }
-    const snapshots = await this.buildSnapshots(p, profileRaw, memoryRaw, dailies);
+    const identityMd = identityRaw ?? cached.identityMd ?? DEFAULT_IDENTITY_MD;
+    const snapshots = await this.buildSnapshots(p, profileRaw, memoryRaw, identityMd, dailies);
     return {
       profile: profileRaw ? parseProfile(profileRaw) : emptyProfile(),
       memoryMd: memoryRaw ?? "# MEMORY\n",
+      identityMd,
       dailies,
       snapshots,
       generation: cached.generation,
@@ -188,15 +204,49 @@ export class StandingStore {
     p: StandingPaths,
     profileRaw: string | null,
     memoryRaw: string | null,
+    identityMd: string | null,
     dailies: Map<string, string>,
   ): Promise<StandingSnapshots> {
     const snaps = emptyStandingSnapshots();
     snaps.profile = await snapshotFile(p.profile, profileRaw);
     snaps.memory = await snapshotFile(p.memory, memoryRaw);
+    snaps.identity = await snapshotFile(p.identity, identityMd);
     for (const [date, content] of dailies) {
       snaps.dailies.set(date, await snapshotFile(p.daily(date), content));
     }
     return snaps;
+  }
+
+  async getIdentity(accountId: string): Promise<string> {
+    const loaded = await this.load(accountId);
+    return loaded.identityMd;
+  }
+
+  async setIdentity(accountId: string, markdown: string): Promise<string> {
+    return withAccountLock(accountId, this.accountRoot(accountId), async () => {
+      const current = await this.loadInsideLock(accountId, { force: true });
+      const next = markdown.trimEnd() + "\n";
+      await writeFile(this.paths(accountId).identity, next, "utf8");
+      const refreshed = await this.readAll(accountId, current.generation + 1);
+      this.cache.set(accountId, refreshed);
+      return refreshed.identityMd;
+    });
+  }
+
+  async appendIdentity(accountId: string, line: string): Promise<LoadedStanding> {
+    return withAccountLock(accountId, this.accountRoot(accountId), async () => {
+      const current = await this.loadInsideLock(accountId, { force: true });
+      const bullet = line.trim().startsWith("-") ? line.trim() : `- ${line.trim()}`;
+      let body = current.identityMd.trimEnd();
+      if (!/^## Learned/m.test(body)) {
+        body = `${body}\n\n## Learned\n`;
+      }
+      body = `${body}\n${bullet}\n`;
+      await writeFile(this.paths(accountId).identity, body.endsWith("\n") ? body : `${body}\n`, "utf8");
+      const refreshed = await this.readAll(accountId, current.generation + 1);
+      this.cache.set(accountId, refreshed);
+      return refreshed;
+    });
   }
 
   async getProfile(accountId: string, keys?: string[]) {
