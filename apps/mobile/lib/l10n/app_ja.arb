@@ -270,8 +270,8 @@
   "schedHistoryNotSet": "Not set",
   "schedHistoryRuns": "Runs",
   "schedNoDismissed": "No canceled or expired proposals.",
-  "schedDismissedCanceled": "canceled",
-  "schedDismissedExpired": "expired",
+  "schedDismissedCanceled": "キャンセル",
+  "schedDismissedExpired": "期限切れ",
   "schedNext": "次回",
   "schedKindRepeating": "繰り返し",
   "schedKindOnce": "一度",
@@ -284,7 +284,9 @@
   "schedDayOfMonth": "{d}日",
   "@schedDayOfMonth": {
     "placeholders": {
-      "d": { "type": "String" }
+      "d": {
+        "type": "String"
+      }
     }
   },
   "wfEditorTitle": "Workflow",
@@ -602,7 +604,9 @@
   "profilesTimeZoneValue": "Time zone: {tz}",
   "@profilesTimeZoneValue": {
     "placeholders": {
-      "tz": { "type": "String" }
+      "tz": {
+        "type": "String"
+      }
     }
   },
   "profilesTimeZoneEdit": "Time zone",
@@ -612,7 +616,9 @@
   "profilesTimeZoneDone": "Time zone set to {tz}",
   "@profilesTimeZoneDone": {
     "placeholders": {
-      "tz": { "type": "String" }
+      "tz": {
+        "type": "String"
+      }
     }
   },
   "profilesShareLocationTitle": "Home と位置情報を共有",
@@ -675,5 +681,57 @@
   "homeFolderComputer": "Computer",
   "homeFolderHome": "Home",
   "homeFolderParent": "Parent folder",
-  "homeFolderNoSubfolders": "No subfolders"
+  "homeFolderNoSubfolders": "No subfolders",
+  "choiceCardConfirm": "確認",
+  "choiceCardPickOne": "少なくとも1つ選んでください。",
+  "choiceCardAnswered": "受け取りました。",
+  "choiceCardFailed": "選択を送信できませんでした: {error}",
+  "@choiceCardFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatPendingChoices": "選択待ち {count} 件",
+  "@chatPendingChoices": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "choiceCardCancel": "キャンセル",
+  "choiceCardCanceled": "選択を取り消しました。",
+  "choiceCardExpired": "期限切れ",
+  "choiceCardExpiredHint": "この選択は期限切れです。必要ならもう一度聞いてください。",
+  "choiceCardExpiresIn": "{mins} 分で期限切れ",
+  "choiceCardTextPlaceholder": "回答を入力",
+  "@choiceCardExpiresIn": {
+    "placeholders": {
+      "mins": {
+        "type": "int"
+      }
+    }
+  },
+  "schedulesChatTabChat": "スケジュール",
+  "schedulesChatTabHistories": "履歴",
+  "schedulesChatHistoriesHint": "キャンセルまたは期限切れの提案と最近の実行。",
+  "jobsHistoriesMovedHint": "履歴はスケジュール → 履歴へ",
+  "schedulesChatClosedAt": "終了 {when}",
+  "@schedulesChatClosedAt": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "schedulesChatRanAt": "実行 {when}",
+  "@schedulesChatRanAt": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  }
 }

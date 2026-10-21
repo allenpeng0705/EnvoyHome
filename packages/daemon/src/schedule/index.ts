@@ -5,8 +5,17 @@ export {
   zonedParts,
   zonedWallToUtc,
 } from "./cron-next.js";
-export { resolveScheduleFromText, type ResolveNlInput, type ResolveNlResult } from "./resolve-nl.js";
 export {
+  extractScheduleMessage,
+  resolveScheduleFromText,
+  type ResolveNlInput,
+  type ResolveNlResult,
+} from "./resolve-nl.js";
+export {
+  scheduleCandidateProposeAttempts,
+} from "./choice-followup.js";
+export {
+  matchBareWeekday,
   matchDayOffset,
   matchMonthYear,
   matchRecurring,
@@ -29,6 +38,15 @@ export {
   type FireHandler,
   type ScheduleServiceOptions,
 } from "./service.js";
+export {
+  HEARTBEAT_OK,
+  HEARTBEAT_OK_REMAINDER_BUDGET,
+  MIN_HEARTBEAT_INTERVAL_MS,
+  DEFAULT_HEARTBEAT_INTERVAL_MS,
+  DEFAULT_HEARTBEAT_PROMPT,
+  isHeartbeatSilentOk,
+  clampHeartbeatIntervalMs,
+} from "./heartbeat.js";
 export {
   type ScheduleKind,
   type SchedulePayloadKind,

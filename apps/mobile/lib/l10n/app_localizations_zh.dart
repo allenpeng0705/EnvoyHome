@@ -1446,4 +1446,65 @@ class AppLocalizationsZh extends AppLocalizations {
   String chatPendingApprovals(int count) {
     return '$count 项等待你的批准';
   }
+
+  @override
+  String get choiceCardConfirm => '确认';
+
+  @override
+  String get choiceCardPickOne => '请至少选一项。';
+
+  @override
+  String get choiceCardAnswered => '已收到。';
+
+  @override
+  String choiceCardFailed(String error) {
+    return '无法提交该选择：$error';
+  }
+
+  @override
+  String chatPendingChoices(int count) {
+    return '$count 项等待你的选择';
+  }
+
+  @override
+  String get choiceCardCancel => '取消';
+
+  @override
+  String get choiceCardCanceled => '已取消选择。';
+
+  @override
+  String get choiceCardExpired => '已过期';
+
+  @override
+  String get choiceCardExpiredHint => '该选择已过期 — 如仍需要请再问一次。';
+
+  @override
+  String choiceCardExpiresIn(int mins) {
+    return '$mins 分钟后过期';
+  }
+
+  @override
+  String get choiceCardTextPlaceholder => '输入你的回答';
+
+  @override
+  String get schedulesChatTabChat => '日程';
+
+  @override
+  String get schedulesChatTabHistories => '历史';
+
+  @override
+  String get schedulesChatHistoriesHint => '已取消或过期的提议，以及近期运行记录。';
+
+  @override
+  String get jobsHistoriesMovedHint => '历史已移至日程 → 历史';
+
+  @override
+  String schedulesChatClosedAt(String when) {
+    return '关闭于 $when';
+  }
+
+  @override
+  String schedulesChatRanAt(String when) {
+    return '运行于 $when';
+  }
 }

@@ -5,7 +5,7 @@
 | **Document** | Single all-in-one design for EnvoyHome |
 | **Role** | Ground truth for **implementation** and **verification** |
 | **Status** | Living draft — refine in place; bump changelog |
-| **Last updated** | 2026-10-19 (client turn context + multi-locale WHEN) |
+| **Last updated** | 2026-10-20 (Phase 2 P2-E3 parent Agent §19.13) |
 | **Not** | A port of HomeClaw; a clone of Hermes / OpenClaw / OpenHuman |
 
 **How to use this doc**
@@ -22,8 +22,23 @@
 
 | Date | Change |
 |------|--------|
+| 2026-10-20t | **Ship (P2-E3):** Parent harness turns use envoy-harness `Agent.run` (HomeModelAdapter + full Home ToolRegistry + `meshSubmitter` for `task` + Home transcript Session). TurnService preambles (`plannedTools` / schedule affirm / home recover callbacks) stay outside Agent. `runTurn` retained as tested fallback (`ENVOYHOME_PARENT_AGENT=0` rollback). Q10 + `sessions_spawn` Reject unchanged. V-P2-AGENT-4. No wire bump. |
+| 2026-10-20s | **Ship (P2-E2 honesty):** `task` children are real envoy-harness `LocalMeshSubmitter` + `Agent` (HomeModelAdapter + jail ToolRegistry). Parent turn remains harness-host `runTurn`. Caps unchanged. V-P2-AGENT-3. No wire bump. |
+| 2026-10-20r | **Ship (P2-E2):** Builtin `task` tool — parallel children via envoy-harness `mapBoundedParallel` (caps: 8/call, parallel 4, account 8). `spawn_helper` thin wrapper (`via: "task"`). OpenClaw `sessions_spawn` still Reject. V-P2-AGENT-3. No wire bump. |
+| 2026-10-20q | **Normative (P2-E2):** Parallel children = **envoy-harness sub-agents** (`task` + caps / batching). OpenClaw `sessions_spawn` / swarm-as-default remain **Reject**. Q10 unchanged. See §19.13. Owner direction **2026-10-20**. No wire bump. |
+| 2026-10-20p | **Design-max Adapt (P2-C / P2-D honesty gaps):** `sessions_send` default `run: true` + optional `waitMs` (cap 60s; `run: false` inject-only); `view_image` allows `https://` via SSRF chokepoint (refuse `file://` / non-TLS / host paths); `image_generate` async jobId by default (`wait: true` sync); `message` actions add capability-gated `edit`/`delete`/`pin`/`unpin`. Swarm/helpers unchanged (Q10). No wire bump. |
+| 2026-10-20o | **Ship full Adapt (P2-C / P2-D):** `message` actions `send`\|`notify`\|`reply`\|`react` + optional jail `mediaPath`(s) (channel capabilities); `sessions_send` same-account. `view_image` vision via supportsVision + openai/anthropic multimodal fallback; `image_generate` wired to OpenAI Images API + daily cap + Doctor warn. D2 no longer deferred. No wire bump. |
+| 2026-10-20n | **Refine (P2-B…E / §19.10–§19.13):** HEARTBEAT_OK OpenClaw-aligned (start/end + 300-char); standing `channel_event`/`smarthome_event` fire; `spawn_helper` child tool loop (allow-list); Settings heartbeat/standing + media-generate toggle; `message` actions `send`\|`notify`; `sessions_send`; `view_image` optional vision; `image_generate` fail-closed (Owner enable + Privacy Mode; no provider → refuse). Additive `home.getMediaGenerateConfig` / `home.setMediaGenerateConfig`. No wire bump. |
+| 2026-10-20m | **Ship (P2-E / §19.13):** `spawn_helper` — reduced allow-list, inherit origin, depth ≤ 1, concurrency cap; unattended requires grant (V-P2-AGENT-1/2). Q10 default agent unchanged. No wire bump. |
+| 2026-10-20l | **Ship (P2-D1 / §19.12):** `view_image` jail-only metadata; `extract_document` optional `startPage`/`endPage`. V-P2-MEDIA-1. Generate (D2) still deferred. No wire bump. |
+| 2026-10-20k | **Ship (P2-C / §19.11):** `message` + `sessions_list` / `sessions_history` / `sessions_status` tools. Bound same-account targets; event-source notify-only; Privacy Mode / restricted fail-closed (V-P2-MSG-*). No wire bump. |
+| 2026-10-20j | **Ship (P2-B / §19.10):** Heartbeat system job (`HEARTBEAT_OK` silent; Doctor interval warn) + standing-orders store with cron sync. Additive RPCs `home.getHeartbeatConfig` / `home.setHeartbeatConfig` / `home.listStandingOrders` / `home.putStandingOrder` / `home.removeStandingOrder` / `home.setStandingOrderEnabled`. V-P2-AMB-*. No `protocolApiVersion` bump. |
+| 2026-10-20i | **Ship (P2-A / §19.9):** Builtin `edit_file` + `apply_patch` (path jail; unique oldString or line range; single-file unified diff). Unattended requires grant (V-P2-EDIT-2). Catalogue discovery; no `protocolApiVersion` bump. |
+| 2026-10-20h | **Phase 2 Normative (§19.9–§19.13):** Five agent-capability epics — Design draft. **Owner Accepted 2026-10-20** ([`reviews/2026-10-20h-phase2-agent-capabilities-acceptance.md`](reviews/2026-10-20h-phase2-agent-capabilities-acceptance.md)). Ship order P2-A→E; Q10 preserved; reject OpenClaw terminal/swarm/Lobster as core. |
+| 2026-10-20f | **Product (V-UX-14):** Chat **choice cards** (EnvoyCoder `ApprovalChoices` peer) — `selection`: `one` \| `many` \| `text`. Additive `home.listChoices` / `home.answerChoice` (+ `cancel`) + `home:choice-needed` / `home:choice-resolved`. Model tool `ask_user` parks the turn with a TTL timer (fail closed); schedule time candidates propose from the pick; Home disambiguation uses a short reply + card (no duplicate list). Session-scoped list; desktop turn-anchored insert + Cancel + expiry cue. No wire bump. |
+| 2026-10-20g | **Product (IA):** Schedule **Histories** (Not set + Runs) moves from Skills → Schedules to **Schedules chat → Histories** (desktop + mobile). Skills → Schedules keeps create + Repeating/Once with a deep-link hint. No wire bump. |
 | 2026-10-20e | **Fix (§7.4 / V-UX-12):** Settings Schedules **History → Runs** hides `system:*` receipts (consolidate/review/flush). Doctor still reads the full store. No wire bump. |
-| 2026-10-20d | **Product (§7.4 / V-UX-12):** Chat shows a Confirm/Cancel **schedule card** for an unarmed proposal (timeout fails closed — expire, never auto-arm). Canceled and expired proposals stay listed under Settings Schedules **History → Not set** (additive `listSchedules.dismissed` + `home.cancelScheduleProposal`). Confirm still requires an explicit tap. No wire bump. |
+| 2026-10-20d | **Product (§7.4 / V-UX-12):** Chat shows a Confirm/Cancel **schedule card** for an unarmed proposal (timeout fails closed — expire, never auto-arm). Canceled and expired proposals stay listed under **Schedules → Histories → Not set** (additive `listSchedules.dismissed` + `home.cancelScheduleProposal`). Confirm still requires an explicit tap. No wire bump. |
 | 2026-10-20c | **Fix (§7.4):** Cron proposals quote a human WHEN (`每周一 09:00`) instead of the raw expression. A `schedule` JSON object inside the reply (including a thinking block, fields beside `tool`) is dispatched as a propose. A short yes (`请设置` / confirm) arms the session's pending proposal without another model pass; a short no clears it. Confirm still asks before the write. No wire bump. |
 | 2026-10-20b | **Harden (§7.4):** Schedules chat runs only the `schedule` tool. Chat can `reschedule` / `enable` / `remove` / `rename` (confirm or ask before the write; WHEN still NL-only; reschedule updates the same job). `home.proposeSchedule` errors include the explanation and candidates. NL locale falls back to the account locale. If a normal turn skips schedule tools and the resolver already sees a schedule, the reply offers to set it (no second model, nothing armed). Job lists use a human WHEN. No wire bump. |
 | 2026-10-20 | **Product (§7.4 / V-UX-13):** Dedicated **Schedules chat** (`purpose: "schedules"`), one session per profile, same shell pattern as Home chat. Each turn injects a short job list and a schedule-tool instruction. Home tools stay off on that surface. Resolver still owns WHEN. Additive enum value on `home.openSession` — no `protocolApiVersion` bump. |
@@ -442,14 +457,14 @@ Three transports carry `home.*`: the local/LAN WebSocket host (reuse-host), the 
 | **Accounts** | `home.listAccounts`, `home.createAccount`, `home.updateAccount`, `home.deleteAccount`, `home.getHouseholdOwner`, `home.transferHouseholdOwner`, `home.getWorkspace`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig` | Settings-first; transfer = Owner-scope; workspace rules §4.2.1 / §4.1.1; web search §9.5f; browser §9.5g |
 | **Bindings** | `home.listBindings`, `home.setBinding`, `home.removeBinding` | IM sender **or** `deviceId` → account (+ agent); set/remove = **Owner-scope**; list = seat-or-Owner; Owner exclusive-bind (§4.1.1) |
 | **Devices** | `home.mintPairing`, `home.listPairedDevices`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts` | Mint/revoke/list/rebind = Owner-scope (§4.1.1). Machine lifecycle = loopback-owner |
-| **Sessions / chat** | `home.listSessions`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.clearTranscript`, `home.deleteTranscriptMessages`, `home.archiveSession`, `home.unarchiveSession`, `home.removeSession`, `home.renameSession` | Core chat path; `accountId` bounded by device binding. `uploadChatMedia` stores attachments under the account sandbox for `sendMessage.media[]`. Clear/delete edit the transcript; archive soft-hides; unarchive restores; remove deletes the session dir; rename sets display title |
+| **Sessions / chat** | `home.listSessions`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.clearTranscript`, `home.deleteTranscriptMessages`, `home.archiveSession`, `home.unarchiveSession`, `home.removeSession`, `home.renameSession`, `home.listChoices`, `home.answerChoice` | Core chat path; `accountId` bounded by device binding. `uploadChatMedia` stores attachments under the account sandbox for `sendMessage.media[]`. Clear/delete edit the transcript; archive soft-hides; unarchive restores; remove deletes the session dir; rename sets display title. Choice cards (V-UX-14) = EnvoyCoder ask_user peer |
 | **Approvals** | `home.listApprovals`, `home.answerApproval`, `home.listGrants`, `home.revokeGrant` | Durable gates + grants (§4.4); grants list/revoke = seat-or-Owner (§4.1.1) |
 | **Channels** | `home.listChannels`, `home.enableChannel`, `home.disableChannel`, `home.getChannelStatus`, `home.setChannelConfig`, `home.startDemoHa`, `home.getDemoHaStatus`, `home.stopDemoHa`, `home.startDemoMqtt`, `home.getDemoMqttStatus`, `home.stopDemoMqtt` | Config + enable/disable = Owner-scope. Demo start/status account-scoped; demo stop Owner-scope |
 | **Smart-home objects** | `home.listSources`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations` | §5.7.3/§5.7.7 — registry is **owner-scope** to write; objects are reached through **tools**, never a device/state API. `listSources` returns the **household** registry (Design `2026-10-16l`) |
 | **Harness** | `home.listHarnesses`, `home.setHarness` | Per agent/default |
 | **Models** | `home.listProviders`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.getUsage` | provider pool + EnvoyHome Local / Ollama engine (§8.5) + default + placement + opt-in switch (B6/§8) |
 | **Static workflows** | `home.listWorkflows`, `home.getWorkflow`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.runWorkflow`, `home.listWorkflowTools`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.listWorkflowStepTemplates`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate` | DAG procedures (linear `steps[]` = single path); §7 |
-| **Schedules** | `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts` | Daemon clock jobs (§7.4); NL propose→confirm + structured put; run history |
+| **Schedules** | `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.cancelScheduleProposal`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts`, `home.getHeartbeatConfig`, `home.setHeartbeatConfig`, `home.listStandingOrders`, `home.putStandingOrder`, `home.removeStandingOrder`, `home.setStandingOrderEnabled` | Daemon clock jobs (§7.4); NL propose→confirm + structured put; run history; §19.10 heartbeat + standing orders |
 | **Skills** | `home.listSkills`, `home.searchClawHubSkills`, `home.installSkill`, `home.removeSkill`, `home.verifySkill` | AgentSkills / ClawHub path |
 | **Profile / memory** | `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.recall`, `home.forget`, `home.listMemory`, `home.setMemorySettings`, `home.compactMemory` | Account-scoped |
 | **Learning** | `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn` | Gated skill/memory patches (§9.3) |
@@ -464,11 +479,13 @@ Three transports carry `home.*`: the local/LAN WebSocket host (reuse-host), the 
 | `home:turn-started` / `home:turn-delta` / `home:turn-finished` | session, account, text/tool deltas |
 | `home:route-decided` | which provider was chosen for a turn (`providerId`, `reason`, …) |
 | `home:approval-needed` / `home:approval-resolved` | risk, tool, account |
+| `home:choice-needed` / `home:choice-resolved` | chat choice card (V-UX-14) |
 | `home:learn-proposed` / `home:memory-compacted` | pending learn / standing consolidate done |
 | `home:session-compacted` | L0 transcript compacted under context pressure (Memory Design §8) |
 | `home:learn-rejected-full` | a PendingLearn was refused because the queue hit its cap (Memory Design §7.2) — the event exists so a silent eviction is impossible |
 | `home:mesh-status` | mesh kind / peers |
 | `home:schedule-fired` | job id, account, exec/delivery status (§7.4) |
+| `home:schedule-proposed` / `home:schedule-proposal-closed` | unarmed proposal card + confirm/cancel/expire (§7.4 / V-UX-12) |
 | `home:workflow-step` / `home:workflow-finished` | attended workflow test-run progress (`runId`, `workflowId`, node phase) (§7) |
 | `home:local-model-download` | GGUF download progress (`fileName`, `status`, `bytesReceived`, `bytesTotal?`, …) (§8.5) |
 
@@ -764,7 +781,7 @@ Verification: V-SEC-13, V-SEC-14, V-SEC-20; Settings on `account.detail` (§10.1
 |-------|---------|------|
 | **loopback-owner** | `home.getDaemonLog`, `home.shutdown`, `home.getServiceStatus`, `home.installService`, `home.uninstallService`, `home.restartService` | Only from the home machine Settings window — never over mesh, never from a paired device. Host OS / process lifecycle. |
 | **owner-scope** | `home.mintPairing`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts`, `home.listPairedDevices`, `home.sendTestPush`, `home.transferHouseholdOwner`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig`, `home.setBinding`, `home.removeBinding`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations`, `home.createAccount`, `home.deleteAccount`, `home.enableChannel`, `home.disableChannel`, `home.setChannelConfig`, `home.stopDemoHa`, `home.stopDemoMqtt`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.searchClawHubSkills`, `home.installSkill`, `home.verifySkill`, `home.removeSkill`, `home.setHarness`, `home.doctorFix`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate` | **`isHouseholdOwner(caller)`** (§4.1.1): loopback **or** device with `accountIds = [ownerAccountId]`. Mobile OK. `setWorkspace` filesystem root only for Owner seat (R3). |
-| **account-scoped** | bootstrap/negotiation: `home.hello`, `home.health`, `home.subscribe`, `home.meshStatus`, `home.registerPushToken`, `home.unregisterPushToken`. Reads of shared catalogs: `home.listAccounts`, `home.listChannels`, `home.getChannelStatus`, `home.listHarnesses`, `home.listProviders`, `home.listWorkflows`, `home.getWorkflow`, `home.listSkills`, `home.doctor`, `home.listWorkflowStepTemplates`, `home.getDemoHaStatus`, `home.getDemoMqttStatus`, `home.listSources` (household object registry — Design `2026-10-16l`), `home.getHouseholdOwner`. Seat-or-Owner (§4.1.1 `mayActForSeat`): `home.listGrants`, `home.revokeGrant`, `home.listBindings`, `home.updateAccount` (field rules: `toolPolicy` still Owner-only), `home.getWorkspace`. Own-account data: `home.getUsage`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.listMemory`, `home.setMemorySettings`, `home.recall`, `home.forget`, `home.compactMemory`, `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.clearTranscript`, `home.deleteTranscriptMessages`, `home.archiveSession`, `home.unarchiveSession`, `home.removeSession`, `home.renameSession`, `home.listSessions`, `home.listApprovals`, `home.answerApproval`, `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts`, `home.runWorkflow`, `home.listWorkflowTools`, `home.startDemoHa`, `home.startDemoMqtt` | Default: device bound to that account (§4.1). **Seat-or-Owner** as §4.1.1. Zero-binding devices may still call bootstrap methods including push register/unregister. A method that appears in **none** of the three rows is a spec bug — `scripts/docs-lint.mjs` fails the build if a catalogued method is missing here. |
+| **account-scoped** | bootstrap/negotiation: `home.hello`, `home.health`, `home.subscribe`, `home.meshStatus`, `home.registerPushToken`, `home.unregisterPushToken`. Reads of shared catalogs: `home.listAccounts`, `home.listChannels`, `home.getChannelStatus`, `home.listHarnesses`, `home.listProviders`, `home.listWorkflows`, `home.getWorkflow`, `home.listSkills`, `home.doctor`, `home.listWorkflowStepTemplates`, `home.getDemoHaStatus`, `home.getDemoMqttStatus`, `home.listSources` (household object registry — Design `2026-10-16l`), `home.getHouseholdOwner`. Seat-or-Owner (§4.1.1 `mayActForSeat`): `home.listGrants`, `home.revokeGrant`, `home.listBindings`, `home.updateAccount` (field rules: `toolPolicy` still Owner-only), `home.getWorkspace`. Own-account data: `home.getUsage`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.listMemory`, `home.setMemorySettings`, `home.recall`, `home.forget`, `home.compactMemory`, `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.clearTranscript`, `home.deleteTranscriptMessages`, `home.archiveSession`, `home.unarchiveSession`, `home.removeSession`, `home.renameSession`, `home.listChoices`, `home.answerChoice`, `home.listSessions`, `home.listApprovals`, `home.answerApproval`, `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.cancelScheduleProposal`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts`, `home.getHeartbeatConfig`, `home.setHeartbeatConfig`, `home.listStandingOrders`, `home.putStandingOrder`, `home.removeStandingOrder`, `home.setStandingOrderEnabled`, `home.runWorkflow`, `home.listWorkflowTools`, `home.startDemoHa`, `home.startDemoMqtt` | Default: device bound to that account (§4.1). **Seat-or-Owner** as §4.1.1. Zero-binding devices may still call bootstrap methods including push register/unregister. A method that appears in **none** of the three rows is a spec bug — `scripts/docs-lint.mjs` fails the build if a catalogued method is missing here. |
 
 A method's scope is **transport-independent** (§3.3.1), except loopback-owner methods which are refused on both remote transports. Owner-scope over mesh requires an **exclusive** Owner-bound device.
 
@@ -2313,7 +2330,7 @@ YAML/JSON export is secondary. Desktop Settings is a **single window** with a le
 | `chat` | Chats + approval inbox | Loopback turns; **ChatGPT-style session rail** (New chat + list; archive/delete); trash menu (**Empty** / **Archive** / **Delete chat**) + per-message copy/delete; **pending tool/actuation approvals** Allow/Deny inline (V-UX-7); toast + auto-focus Chats on `home:approval-needed`. **Home-intent routing** (§5.7.8): general sessions omit `ha_*`/`mqtt_*` unless the turn is home-related. |
 | `homeChat` | Home chat | Dedicated smart-home session (`purpose: "home"`): **one session per profile** (reuse, no New/Recents); trash menu (**Empty** / **Delete chat**) + per-message delete; bound-object card + `ha_*`/`mqtt_*` always available; same Approvals gate. Entry from the sidebar. Not a second brain — same daemon/harness. **Hidden until Home Assistant is configured and enabled** (`homeassistant` channel: baseUrl + access token saved, then Enable) — do not show an empty Home chat when HA is absent. MQTT-only homes use Workflows / MQTT bind until HA is connected. |
 | `llm` | LLM (tabs) | **Model Provider** (`models`, default): provider pool. **Local Model** (`local`): EnvoyHome Local / Ollama (§8.5). **Routing** (`routing`): Cloud / Local only / Smart Routing. **Memory** (`memory`): standing notes; On disk / In prompt; cloud vs local inject packages (Memory Design §4.2.1); pending learns; compact; flush/review. Harness UI hidden (envoy-harness default). Legacy ids deep-link to the tab. |
-| `automation` | Skills (tabs) | Sidebar label **Skills** (view id remains `automation`). **Skills** (`skills`): how-to sample `SKILL.md` + install path / ClawHub search+install / URL; verify; remove. **Workflows** (`workflows`): list-first New/Edit, **Who can use this**, Diagram\|YAML dual editor (DAG canvas + YAML), multi-line NL draft/revise (`home.draftWorkflow` + optional `currentYaml`) + per-node Refine prompt, **Available tools** picker (`home.listWorkflowTools` + Insert sample), validate/save, test-run, collapsed howto. **Schedules** (`jobs` tab id — deep-link/legacy): NL WHEN resolve + create Reminder / Workflow / Tool (`home.proposeSchedule` → `home.confirmSchedule` with payload, or `home.putSchedule`); unified list with Workflow badge for YAML-synced jobs; enable/run/remove (no remove on synced). Object bind is **not** a Skills tab — see Connections HA/MQTT. Legacy `skills`/`workflows`/`jobs` deep-link to the tab; legacy `smarthome` → Connections → Home Assistant. |
+| `automation` | Skills (tabs) | Sidebar label **Skills** (view id remains `automation`). **Skills** (`skills`): how-to sample `SKILL.md` + install path / ClawHub search+install / URL; verify; remove. **Workflows** (`workflows`): list-first New/Edit, **Who can use this**, Diagram\|YAML dual editor (DAG canvas + YAML), multi-line NL draft/revise (`home.draftWorkflow` + optional `currentYaml`) + per-node Refine prompt, **Available tools** picker (`home.listWorkflowTools` + Insert sample), validate/save, test-run, collapsed howto. **Schedules** (`jobs` tab id — deep-link/legacy): NL WHEN resolve + create Reminder / Workflow / Tool; list **Repeating** / **Once** (Histories live under Schedules chat). Object bind is **not** a Skills tab — see Connections HA/MQTT. Legacy `skills`/`workflows`/`jobs` deep-link to the tab; legacy `smarthome` → Connections → Home Assistant. |
 | `system` | System (tabs) | **Profiles** (`accounts` / first tab): household seats, Owner transfer, workspace folders (§4.2.1). **Files** (`artifacts`): folder browser via `home.listSandboxEntries` (sandbox + effective `workspace/`); open in-app / Share-Save / Open in browser (signed URL sandbox-only). **Health check** (`doctor`): issues + Fix / migrate dry-run. **This machine** (`advanced`): `publicBaseUrl`; ports (4780/4781); OS service; **grants** list + revoke. Legacy `accounts`/`artifacts`/`doctor`/`advanced` deep-link to the tab. |
 
 ### 10.2 Critical flows (must work without YAML)
@@ -2344,9 +2361,10 @@ YAML/JSON export is secondary. Desktop Settings is a **single window** with a le
 | V-UX-9 | Workflows editor supports Diagram \| YAML dual mode; diagram ↔ YAML round-trips without losing nodes/edges; YAML remains what `home.putWorkflow` writes |
 | V-UX-10 | `home.draftWorkflow` returns validated YAML without writing (create or revise via optional `currentYaml`); invalid/unknown-tool drafts fail closed; `home.draftWorkflowPrompt` returns a non-empty prompt for llm nodes; Settings New/Edit Draft/Revise with AI + Diagram remount after draft |
 | V-UX-11 | User can create a reusable LLM step from Add step ▾ or Save as step on a node, see it under Your steps, and insert it as `llm_fill`/`llm_summarize` (runtime kinds unchanged) |
-| V-UX-12 | Schedules tab: create Reminder / Workflow / Tool (NL WHEN + confirm payload or `home.putSchedule`); list split **Repeating** (`cron`/`every`) · **Once** (`at`) · **History** (runs + **Not set** canceled/expired proposals); shows human WHEN + `payloadKind` and Workflow badge for YAML-synced jobs; no remove on synced; no debug JSON dumps; chat Confirm/Cancel card for unarmed proposals (expire ≠ arm) |
-| V-UX-12b | Mobile Schedules: reads `jobs` from `listSchedules`; parity with V-UX-12 (Repeating/Once/History, badge, no remove synced, tool argChoices); run history via `listScheduleReceipts` |
-| V-UX-13 | User can open **Schedules chat** from the shell (desktop sidebar and mobile nav) without Home Assistant; session uses `purpose: "schedules"` (one session per profile); the turn standing text lists non-system jobs and tells the model to propose/confirm via the schedule tool; smart-home tools are not enabled by that purpose |
+| V-UX-12 | Skills → Schedules: create Reminder / Workflow / Tool (NL WHEN + confirm payload or `home.putSchedule`); list split **Repeating** · **Once**; shows human WHEN + `payloadKind` and Workflow badge for YAML-synced jobs; no remove on synced; no debug JSON dumps; chat Confirm/Cancel card for unarmed proposals (expire ≠ arm) |
+| V-UX-12b | Mobile Skills → Schedules: reads `jobs` from `listSchedules`; parity with V-UX-12 (Repeating/Once, badge, no remove synced, tool argChoices) |
+| V-UX-13 | User can open **Schedules chat** from the shell (desktop sidebar and mobile nav) without Home Assistant; session uses `purpose: "schedules"` (one session per profile); **Chat \| Histories** panes — Histories shows **Not set** (canceled/expired proposals) + **Runs** (`listScheduleReceipts`); the turn standing text lists non-system jobs and tells the model to propose/confirm via the schedule tool; smart-home tools are not enabled by that purpose |
+| V-UX-14 | Chat shows a **choice card** (`selection` one/many/text) for `ask_user`, schedule time candidates, and Home device disambiguation; `home.answerChoice` settles or cancels it; TTL expires as cancel (fail closed, wakes parked `ask_user`) |
 
 ---
 
@@ -2638,11 +2656,11 @@ Q1–Q12 are closed and **P2-Q4 is finished**. Phase 2 leftover: **P2-Q3 only** 
 
 **v1 already includes:** daemon + Mesh + sandbox + Channel SDK + Telegram demo + envoy-harness + static workflows + local LLM + **memory + consolidation + gated learning (§9)** + Settings.
 
-**Phase 2 is not memory/learning** (that is §9 Normative). Phase 2 = mobile thin client, Privacy Mode, optional triage, extra channels. **Not** Social. **Not** phone-via-attach.
+**Phase 2 is not memory/learning** (that is §9 Normative). Phase 2 = mobile thin client, Privacy Mode, optional triage, extra channels, **and** the agent-capability epics in §19.9–§19.13. **Not** Social. **Not** phone-via-attach.
 
 ### 19.1 Invariants
 
-Same as v1, including §9.3: no silent skill overwrite. Thin clients stay thin. Mesh phone path = **hosting** only.
+Same as v1, including §9.3: no silent skill overwrite. Thin clients stay thin. Mesh phone path = **hosting** only. Path jail + durable approvals remain for every new tool. Additive catalogue / `home.hello.methods[]` discovery — bump `protocolApiVersion` only on break.
 
 ### 19.2 What enters Phase 2
 
@@ -2651,13 +2669,16 @@ Same as v1, including §9.3: no silent skill overwrite. Thin clients stay thin. 
 | **2a** | Mobile thin client | Shared Dart `home.*` + EnvoyHome UI; dials **hosting** peer via join channels **link / host:port / SSH** (§2.3) |
 | **2a** | **Household Owner + workspace** | §4.1.1 Owner account + transfer; Owner-scope from Owner’s mobile; §4.2.1 workspace under Owner; V-SEC-13…16 |
 | **2b** | Optional typed triage | Plug-in behind §8.3 |
-| **2b** | Privacy Mode | Hard block cloud |
-| **2c** | Extra channels / multi-agent | SDK/community; Q10 default agent until UX clear |
+| **2b** | Privacy Mode | Hard block cloud (+ smart-home egress — §19.4) |
+| **2b′** | **Agent capabilities (P2-A…E)** | File edit → ambient → messaging → media understand → helpers → media generate — §19.9–§19.13; after IM/mobile solid |
+| **2c** | Extra channels / Settings multi-agent roster | SDK/community; Q10 default agent until UX clear; helpers (§19.13) land earlier without roster |
 | **2c** | **Additional smart-home platforms + device model** | Zigbee/Matter native, multi-aggregator interop, scenes/automation UI — **v1 already ships MQTT + Home Assistant** (§5.7, B14) |
 
 ### 19.3 Still later / reject
 
 Federation, Bot Mode, silent skill overwrite, vLLM-as-required, **EnvoyMesh Social product**, phone dial via attach. Capability nodes stay mesh-owned until needed. Optional `attachToMeshNode` = **dual-if-needed** (P2-Q4 / §2.3), not a Phase 2 blocker. **Family multi-account remains v1** (§4.0), not Phase 2. **Smart home is v1** (§5.7) — not Phase 2.
+
+**Reject as core (OpenClaw-shaped non-goals for §19.9–§19.13):** shared interactive operator `terminal`/PTY; swarm-as-default / ACP agent marketplace; Lobster-style resumable workflow engine (use §7 workflows + §7.4 schedules); cross-account `message` / session tools; Code Mode + Tool Search as required; MCP runtime in core (investigate only); device **nodes** (camera/screen/computer-use) — §13.1 deferral, not this epic set.
 
 **Investigate (not Normative yet):** Memory Tree, auto-fetch, TokenJuice, fleets — see §19.7.
 
@@ -2687,6 +2708,20 @@ Federation, Bot Mode, silent skill overwrite, vLLM-as-required, **EnvoyMesh Soci
 | V-P2-HA-1 | A second smart-home aggregator (beyond HA/MQTT) integrates through the same Channel + tool contract with no core change |
 | V-P2-HA-2 | If a device model is introduced, it round-trips two aggregators without either losing fidelity, and stays account-scoped (§5.7.3) |
 | V-P2-PRIV-2 | Privacy Mode also blocks outbound smart-home calls, not just cloud LLM calls (§19.4) |
+| V-P2-EDIT-1 | `edit_file` / `apply_patch` stay inside the turn profile path jail; path escape and oversized patch fail closed (§19.9) |
+| V-P2-EDIT-2 | `edit_file` / `apply_patch` are risk `write`, grantable; unattended requires a matching grant (§4.3/§4.4) |
+| V-P2-AMB-1 | Heartbeat system job fires unattended `agentTurn` with caps; silent OK produces no user-facing chat spam (§19.10) |
+| V-P2-AMB-2 | Standing-order actuation still `admin` + journal + safety class; unbound / unregistered `sourceId` opens no turn (§19.10, §5.7) |
+| V-P2-AMB-3 | Doctor warns when heartbeat interval is below the household minimum (§19.10) |
+| V-P2-MSG-1 | `message` tool reaches only a **bound** chat target for the **same** `accountId`; cross-account / unbound fail closed (§19.11) |
+| V-P2-MSG-2 | Event-source `outbound` remains notification-only; `message` cannot actuate (§19.11, §5.3.5) |
+| V-P2-MSG-3 | `sessions_*` tools are account-scoped and capped; no cross-seat transcript leak (§19.11) |
+| V-P2-MEDIA-1 | `view_image` resolves jail / upload paths or SSRF-gated `https://`; no raw host / `file://` (§19.12 D1) |
+| V-P2-MEDIA-2 | Generate tools are Owner-opt-in, attended ask by default, Privacy Mode fail-closed; unattended deny without grant (§19.12 D2) |
+| V-P2-MEDIA-3 | Generated artifacts land under `files/output/media/` and open via existing artifact path (§19.12 D2, §9.5) |
+| V-P2-AGENT-1 | `spawn_helper` child inherits origin and cannot escalate unattended admin; reduced allow-list enforced (§19.13) |
+| V-P2-AGENT-2 | Helper depth ≤ 1, concurrency / TTL / token caps enforced; user-facing agent remains `default` (Q10) (§19.13) |
+| V-P2-AGENT-3 | Harness `task` / mesh submitter wired for parallel children; caps + origin inherit; no OpenClaw `sessions_spawn` (§19.13 P2-E2) |
 
 ### 19.7 Advanced memory / scale investigation (**decisions locked**)
 
@@ -2752,7 +2787,138 @@ What it must **not** add is a device model. That is the Phase 2 question, and on
 
 **Verification (Phase 2):** V-P2-HA-1, V-P2-HA-2, V-P2-PRIV-2 (§19.6). Unowned by design — see Plan §4.
 
----
+### 19.9 File edit ergonomics (**Phase 2 — epic P2-A**)
+
+**Status:** Normative for Phase 2. **Shipped** in the harness builtin catalogue (`2026-10-20i`). Peer: OpenClaw `edit` / `apply_patch` — **Adapt** under EnvoyHome path jail; **Reject** shared interactive `terminal`/PTY.
+
+**Tools (catalogue discovery when shipped):**
+
+| Tool | Risk | Grantable | Contract |
+|------|------|-----------|----------|
+| `edit_file` | `write` | yes | Surgical replace: path + old/new string or bounded line range. Fail closed if old text not found uniquely (or document multi-match policy as refuse). |
+| `apply_patch` | `write` | yes | Unified diff apply under the turn profile jail. Reject path escape, symlink-out, oversized patch, surprise binary. |
+
+**Jail:** Same as §9.5e — `safeJoin` + turn profile `files/` + R3-effective `workspace/` mounts only. Never another profile’s sandbox.
+
+**Non-goals for P2-A:** interactive operator terminal; background `process` (start/poll/kill long `exec`) is an optional follow-on epic, not P2-A. TokenJuice remains §19.7 optional middleware (default off) — complements noisy `exec`, does not replace edit tools.
+
+**Verification:** V-P2-EDIT-1, V-P2-EDIT-2.
+
+### 19.10 Ambient automation (**Phase 2 — epic P2-B**)
+
+**Status:** Normative for Phase 2. **Shipped** (`2026-10-20j`). Build on **ScheduleService** (§7.4) + static workflows (§7) — **no second orchestrator**. Peer: OpenClaw heartbeat / standing orders — **Adapt**; Lobster — **Reject** as core.
+
+**Heartbeat**
+
+- Owner-configurable **system** job per account: interval + prompt (and optional locale/TZ).
+- Fire = unattended `agentTurn` with hard caps (tools/rounds ≤ schedule `maxToolRounds` rules; elevated browser never).
+- Model MAY reply with a **silent OK** token (product constant, e.g. `HEARTBEAT_OK`) → **no** user-facing chat / push spam.
+- Needs-attention → notify (`home:schedule-fired` and/or `message` when P2-C shipped) — never invent WHEN.
+- Doctor **MUST** warn when interval is below the household minimum (stampede / cost).
+
+**Standing orders**
+
+Durable rules under account state:
+
+```text
+{ id, accountId, when, action, enabled, createdAt, … }
+when   ∈ cron | channel_event | smarthome_event   // smarthome_event requires bound sourceId
+action ∈ notify | workflow | agentTurn
+```
+
+- Settings list/create/edit/disable (Owner or seat-or-Owner as Plan epic specifies — default **seat-or-Owner** for own account, Owner for household-wide).
+- Smart-home triggers: bound `sourceId` only; actuation in `action` still **`admin`** + journal + safety class (§5.7).
+- Prefer workflow nodes + standing orders over a generic lifecycle-hook zoo.
+
+**Verification:** V-P2-AMB-1, V-P2-AMB-2, V-P2-AMB-3.
+
+### 19.11 Cross-session messaging (**Phase 2 — epic P2-C**)
+
+**Status:** Normative for Phase 2. **Shipped** (`2026-10-20k`/`o`/`p`) — tools live; IM live-verify still preferred for field soak.
+
+**`message` tool**
+
+- Risk: `network` (or channel-tier as declared); **grantable**.
+- Send to a **bound** chat target for the **same** `accountId` (channel + channelAccount + peer/thread ids from binding / channel registry).
+- **Actions (Adapt, not OpenClaw-wide):** `send` · `notify` · `reply` (requires `rawRef`) · `react` (requires `reaction` + `rawRef`; channel must declare `react`) · `edit` / `delete` / `pin` / `unpin` (require `rawRef`; channel must declare `edit` / `delete` / `pin` respectively — `unpin` uses `pin`). Optional jail-relative `mediaPath`/`mediaPaths` when channel declares `media`. Unsupported OpenClaw zoo actions **fail closed**. Event-source always notify-only.
+- Event-source plugins: outbound remains **notification-only** (§5.3.5 rule 6) — `message` MUST NOT actuate.
+- Fail closed: unbound channel, wrong account, Privacy Mode, `restricted` policy, undeclared capability.
+
+**Session tools (account-scoped)**
+
+| Tool | Purpose |
+|------|---------|
+| `sessions_list` | List sessions for the turn’s account (capped). |
+| `sessions_history` | Capped transcript window for a session of the **same** account. |
+| `sessions_status` | Coarse status (open / idle / pending approval). |
+| `sessions_send` | Same-account only; **attended ask**; unattended needs grant. Default **`run: true`** wakes a turn on the target session (OpenClaw-aligned Adapt); `run: false` injects a transcript line only. Optional `waitMs` (cap 60s; `0` = fire-and-forget) returns assistant `reply` or `timedOut`. No self-target / swarm / cross-account. |
+
+No cross-seat / cross-account session or message access. **Reject** OpenClaw `sessions_spawn` / swarm as core (Q10).
+
+**Verification:** V-P2-MSG-1, V-P2-MSG-2, V-P2-MSG-3.
+
+### 19.12 Media tools (**Phase 2 — epic P2-D**, split)
+
+**Status:** Normative for Phase 2. **D1 shipped** (`2026-10-20l`/`o`/`p`). **D2 shipped** (`2026-10-20o`/`p`).
+
+**D1 — understand**
+
+- **`view_image`:** describe / OCR-lite for sandbox or chat-upload image paths through the jail, **or** an `https://` URL fetched through the same SSRF chokepoint as `http_fetch` (size cap 8 MiB; refuse `file://`, non-TLS `http://`, absolute host paths, `..` escapes). Tool risk stays `read`; URL fetch is SSRF-gated. Prefer a provider with `supportsVision` when available. **Shipped:** jail or https metadata; vision description when a vision-capable (or OpenAI/Anthropic cloud) provider is eligible and Privacy Mode is off (else metadata-only). Multimodal parts on openai-compat + anthropic-compat.
+- **Richer PDF:** extend §9.5a–c extract/export — page-range extract (`startPage`/`endPage` on `extract_document`); optional render-to-image for `view_image`. Baseline MUST NOT require cloud OCR.
+
+**D2 — generate**
+
+- `image_generate` (+ optional later `video_generate` / `music_generate`): Owner enable (`home.setMediaGenerateConfig`) + OpenAI-compat Images API (`/v1/images/generations`) with provider secret; risk `network`; **attended ask**; **unattended deny** unless explicit grant; **Privacy Mode blocks**; **daily cap** (default 20). **Fail closed** when disabled or no eligible provider. **Default async:** returns `{ jobId, status: "pending" }` immediately; background write under `output/media/` + `home:state-changed` detail; quota consumed on **success** only. `wait: true` keeps the sync fast-path (tool blocks until path written).
+- Artifacts under `accounts/<id>/files/output/media/`; open via existing artifact / chip path (§9.5).
+- Cost / rate caps surfaced in Doctor (`media.generate_no_provider`) + Settings.
+
+**Verification:** V-P2-MEDIA-1, V-P2-MEDIA-2, V-P2-MEDIA-3.
+
+### 19.13 Turn-scoped helpers + harness sub-agents (**Phase 2 — epic P2-E / P2-E2 / P2-E3**)
+
+**Status:** Normative for Phase 2. **P2-E shipped** (`2026-10-20m`). **P2-E2 shipped** (`2026-10-20r`/`s`). **P2-E3 shipped** (`2026-10-20t`). Preserves **Q10**: the user still talks to `agent_id = "default"`. Settings multi-agent **roster** remains wave **2c** — distinct from execution sub-agents.
+
+#### P2-E — `spawn_helper` (shipped)
+
+- Parent turn invokes helper; child runs with a **reduced tool allow-list**, same account sandbox, **inherited origin** (attended child MUST NOT launder unattended `admin`).
+- Child result returns to parent as tool output; optional transcript footnote.
+- Caps: max concurrent helpers per account; **depth ≤ 1** (no helper-of-helper); TTL; token budget.
+- Child runs a **reduced tool loop** (allow-list enforced; max two tool rounds) — not completion-only.
+- Bindings MAY continue to store unused `agentId` for forward compatibility (§4.1).
+
+#### P2-E2 — envoy-harness sub-agents (shipped `2026-10-20r`/`s`)
+
+**Decision:** EnvoyHome **SHALL** use **`@envoymesh/envoy-harness` `LocalMeshSubmitter` + `Agent`** for **parallel children** on one user ask (builtin `task`). Prefer this over inventing OpenClaw `sessions_spawn` / swarm.
+
+**Shipped contract:**
+
+- Tool `task`: `objective`\|`prompt` or `tasks[]` of `{ objective|prompt, allowTools? }`; shared reduce allow-list; **inherited origin**.
+- Caps (fail closed): `TASK_MAX_SUBAGENTS` (8, refuse-all), `TASK_MAX_PARALLEL` (4), `TASK_ACCOUNT_CONCURRENCY` (8, shared with `spawn_helper`).
+- Each child: fresh `InMemorySession` + Home `ToolRegistry` (jail via `dispatchTool`) + `HomeModelAdapter` (ProviderHandle + fence→tool_use). **No** nested `meshSubmitter` on children (depth ≤ 1).
+- `spawn_helper` is a **thin wrapper** over single-child `task` (`via: "task"`, `engine: "local-mesh"`).
+- Children are **execution workers**, not a Settings roster — Q10 holds; no cross-account spawn.
+- Unattended: grant required (risk `exec`); children MUST NOT escalate beyond parent grants.
+
+#### P2-E3 — parent turn = envoy-harness `Agent` (shipped `2026-10-20t`)
+
+**Decision:** The daemon harness path **SHALL** run the **parent** turn via **`Agent.run`** (same HomeModelAdapter + ApprovalSink-gated ToolRegistry + `LocalMeshSubmitter` for `task`), not only children.
+
+**Shipped contract:**
+
+- Parent `Agent`: full Home tool set for the turn surface (`homeSurface` / `schedulesSurface` still gate allow); jail via `dispatchTool` + existing `ApprovalSink`.
+- `meshSubmitter` on the parent so harness-native `task` is available; children still depth-capped (no nested mesh on child Agents).
+- Home transcript durability: Session adapter over account session dir (`appendTranscriptLine` / `readTranscript`), not a throwaway-only session for the parent path.
+- Tracer events map to `home:turn-delta` (tool_call / tool_result / text / error).
+- **TurnService preambles stay outside Agent:** `plannedTools`, schedule affirmation/deny, home recover/offer callbacks, memory inject, forceLocal — same as before `Agent.run`.
+- harness-host `runTurn` **MAY** remain as fallback for injected `completionText`/`plannedTools` tests and emergency rollback (`ENVOYHOME_PARENT_AGENT=0`). Soft-deprecate once V-P2-AGENT-4 is green.
+
+**Still Reject:** OpenClaw-shaped `sessions_spawn` / swarm-as-default / ACP agent marketplace as core. Wave **2c** roster (named agents) is separate and still deferred.
+
+**Non-goals for P2-E / E2 / E3:** Settings roster UI, cross-agent mailbox, ACP marketplace, deleting `runTurn` entirely, Continuable/remote mesh, rewriting the workflow-keyword path to Agent.
+
+**Verification:** V-P2-AGENT-1, V-P2-AGENT-2 (E); V-P2-AGENT-3 (E2); **V-P2-AGENT-4** (E3: parent Agent path; tools via ApprovalSink; transcript durable; task depth-1).
+
+**Ship order (Normative intent):** P2-A → P2-B → P2-C → P2-D1 → P2-E → P2-D2 → P2-E2 → **P2-E3**. Owner MAY reorder.
 
 ---
 
@@ -3129,6 +3295,10 @@ Returns the household object registry for callers on this EnvoyHome (Design `202
 
 **`home.answerApproval`** params `{ "id", "decision": "allow"|"deny", "scope?": "once"|"session"|"always", "argsDigest": "sha256:…" }` → `{ "ok": true, "grantId?" }`
 
+**`home.listChoices`** params `{ "accountId", "sessionId?" }` → `{ "choices": [{ "id", "accountId", "sessionId", "question", "options": [{ "id", "label", "destructive?" }], "selection": "one"|"many"|"text", "purpose", "createdAt", "expiresAt", … }] }` — pending chat choice cards (V-UX-14)
+
+**`home.answerChoice`** params `{ "accountId", "id", "optionId?", "optionIds?", "text?", "cancel?" }` → `{ "ok": true, "labels?", "optionIds?", "text?", "followUp?", "canceled?", "proposed?" }` — TTL expiry and `cancel: true` fail closed (no selection). `ask_user` resumes the parked tool; `schedule_candidates` MAY `proposeFromText` from the pick; `home_disambiguation` / `general` MAY send labels as a follow-up user message.
+
 - **`argsDigest` is REQUIRED and MUST equal the digest the caller was shown** (A.5 above). A mismatch is rejected with `envoyhome.approval_mismatch: …` — approval is bound to the arguments the human actually saw, not to whatever the pending row holds at answer time (V-HA-20).
 - `scope: "always"` returns the created `grantId` (§4.4). For an `admin`/`sensitive` tool the grant is stored with the **full** digest; a request that would produce a broad grant is refused with `envoyhome.grant_too_broad: …`.
 - `scope: "always"` on a **safety-class** call is refused with `envoyhome.actuation_never_unattended: …`; safety-class calls are always `once`.
@@ -3250,7 +3420,18 @@ Returns the household object registry for callers on this EnvoyHome (Design `202
 **`home.removeSchedule`** params `{ "accountId", "jobId" }` → `{ "ok": true }`  
 **`home.runSchedule`** params `{ "accountId", "jobId" }` → `{ "receipt": { "execStatus", "deliveryStatus" } }`
 
+**`home.getHeartbeatConfig`** params `{ "accountId" }` → `{ "enabled", "everyMs", "prompt", "minEveryMs" }` — §19.10  
+**`home.setHeartbeatConfig`** params `{ "accountId", "enabled?", "everyMs?", "prompt?" }` → `{ "ok", "enabled", "everyMs", "prompt", "minEveryMs" }` — Owner opt-in; Doctor warns when `everyMs` &lt; `minEveryMs`  
+**`home.listStandingOrders`** params `{ "accountId" }` → `{ "orders": [{ "id", "name", "enabled", "when", "action", "createdAt", "updatedAt" }] }`  
+**`home.putStandingOrder`** params `{ "accountId", "name", "when", "action", "id?", "enabled?" }` → `{ "order": { … } }` — `when.kind` ∈ {`cron`,`channel_event`,`smarthome_event`}; smarthome requires bound `sourceId`  
+**`home.removeStandingOrder`** params `{ "accountId", "id" }` → `{ "ok": true }`  
+**`home.setStandingOrderEnabled`** params `{ "accountId", "id", "enabled" }` → `{ "order": { … } }`
+
 **Event `home:schedule-fired`** data `{ "jobId", "accountId", "status", "deliveryStatus?", "error?" }`
+
+**Event `home:schedule-proposed`** data `{ "proposalId", "accountId", "sessionId?", "resolvedLocal", "expiresAt", "name?", "message?", "kind?" }` — chat Confirm/Cancel card (V-UX-12).
+
+**Event `home:schedule-proposal-closed`** data `{ "proposalId", "accountId", "sessionId?", "status": "confirmed"|"canceled"|"expired", "jobId?" }`
 **Event `home:workflow-step`** data `{ "runId", "workflowId", "accountId", "nodeId", "type", "phase": "started"|"finished", "ok?", "detail?", "output?" }` — attended `home.runWorkflow` progress.
 **Event `home:workflow-finished`** data `{ "runId", "workflowId", "accountId", "ok" }`
 

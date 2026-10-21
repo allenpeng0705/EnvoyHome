@@ -5,7 +5,7 @@ Living plan for **active** EnvoyHome build work. Style aligned with EnvoyMesh [`
 | Field | Value |
 |-------|-------|
 | **Role** | Subordinate to [`EnvoyHome-Design.md`](EnvoyHome-Design.md) and [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Design.md). **Design wins.** |
-| **Last updated** | 2026-10-18ad |
+| **Last updated** | 2026-10-20s |
 | **Owner** | Allen Peng |
 | **G6** | **Accepted 2026-10-09** for Plan text matching Design `2026-10-08f` (with G1) |
 
@@ -31,6 +31,7 @@ Maintenance: flip checkboxes when shipping; refresh **Current Milestone**; keep 
 - [Build stage board (B0–B14)](#build-stage-board-b0b14)
 - [Release bar (§8 / Design §21)](#release-bar-8--design-21)
 - [Post-v1 product epics](#post-v1-product-epics)
+- [Phase 2 agent capabilities (P2-A…E)](#phase-2-agent-capabilities-p2-ae)
 - [§2 Repo layout](#2-repo-layout-target)
 - [§3 Build Stages (detail)](#3-build-stages-b0b14)
 - [§4 Verification ID index](#4-verification-id-index)
@@ -61,10 +62,11 @@ EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0
 - `[ ]` Tag `v1.0.0` — when [release bar](#release-bar-8--design-21) items (1)–(8) all `[x]` with honest evidence.
 - `[ ]` First-party IM epic — Telegram live first, then the five additional bots; Channels UI becomes a chat-plugin catalog.
 - `[ ]` Phase 2 Privacy Mode RPC / automation authoring UX — after mobile path is clear.
+- `[x]` Phase 2 agent capabilities P2-A…E — Design **Accepted 2026-10-20**; **A–E + D2 `[x]`** (`2026-10-20o`/`p` Design-max Adapt).
 
 ## Current Milestone
 
-**Milestone:** Spine shipped; **deepen desktop Settings + mobile thin client**; then **first-party IM set** (Design §5.0).
+**Milestone:** Spine shipped; **deepen desktop Settings + mobile thin client**; then **first-party IM set** (Design §5.0). Phase 2 agent capabilities (P2-A…E) are **Design-ready** — no code until Accept.
 
 | Track | Status | Notes |
 |-------|--------|-------|
@@ -79,6 +81,7 @@ EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0
 | Live HA C.4 | `[>]` | Fixture `[x]` (`pnpm ha:c4-diff`); live needs hub creds — unset here |
 | EnvoyMesh mobile thin client | `[~]` | Pair + push + chat stream + artifacts open; Store polish operator-side |
 | First-party IM set | `[~]` | Telegram+Discord+Slack+Feishu+DingTalk+WeCom plugins+Channels catalog; live operator verify remaining |
+| Phase 2 P2-A…E | `[x]` | Design Accepted 2026-10-20; **A–E + D2 `[x]`** (`2026-10-20o`/`p`) |
 
 ### Next planning pulls
 
@@ -86,7 +89,8 @@ EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0
 1. **Mobile thin client** `[~]` — accountIds + chat + artifacts `[x]`; Store/TestFlight polish.  
 2. **Optional live HA C.4** `[>]` — when hub creds available.  
 3. **First-party IM set** `[ ]` — Telegram live + five bots (Design §5.0); catalog UI.  
-4. **Tag `v1.0.0`** `[ ]` — when release bar holds.
+4. **Tag `v1.0.0`** `[ ]` — when release bar holds.  
+5. **P2-D2 generate** `[x]` — OpenAI Images API + Owner enable + Privacy Mode + daily cap + async job (`2026-10-20o`/`p`).
 
 ## Build stage board (B0–B14)
 
@@ -139,7 +143,39 @@ Tag `v1.0.0` when (1)–(8) are honestly `[x]` including bar 1’s e2e bar you c
 | Privacy Mode RPC (+ smart-home egress) | `[ ]` | §19.4, V-P2-PRIV-* |
 | Automation authoring UX | `[ ]` | §19.8 |
 | First-party IM set (Telegram + Discord + Slack + Feishu + DingTalk + WeCom) | `[ ]` | Design §5.0 `2026-10-16c` — after mobile solid |
+| **P2-A…E agent capabilities** | `[x]` | Accepted 2026-10-20; A–E + D2 shipped (`2026-10-20o`) |
 | Memory Tree / fleets / TokenJuice | `[>]` | §19.7 — not core |
+
+## Phase 2 agent capabilities (P2-A…E)
+
+Design ground truth: **§19.9–§19.13** (**Accepted 2026-10-20**). Ship after Current Milestone IM/mobile unless Owner reorders. Wire: additive catalogue / methods only.
+
+| Epic | Status | Design | Depends on | Deliverable (when coding) | Verify IDs |
+|------|--------|--------|------------|---------------------------|------------|
+| **P2-A** File edit | `[x]` | §19.9 | Path jail (B3) done | `edit_file` / `apply_patch` in harness-host; V-P2-EDIT tests green (`2026-10-20i`) | V-P2-EDIT-1, V-P2-EDIT-2 |
+| **P2-B** Ambient | `[x]` | §19.10 | ScheduleService + agentTurn (B9.1) | Heartbeat + standing orders + Doctor warn (`2026-10-20j`) | V-P2-AMB-1, V-P2-AMB-2, V-P2-AMB-3 |
+| **P2-C** Messaging | `[x]` | §19.11 | Prefer IM live-verify | `message` edit/delete/pin + `sessions_send` run+wait (`2026-10-20k`/`n`/`p`) | V-P2-MSG-1, V-P2-MSG-2, V-P2-MSG-3 |
+| **P2-D1** Media understand | `[x]` | §19.12 D1 | Artifacts (B11) | `view_image` jail + https SSRF + vision + PDF page-range (`2026-10-20l`/`n`/`p`) | V-P2-MEDIA-1 |
+| **P2-E** Helpers | `[x]` | §19.13 | Stable allow-lists from A–C | `spawn_helper` child tool loop; depth 1; Q10 (`2026-10-20m`/`n`) | V-P2-AGENT-1, V-P2-AGENT-2 |
+| **P2-D2** Media generate | `[x]` | §19.12 D2 | Privacy Mode (§19.4) | OpenAI Images + async job / `wait:true` + Owner/Privacy/cap (`2026-10-20o`/`p`) | V-P2-MEDIA-2, V-P2-MEDIA-3 |
+| **P2-E2** Harness sub-agents | `[x]` | §19.13 E2 | P2-E `[x]` | `LocalMeshSubmitter`+`Agent` children; `task` caps; `spawn_helper` via task (`2026-10-20s`) | V-P2-AGENT-3 |
+| **P2-E3** Parent Agent | `[x]` | §19.13 E3 | P2-E2 `[x]` | Parent `Agent.run`; Home Session + full ToolRegistry; `runTurn` fallback (`2026-10-20t`) | V-P2-AGENT-4 |
+
+**Ship order:** P2-A → P2-B → P2-C → P2-D1 → P2-E → P2-D2 → P2-E2 → **P2-E3**. Owner MAY pull E2/E3 forward.
+
+**Package touch points (at code time):** `packages/harness-host` (policy + parse), `packages/daemon` (turn-service, schedule, standing-orders, message dispatch), `packages/protocol` (additive schemas), Settings desktop/mobile surfaces, Doctor issues.
+
+**Soft risks (owning epic):**
+
+| Risk | Epic | Mitigation |
+|------|------|------------|
+| Heartbeat stampede / cost | P2-B | Min interval + Doctor warn (V-P2-AMB-3); silent OK; tool/round caps |
+| Helper privilege escalation | P2-E | Inherit origin; reduced allow-list; depth 1 (V-P2-AGENT-1/2) |
+| Sub-agent stampede / cost | P2-E2 | maxSubagents + parallel pool + account caps; Doctor; refuse-all on over-cap (V-P2-AGENT-3) |
+| Parent Agent streaming / honesty drift | P2-E3 | Keep TurnService preambles; `runTurn` rollback flag; golden home/schedule tests (V-P2-AGENT-4) |
+| `message` spam / cross-account leak | P2-C | Bound target + same account only; grantable; Privacy Mode (V-P2-MSG-*) |
+| Patch path escape / huge diff | P2-A | Jail + size cap (V-P2-EDIT-1) |
+| Media generate egress / bill shock | P2-D2 | Owner opt-in; Privacy Mode; rate caps; attended default (V-P2-MEDIA-2) |
 
 ---
 
@@ -536,9 +572,17 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-P2-PRIV-2 | *(Phase 2 — unowned by design)* | Privacy Mode also stops outbound smart-home calls **and** notifications (Design §19.4) |
 | V-P2-MOB-1 | *(Phase 2 — unowned by design)* | Dart thin client; no local model; dials the hosting peer |
 | V-P2-HA-1, V-P2-HA-2 | *(Phase 2 — unowned by design)* | home-automation via the Channel contract + static workflow, no approval bypass (Design §19.8) |
+| V-P2-EDIT-1, V-P2-EDIT-2 | **P2-A** | file edit / apply_patch jail + write grants (Design §19.9) |
+| V-P2-AMB-1, V-P2-AMB-2, V-P2-AMB-3 | **P2-B** | heartbeat silent OK; standing-order safety; Doctor interval (Design §19.10) |
+| V-P2-MSG-1, V-P2-MSG-2, V-P2-MSG-3 | **P2-C** | message bound/same-account; event-source notify-only; sessions_* scoped (Design §19.11) |
+| V-P2-MEDIA-1 | **P2-D1** | view_image jail paths (Design §19.12 D1) |
+| V-P2-MEDIA-2, V-P2-MEDIA-3 | **P2-D2** | generate Owner/Privacy/attended; artifacts under output/media (Design §19.12 D2) |
+| V-P2-AGENT-1, V-P2-AGENT-2 | **P2-E** | spawn_helper origin/allow-list; depth/caps; Q10 default (Design §19.13) |
+| V-P2-AGENT-3 | **P2-E2** | harness `task`/meshSubmitter; caps/batching; origin inherit; no sessions_spawn (Design §19.13 E2) |
+| V-P2-AGENT-4 | **P2-E3** | parent Agent path; tools via ApprovalSink; transcript durable; task depth-1 (Design §19.13 E3) |
 | Design Appendix C.2 (pre-MVP floor) | **B0–B14 (gate)** | every C.2 row green, including the smart-home safety IDs (V-HA-4/5/7/8/11/13/14/19) in the every-PR `smarthome` suite |
 
-**Not owned by any single stage, on purpose:** `V-P2-PRIV-1`, `V-P2-PRIV-2`, `V-P2-MOB-1` and `V-P2-HA-*` are Design §19.6 **Phase 2** IDs. They are listed here so the index is complete, and explicitly marked unowned so nobody claims them for v1.
+**Not owned by any single v1 stage, on purpose:** `V-P2-PRIV-*`, `V-P2-MOB-1`, and `V-P2-HA-*` remain Design §19.6 Phase 2 (unowned for v1). **P2-A…E** IDs are owned by the Phase 2 epics above — still **not** claimable for v1 / B0–B14.
 
 **Open by reference matrix** (where each family is defined and where it is tested):
 
@@ -557,7 +601,7 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-UX-*, V-UX-MEM-* | Design §10.3 | `apps/desktop/test/` (Playwright/manual) |
 | V-HA-* | Design §5.7.6 | `packages/smarthome/test/`, `plugins/channel-{mqtt,homeassistant}/test/` |
 | V-OUT-* | Design §9.6 | `packages/daemon/test/artifacts.test.ts` |
-| V-P2-* | Design §19.6 | Phase 2; mesh-host test for the v1-relevant half |
+| V-P2-* | Design §19.6 | Phase 2; mesh-host for mesh half; P2-A…E suites when those epics ship |
 
 If you find a verification ID referenced in code that isn't in this table, file an issue — not a silent addition. If you find one ID with two owning stages, that is a bug in this table, not a reason to co-own it.
 
@@ -721,7 +765,7 @@ When (1)–(8) are honestly `[x]`, tag `v1.0.0`. Post-tag product order: desktop
 
 ## 9. What this doc does **not** cover
 
-- Phase 2 (after v1 spine) — Design §19 owns this.
+- Phase 2 Normative narrative — Design §19 owns this (including §19.9–§19.13). This Plan owns **epic order, verify-ID ownership, and soft-risk rows** for P2-A…E after Accept.
 - Normative re-designs — Design owns this.
 - Memory layer depth beyond what B5/B8 implement — Memory Design owns this.
 - Peer-research fitness updates — `analysis/synthesis.md` and Design §13.1 own this.
@@ -736,6 +780,19 @@ If you need to change the answer to "in what order we build," edit this doc and 
 
 | Date | Change |
 |------|--------|
+| 2026-10-20t | **P2-E3 shipped:** parent harness turn = envoy-harness `Agent.run`; V-P2-AGENT-4; `runTurn` fallback. Aligns Design `2026-10-20t`. |
+| 2026-10-20s | **P2-E2 full mesh:** task children = LocalMeshSubmitter+Agent; parent stays runTurn. Aligns Design `2026-10-20s`. |
+| 2026-10-20r | **P2-E2 shipped:** `task` tool + harness `mapBoundedParallel`; spawn_helper via task; V-P2-AGENT-3. Aligns Design `2026-10-20r`. |
+| 2026-10-20q | **P2-E2 board:** parallel children via envoy-harness sub-agents (caps/batching); `sessions_spawn` still Reject. Aligns Design `2026-10-20q`. |
+| 2026-10-20p | **Design-max Adapt honesty-gap close:** sessions_send run+wait; view_image https SSRF; image_generate async; message edit/delete/pin/unpin. P2-D2 stays `[x]`. Aligns Design `2026-10-20p`. |
+| 2026-10-20o | **P2-C/D full Adapt:** message reply/react/media; vision multimodal; image_generate OpenAI Images + daily cap. Aligns Design `2026-10-20o`. D2 `[x]`. |
+| 2026-10-20n | **P2 refine:** HB OK / standing fire / spawn loop / Settings / message+sessions_send / vision+image_generate fail-closed. Aligns Design `2026-10-20n`. |
+| 2026-10-20m | **P2-E shipped:** `spawn_helper` + V-P2-AGENT tests. Aligns Design `2026-10-20m`. |
+| 2026-10-20l | **P2-D1 shipped:** `view_image` + extract page-range + V-P2-MEDIA-1. Aligns Design `2026-10-20l`. D2 still deferred. |
+| 2026-10-20k | **P2-C shipped:** `message` + `sessions_*` + V-P2-MSG tests. Aligns Design `2026-10-20k`. |
+| 2026-10-20j | **P2-B shipped:** heartbeat + standing orders + V-P2-AMB tests. Aligns Design `2026-10-20j`. |
+| 2026-10-20i | **P2-A shipped:** `edit_file` / `apply_patch` + V-P2-EDIT tests. Aligns Design `2026-10-20i`. |
+| 2026-10-20h | **Phase 2 P2-A…E board:** Design §19.9–§19.13; verify IDs; soft-risks. **Owner Accepted 2026-10-20.** |
 | 2026-10-19k | **§7.4 accuracy high-impact:** no silent clock invent; account IANA TZ; NL corpus (this/next, in-N-days, 半, noon). Aligns Design `2026-10-19k`. |
 | 2026-10-19j | **§7.4 follow-through:** `maxToolRounds` reserved (v1 single-cycle); schedule propose `resolvedLocal` humanized in harness + thin clients; V-CRON-12 elevated glue. Aligns Design `2026-10-19j`. |
 | 2026-10-19i | **§7.4 authoring accuracy + restricted agentTurn:** V-CRON-11/12. Aligns Design `2026-10-19i`. |

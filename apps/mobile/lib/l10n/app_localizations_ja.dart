@@ -927,10 +927,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get schedNoDismissed => 'No canceled or expired proposals.';
 
   @override
-  String get schedDismissedCanceled => 'canceled';
+  String get schedDismissedCanceled => 'キャンセル';
 
   @override
-  String get schedDismissedExpired => 'expired';
+  String get schedDismissedExpired => '期限切れ';
 
   @override
   String get schedNext => '次回';
@@ -1456,5 +1456,66 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String chatPendingApprovals(int count) {
     return '承認待ち $count 件';
+  }
+
+  @override
+  String get choiceCardConfirm => '確認';
+
+  @override
+  String get choiceCardPickOne => '少なくとも1つ選んでください。';
+
+  @override
+  String get choiceCardAnswered => '受け取りました。';
+
+  @override
+  String choiceCardFailed(String error) {
+    return '選択を送信できませんでした: $error';
+  }
+
+  @override
+  String chatPendingChoices(int count) {
+    return '選択待ち $count 件';
+  }
+
+  @override
+  String get choiceCardCancel => 'キャンセル';
+
+  @override
+  String get choiceCardCanceled => '選択を取り消しました。';
+
+  @override
+  String get choiceCardExpired => '期限切れ';
+
+  @override
+  String get choiceCardExpiredHint => 'この選択は期限切れです。必要ならもう一度聞いてください。';
+
+  @override
+  String choiceCardExpiresIn(int mins) {
+    return '$mins 分で期限切れ';
+  }
+
+  @override
+  String get choiceCardTextPlaceholder => '回答を入力';
+
+  @override
+  String get schedulesChatTabChat => 'スケジュール';
+
+  @override
+  String get schedulesChatTabHistories => '履歴';
+
+  @override
+  String get schedulesChatHistoriesHint => 'キャンセルまたは期限切れの提案と最近の実行。';
+
+  @override
+  String get jobsHistoriesMovedHint => '履歴はスケジュール → 履歴へ';
+
+  @override
+  String schedulesChatClosedAt(String when) {
+    return '終了 $when';
+  }
+
+  @override
+  String schedulesChatRanAt(String when) {
+    return '実行 $when';
   }
 }

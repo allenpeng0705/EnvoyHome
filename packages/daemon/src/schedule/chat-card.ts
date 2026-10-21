@@ -92,14 +92,17 @@ function describeCron(expr: string): string {
  * Lists user jobs so the model can change them; WHEN stays on the resolver.
  */
 export function formatSchedulesChatCard(jobs: readonly ScheduleJob[]): string {
-  const visible = jobs.filter((j) => j.payload.kind !== "system").slice(0, 24);
+  const visible = jobs
+    .filter((j) => j.payload.kind !== "system" && !j.id.startsWith("standing:"))
+    .slice(0, 24);
   const lines = visible.map((j) => {
     const state = j.enabled ? "on" : "off";
     const synced = j.source === "workflow" ? " workflow-synced" : "";
     return `- id=${j.id} ${j.name}: ${describeScheduleSpec(j.spec)} ${state}${synced} next=${j.nextRunAt ?? "—"}`;
   });
   const more =
-    jobs.filter((j) => j.payload.kind !== "system").length > visible.length
+    jobs.filter((j) => j.payload.kind !== "system" && !j.id.startsWith("standing:")).length >
+      visible.length
       ? "\n- (more jobs exist — call schedule list)"
       : "";
   return `## Schedules chat

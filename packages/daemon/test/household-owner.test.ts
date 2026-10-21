@@ -65,6 +65,7 @@ function deps(daemon: RunningDaemon) {
     workflows: daemon.workflows,
     workflowStepTemplates: daemon.workflowStepTemplates,
     schedules: daemon.schedules,
+    standingOrders: daemon.standingOrders,
     skills: daemon.skills,
     artifacts: daemon.artifacts,
     webSearch: daemon.webSearch,

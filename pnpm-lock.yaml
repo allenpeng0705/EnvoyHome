@@ -121,6 +121,9 @@ importers:
       '@envoymesh/api':
         specifier: link:../../../EnvoyMesh/packages/api
         version: link:../../../EnvoyMesh/packages/api
+      '@envoymesh/envoy-harness':
+        specifier: link:../../../envoy-harness/packages/envoy-harness
+        version: link:../../../envoy-harness/packages/envoy-harness
       '@envoymesh/network':
         specifier: link:../../../EnvoyMesh/packages/network
         version: link:../../../EnvoyMesh/packages/network
@@ -151,6 +154,9 @@ importers:
       playwright:
         specifier: ^1.51.0
         version: 1.64.0
+      zod:
+        specifier: ^3.23.8
+        version: 3.25.76
     devDependencies:
       '@types/node':
         specifier: ^22.20.5
@@ -1967,6 +1973,9 @@ packages:
   zip-stream@4.1.1:
     resolution: {integrity: sha512-9qv4rlDiopXg4E69k+vMHjNN63YFMe9sZMrdlvKnCjlCRWeCBswPPMPUfx+ipsAWq1LXHe70RcbaHdJJpS6hyQ==}
     engines: {node: '>= 10'}
+
+  zod@3.25.76:
+    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
 
 snapshots:
 
@@ -3813,3 +3822,5 @@ snapshots:
       archiver-utils: 3.0.4
       compress-commons: 4.1.2
       readable-stream: 3.6.2
+
+  zod@3.25.76: {}

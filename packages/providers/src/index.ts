@@ -2,15 +2,23 @@
 
 export {
   type ChatMessage,
+  type ChatContentPart,
   type CompletionRequest,
   type CompletionResult,
   type ModelProvider,
   type ProviderKind,
   type ProviderSecretStore,
+  chatContentToText,
   MemorySecretStore,
 } from "./provider.js";
 
 export { createOpenAICompatProvider, type OpenAICompatOptions } from "./openai-compat.js";
+export {
+  generateOpenAIImage,
+  peekProviderSecret,
+  type OpenAIImageGenerateOpts,
+  type OpenAIImageGenerateResult,
+} from "./openai-images.js";
 export {
   createAnthropicCompatProvider,
   type AnthropicCompatOptions,

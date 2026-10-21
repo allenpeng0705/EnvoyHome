@@ -249,9 +249,76 @@ export {
   resolveScheduleFromText,
   parseCron,
   nextCronExprAfter,
+  HEARTBEAT_OK,
+  MIN_HEARTBEAT_INTERVAL_MS,
+  DEFAULT_HEARTBEAT_INTERVAL_MS,
+  isHeartbeatSilentOk,
+  clampHeartbeatIntervalMs,
   type ScheduleJob,
   type ScheduleProposal,
 } from "./schedule/index.js";
+
+export {
+  StandingOrderStore,
+  standingJobId,
+  standingOrderToScheduleParts,
+  validateStandingOrder,
+  type StandingOrder,
+  type StandingWhen,
+  type StandingAction,
+} from "./standing-orders.js";
+
+export {
+  runMessageTool,
+  runSessionsListTool,
+  runSessionsHistoryTool,
+  runSessionsStatusTool,
+  runSessionsSendTool,
+  runViewImageTool,
+  runImageGenerateTool,
+  runSpawnHelperTool,
+  runTaskTool,
+  sliceExtractByPageRange,
+  __resetPhase2ToolsForTests,
+  SESSIONS_LIST_CAP,
+  SESSIONS_HISTORY_CAP,
+  SESSIONS_SEND_TEXT_CAP,
+  SPAWN_HELPER_MAX_CONCURRENT,
+  TASK_MAX_SUBAGENTS,
+  TASK_MAX_PARALLEL,
+  TASK_ACCOUNT_CONCURRENCY,
+  MESSAGE_ACTIONS_SUPPORTED,
+} from "./phase2-tools.js";
+
+export {
+  HomeModelAdapter,
+  createHomeMeshSubmitter,
+  buildHomeChildToolRegistry,
+  buildParentToolRegistry,
+  homeTaskArgsToHarness,
+  homeSubagentInput,
+  textFromSubagentResult,
+  HOME_PARENT_MAX_ITERATIONS,
+} from "./home-harness-bridge.js";
+
+export { HomeAgentSession } from "./home-agent-session.js";
+
+export {
+  runAgentTurn,
+  parentAgentEnabled,
+  parentToolNamesForSurface,
+} from "./home-agent-turn.js";
+
+export {
+  MediaGenerateStore,
+  type MediaGenerateState,
+  type MediaGenerateJob,
+  type MediaGenerateJobStatus,
+} from "./media-generate-store.js";
+
+export { SessionStore, type SessionMeta } from "./sessions.js";
+
+export { ChannelService } from "./channels/service.js";
 
 export {
   CHAT_MEDIA_MAX_BYTES,

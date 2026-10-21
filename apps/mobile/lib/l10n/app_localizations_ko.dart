@@ -927,10 +927,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get schedNoDismissed => 'No canceled or expired proposals.';
 
   @override
-  String get schedDismissedCanceled => 'canceled';
+  String get schedDismissedCanceled => '취소됨';
 
   @override
-  String get schedDismissedExpired => 'expired';
+  String get schedDismissedExpired => '만료됨';
 
   @override
   String get schedNext => '다음';
@@ -1458,5 +1458,66 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String chatPendingApprovals(int count) {
     return '승인 대기 $count건';
+  }
+
+  @override
+  String get choiceCardConfirm => '확인';
+
+  @override
+  String get choiceCardPickOne => '하나 이상 선택하세요.';
+
+  @override
+  String get choiceCardAnswered => '확인했습니다.';
+
+  @override
+  String choiceCardFailed(String error) {
+    return '선택을 보낼 수 없습니다: $error';
+  }
+
+  @override
+  String chatPendingChoices(int count) {
+    return '선택 대기 $count건';
+  }
+
+  @override
+  String get choiceCardCancel => '취소';
+
+  @override
+  String get choiceCardCanceled => '선택을 취소했습니다.';
+
+  @override
+  String get choiceCardExpired => '만료됨';
+
+  @override
+  String get choiceCardExpiredHint => '이 선택은 만료되었습니다. 필요하면 다시 물어보세요.';
+
+  @override
+  String choiceCardExpiresIn(int mins) {
+    return '$mins분 후 만료';
+  }
+
+  @override
+  String get choiceCardTextPlaceholder => '답변 입력';
+
+  @override
+  String get schedulesChatTabChat => '일정';
+
+  @override
+  String get schedulesChatTabHistories => '기록';
+
+  @override
+  String get schedulesChatHistoriesHint => '취소·만료된 제안과 최근 실행 기록.';
+
+  @override
+  String get jobsHistoriesMovedHint => '기록은 일정 → 기록으로 이동';
+
+  @override
+  String schedulesChatClosedAt(String when) {
+    return '종료 $when';
+  }
+
+  @override
+  String schedulesChatRanAt(String when) {
+    return '실행 $when';
   }
 }

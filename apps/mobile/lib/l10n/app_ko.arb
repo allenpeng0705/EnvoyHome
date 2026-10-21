@@ -270,8 +270,8 @@
   "schedHistoryNotSet": "Not set",
   "schedHistoryRuns": "Runs",
   "schedNoDismissed": "No canceled or expired proposals.",
-  "schedDismissedCanceled": "canceled",
-  "schedDismissedExpired": "expired",
+  "schedDismissedCanceled": "취소됨",
+  "schedDismissedExpired": "만료됨",
   "schedNext": "다음",
   "schedKindRepeating": "반복",
   "schedKindOnce": "한 번",
@@ -284,7 +284,9 @@
   "schedDayOfMonth": "{d}일",
   "@schedDayOfMonth": {
     "placeholders": {
-      "d": { "type": "String" }
+      "d": {
+        "type": "String"
+      }
     }
   },
   "wfEditorTitle": "Workflow",
@@ -602,7 +604,9 @@
   "profilesTimeZoneValue": "Time zone: {tz}",
   "@profilesTimeZoneValue": {
     "placeholders": {
-      "tz": { "type": "String" }
+      "tz": {
+        "type": "String"
+      }
     }
   },
   "profilesTimeZoneEdit": "Time zone",
@@ -612,7 +616,9 @@
   "profilesTimeZoneDone": "Time zone set to {tz}",
   "@profilesTimeZoneDone": {
     "placeholders": {
-      "tz": { "type": "String" }
+      "tz": {
+        "type": "String"
+      }
     }
   },
   "profilesShareLocationTitle": "Home과 위치 공유",
@@ -675,5 +681,57 @@
   "homeFolderComputer": "Computer",
   "homeFolderHome": "Home",
   "homeFolderParent": "Parent folder",
-  "homeFolderNoSubfolders": "No subfolders"
+  "homeFolderNoSubfolders": "No subfolders",
+  "choiceCardConfirm": "확인",
+  "choiceCardPickOne": "하나 이상 선택하세요.",
+  "choiceCardAnswered": "확인했습니다.",
+  "choiceCardFailed": "선택을 보낼 수 없습니다: {error}",
+  "@choiceCardFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatPendingChoices": "선택 대기 {count}건",
+  "@chatPendingChoices": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "choiceCardCancel": "취소",
+  "choiceCardCanceled": "선택을 취소했습니다.",
+  "choiceCardExpired": "만료됨",
+  "choiceCardExpiredHint": "이 선택은 만료되었습니다. 필요하면 다시 물어보세요.",
+  "choiceCardExpiresIn": "{mins}분 후 만료",
+  "choiceCardTextPlaceholder": "답변 입력",
+  "@choiceCardExpiresIn": {
+    "placeholders": {
+      "mins": {
+        "type": "int"
+      }
+    }
+  },
+  "schedulesChatTabChat": "일정",
+  "schedulesChatTabHistories": "기록",
+  "schedulesChatHistoriesHint": "취소·만료된 제안과 최근 실행 기록.",
+  "jobsHistoriesMovedHint": "기록은 일정 → 기록으로 이동",
+  "schedulesChatClosedAt": "종료 {when}",
+  "@schedulesChatClosedAt": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "schedulesChatRanAt": "실행 {when}",
+  "@schedulesChatRanAt": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  }
 }

@@ -11,7 +11,7 @@
 
 1. **`design_doc/EnvoyHome-Design.md`** — what we build, why, every Normative rule.
 2. **`design_doc/EnvoyHome-Memory-Design.md`** — how memory works (L0–L7, flush, LearnQueue).
-3. **`design_doc/EnvoyHome-Implementation-Plan.md`** — Build Stages **B0–B14**, verification IDs, soft-risk mitigations.
+3. **`design_doc/EnvoyHome-Implementation-Plan.md`** — Build Stages **B0–B14**, Phase 2 epics **P2-A…E**, verification IDs, soft-risk mitigations.
 4. **`tests/min/conventions.md`** — 13 must-follow rules (R1–R13). **Read before editing any package code.**
 
 ## Don't
@@ -34,6 +34,7 @@
 - Don't mask `peers:check` or any merge gate with `|| echo ...` (Plan §5.7).
 - Don't rely on Ext-Agent-only as the long-term phone path (Design §14 item 9).
 - Don't put EnvoyMesh Social product inside EnvoyHome (Design §14 item 10).
+- Don't ship OpenClaw-shaped **shared interactive terminal/PTY**, **swarm-as-default** / **`sessions_spawn`**, or a **Lobster-style** second workflow engine in core — Phase 2 uses path-jailed `edit_file`/`apply_patch`, ScheduleService heartbeat + standing orders, `spawn_helper`, and **`task`** (P2-E2/E3: envoy-harness `LocalMeshSubmitter`+`Agent` children; **parent** harness turns use `Agent.run` — `runTurn` is fallback/tests only; `ENVOYHOME_PARENT_AGENT=0` rollback) under Q10 (Design §19.3, §19.9–§19.13; `2026-10-20t`).
 
 ## Do
 

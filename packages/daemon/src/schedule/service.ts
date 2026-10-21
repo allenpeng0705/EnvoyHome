@@ -134,7 +134,15 @@ export class ScheduleService {
 
   async watchAccount(
     accountId: string,
-    opts?: { reviewEnabled?: boolean; consolidateAt?: string; timeZone?: string },
+    opts?: {
+      reviewEnabled?: boolean;
+      consolidateAt?: string;
+      timeZone?: string;
+      /** Design §19.10 — Owner opt-in heartbeat. */
+      heartbeatEnabled?: boolean;
+      heartbeatEveryMs?: number;
+      heartbeatPrompt?: string;
+    },
   ): Promise<void> {
     await this.store.loadAccount(accountId, this.now().getTime());
     this.watched.add(accountId);
@@ -148,6 +156,15 @@ export class ScheduleService {
       });
     } else if (opts?.reviewEnabled === false) {
       await this.disableSystemJob(accountId, `system:review:${accountId}`);
+    }
+    if (opts?.heartbeatEnabled === true) {
+      await this.ensureHeartbeatJob(accountId, {
+        ...(opts.heartbeatEveryMs !== undefined ? { everyMs: opts.heartbeatEveryMs } : {}),
+        ...(opts.heartbeatPrompt !== undefined ? { prompt: opts.heartbeatPrompt } : {}),
+        ...(opts.timeZone !== undefined ? { timeZone: opts.timeZone } : {}),
+      });
+    } else if (opts?.heartbeatEnabled === false) {
+      await this.disableSystemJob(accountId, `system:heartbeat:${accountId}`);
     }
     this.armTimer();
   }
@@ -241,6 +258,132 @@ export class ScheduleService {
     job.nextRunAt = null;
     job.updatedAt = this.now().toISOString();
     await this.store.upsertJob(job);
+  }
+
+  /**
+   * Design §19.10 — Owner-configurable heartbeat (every-interval system job).
+   * Fire path runs agentTurn; silent HEARTBEAT_OK suppresses user notify.
+   */
+  async ensureHeartbeatJob(
+    accountId: string,
+    opts?: { everyMs?: number; prompt?: string; timeZone?: string },
+  ): Promise<ScheduleJob> {
+    const { clampHeartbeatIntervalMs, DEFAULT_HEARTBEAT_PROMPT } = await import(
+      "./heartbeat.js"
+    );
+    const id = `system:heartbeat:${accountId}`;
+    const existing = await this.store.getJob(accountId, id);
+    const tz = opts?.timeZone ?? this.defaultTimeZone;
+    const everyMs = clampHeartbeatIntervalMs(opts?.everyMs ?? 60 * 60_000);
+    const prompt = (opts?.prompt ?? DEFAULT_HEARTBEAT_PROMPT).trim() || DEFAULT_HEARTBEAT_PROMPT;
+    if (existing) {
+      const same =
+        existing.spec.kind === "every" &&
+        existing.spec.everyMs === everyMs &&
+        existing.spec.timeZone === tz &&
+        existing.payload.kind === "system" &&
+        existing.payload.systemJob === "heartbeat" &&
+        existing.payload.prompt === prompt &&
+        existing.enabled;
+      if (same) return existing;
+      existing.enabled = true;
+      existing.spec = { kind: "every", everyMs, timeZone: tz };
+      existing.payload = { kind: "system", systemJob: "heartbeat", prompt };
+      existing.updatedAt = this.now().toISOString();
+      existing.nextRunAt = computeNext(existing.spec, this.now(), {
+        graceMs: RECURRING_GRACE_MS,
+        missPolicy: "skip",
+        wasMissed: false,
+      });
+      await this.store.upsertJob(existing);
+      this.armTimer();
+      return existing;
+    }
+    return this.createJob({
+      id,
+      accountId,
+      name: "Heartbeat",
+      spec: { kind: "every", everyMs, timeZone: tz },
+      payload: { kind: "system", systemJob: "heartbeat", prompt },
+      missPolicy: "skip",
+      source: "user",
+      enabled: true,
+    });
+  }
+
+  /**
+   * Sync cron standing orders into `standing:<id>` jobs; remove orphans.
+   * Non-cron standing orders are stored only (event triggers elsewhere).
+   */
+  async syncStandingCronJobs(
+    accountId: string,
+    orders: Array<{
+      id: string;
+      name: string;
+      enabled: boolean;
+      when: { kind: string; cronExpr?: string; timeZone?: string };
+      action: {
+        kind: string;
+        message?: string;
+        workflowId?: string;
+        prompt?: string;
+        toolPolicyPreset?: "standard" | "restricted";
+        maxToolRounds?: number;
+      };
+    }>,
+  ): Promise<void> {
+    const { standingJobId, standingOrderToScheduleParts } = await import(
+      "../standing-orders.js"
+    );
+    const want = new Set<string>();
+    for (const o of orders) {
+      if (o.when.kind !== "cron") continue;
+      const jobId = standingJobId(o.id);
+      want.add(jobId);
+      const parts = standingOrderToScheduleParts(o as never, this.defaultTimeZone);
+      if (!parts) continue;
+      const existing = await this.store.getJob(accountId, jobId);
+      if (!o.enabled) {
+        if (existing?.enabled) {
+          existing.enabled = false;
+          existing.nextRunAt = null;
+          existing.updatedAt = this.now().toISOString();
+          await this.store.upsertJob(existing);
+        }
+        continue;
+      }
+      if (existing) {
+        existing.enabled = true;
+        existing.name = o.name;
+        existing.spec = parts.spec;
+        existing.payload = parts.payload;
+        existing.missPolicy = inferMissPolicy(parts.payload);
+        existing.updatedAt = this.now().toISOString();
+        existing.nextRunAt = computeNext(existing.spec, this.now(), {
+          graceMs: RECURRING_GRACE_MS,
+          missPolicy: existing.missPolicy,
+          wasMissed: false,
+        });
+        await this.store.upsertJob(existing);
+      } else {
+        await this.createJob({
+          id: jobId,
+          accountId,
+          name: o.name,
+          spec: parts.spec,
+          payload: parts.payload,
+          missPolicy: inferMissPolicy(parts.payload),
+          source: "user",
+          enabled: true,
+        });
+      }
+    }
+    for (const job of await this.store.listJobs(accountId)) {
+      if (!job.id.startsWith("standing:")) continue;
+      if (want.has(job.id)) continue;
+      await this.store.removeJob(accountId, job.id);
+    }
+    this.armTimer();
   }
 
   async stop(): Promise<void> {
@@ -533,6 +676,7 @@ export class ScheduleService {
       });
     }
     const isSystem = job.payload.kind === "system";
+    const isStanding = job.id.startsWith("standing:");
     const isWorkflowSynced = job.source === "workflow";
 
     // Daemon-owned system jobs: enable-only via watchAccount / disableSystemJob — not client patches.
@@ -549,6 +693,14 @@ export class ScheduleService {
         );
       }
       return job;
+    }
+
+    // Standing orders: manage via home.putStandingOrder (Design §19.10).
+    if (isStanding) {
+      throw Object.assign(
+        new Error("envoyhome.bad_params: standing schedule is managed via standing orders"),
+        { code: "bad_params" },
+      );
     }
 
     // Workflow-synced: enable-only (V-CRON-7).
@@ -597,6 +749,12 @@ export class ScheduleService {
     if (job.payload.kind === "system") {
       throw Object.assign(
         new Error("envoyhome.bad_params: cannot remove system schedule"),
+        { code: "bad_params" },
+      );
+    }
+    if (jobId.startsWith("standing:")) {
+      throw Object.assign(
+        new Error("envoyhome.bad_params: remove standing orders via home.removeStandingOrder"),
         { code: "bad_params" },
       );
     }

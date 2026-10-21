@@ -29,6 +29,12 @@ export interface AccountPolicy {
   reviewEnabled: boolean;
   flushEnabled: boolean;
   reviewInCloud: boolean;
+  /** Design §19.10 — Owner opt-in heartbeat system job (default off). */
+  heartbeatEnabled: boolean;
+  /** Interval ms for heartbeat every-job (clamped; Doctor warns below floor). */
+  heartbeatEveryMs: number;
+  /** Frozen prompt for heartbeat agentTurn. */
+  heartbeatPrompt: string;
   /** Memory Design §4.2.1 — auto derives cloud/local inject from contextTokens. */
   injectBudgetMode: "auto" | "baseline" | "custom";
   caps: Record<string, unknown>;
@@ -50,6 +56,10 @@ const DEFAULTS: AccountPolicy = {
   reviewEnabled: true,
   flushEnabled: true,
   reviewInCloud: false,
+  heartbeatEnabled: false,
+  heartbeatEveryMs: 60 * 60_000,
+  heartbeatPrompt:
+    "Follow the heartbeat monitor context. Recurring tasks use schedules or standing orders — do not invent WHEN. If nothing needs attention, reply exactly HEARTBEAT_OK.",
   injectBudgetMode: "auto",
   caps: {},
 };

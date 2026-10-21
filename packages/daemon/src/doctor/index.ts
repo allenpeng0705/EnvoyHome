@@ -46,6 +46,19 @@ export async function collectDoctorIssues(
         listReceipts: (accountId: string) => Promise<Array<{ latenessMs?: number }>>;
       };
     } | null;
+    /** Design §19.10 / V-P2-AMB-3 — heartbeat interval floor. */
+    policy?: {
+      get: (accountId: string) => Promise<{
+        heartbeatEnabled: boolean;
+        heartbeatEveryMs: number;
+      }>;
+    } | null;
+    /** Design §19.12 D2 — Owner media-generate gate. */
+    mediaGenerate?: {
+      get: (accountId: string) => Promise<{ enabled: boolean }>;
+    } | null;
+    /** True when an OpenAI-compat provider with secret exists. */
+    hasImageGenerateProvider?: () => boolean;
   },
   options: CollectDoctorOptions = {},
 ): Promise<DoctorIssue[]> {
@@ -201,6 +214,45 @@ export async function collectDoctorIssues(
         id: "schedule.late_fire",
         severity: "warn",
         message: `${lateCount} recent schedule fire(s) ran ≥5 minutes late — check daemon uptime / host clock`,
+        fixable: false,
+      });
+    }
+  }
+
+  // Design §19.10 / V-P2-AMB-3 — warn when enabled heartbeat is below household floor.
+  if (deps.policy) {
+    const { MIN_HEARTBEAT_INTERVAL_MS } = await import("../schedule/heartbeat.js");
+    const under: string[] = [];
+    for (const a of accountRows) {
+      const pol = await deps.policy.get(a.accountId);
+      if (pol.heartbeatEnabled && pol.heartbeatEveryMs < MIN_HEARTBEAT_INTERVAL_MS) {
+        under.push(a.accountId);
+      }
+    }
+    if (under.length > 0) {
+      issues.push({
+        id: "schedule.heartbeat_interval_low",
+        severity: "warn",
+        message: `heartbeat interval below household minimum (${MIN_HEARTBEAT_INTERVAL_MS}ms) for: ${under.join(", ")}`,
+        fixable: false,
+      });
+    }
+  }
+
+  // Design §19.12 D2 / V-P2-MEDIA-2 — enabled generate without a provider is a dead switch.
+  if (deps.mediaGenerate && deps.hasImageGenerateProvider) {
+    const enabledWithoutProvider: string[] = [];
+    if (!deps.hasImageGenerateProvider()) {
+      for (const a of accountRows) {
+        const mg = await deps.mediaGenerate.get(a.accountId);
+        if (mg.enabled) enabledWithoutProvider.push(a.accountId);
+      }
+    }
+    if (enabledWithoutProvider.length > 0) {
+      issues.push({
+        id: "media.generate_no_provider",
+        severity: "warn",
+        message: `image_generate enabled but no OpenAI-compat provider with secret for: ${enabledWithoutProvider.join(", ")}`,
         fixable: false,
       });
     }

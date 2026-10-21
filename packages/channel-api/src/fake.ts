@@ -23,7 +23,7 @@ export function createFakeChannel(): ChannelPlugin {
       kind: "chat",
       label: "Fake Channel",
       configSchema: { echo: { required: false }, token: { secret: true } },
-      capabilities: ["text"],
+      capabilities: ["text", "react", "media", "edit", "delete", "pin"],
     },
     async start(ctx) {
       lastFakeChatCtx = ctx;

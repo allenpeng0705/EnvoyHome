@@ -933,10 +933,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get schedNoDismissed => 'No canceled or expired proposals.';
 
   @override
-  String get schedDismissedCanceled => 'canceled';
+  String get schedDismissedCanceled => 'Canceled';
 
   @override
-  String get schedDismissedExpired => 'expired';
+  String get schedDismissedExpired => 'Expired';
 
   @override
   String get schedNext => 'Next';
@@ -1473,5 +1473,68 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String chatPendingApprovals(int count) {
     return '$count waiting for your approval';
+  }
+
+  @override
+  String get choiceCardConfirm => 'Confirm';
+
+  @override
+  String get choiceCardPickOne => 'Pick at least one option.';
+
+  @override
+  String get choiceCardAnswered => 'Got it.';
+
+  @override
+  String choiceCardFailed(String error) {
+    return 'Could not send that choice: $error';
+  }
+
+  @override
+  String chatPendingChoices(int count) {
+    return '$count waiting for your choice';
+  }
+
+  @override
+  String get choiceCardCancel => 'Cancel';
+
+  @override
+  String get choiceCardCanceled => 'Choice dismissed.';
+
+  @override
+  String get choiceCardExpired => 'Expired';
+
+  @override
+  String get choiceCardExpiredHint =>
+      'This choice expired — ask again if you still need it.';
+
+  @override
+  String choiceCardExpiresIn(int mins) {
+    return 'Expires in $mins min';
+  }
+
+  @override
+  String get choiceCardTextPlaceholder => 'Type your answer';
+
+  @override
+  String get schedulesChatTabChat => 'Schedules';
+
+  @override
+  String get schedulesChatTabHistories => 'Histories';
+
+  @override
+  String get schedulesChatHistoriesHint =>
+      'Proposals you canceled or that expired, and recent job runs.';
+
+  @override
+  String get jobsHistoriesMovedHint => 'History moved to Schedules → Histories';
+
+  @override
+  String schedulesChatClosedAt(String when) {
+    return 'Closed $when';
+  }
+
+  @override
+  String schedulesChatRanAt(String when) {
+    return 'Ran $when';
   }
 }

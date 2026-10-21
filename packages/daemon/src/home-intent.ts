@@ -214,6 +214,8 @@ export function matchBoundDevice(
 export type LocalHomePlan = {
   tools: Array<{ tool: string; args: Record<string, unknown>; summary: string }>;
   reply: string;
+  /** When set, thin clients show a choice card (Design V-UX-14). */
+  choiceCandidates?: BoundDevicePick[];
 };
 
 function formatDisambiguationReply(
@@ -541,7 +543,14 @@ export function planLocalHomeActuation(
   const matched = matchBoundDevices(text, boundObjects);
   if (matched.kind === "none") return undefined;
   if (matched.kind === "ambiguous") {
-    return { tools: [], reply: formatDisambiguationReply(matched.candidates, replyZh) };
+    // Card carries the options (V-UX-14) — keep transcript reply short, no duplicate list.
+    return {
+      tools: [],
+      reply: replyZh
+        ? "有多个设备符合描述，请在下方选择一个："
+        : "Several devices match — pick one below:",
+      choiceCandidates: matched.candidates.slice(0, 8),
+    };
   }
   const device = matched.device;
   if (!device.sourceId) return undefined;

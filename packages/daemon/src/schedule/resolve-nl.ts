@@ -6,6 +6,7 @@
 import { zonedParts, zonedWallToUtc } from "./cron-next.js";
 import { humanCronLabel } from "./chat-card.js";
 import {
+  matchBareWeekday,
   matchDayOffset,
   matchMonthYear,
   matchRecurring,
@@ -512,6 +513,11 @@ function resolveClock(text: string, lower: string): { hour: number; minute: numb
   return clock;
 }
 
+/** Strip WHEN phrases so a candidate pick can re-attach the notify body. */
+export function extractScheduleMessage(text: string): string {
+  return extractMessage(text);
+}
+
 function extractMessage(text: string): string {
   let s = text.trim();
   s = s.replace(/^(please\s+)?(can you|could you|would you)\s+/i, "");
@@ -967,7 +973,7 @@ export function resolveScheduleFromText(input: ResolveNlInput): ResolveNlResult 
         ok: false,
         reason: "missing_time",
         detail: "weekend needs a day and clock — Saturday or Sunday?",
-        candidates: ["Saturday at 10am", "Sunday at 10am"],
+        candidates: weekendCandidates(locale),
       };
     }
     const p = zonedParts(now, tz);
@@ -1037,10 +1043,10 @@ export function resolveScheduleFromText(input: ResolveNlInput): ResolveNlResult 
     return okAt(when, tz, msg);
   }
 
-  // --- this|next <weekday> (all UI locales) ---
-  // Normative: "next X" = strictly future weekday; "this X" = upcoming in current week
+  // --- this|next|<bare> <weekday> (all UI locales) ---
+  // Normative: "next X" = strictly future weekday; "this X" / bare = upcoming in current week
   // (same day allowed if clock still ahead; if past → missing_time + candidates).
-  const thisNext = matchThisNextWeekday(text);
+  const thisNext = matchThisNextWeekday(text) ?? matchBareWeekday(text);
   if (thisNext) {
     const targetDow = thisNext.dow;
     const mode = thisNext.mode;

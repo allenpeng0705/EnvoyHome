@@ -2,9 +2,23 @@
 
 export type ProviderKind = "llama-cpp" | "openai-compat" | "cloud";
 
+/** OpenAI-style multimodal parts (Design §19.12 D1 vision). */
+export type ChatContentPart =
+  | { type: "text"; text: string }
+  | { type: "image_url"; image_url: { url: string } };
+
 export interface ChatMessage {
   role: "system" | "user" | "assistant" | "tool";
-  content: string;
+  /** String for text-only; parts array when a vision turn includes images. */
+  content: string | ChatContentPart[];
+}
+
+/** Flatten multimodal content for providers that only accept strings. */
+export function chatContentToText(content: string | ChatContentPart[]): string {
+  if (typeof content === "string") return content;
+  return content
+    .map((p) => (p.type === "text" ? p.text : "[image]"))
+    .join("\n");
 }
 
 export interface CompletionRequest {

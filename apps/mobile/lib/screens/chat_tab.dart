@@ -133,8 +133,17 @@ class _ChatTabState extends State<ChatTab> {
   bool _listening = false;
   bool _speechAvailable = false;
   List<Map<String, dynamic>> _pending = [];
+  List<Map<String, dynamic>> _pendingChoices = [];
+  final Map<String, Set<String>> _choiceManySelected = {};
+  final Map<String, TextEditingController> _choiceTextCtrls = {};
   List<Map<String, dynamic>> _boundSources = [];
   bool _approvalsLoading = false;
+  bool _choicesLoading = false;
+  /// Schedules chat: Chat vs Histories (Not set + Runs).
+  String _schedulesPane = 'chat';
+  List<Map<String, dynamic>> _scheduleDismissed = [];
+  List<Map<String, dynamic>> _scheduleReceipts = [];
+  bool _scheduleHistoryLoading = false;
   /// General Chats: ChatGPT-style list ↔ thread (Home stays single-thread).
   bool _showSessionList = true;
   /// When true, the session list shows archived chats (includeArchived).
@@ -173,6 +182,7 @@ class _ChatTabState extends State<ChatTab> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         unawaited(_refreshApprovals());
+        unawaited(_refreshChoices());
         if (_isHome) unawaited(_loadBoundSources());
       }
     });
@@ -195,6 +205,7 @@ class _ChatTabState extends State<ChatTab> {
       _ensureSubscribed();
       unawaited(_restoreSession());
       unawaited(_refreshApprovals());
+      unawaited(_refreshChoices());
       if (_isHome) unawaited(_loadBoundSources());
     }
   }
@@ -206,6 +217,10 @@ class _ChatTabState extends State<ChatTab> {
     unawaited(_speech.stop());
     _textCtrl.dispose();
     _scrollCtrl.dispose();
+    for (final c in _choiceTextCtrls.values) {
+      c.dispose();
+    }
+    _choiceTextCtrls.clear();
     super.dispose();
   }
 
@@ -236,6 +251,7 @@ class _ChatTabState extends State<ChatTab> {
     }
     _wasConnected = connected;
     unawaited(_refreshApprovals());
+    unawaited(_refreshChoices());
     if (_isHome) unawaited(_loadBoundSources());
   }
 
@@ -269,6 +285,7 @@ class _ChatTabState extends State<ChatTab> {
       setState(() => _sessionId = id);
       try {
         await _reloadTranscript(id);
+        unawaited(_refreshChoices());
         return;
       } catch (_) {
         // Stale pointer — fall through (Home may still have a daemon session).
@@ -297,6 +314,7 @@ class _ChatTabState extends State<ChatTab> {
             if (!mounted) return;
             setState(() => _sessionId = sid);
             await _reloadTranscript(sid);
+            unawaited(_refreshChoices());
             return;
           }
         }
@@ -380,11 +398,15 @@ class _ChatTabState extends State<ChatTab> {
         'home:turn-finished',
         'home:approval-needed',
         'home:approval-resolved',
+        'home:choice-needed',
+        'home:choice-resolved',
       ]);
       _unsubs.add(home.onEvent('home:turn-delta', _onTurnDelta));
       _unsubs.add(home.onEvent('home:turn-finished', _onTurnFinished));
       _unsubs.add(home.onEvent('home:approval-needed', _onApprovalEvent));
       _unsubs.add(home.onEvent('home:approval-resolved', _onApprovalEvent));
+      _unsubs.add(home.onEvent('home:choice-needed', _onChoiceEvent));
+      _unsubs.add(home.onEvent('home:choice-resolved', _onChoiceEvent));
       _subscribed = true;
     } catch (e) {
       if (mounted) {
@@ -402,6 +424,16 @@ class _ChatTabState extends State<ChatTab> {
 
   void _onApprovalEvent(dynamic _) {
     unawaited(_refreshApprovals());
+  }
+
+  void _onChoiceEvent(dynamic data) {
+    if (data is Map) {
+      final sid = data['sessionId']?.toString();
+      if (sid != null && sid.isNotEmpty && _sessionId != null && sid != _sessionId) {
+        return;
+      }
+    }
+    unawaited(_refreshChoices());
   }
 
   Future<void> _loadBoundSources() async {
@@ -453,6 +485,92 @@ class _ChatTabState extends State<ChatTab> {
     } catch (_) {
       if (mounted) setState(() => _approvalsLoading = false);
     }
+  }
+
+  Future<void> _refreshChoices() async {
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    final sessionId = _sessionId;
+    if (home == null ||
+        accountId == null ||
+        accountId.isEmpty ||
+        sessionId == null ||
+        sessionId.isEmpty) {
+      if (mounted) setState(() => _pendingChoices = []);
+      return;
+    }
+    if (mounted) setState(() => _choicesLoading = true);
+    try {
+      final listed = await home.listChoices(
+        accountId: accountId,
+        sessionId: sessionId,
+      );
+      final raw = listed['choices'];
+      final rows = raw is List
+          ? raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+          : <Map<String, dynamic>>[];
+      if (!mounted) return;
+      final alive = rows.map((r) => r['id']?.toString() ?? '').toSet();
+      _choiceManySelected.removeWhere((k, _) => !alive.contains(k));
+      for (final id in _choiceTextCtrls.keys.toList()) {
+        if (!alive.contains(id)) {
+          _choiceTextCtrls.remove(id)?.dispose();
+        }
+      }
+      setState(() {
+        _pendingChoices = rows;
+        _choicesLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _choicesLoading = false);
+    }
+  }
+
+  Future<void> _answerChoice(
+    Map<String, dynamic> row, {
+    String? optionId,
+    List<String>? optionIds,
+    String? text,
+    bool cancel = false,
+  }) async {
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    if (home == null || accountId == null) return;
+    final l10n = AppLocalizations.of(context);
+    final id = row['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    try {
+      await home.answerChoice(
+        accountId: accountId,
+        id: id,
+        optionId: optionId,
+        optionIds: optionIds,
+        text: text,
+        cancel: cancel,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(cancel ? l10n.choiceCardCanceled : l10n.choiceCardAnswered),
+        ),
+      );
+      await _refreshChoices();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.choiceCardFailed('$e'))),
+      );
+    }
+  }
+
+  String? _choiceExpiryLabel(Map<String, dynamic> row, AppLocalizations l10n) {
+    final raw = row['expiresAt']?.toString();
+    if (raw == null || raw.isEmpty) return null;
+    final ms = DateTime.tryParse(raw)?.difference(DateTime.now()).inMilliseconds;
+    if (ms == null) return null;
+    if (ms <= 0) return l10n.choiceCardExpired;
+    final mins = (ms / 60000).ceil().clamp(1, 9999);
+    return l10n.choiceCardExpiresIn(mins);
   }
 
   Future<void> _answer(Map<String, dynamic> row, String decision) async {
@@ -560,6 +678,7 @@ class _ChatTabState extends State<ChatTab> {
     }
     if (!_singleThread) unawaited(_loadSessionList());
     unawaited(_refreshApprovals());
+    unawaited(_refreshChoices());
     _scrollToEnd();
   }
 
@@ -1547,6 +1666,7 @@ class _ChatTabState extends State<ChatTab> {
       }
       if (!_singleThread) unawaited(_loadSessionList());
       unawaited(_refreshApprovals());
+      unawaited(_refreshChoices());
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -1580,6 +1700,296 @@ class _ChatTabState extends State<ChatTab> {
       }
     }
     return l10n.chatUntitled;
+  }
+
+  Future<void> _refreshScheduleHistories() async {
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    if (!_isSchedules || home == null || accountId == null || accountId.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _scheduleDismissed = [];
+          _scheduleReceipts = [];
+        });
+      }
+      return;
+    }
+    if (mounted) setState(() => _scheduleHistoryLoading = true);
+    try {
+      final listed = await home.listSchedules(accountId: accountId);
+      final dismissedRaw = listed['dismissed'];
+      final dismissed = <Map<String, dynamic>>[];
+      if (dismissedRaw is List) {
+        for (final d in dismissedRaw) {
+          if (d is Map) dismissed.add(Map<String, dynamic>.from(d));
+        }
+      }
+      final receiptsBody = await home.listScheduleReceipts(
+        accountId: accountId,
+        limit: 20,
+      );
+      final receiptsRaw = receiptsBody['receipts'];
+      final receipts = <Map<String, dynamic>>[];
+      if (receiptsRaw is List) {
+        for (final r in receiptsRaw) {
+          if (r is Map) receipts.add(Map<String, dynamic>.from(r));
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _scheduleDismissed = dismissed;
+        _scheduleReceipts = receipts;
+        _scheduleHistoryLoading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _scheduleHistoryLoading = false);
+    }
+  }
+
+  String _dismissedTitle(Map<String, dynamic> d, AppLocalizations l10n) {
+    final name = d['name']?.toString().trim() ?? '';
+    if (name.isNotEmpty) return name;
+    final msg = d['message']?.toString().trim() ?? '';
+    if (msg.isNotEmpty) return msg;
+    final local = d['resolvedLocal']?.toString().trim() ?? '';
+    if (local.isEmpty) return '—';
+    if (local.toLowerCase().startsWith('cron ')) return l10n.schedTabRepeating;
+    return local;
+  }
+
+  String? _dismissedWhen(Map<String, dynamic> d) {
+    final local = d['resolvedLocal']?.toString().trim() ?? '';
+    if (local.isEmpty || local.toLowerCase().startsWith('cron ')) return null;
+    return local;
+  }
+
+  String _formatHistWhen(String? iso) {
+    if (iso == null || iso.isEmpty) return '—';
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return iso;
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} '
+        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  }
+
+  Widget _histRow({
+    required ThemeData theme,
+    required String title,
+    required String badge,
+    Color? badgeFg,
+    Color? badgeBg,
+    String? meta,
+    String? foot,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: badgeBg ??
+                        theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    badge,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: badgeFg ?? theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (meta != null && meta.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(meta, style: theme.textTheme.bodySmall),
+            ],
+            if (foot != null && foot.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                foot,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _schedulesHistoriesBody(AppLocalizations l10n, ThemeData theme) {
+    if (_scheduleHistoryLoading &&
+        _scheduleDismissed.isEmpty &&
+        _scheduleReceipts.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return RefreshIndicator(
+      onRefresh: _refreshScheduleHistories,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+        children: [
+          Text(
+            l10n.schedulesChatHistoriesHint,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              height: 1.4,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            l10n.schedHistoryNotSet,
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          if (_scheduleDismissed.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                l10n.schedNoDismissed,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                ),
+              ),
+            )
+          else
+            ..._scheduleDismissed.take(20).map((d) {
+              final expired = d['status']?.toString() == 'expired';
+              return _histRow(
+                theme: theme,
+                title: _dismissedTitle(d, l10n),
+                badge: expired
+                    ? l10n.schedDismissedExpired
+                    : l10n.schedDismissedCanceled,
+                badgeFg: expired
+                    ? theme.colorScheme.tertiary
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                badgeBg: expired
+                    ? theme.colorScheme.tertiary.withValues(alpha: 0.14)
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                meta: _dismissedWhen(d),
+                foot: l10n.schedulesChatClosedAt(
+                  _formatHistWhen(d['closedAt']?.toString()),
+                ),
+              );
+            }),
+          const SizedBox(height: 16),
+          Text(
+            l10n.schedHistoryRuns,
+            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 8),
+          if (_scheduleReceipts.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                l10n.schedNoReceipts,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                ),
+              ),
+            )
+          else
+            ..._scheduleReceipts.take(20).map((r) {
+              final status = r['execStatus']?.toString() ?? '—';
+              final ok = status == 'ok';
+              final err = status == 'error';
+              return _histRow(
+                theme: theme,
+                title: (r['jobId']?.toString() ?? '—'),
+                badge: status,
+                badgeFg: ok
+                    ? theme.colorScheme.primary
+                    : err
+                        ? theme.colorScheme.error
+                        : null,
+                badgeBg: ok
+                    ? theme.colorScheme.primary.withValues(alpha: 0.12)
+                    : err
+                        ? theme.colorScheme.error.withValues(alpha: 0.12)
+                        : null,
+                foot: l10n.schedulesChatRanAt(
+                  _formatHistWhen(
+                    r['finishedAt']?.toString() ?? r['startedAt']?.toString(),
+                  ),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
+  Widget _schedulesPaneTabs(AppLocalizations l10n, ThemeData theme) {
+    Widget tab(String id, String label) {
+      final selected = _schedulesPane == id;
+      return Expanded(
+        child: InkWell(
+          onTap: _sending
+              ? null
+              : () {
+                  if (id == _schedulesPane) return;
+                  setState(() => _schedulesPane = id);
+                  if (id == 'histories') unawaited(_refreshScheduleHistories());
+                },
+          child: Container(
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  width: 2,
+                  color: selected ? theme.colorScheme.primary : Colors.transparent,
+                ),
+              ),
+            ),
+            child: Text(
+              label,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: selected
+                    ? theme.colorScheme.primary
+                    : theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Material(
+      color: theme.scaffoldBackgroundColor,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(
+            bottom: BorderSide(color: theme.dividerColor.withValues(alpha: 0.6)),
+          ),
+        ),
+        child: Row(
+          children: [
+            tab('chat', l10n.schedulesChatTabChat),
+            tab('histories', l10n.schedulesChatTabHistories),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _chatChrome(AppLocalizations l10n, ThemeData theme) {
@@ -2062,6 +2472,175 @@ class _ChatTabState extends State<ChatTab> {
     }
   }
 
+  Widget _choiceCard(Map<String, dynamic> row, AppLocalizations l10n, ThemeData theme) {
+    final id = row['id']?.toString() ?? '';
+    final selection = row['selection']?.toString() ?? 'one';
+    final question = row['question']?.toString() ?? '';
+    final expiry = _choiceExpiryLabel(row, l10n);
+    final expired = expiry == l10n.choiceCardExpired;
+    final optionsRaw = row['options'];
+    final options = optionsRaw is List
+        ? optionsRaw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+        : <Map<String, dynamic>>[];
+
+    Widget cancelBtn = OutlinedButton(
+      onPressed: expired ? null : () => unawaited(_answerChoice(row, cancel: true)),
+      child: Text(l10n.choiceCardCancel),
+    );
+
+    Widget body;
+    if (expired) {
+      body = Text(
+        l10n.choiceCardExpiredHint,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+      );
+    } else if (selection == 'text') {
+      final ctrl = _choiceTextCtrls.putIfAbsent(id, TextEditingController.new);
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: ctrl,
+            maxLines: row['multiline'] == true ? 4 : 2,
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              isDense: true,
+              hintText: l10n.choiceCardTextPlaceholder,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton(
+                onPressed: () {
+                  final text = ctrl.text.trim();
+                  if (text.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(l10n.choiceCardPickOne)),
+                    );
+                    return;
+                  }
+                  unawaited(_answerChoice(row, text: text));
+                },
+                child: Text(l10n.choiceCardConfirm),
+              ),
+              cancelBtn,
+            ],
+          ),
+        ],
+      );
+    } else if (selection == 'many') {
+      final selected = _choiceManySelected.putIfAbsent(id, () => <String>{});
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final o in options)
+            CheckboxListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              value: selected.contains(o['id']?.toString()),
+              title: Text(o['label']?.toString() ?? ''),
+              onChanged: (v) {
+                setState(() {
+                  final oid = o['id']?.toString();
+                  if (oid == null) return;
+                  if (v == true) {
+                    selected.add(oid);
+                  } else {
+                    selected.remove(oid);
+                  }
+                });
+              },
+            ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton(
+                onPressed: () {
+                  if (selected.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(l10n.choiceCardPickOne)),
+                    );
+                    return;
+                  }
+                  unawaited(_answerChoice(row, optionIds: selected.toList()));
+                },
+                child: Text(l10n.choiceCardConfirm),
+              ),
+              cancelBtn,
+            ],
+          ),
+        ],
+      );
+    } else {
+      body = Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final o in options)
+            o['destructive'] == true
+                ? OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: theme.colorScheme.error,
+                    ),
+                    onPressed: () => unawaited(
+                      _answerChoice(row, optionId: o['id']?.toString()),
+                    ),
+                    child: Text(o['label']?.toString() ?? ''),
+                  )
+                : FilledButton.tonal(
+                    onPressed: () => unawaited(
+                      _answerChoice(row, optionId: o['id']?.toString()),
+                    ),
+                    child: Text(o['label']?.toString() ?? ''),
+                  ),
+          cancelBtn,
+        ],
+      );
+    }
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: theme.colorScheme.secondaryContainer.withValues(alpha: expired ? 0.18 : 0.35),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    question,
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+                if (expiry != null)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: Chip(
+                      label: Text(expiry),
+                      visualDensity: VisualDensity.compact,
+                      labelStyle: theme.textTheme.labelSmall,
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            body,
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _approvalCard(Map<String, dynamic> row, AppLocalizations l10n, ThemeData theme) {
     final actuation = _isActuation(row);
     final objectId = row['objectId']?.toString();
@@ -2185,9 +2764,15 @@ class _ChatTabState extends State<ChatTab> {
       );
     }
 
+    final showSchedulesHistories = _isSchedules && _schedulesPane == 'histories';
+
     return Column(
       children: [
         _chatChrome(l10n, theme),
+        if (_isSchedules) _schedulesPaneTabs(l10n, theme),
+        if (showSchedulesHistories)
+          Expanded(child: _schedulesHistoriesBody(l10n, theme))
+        else ...[
         if (_isHome && _boundSources.isNotEmpty)
           SizedBox(
             height: 44,
@@ -2211,7 +2796,10 @@ class _ChatTabState extends State<ChatTab> {
               ],
             ),
           ),
-        if (_pending.isNotEmpty || _approvalsLoading)
+        if (_pending.isNotEmpty ||
+            _approvalsLoading ||
+            _pendingChoices.isNotEmpty ||
+            _choicesLoading)
           Material(
             color: theme.scaffoldBackgroundColor,
             child: Padding(
@@ -2233,6 +2821,20 @@ class _ChatTabState extends State<ChatTab> {
                   if (_approvalsLoading && _pending.isEmpty)
                     const LinearProgressIndicator(),
                   ..._pending.map((row) => _approvalCard(row, l10n, theme)),
+                  if (_pendingChoices.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6, left: 4, top: 4),
+                      child: Text(
+                        l10n.chatPendingChoices(_pendingChoices.length),
+                        style: theme.textTheme.labelLarge?.copyWith(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
+                          letterSpacing: 0.4,
+                        ),
+                      ),
+                    ),
+                  if (_choicesLoading && _pendingChoices.isEmpty)
+                    const LinearProgressIndicator(),
+                  ..._pendingChoices.map((row) => _choiceCard(row, l10n, theme)),
                 ],
               ),
             ),
@@ -2280,7 +2882,10 @@ class _ChatTabState extends State<ChatTab> {
                   ),
                 )
               : RefreshIndicator(
-                  onRefresh: _refreshApprovals,
+                  onRefresh: () async {
+                    await _refreshApprovals();
+                    await _refreshChoices();
+                  },
                   child: ListView.builder(
                     controller: _scrollCtrl,
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
@@ -2382,6 +2987,7 @@ class _ChatTabState extends State<ChatTab> {
             ),
           ),
         ),
+        ], // schedules chat pane (not histories)
       ],
     );
   }

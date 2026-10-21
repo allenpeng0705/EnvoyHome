@@ -19,6 +19,7 @@ import { DaemonLogger } from "../dist/logger.js";
 import { WorkflowStore } from "../dist/workflows.js";
 import { WorkflowStepTemplateStore } from "../dist/workflow-step-templates.js";
 import { ScheduleService } from "../dist/schedule/service.js";
+import { StandingOrderStore } from "../dist/standing-orders.js";
 import { SkillService } from "../dist/skills.js";
 import { ArtifactService } from "../dist/artifacts.js";
 import { WebSearchService } from "../dist/web-search.js";
@@ -70,6 +71,7 @@ function channelRouterDeps(stateDir: string): RouterDeps {
     workflows: new WorkflowStore(homePaths(stateDir)),
     workflowStepTemplates: new WorkflowStepTemplateStore(homePaths(stateDir)),
     schedules: new ScheduleService({ paths: homePaths(stateDir) }),
+    standingOrders: new StandingOrderStore(homePaths(stateDir)),
     skills: new SkillService(homePaths(stateDir)),
     artifacts: new ArtifactService(homePaths(stateDir), () => "http://127.0.0.1:1"),
     webSearch: new WebSearchService(homePaths(stateDir)),

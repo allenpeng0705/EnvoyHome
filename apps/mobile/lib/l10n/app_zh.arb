@@ -284,7 +284,9 @@
   "schedDayOfMonth": "{d}号",
   "@schedDayOfMonth": {
     "placeholders": {
-      "d": { "type": "String" }
+      "d": {
+        "type": "String"
+      }
     }
   },
   "wfEditorTitle": "Workflow",
@@ -602,7 +604,9 @@
   "profilesTimeZoneValue": "时区：{tz}",
   "@profilesTimeZoneValue": {
     "placeholders": {
-      "tz": { "type": "String" }
+      "tz": {
+        "type": "String"
+      }
     }
   },
   "profilesTimeZoneEdit": "时区",
@@ -612,7 +616,9 @@
   "profilesTimeZoneDone": "时区已设为 {tz}",
   "@profilesTimeZoneDone": {
     "placeholders": {
-      "tz": { "type": "String" }
+      "tz": {
+        "type": "String"
+      }
     }
   },
   "profilesShareLocationTitle": "与 Home 共享位置",
@@ -675,5 +681,57 @@
   "homeFolderComputer": "此电脑",
   "homeFolderHome": "主目录",
   "homeFolderParent": "上级文件夹",
-  "homeFolderNoSubfolders": "没有子文件夹"
+  "homeFolderNoSubfolders": "没有子文件夹",
+  "choiceCardConfirm": "确认",
+  "choiceCardPickOne": "请至少选一项。",
+  "choiceCardAnswered": "已收到。",
+  "choiceCardFailed": "无法提交该选择：{error}",
+  "@choiceCardFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatPendingChoices": "{count} 项等待你的选择",
+  "@chatPendingChoices": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "choiceCardCancel": "取消",
+  "choiceCardCanceled": "已取消选择。",
+  "choiceCardExpired": "已过期",
+  "choiceCardExpiredHint": "该选择已过期 — 如仍需要请再问一次。",
+  "choiceCardExpiresIn": "{mins} 分钟后过期",
+  "choiceCardTextPlaceholder": "输入你的回答",
+  "@choiceCardExpiresIn": {
+    "placeholders": {
+      "mins": {
+        "type": "int"
+      }
+    }
+  },
+  "schedulesChatTabChat": "日程",
+  "schedulesChatTabHistories": "历史",
+  "schedulesChatHistoriesHint": "已取消或过期的提议，以及近期运行记录。",
+  "jobsHistoriesMovedHint": "历史已移至日程 → 历史",
+  "schedulesChatClosedAt": "关闭于 {when}",
+  "@schedulesChatClosedAt": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "schedulesChatRanAt": "运行于 {when}",
+  "@schedulesChatRanAt": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  }
 }

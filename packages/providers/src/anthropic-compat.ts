@@ -1,12 +1,14 @@
 // Anthropic Messages API adapter (Design §8.1 cloud_anthropic_compat).
 
 import type {
+  ChatContentPart,
   ChatMessage,
   CompletionRequest,
   CompletionResult,
   ModelProvider,
   ProviderSecretStore,
 } from "./provider.js";
+import { chatContentToText } from "./provider.js";
 import { joinProviderUrl } from "./url.js";
 
 export interface AnthropicCompatOptions {
@@ -20,32 +22,79 @@ export interface AnthropicCompatOptions {
   anthropicVersion?: string;
 }
 
+type AnthropicContentBlock =
+  | { type: "text"; text: string }
+  | {
+      type: "image";
+      source: { type: "base64"; media_type: string; data: string };
+    };
+
+type AnthropicMsg = {
+  role: "user" | "assistant";
+  content: string | AnthropicContentBlock[];
+};
+
+function contentToAnthropic(content: string | ChatContentPart[]): string | AnthropicContentBlock[] {
+  if (typeof content === "string") return content;
+  const blocks: AnthropicContentBlock[] = [];
+  for (const p of content) {
+    if (p.type === "text") {
+      blocks.push({ type: "text", text: p.text });
+      continue;
+    }
+    const url = p.image_url?.url ?? "";
+    const m = /^data:([^;]+);base64,(.+)$/s.exec(url);
+    if (m) {
+      blocks.push({
+        type: "image",
+        source: { type: "base64", media_type: m[1]!, data: m[2]! },
+      });
+    } else {
+      blocks.push({ type: "text", text: "[image]" });
+    }
+  }
+  return blocks.length === 1 && blocks[0]!.type === "text" ? blocks[0]!.text : blocks;
+}
+
+function coalesceContent(
+  a: string | AnthropicContentBlock[],
+  b: string | AnthropicContentBlock[],
+): string | AnthropicContentBlock[] {
+  const toBlocks = (c: string | AnthropicContentBlock[]): AnthropicContentBlock[] =>
+    typeof c === "string" ? [{ type: "text", text: c }] : c;
+  return [...toBlocks(a), ...toBlocks(b)];
+}
+
 function toAnthropicBody(req: CompletionRequest, defaultModel: string): Record<string, unknown> {
   const model = req.model ?? defaultModel;
   let system: string | undefined;
-  const messages: Array<{ role: "user" | "assistant"; content: string }> = [];
+  const messages: AnthropicMsg[] = [];
   for (const m of req.messages) {
     if (m.role === "system") {
-      system = system ? `${system}\n${m.content}` : m.content;
+      const text = chatContentToText(m.content);
+      system = system ? `${system}\n${text}` : text;
       continue;
     }
     if (m.role === "tool") {
-      messages.push({ role: "user", content: m.content });
+      messages.push({ role: "user", content: chatContentToText(m.content) });
       continue;
     }
-    messages.push({ role: m.role === "assistant" ? "assistant" : "user", content: m.content });
+    messages.push({
+      role: m.role === "assistant" ? "assistant" : "user",
+      content: contentToAnthropic(m.content),
+    });
   }
   if (messages.length === 0) {
     messages.push({ role: "user", content: "(empty)" });
   }
   // Anthropic requires alternating roles starting with user — coalesce if needed.
-  const normalized: Array<{ role: "user" | "assistant"; content: string }> = [];
+  const normalized: AnthropicMsg[] = [];
   for (const m of messages) {
     const last = normalized[normalized.length - 1];
     if (last && last.role === m.role) {
-      last.content = `${last.content}\n${m.content}`;
+      last.content = coalesceContent(last.content, m.content);
     } else {
-      normalized.push({ ...m });
+      normalized.push({ role: m.role, content: m.content });
     }
   }
   if (normalized[0]?.role === "assistant") {

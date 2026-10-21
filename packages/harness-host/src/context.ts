@@ -16,6 +16,11 @@ export interface TurnContext {
   workspace_mounts?: Array<{ id: string; host_path: string; mode: "ro" | "rw" }>;
   origin: TurnOrigin;
   standing_inject?: string;
+  /**
+   * Design §19.13 — depth of spawn_helper nesting (0 = parent turn).
+   * Child helpers run at depth 1; depth ≥ 1 cannot spawn again.
+   */
+  helper_depth?: number;
   policy_snapshot: {
     origin: TurnOrigin;
     tool_policy: "standard" | "restricted";

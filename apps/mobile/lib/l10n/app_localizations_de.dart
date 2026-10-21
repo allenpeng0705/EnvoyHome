@@ -933,10 +933,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get schedNoDismissed => 'No canceled or expired proposals.';
 
   @override
-  String get schedDismissedCanceled => 'canceled';
+  String get schedDismissedCanceled => 'Abgebrochen';
 
   @override
-  String get schedDismissedExpired => 'expired';
+  String get schedDismissedExpired => 'Abgelaufen';
 
   @override
   String get schedNext => 'Nächste';
@@ -1478,5 +1478,68 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String chatPendingApprovals(int count) {
     return '$count warten auf Ihre Freigabe';
+  }
+
+  @override
+  String get choiceCardConfirm => 'Bestätigen';
+
+  @override
+  String get choiceCardPickOne => 'Bitte mindestens eine Option wählen.';
+
+  @override
+  String get choiceCardAnswered => 'Erhalten.';
+
+  @override
+  String choiceCardFailed(String error) {
+    return 'Auswahl konnte nicht gesendet werden: $error';
+  }
+
+  @override
+  String chatPendingChoices(int count) {
+    return '$count warten auf Ihre Auswahl';
+  }
+
+  @override
+  String get choiceCardCancel => 'Abbrechen';
+
+  @override
+  String get choiceCardCanceled => 'Auswahl verworfen.';
+
+  @override
+  String get choiceCardExpired => 'Abgelaufen';
+
+  @override
+  String get choiceCardExpiredHint =>
+      'Diese Auswahl ist abgelaufen — fragen Sie erneut, falls nötig.';
+
+  @override
+  String choiceCardExpiresIn(int mins) {
+    return 'Läuft in $mins Min. ab';
+  }
+
+  @override
+  String get choiceCardTextPlaceholder => 'Antwort eingeben';
+
+  @override
+  String get schedulesChatTabChat => 'Zeitpläne';
+
+  @override
+  String get schedulesChatTabHistories => 'Verläufe';
+
+  @override
+  String get schedulesChatHistoriesHint =>
+      'Abgebrochene oder abgelaufene Vorschläge und letzte Läufe.';
+
+  @override
+  String get jobsHistoriesMovedHint => 'Verlauf unter Zeitpläne → Verläufe';
+
+  @override
+  String schedulesChatClosedAt(String when) {
+    return 'Geschlossen $when';
+  }
+
+  @override
+  String schedulesChatRanAt(String when) {
+    return 'Gelaufen $when';
   }
 }

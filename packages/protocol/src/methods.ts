@@ -216,6 +216,44 @@ const approval = obj(
   ],
 );
 
+/** EnvoyCoder ApprovalChoices peer — chat question card (Design V-UX-14). */
+const choiceOption = obj(
+  {
+    id: str({ minLength: 1 }),
+    label: str({ minLength: 1 }),
+    destructive: bool(),
+  },
+  ["id", "label"],
+);
+
+const pendingChoice = obj(
+  {
+    id: str({ minLength: 1 }),
+    accountId: str({ minLength: 1 }),
+    sessionId: str({ minLength: 1 }),
+    turnId: str(),
+    question: str({ minLength: 1 }),
+    detail: str(),
+    options: arr(choiceOption),
+    selection: enumOf("one", "many", "text"),
+    multiline: bool(),
+    purpose: enumOf("ask_user", "schedule_candidates", "home_disambiguation", "general"),
+    createdAt: iso(),
+    expiresAt: iso(),
+  },
+  [
+    "id",
+    "accountId",
+    "sessionId",
+    "question",
+    "options",
+    "selection",
+    "purpose",
+    "createdAt",
+    "expiresAt",
+  ],
+);
+
 const grant = obj(
   {
     id: str({ minLength: 1 }),
@@ -1299,6 +1337,49 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
       ["id", "decision", "argsDigest"],
     ),
     result: obj({ ok: bool(), grantId: str() }, ["ok"]),
+  },
+  "home.listChoices": {
+    group: "chat",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "List pending chat choice cards (Design V-UX-14)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        sessionId: str({ minLength: 1 }),
+      },
+      ["accountId"],
+    ),
+    result: obj({ choices: arr(pendingChoice) }, ["choices"]),
+  },
+  "home.answerChoice": {
+    group: "chat",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Answer or cancel a chat choice card (one / many / text); TTL expires as cancel",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        id: str({ minLength: 1 }),
+        optionId: str({ minLength: 1 }),
+        optionIds: arr(str({ minLength: 1 })),
+        text: str({ minLength: 1 }),
+        cancel: bool(),
+      },
+      ["accountId", "id"],
+    ),
+    result: obj(
+      {
+        ok: bool(),
+        labels: arr(str()),
+        optionIds: arr(str()),
+        text: str(),
+        followUp: bool(),
+        canceled: bool(),
+        proposed: bool(),
+      },
+      ["ok"],
+    ),
   },
   "home.listGrants": {
     group: "approvals",
@@ -2391,6 +2472,185 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         dismissed: arr(dismissedSchedule),
       },
       ["jobs"],
+    ),
+  },
+  /** Design §19.10 — Owner opt-in heartbeat system job. */
+  "home.getHeartbeatConfig": {
+    group: "schedules",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Read heartbeat interval/prompt/enabled for an account (Design §19.10)",
+    params: obj({ accountId: str({ minLength: 1 }) }, ["accountId"]),
+    result: obj(
+      {
+        enabled: bool(),
+        everyMs: int({ minimum: 1 }),
+        prompt: str({ minLength: 1 }),
+        minEveryMs: int({ minimum: 1 }),
+      },
+      ["enabled", "everyMs", "prompt", "minEveryMs"],
+    ),
+  },
+  "home.setHeartbeatConfig": {
+    group: "schedules",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Enable/configure or disable the heartbeat system job (Design §19.10)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        enabled: bool(),
+        everyMs: int({ minimum: 1 }),
+        prompt: str({ minLength: 1 }),
+      },
+      ["accountId"],
+    ),
+    result: obj(
+      {
+        ok: bool(),
+        enabled: bool(),
+        everyMs: int({ minimum: 1 }),
+        prompt: str({ minLength: 1 }),
+        minEveryMs: int({ minimum: 1 }),
+      },
+      ["ok", "enabled", "everyMs", "prompt", "minEveryMs"],
+    ),
+  },
+  "home.listStandingOrders": {
+    group: "schedules",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "List standing orders for an account (Design §19.10)",
+    params: obj({ accountId: str({ minLength: 1 }) }, ["accountId"]),
+    result: obj(
+      {
+        orders: arr(
+          obj(
+            {
+              id: str({ minLength: 1 }),
+              name: str(),
+              enabled: bool(),
+              when: obj({}, []),
+              action: obj({}, []),
+              createdAt: iso(),
+              updatedAt: iso(),
+            },
+            ["id", "name", "enabled", "when", "action", "createdAt", "updatedAt"],
+          ),
+        ),
+      },
+      ["orders"],
+    ),
+  },
+  "home.putStandingOrder": {
+    group: "schedules",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Create or update a standing order; cron syncs into ScheduleService (Design §19.10)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        id: str({ minLength: 1 }),
+        name: str({ minLength: 1 }),
+        enabled: bool(),
+        when: obj({}, []),
+        action: obj({}, []),
+      },
+      ["accountId", "name", "when", "action"],
+    ),
+    result: obj(
+      {
+        order: obj(
+          {
+            id: str({ minLength: 1 }),
+            name: str(),
+            enabled: bool(),
+            when: obj({}, []),
+            action: obj({}, []),
+            createdAt: iso(),
+            updatedAt: iso(),
+          },
+          ["id", "name", "enabled", "when", "action", "createdAt", "updatedAt"],
+        ),
+      },
+      ["order"],
+    ),
+  },
+  "home.removeStandingOrder": {
+    group: "schedules",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Remove a standing order and its synced cron job (Design §19.10)",
+    params: obj(
+      { accountId: str({ minLength: 1 }), id: str({ minLength: 1 }) },
+      ["accountId", "id"],
+    ),
+    result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.setStandingOrderEnabled": {
+    group: "schedules",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Enable or disable a standing order (Design §19.10)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        id: str({ minLength: 1 }),
+        enabled: bool(),
+      },
+      ["accountId", "id", "enabled"],
+    ),
+    result: obj(
+      {
+        order: obj(
+          {
+            id: str({ minLength: 1 }),
+            name: str(),
+            enabled: bool(),
+            when: obj({}, []),
+            action: obj({}, []),
+            createdAt: iso(),
+            updatedAt: iso(),
+          },
+          ["id", "name", "enabled", "when", "action", "createdAt", "updatedAt"],
+        ),
+      },
+      ["order"],
+    ),
+  },
+  /** Design §19.12 D2 — Owner opt-in for image_generate (fail-closed default). */
+  "home.getMediaGenerateConfig": {
+    group: "artifacts",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Read Owner image_generate enable + daily cap (Design §19.12 D2)",
+    params: obj({ accountId: str({ minLength: 1 }) }, ["accountId"]),
+    result: obj(
+      {
+        enabled: bool(),
+        maxPerDay: int({ minimum: 1 }),
+        dayCount: int({ minimum: 0 }),
+        hasProvider: bool(),
+      },
+      ["enabled", "maxPerDay", "hasProvider"],
+    ),
+  },
+  "home.setMediaGenerateConfig": {
+    group: "artifacts",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Enable/configure image_generate for an account (Owner; Design §19.12 D2)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        enabled: bool(),
+        maxPerDay: int({ minimum: 1 }),
+      },
+      ["accountId"],
+    ),
+    result: obj(
+      { ok: bool(), enabled: bool(), maxPerDay: int({ minimum: 1 }) },
+      ["ok", "enabled", "maxPerDay"],
     ),
   },
   "home.cancelScheduleProposal": {

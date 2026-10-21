@@ -24,15 +24,41 @@ export function normalizeOutbound(kind: ChannelKind, msg: OutboundMessage): Outb
       : raw.format === undefined
         ? undefined
         : "markdown";
+  const action =
+    msg.action === "send" ||
+    msg.action === "notify" ||
+    msg.action === "reply" ||
+    msg.action === "react" ||
+    msg.action === "edit" ||
+    msg.action === "delete" ||
+    msg.action === "pin" ||
+    msg.action === "unpin"
+      ? msg.action
+      : undefined;
+  const mediaPaths = Array.isArray(msg.mediaPaths)
+    ? msg.mediaPaths.filter((p): p is string => typeof p === "string" && p.trim().length > 0)
+    : undefined;
   const next: OutboundMessage = {
     accountId: msg.accountId,
     text: msg.text,
     ...(msg.rawRef !== undefined ? { rawRef: msg.rawRef } : {}),
     ...(format !== undefined ? { format } : {}),
     ...(msg.kind !== undefined ? { kind: msg.kind } : {}),
+    ...(action !== undefined ? { action } : {}),
+    ...(typeof msg.reaction === "string" && msg.reaction.trim()
+      ? { reaction: msg.reaction.trim().slice(0, 64) }
+      : {}),
+    ...(mediaPaths && mediaPaths.length > 0 ? { mediaPaths: mediaPaths.slice(0, 8) } : {}),
   };
-  if (kind === "event-source" && next.kind === undefined) {
-    return { ...next, kind: "notify" };
+  if (kind === "event-source") {
+    // Event-source: notify-only; strip chat-rich fields that imply actuation/thread.
+    return {
+      accountId: next.accountId,
+      text: next.text,
+      kind: "notify",
+      ...(next.rawRef !== undefined ? { rawRef: next.rawRef } : {}),
+      ...(next.format !== undefined ? { format: next.format } : {}),
+    };
   }
   return next;
 }

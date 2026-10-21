@@ -934,10 +934,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get schedNoDismissed => 'No canceled or expired proposals.';
 
   @override
-  String get schedDismissedCanceled => 'canceled';
+  String get schedDismissedCanceled => 'Annulé';
 
   @override
-  String get schedDismissedExpired => 'expired';
+  String get schedDismissedExpired => 'Expiré';
 
   @override
   String get schedNext => 'Prochain';
@@ -1481,5 +1481,69 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String chatPendingApprovals(int count) {
     return '$count en attente de votre approbation';
+  }
+
+  @override
+  String get choiceCardConfirm => 'Confirmer';
+
+  @override
+  String get choiceCardPickOne => 'Choisissez au moins une option.';
+
+  @override
+  String get choiceCardAnswered => 'Reçu.';
+
+  @override
+  String choiceCardFailed(String error) {
+    return 'Impossible d\'envoyer ce choix : $error';
+  }
+
+  @override
+  String chatPendingChoices(int count) {
+    return '$count en attente de votre choix';
+  }
+
+  @override
+  String get choiceCardCancel => 'Annuler';
+
+  @override
+  String get choiceCardCanceled => 'Choix annulé.';
+
+  @override
+  String get choiceCardExpired => 'Expiré';
+
+  @override
+  String get choiceCardExpiredHint =>
+      'Ce choix a expiré — reposez la question si besoin.';
+
+  @override
+  String choiceCardExpiresIn(int mins) {
+    return 'Expire dans $mins min';
+  }
+
+  @override
+  String get choiceCardTextPlaceholder => 'Saisissez votre réponse';
+
+  @override
+  String get schedulesChatTabChat => 'Plannings';
+
+  @override
+  String get schedulesChatTabHistories => 'Historiques';
+
+  @override
+  String get schedulesChatHistoriesHint =>
+      'Propositions annulées ou expirées, et exécutions récentes.';
+
+  @override
+  String get jobsHistoriesMovedHint =>
+      'Historique sous Plannings → Historiques';
+
+  @override
+  String schedulesChatClosedAt(String when) {
+    return 'Fermé $when';
+  }
+
+  @override
+  String schedulesChatRanAt(String when) {
+    return 'Exécuté $when';
   }
 }

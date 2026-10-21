@@ -249,6 +249,7 @@ test("home.listWorkflowTools RPC + skill step returns SKILL.md body", async () =
         workflows: daemon.workflows,
         workflowStepTemplates: daemon.workflowStepTemplates,
         schedules: daemon.schedules,
+        standingOrders: daemon.standingOrders,
         skills: daemon.skills,
         artifacts: daemon.artifacts,
     webSearch: daemon.webSearch,
@@ -468,6 +469,7 @@ test("V-CRON-11: schedule propose refuses invented WHEN specs", async () => {
           channels: daemon.channels,
           paths,
           schedules: daemon.schedules,
+          standingOrders: daemon.standingOrders,
         }),
       /refuses whenInstant/,
     );
@@ -479,6 +481,7 @@ test("V-CRON-11: schedule propose refuses invented WHEN specs", async () => {
       channels: daemon.channels,
       paths,
       schedules: daemon.schedules,
+      standingOrders: daemon.standingOrders,
     });
     const parsed = JSON.parse(out) as { proposalId: string; resolvedLocal: string };
     assert.ok(parsed.proposalId);

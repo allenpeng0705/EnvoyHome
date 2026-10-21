@@ -385,11 +385,13 @@ test("planLocalHomeActuation: MQTT publish for bound mqtt topics", () => {
   assert.ok(mqttOnly);
   assert.equal(mqttOnly!.tools[0]!.tool, "mqtt_publish");
 
-  // Broad “mqtt” with several devices → no silent pick; choice list, no tools.
+  // Broad “mqtt” with several devices → no silent pick; short reply + choiceCandidates (V-UX-14).
   const ambiguous = planLocalHomeActuation("打开 mqtt", bound);
   assert.ok(ambiguous);
   assert.equal(ambiguous!.tools.length, 0);
-  assert.match(ambiguous!.reply, /mqtt_desk|mqtt_porch|更具体|specific/i);
+  assert.match(ambiguous!.reply, /下方选择|pick one below/i);
+  assert.doesNotMatch(ambiguous!.reply, /mqtt_desk|mqtt_porch/);
+  assert.ok(ambiguous!.choiceCandidates && ambiguous!.choiceCandidates.length >= 2);
 });
 
 test("V-HA-22: bound card lists household bound devices; capped; overflow note", () => {

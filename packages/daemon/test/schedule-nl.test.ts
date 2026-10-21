@@ -279,6 +279,21 @@ test("V-CRON-NL: this weekend asks without clock; resolves with clock", () => {
   if (!ask.ok) {
     assert.equal(ask.reason, "missing_time");
     assert.ok(ask.candidates && ask.candidates.length >= 2);
+    // Candidates must resolve alone to the intended DOW (V-UX-14 propose path).
+    for (const c of ask.candidates!) {
+      const picked = at(c);
+      assert.ok(picked.ok, c);
+      if (!picked.ok) continue;
+      const dow = zonedParts(new Date(picked.spec.whenInstant!), TZ).dow;
+      assert.ok(dow === 0 || dow === 6, `${c} → dow ${dow}`);
+    }
+    const sun = ask.candidates!.find((c) => /sunday|周日|sonntag|dimanche|domenica|日曜|일요일/i.test(c));
+    assert.ok(sun);
+    const sunR = at(sun!);
+    assert.ok(sunR.ok);
+    if (sunR.ok) {
+      assert.equal(zonedParts(new Date(sunR.spec.whenInstant!), TZ).dow, 0);
+    }
   }
   const ok = at("Remind me this weekend at 10am to relax");
   assert.ok(ok.ok);
@@ -286,6 +301,24 @@ test("V-CRON-NL: this weekend asks without clock; resolves with clock", () => {
   // REF = Friday → Saturday 10-10
   assert.equal(zonedParts(new Date(ok.spec.whenInstant!), TZ).day, 10);
   assert.equal(zonedParts(new Date(ok.spec.whenInstant!), TZ).dow, 6);
+});
+
+test("V-CRON-NL: bare Sunday honors weekday (not bare-clock tomorrow)", () => {
+  const r = at("Remind me Sunday at 10am to call");
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  const p = zonedParts(new Date(r.spec.whenInstant!), TZ);
+  assert.equal(p.dow, 0);
+  assert.equal(p.day, 11);
+});
+
+test("V-CRON-NL: 这周六 / 本周日 honor weekday", () => {
+  const sat = at("提醒我这周六上午10点打电话");
+  const sun = at("提醒我本周日上午10点打电话");
+  assert.ok(sat.ok && sun.ok);
+  if (!sat.ok || !sun.ok) return;
+  assert.equal(zonedParts(new Date(sat.spec.whenInstant!), TZ).dow, 6);
+  assert.equal(zonedParts(new Date(sun.spec.whenInstant!), TZ).dow, 0);
 });
 
 test("V-CRON-NL: past this Friday returns candidates", () => {

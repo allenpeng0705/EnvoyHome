@@ -20,8 +20,8 @@ export interface SchedulePayload {
   /** tool name when kind=tool */
   toolName?: string;
   toolArgs?: Record<string, unknown>;
-  /** system job: consolidate | flush | review */
-  systemJob?: "consolidate" | "flush" | "review";
+  /** system job: consolidate | flush | review | heartbeat (§19.10) */
+  systemJob?: "consolidate" | "flush" | "review" | "heartbeat";
   /** agentTurn — frozen prompt (Design §7.4 V-CRON-12). */
   prompt?: string;
   toolPolicyPreset?: AgentTurnToolPolicy;

@@ -374,6 +374,45 @@ class EnvoyHomeSession {
         'scope': scope,
       });
 
+  /// Pending chat choice cards (V-UX-14 — one / many / text).
+  Future<Map<String, dynamic>> listChoices({
+    required String accountId,
+    String? sessionId,
+  }) {
+    final params = <String, dynamic>{'accountId': accountId};
+    if (sessionId != null && sessionId.isNotEmpty) {
+      params['sessionId'] = sessionId;
+    }
+    return _call('home.listChoices', params);
+  }
+
+  Future<Map<String, dynamic>> answerChoice({
+    required String accountId,
+    required String id,
+    String? optionId,
+    List<String>? optionIds,
+    String? text,
+    bool cancel = false,
+  }) {
+    final params = <String, dynamic>{
+      'accountId': accountId,
+      'id': id,
+    };
+    if (cancel) {
+      params['cancel'] = true;
+    }
+    if (optionId != null && optionId.isNotEmpty) {
+      params['optionId'] = optionId;
+    }
+    if (optionIds != null && optionIds.isNotEmpty) {
+      params['optionIds'] = optionIds;
+    }
+    if (text != null && text.trim().isNotEmpty) {
+      params['text'] = text.trim();
+    }
+    return _call('home.answerChoice', params);
+  }
+
   Future<Map<String, dynamic>> registerPushToken({
     required String platform,
     required String token,

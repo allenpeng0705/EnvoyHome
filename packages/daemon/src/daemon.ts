@@ -47,6 +47,7 @@ import { WebSearchService } from "./web-search.js";
 import { BrowserControlService } from "./browser-control.js";
 import { ProductEventBus, homeEventDispositions } from "./product-events.js";
 import { ScheduleService } from "./schedule/service.js";
+import { StandingOrderStore } from "./standing-orders.js";
 import { LocalEngineService } from "./local-engine/service.js";
 import { ensureSmarthomeToolSpecsRegistered } from "./workflow-tools.js";
 import { DemoHaService } from "./demo-ha.js";
@@ -68,6 +69,7 @@ export interface RunningDaemon {
   workflows: WorkflowStore;
   workflowStepTemplates: WorkflowStepTemplateStore;
   schedules: ScheduleService;
+  standingOrders: StandingOrderStore;
   skills: SkillService;
   artifacts: ArtifactService;
   webSearch: import("./web-search.js").WebSearchService;
@@ -245,6 +247,31 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
         await turns.runScheduledMemoryReview(job.accountId);
       } else if (sys === "flush") {
         await turns.runScheduledMemoryFlush(job.accountId);
+      } else if (sys === "heartbeat") {
+        // Design §19.10 / V-P2-AMB-1 — silent HEARTBEAT_OK → no push spam.
+        const prompt =
+          typeof job.payload.prompt === "string" && job.payload.prompt.trim()
+            ? job.payload.prompt.trim()
+            : "If nothing needs attention, reply exactly HEARTBEAT_OK.";
+        const hb = await turns.runHeartbeatTurn(job.accountId, { prompt });
+        if (hb.silent) {
+          return { execStatus: "ok", deliveryStatus: "none" };
+        }
+        const body = (hb.reply.trim() || "Heartbeat needs attention").slice(0, 500);
+        const { sent } = await push.notifyAccount(job.accountId, {
+          title: "EnvoyHome",
+          body,
+          data: {
+            type: "heartbeat",
+            jobId: job.id,
+            accountId: job.accountId,
+          },
+        });
+        const live = events.hasListeners("home:schedule-fired");
+        return {
+          execStatus: "ok",
+          deliveryStatus: sent > 0 || live ? "delivered" : "not-delivered",
+        };
       }
       return { execStatus: "ok", deliveryStatus: "none" };
     }
@@ -275,14 +302,57 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   turns.setEmit(events.emit);
   channels.attachTurns(turns, turns.privacyMode);
   // Sync workflow schedules for known accounts (+ review job when enabled)
+  const standingOrders = new StandingOrderStore(paths);
+  // Design §19.10 — channel_event / smarthome_event standing orders.
+  channels.setStandingOrderFire(async ({ accountId, trigger }) => {
+    const { fireStandingOrderMatches } = await import("./standing-orders.js");
+    const orders = await standingOrders.list(accountId);
+    await fireStandingOrderMatches({
+      orders,
+      trigger,
+      onNotify: async (_order, message) => {
+        await push.notifyAccount(accountId, {
+          title: "EnvoyHome",
+          body: message.slice(0, 500),
+          data: { type: "standing-order", accountId, kind: trigger.kind },
+        });
+        events.emit("home:schedule-fired", {
+          jobId: `standing-event:${trigger.kind}`,
+          accountId,
+          status: "ok",
+          deliveryStatus: "delivered",
+        });
+      },
+      onWorkflow: async (_order, workflowId) => {
+        await turns.runScheduledWorkflow(accountId, workflowId);
+      },
+      onAgentTurn: async (order, prompt) => {
+        await turns.runScheduledAgentTurn(accountId, {
+          prompt,
+          ...(order.action.kind === "agentTurn" && order.action.toolPolicyPreset
+            ? { toolPolicyPreset: order.action.toolPolicyPreset }
+            : {}),
+          ...(order.action.kind === "agentTurn" && order.action.maxToolRounds !== undefined
+            ? { maxToolRounds: order.action.maxToolRounds }
+            : {}),
+        });
+      },
+    });
+  });
   for (const a of await accounts.list()) {
     const pol = await turns.policy.get(a.accountId);
-    await schedules.watchAccount(a.accountId, { reviewEnabled: pol.reviewEnabled });
+    await schedules.watchAccount(a.accountId, {
+      reviewEnabled: pol.reviewEnabled,
+      heartbeatEnabled: pol.heartbeatEnabled,
+      heartbeatEveryMs: pol.heartbeatEveryMs,
+      heartbeatPrompt: pol.heartbeatPrompt,
+    });
     const defs = workflows.mergedForAccount(a.accountId);
     await schedules.syncWorkflowSchedules(
       a.accountId,
       workflows.scheduleSyncRows(defs),
     );
+    await schedules.syncStandingCronJobs(a.accountId, await standingOrders.list(a.accountId));
   }
   const subscriptions = new SubscriptionRegistry();
   const startedAt = new Date();
@@ -361,6 +431,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       workflows,
       workflowStepTemplates,
       schedules,
+      standingOrders,
       skills,
       artifacts,
       webSearch,
@@ -485,6 +556,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     workflows,
     workflowStepTemplates,
     schedules,
+    standingOrders,
     skills,
     artifacts,
     webSearch,

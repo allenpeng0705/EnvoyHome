@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, join } from "node:path";
 import { registerResetHook } from "@envoyhome/test-utils";
 import {
   PRODUCT_IDENTITY_MARKER,
@@ -28,6 +28,7 @@ import {
   type TurnContext,
   type TurnDeps,
   type TurnOrigin,
+  parseAssistantToolCalls,
 } from "@envoyhome/harness-host";
 import { isFilesystemRoot, resolveSandboxPath, safeJoin } from "./fs-jail.js";
 import type { HomePaths } from "./home-paths.js";
@@ -71,11 +72,21 @@ import {
 } from "@envoyhome/memory";
 import type { ProductEmit } from "./product-events.js";
 import { PolicyStore, PrivacyModeStore } from "./policy-store.js";
+import { MediaGenerateStore } from "./media-generate-store.js";
 import { formatSchedulesChatCard } from "./schedule/chat-card.js";
 import { isScheduleAffirmation, isScheduleDenial } from "./schedule/affirm.js";
 import { formatScheduleIntentOffer } from "./schedule/intent-offer.js";
 import { resolveScheduleFromText } from "./schedule/resolve-nl.js";
+import {
+  extractScheduleMessage,
+  scheduleCandidateProposeAttempts,
+} from "./schedule/choice-followup.js";
 import { resolveReferenceNow } from "./client-context.js";
+import {
+  ChoiceStore,
+  type ChoiceAnswer,
+  type PendingChoice,
+} from "./choice-store.js";
 import type { SkillService } from "./skills.js";
 import type { ChannelService } from "./channels/service.js";
 import type { ActuationService } from "./actuation-service.js";
@@ -121,6 +132,8 @@ interface ActiveTurn {
   sessionId: string;
   abort: AbortController;
   approvalWaiters: Map<string, (d: "allow" | "deny") => void>;
+  /** ask_user tool parks until home.answerChoice (or cancel/expire). */
+  choiceWaiters: Map<string, (a: ChoiceAnswer | null | "expired") => void>;
 }
 
 const active = new Map<string, ActiveTurn>();
@@ -177,6 +190,23 @@ function transcriptToHistory(lines: Record<string, unknown>[]): HistoryMessage[]
   return out;
 }
 
+function wireChoice(row: PendingChoice): Record<string, unknown> {
+  return {
+    id: row.id,
+    accountId: row.accountId,
+    sessionId: row.sessionId,
+    question: row.question,
+    options: row.options,
+    selection: row.selection,
+    purpose: row.purpose,
+    createdAt: row.createdAt,
+    expiresAt: row.expiresAt,
+    ...(row.turnId ? { turnId: row.turnId } : {}),
+    ...(row.detail ? { detail: row.detail } : {}),
+    ...(row.multiline === true ? { multiline: true } : {}),
+  };
+}
+
 function wireApproval(row: PendingApproval): Record<string, unknown> {
   return {
     id: row.id,
@@ -225,9 +255,11 @@ function wireGrant(g: {
 
 export class TurnService {
   readonly approvals: ApprovalStore;
+  readonly choices: ChoiceStore;
   readonly sessions: SessionStore;
   readonly policy: PolicyStore;
   readonly privacyMode: PrivacyModeStore;
+  readonly mediaGenerate: MediaGenerateStore;
   private emit: ProductEmit = () => undefined;
   private onComplete: ((info: TurnCompleteInfo) => void | Promise<void>) | undefined;
   /** Household Owner id for R3 workspace effectiveness (Design §4.1.1). */
@@ -250,8 +282,32 @@ export class TurnService {
   ) {
     this.sessions = sessions;
     this.approvals = new ApprovalStore((accountId) => this.paths.accountRoot(accountId));
+    this.choices = new ChoiceStore(
+      (accountId) => this.paths.accountRoot(accountId),
+      (row) => this.onChoiceExpired(row),
+    );
     this.policy = new PolicyStore(paths);
     this.privacyMode = new PrivacyModeStore(paths);
+    this.mediaGenerate = new MediaGenerateStore(paths);
+  }
+
+  /** Fail-closed: prune wakes parked ask_user (tool emits); else notify UI. */
+  private onChoiceExpired(row: PendingChoice): void {
+    if (row.turnId) {
+      const turn = active.get(row.turnId);
+      const waiter = turn?.choiceWaiters.get(row.id);
+      if (waiter) {
+        turn!.choiceWaiters.delete(row.id);
+        waiter("expired");
+        return;
+      }
+    }
+    this.emit("home:choice-resolved", {
+      id: row.id,
+      accountId: row.accountId,
+      sessionId: row.sessionId,
+      status: "expired",
+    });
   }
 
   setEmit(emit: ProductEmit): void {
@@ -654,6 +710,7 @@ export class TurnService {
       sessionId: input.sessionId,
       abort,
       approvalWaiters: new Map(),
+      choiceWaiters: new Map(),
     });
 
     const at = new Date().toISOString();
@@ -774,6 +831,7 @@ export class TurnService {
       sessionId: session.sessionId,
       abort,
       approvalWaiters: new Map(),
+      choiceWaiters: new Map(),
     });
     this.emit("home:turn-started", {
       turnId,
@@ -826,6 +884,7 @@ export class TurnService {
       sessionId: session.sessionId,
       abort,
       approvalWaiters: new Map(),
+      choiceWaiters: new Map(),
     });
     this.emit("home:turn-started", {
       turnId,
@@ -854,6 +913,229 @@ export class TurnService {
   }
 
   /**
+   * Design §19.12 D2 — background image_generate job (async Adapt).
+   * Quota consumed only on success; emits home:state-changed on settle.
+   */
+  private async runMediaGenerateJob(input: {
+    accountId: string;
+    jobId: string;
+    prompt: string;
+  }): Promise<void> {
+    try {
+      const out = await this.providers.generateImage({
+        accountId: input.accountId,
+        prompt: input.prompt,
+      });
+      if (!out.bytes.length || out.bytes.length > 8 * 1024 * 1024) {
+        throw new Error("generated image empty or exceeds 8 MiB");
+      }
+      await this.mediaGenerate.consumeQuota(input.accountId);
+      const stamp = Date.now().toString(36);
+      const safeExt = out.ext.replace(/[^a-z0-9]/gi, "") || "png";
+      const rel = `output/media/gen-${stamp}.${safeExt}`;
+      const abs = join(this.paths.accountFiles(input.accountId), rel);
+      await mkdir(dirname(abs), { recursive: true });
+      await writeFile(abs, out.bytes);
+      await this.mediaGenerate.updateJob(input.accountId, input.jobId, {
+        status: "done",
+        path: rel,
+        mimeType: out.mimeType,
+      });
+      this.emit("home:state-changed", {
+        scope: "daemon",
+        changedAt: new Date().toISOString(),
+        detail: {
+          kind: "media-generate",
+          jobId: input.jobId,
+          accountId: input.accountId,
+          status: "done",
+          path: rel,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await this.mediaGenerate.updateJob(input.accountId, input.jobId, {
+        status: "error",
+        error: message.slice(0, 500),
+      });
+      this.emit("home:state-changed", {
+        scope: "daemon",
+        changedAt: new Date().toISOString(),
+        detail: {
+          kind: "media-generate",
+          jobId: input.jobId,
+          accountId: input.accountId,
+          status: "error",
+          error: message.slice(0, 500),
+        },
+      });
+    }
+  }
+
+  /**
+   * Design §19.11 / V-P2-MSG-3 — sessions_send run+wait wake on an existing same-account session.
+   * Appends via runTurnBackground (do not double-inject). waitMs 0 = fire-and-forget.
+   */
+  async runSessionsSendWake(opts: {
+    accountId: string;
+    sessionId: string;
+    text: string;
+    waitMs: number;
+    fromSessionId?: string | null;
+  }): Promise<{ turnId: string; reply?: string; timedOut?: boolean }> {
+    const session = await this.sessions.get(opts.accountId, opts.sessionId);
+    if (!session || session.accountId !== opts.accountId) {
+      throw Object.assign(new Error("envoyhome.auth: session not found for this account"), {
+        code: "auth",
+      });
+    }
+    const text = opts.text.trim();
+    if (!text) {
+      throw Object.assign(new Error("envoyhome.bad_params: sessions_send text required"), {
+        code: "bad_params",
+      });
+    }
+    void opts.fromSessionId; // recorded by the tool layer / transcript provenance when inject-only
+    const turnId = newTurnId();
+    const abort = new AbortController();
+    active.set(turnId, {
+      accountId: opts.accountId,
+      sessionId: opts.sessionId,
+      abort,
+      approvalWaiters: new Map(),
+      choiceWaiters: new Map(),
+    });
+    this.emit("home:turn-started", {
+      turnId,
+      sessionId: opts.sessionId,
+      accountId: opts.accountId,
+      agentId: session.agentId,
+      route: "harness",
+      at: new Date().toISOString(),
+    });
+    const bg = this.runTurnBackground({
+      accountId: opts.accountId,
+      sessionId: opts.sessionId,
+      text,
+      turnId,
+      agentId: session.agentId,
+      abort,
+      callerKind: "sessions_send",
+      origin: "attended",
+      memoryTrust: "agent",
+    });
+    if (opts.waitMs <= 0) {
+      void bg;
+      return { turnId };
+    }
+    let timedOut = false;
+    await Promise.race([
+      bg,
+      new Promise<void>((resolve) => {
+        setTimeout(() => {
+          timedOut = true;
+          resolve();
+        }, opts.waitMs);
+      }),
+    ]);
+    if (timedOut) {
+      return { turnId, timedOut: true };
+    }
+    const sessionDir = this.sessions.sessionDir(opts.accountId, opts.sessionId);
+    let reply = "";
+    try {
+      const { readTranscript, coalesceAssistantByTurnId } = await import(
+        "@envoyhome/harness-host"
+      );
+      const lines = await readTranscript(sessionDir);
+      const coalesced = coalesceAssistantByTurnId(lines);
+      for (let i = coalesced.length - 1; i >= 0; i--) {
+        const line = coalesced[i]!;
+        if (line["role"] === "assistant" && line["turnId"] === turnId) {
+          reply = typeof line["content"] === "string" ? line["content"] : "";
+          break;
+        }
+      }
+    } catch {
+      reply = "";
+    }
+    return { turnId, ...(reply ? { reply } : {}) };
+  }
+
+  /**
+   * Design §19.10 / V-P2-AMB-1 — heartbeat agentTurn; await reply; silent OK = no notify.
+   */
+  async runHeartbeatTurn(
+    accountId: string,
+    opts: { prompt: string },
+  ): Promise<{ turnId: string; sessionId: string; silent: boolean; reply: string }> {
+    const { isHeartbeatSilentOk } = await import("./schedule/heartbeat.js");
+    const prompt = opts.prompt.trim();
+    if (!prompt) {
+      throw Object.assign(new Error("envoyhome.bad_params: heartbeat prompt required"), {
+        code: "bad_params",
+      });
+    }
+    const session = await this.sessions.open({
+      accountId,
+      title: `schedule:heartbeat`,
+    });
+    const turnId = newTurnId();
+    const abort = new AbortController();
+    active.set(turnId, {
+      accountId,
+      sessionId: session.sessionId,
+      abort,
+      approvalWaiters: new Map(),
+      choiceWaiters: new Map(),
+    });
+    this.emit("home:turn-started", {
+      turnId,
+      sessionId: session.sessionId,
+      accountId,
+      agentId: session.agentId,
+      route: "harness",
+      at: new Date().toISOString(),
+    });
+    await this.runTurnBackground({
+      accountId,
+      sessionId: session.sessionId,
+      text: prompt,
+      turnId,
+      agentId: session.agentId,
+      abort,
+      callerKind: "schedule",
+      origin: "unattended",
+      memoryTrust: "agent",
+      toolPolicyOverride: "restricted",
+    });
+    const sessionDir = this.sessions.sessionDir(accountId, session.sessionId);
+    let reply = "";
+    try {
+      const { readTranscript, coalesceAssistantByTurnId } = await import(
+        "@envoyhome/harness-host"
+      );
+      const lines = await readTranscript(sessionDir);
+      const coalesced = coalesceAssistantByTurnId(lines);
+      for (let i = coalesced.length - 1; i >= 0; i--) {
+        const line = coalesced[i]!;
+        if (line["role"] === "assistant" && line["turnId"] === turnId) {
+          reply = typeof line["content"] === "string" ? line["content"] : "";
+          break;
+        }
+      }
+    } catch {
+      reply = "";
+    }
+    return {
+      turnId,
+      sessionId: session.sessionId,
+      silent: isHeartbeatSilentOk(reply),
+      reply,
+    };
+  }
+
+  /**
    * ScheduleService fire path: run a workflow unattended with no keyword text (V-DAG-5).
    */
   async runScheduledWorkflow(accountId: string, workflowId: string): Promise<{ turnId: string; sessionId: string }> {
@@ -875,6 +1157,7 @@ export class TurnService {
       sessionId: session.sessionId,
       abort,
       approvalWaiters: new Map(),
+      choiceWaiters: new Map(),
     });
     this.emit("home:turn-started", {
       turnId,
@@ -980,6 +1263,7 @@ export class TurnService {
           this.getOwnerAccountId(),
         );
         const primary = mounts[0];
+        const pol = await this.policy.get(input.accountId);
         return runExtendedWorkflowTool({
           tool,
           args,
@@ -996,6 +1280,134 @@ export class TurnService {
           browserControl: this.browserControl,
           schedules: this.schedules,
           workflows: this.workflows,
+          sessions: this.sessions,
+          ...(input.ctx?.session_id ? { sessionId: input.ctx.session_id } : {}),
+          toolPolicy: pol.toolPolicy,
+          helperDepth: input.ctx?.helper_depth ?? 0,
+          httpFetchImpl: workflowHttpFetch as typeof fetch,
+          sessionsSendWake: async (opts) =>
+            this.runSessionsSendWake({
+              accountId: input.accountId,
+              sessionId: opts.sessionId,
+              text: opts.text,
+              waitMs: opts.waitMs,
+              ...(opts.fromSessionId !== undefined
+                ? { fromSessionId: opts.fromSessionId }
+                : {}),
+            }),
+          runMeshChild: async (opts) =>
+            this.runHomeMeshChild({
+              accountId: input.accountId,
+              origin,
+              objective: opts.objective,
+              allowTools: opts.allowTools,
+              ...(opts.signal ? { signal: opts.signal } : {}),
+              ...(input.ctx ? { parentCtx: input.ctx } : {}),
+              ...(input.approval ? { approval: input.approval } : {}),
+            }),
+          // Legacy text path still available for tests that inject spawnHelperComplete only.
+          spawnHelperComplete: async (prompt, allowTools) => {
+            const { textFromSubagentResult } = await import("./home-harness-bridge.js");
+            const result = await this.runHomeMeshChild({
+              accountId: input.accountId,
+              origin,
+              objective: prompt,
+              allowTools,
+              ...(input.ctx ? { parentCtx: input.ctx } : {}),
+              ...(input.approval ? { approval: input.approval } : {}),
+            });
+            return textFromSubagentResult(result) || result.status;
+          },
+          mediaGenerate: this.mediaGenerate,
+          imageGenerateImpl: async (prompt) => {
+            const out = await this.providers.generateImage({
+              accountId: input.accountId,
+              prompt,
+            });
+            return { bytes: out.bytes, mimeType: out.mimeType, ext: out.ext };
+          },
+          enqueueImageGenerate: async (prompt) => {
+            const job = await this.mediaGenerate.createJob(input.accountId, prompt);
+            void this.runMediaGenerateJob({
+              accountId: input.accountId,
+              jobId: job.jobId,
+              prompt,
+            });
+            return { jobId: job.jobId };
+          },
+          visionDescribe: async (meta) => {
+            const privacy = await this.privacyMode.get(input.accountId);
+            if (privacy.enabled) return null;
+            const visionMessages = [
+              {
+                role: "system" as const,
+                content:
+                  "Describe the image briefly for a household assistant. OCR any visible text. Plain text only, under 400 words.",
+              },
+              {
+                role: "user" as const,
+                content: [
+                  { type: "text" as const, text: `Describe this image (${meta.path}).` },
+                  {
+                    type: "image_url" as const,
+                    image_url: {
+                      url: `data:${meta.mimeType};base64,${meta.bytesBase64}`,
+                    },
+                  },
+                ],
+              },
+            ];
+            try {
+              const routing = this.providers.routingForAccount(input.accountId);
+              const policy = await this.policy.get(input.accountId);
+              const ph = new ProviderHandle({
+                router: this.providers.getRouter(),
+                mode: this.providers.modeForAccount(input.accountId),
+                ...(routing.placementFilter !== undefined
+                  ? { placementFilter: routing.placementFilter }
+                  : {}),
+                ...(routing.defaultProviderId !== undefined
+                  ? { defaultProviderId: routing.defaultProviderId }
+                  : {}),
+                requiresVision: true,
+                ...(policy.needClassRules.length > 0
+                  ? { needClassRules: policy.needClassRules }
+                  : {}),
+                text: `describe image ${meta.path}`,
+              });
+              const out = await ph.complete({
+                messages: visionMessages,
+                maxTokens: 512,
+              });
+              if (out.text?.trim()) return out.text.trim();
+            } catch {
+              /* fall through to direct openai/anthropic vision attempt */
+            }
+            // Fallback: any enabled cloud openai/anthropic with secret (even if
+            // supportsVision flag was never set on the record).
+            try {
+              const listed = this.providers.listProviders(input.accountId).providers;
+              const visionRec = listed.find(
+                (p) =>
+                  p.enabled === true &&
+                  p.hasSecret === true &&
+                  (p.kind === "cloud_openai_compat" ||
+                    p.kind === "cloud_anthropic_compat" ||
+                    p.supportsVision === true),
+              );
+              if (!visionRec || typeof visionRec.id !== "string") return null;
+              const rec = this.providers.getRecord(visionRec.id);
+              if (!rec) return null;
+              const provider = this.providers.wireKindToProvider(rec);
+              const out = await provider.complete({
+                messages: visionMessages,
+                maxTokens: 512,
+              });
+              return out.text?.trim() || null;
+            } catch {
+              return null;
+            }
+          },
           ...(input.clientContext ? { clientContext: input.clientContext } : {}),
           ...(input.ctx?.session_id ? { sessionId: input.ctx.session_id } : {}),
           ownerAccountId: this.getOwnerAccountId(),
@@ -1389,6 +1801,7 @@ ${lines.join("\n")}
       sessionId: session.sessionId,
       abort,
       approvalWaiters: new Map(),
+      choiceWaiters: new Map(),
     });
 
     const forceLocal = await this.resolveForceLocal(
@@ -1845,6 +2258,23 @@ ${lines.join("\n")}
             await this.sessions.patchMeta(input.accountId, input.sessionId, {
               pendingHomeProposal: null,
             });
+          } else if (localPlan.choiceCandidates?.length) {
+            const replyZh = /[\u4e00-\u9fff]/.test(input.text);
+            void this.createChoiceAndEmit({
+              accountId: input.accountId,
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              question: replyZh
+                ? "有多个设备符合描述，请选择一个："
+                : "Several devices match — pick one:",
+              options: localPlan.choiceCandidates.map((c, i) => ({
+                id: (c.sourceId || String(i)).slice(0, 64),
+                label: c.displayName || c.sourceId || String(i),
+              })),
+              selection: "one",
+              purpose: "home_disambiguation",
+              detail: input.text.trim().slice(0, 2000),
+            }).catch(() => undefined);
           }
         } else {
           // Fuzzy NL: model may propose ha_*/mqtt_* with opaque objectId handles.
@@ -2030,6 +2460,29 @@ ${lines.join("\n")}
                     `${userText}\n${offerLocale ?? ""}`,
                   );
                   if (offer && preparedSchedule) scheduleOfferShown = true;
+                  if (
+                    !resolved.ok &&
+                    (resolved.reason === "missing_time" || resolved.reason === "ambiguous") &&
+                    resolved.candidates?.length
+                  ) {
+                    const replyZh = /[\u4e00-\u9fff]/.test(`${userText}\n${offerLocale ?? ""}`);
+                    void this.createChoiceAndEmit({
+                      accountId: input.accountId,
+                      sessionId: input.sessionId,
+                      turnId: input.turnId,
+                      question: replyZh
+                        ? "时间还不明确，请选一个："
+                        : "Time is not settled — pick one:",
+                      options: resolved.candidates.map((c, i) => ({
+                        id: String(i),
+                        label: c,
+                      })),
+                      selection: "one",
+                      purpose: "schedule_candidates",
+                      // Original WHEN+message so a pick can propose without reinjecting NL.
+                      detail: userText.trim().slice(0, 2000),
+                    }).catch(() => undefined);
+                  }
                   return offer;
                 } catch {
                   return undefined;
@@ -2037,6 +2490,13 @@ ${lines.join("\n")}
               },
             }
           : {}),
+        askUserImpl: async (args: Record<string, unknown>) =>
+          this.runAskUserTool({
+            accountId: input.accountId,
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            args,
+          }),
       };
       let toolsDispatched = false;
       let scheduleArmed = false;
@@ -2050,43 +2510,85 @@ ${lines.join("\n")}
             name?: string;
           }
         | undefined;
-      for await (const ev of runTurn({
-        userText: input.text,
-        history,
-        deps: turnDeps,
-        ...(plannedTools !== undefined ? { plannedTools } : {}),
-        ...(toolLoop ? { toolLoop: true } : {}),
-      })) {
+      // P2-E3: parent Agent path (default on). Fall back to runTurn for
+      // plannedTools / completionText injects and ENVOYHOME_PARENT_AGENT=0.
+      const { parentAgentEnabled, runAgentTurn } = await import("./home-agent-turn.js");
+      const useParentAgent =
+        (plannedTools === undefined || plannedTools.length === 0) &&
+        completionText === undefined &&
+        parentAgentEnabled();
+      const turnEvents = useParentAgent
+        ? runAgentTurn({
+            userText: input.text,
+            history,
+            deps: turnDeps,
+            sessionDir,
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            ...(toolLoop ? { toolLoop: true } : {}),
+            abortSignal: input.abort.signal,
+          })
+        : runTurn({
+            userText: input.text,
+            history,
+            deps: turnDeps,
+            ...(plannedTools !== undefined ? { plannedTools } : {}),
+            ...(toolLoop ? { toolLoop: true } : {}),
+          });
+      for await (const ev of turnEvents) {
         if (input.abort.signal.aborted) {
           status = "cancelled";
           break;
         }
-        if (ev.kind === "tool_call") toolsDispatched = true;
-        if (ev.kind === "tool_result" && ev.tool === "schedule" && ev.text) {
-          try {
-            const j = JSON.parse(ev.text) as {
-              proposalId?: unknown;
-              resolvedLocal?: unknown;
-              armed?: unknown;
-              updated?: unknown;
-            };
-            if (j.armed === true || j.updated === true) scheduleArmed = true;
-            else if (typeof j.proposalId === "string" && j.proposalId.trim()) {
-              const peek = this.schedules?.store.getProposal(j.proposalId.trim());
-              capturedSchedule = {
-                proposalId: j.proposalId.trim(),
-                resolvedLocal:
-                  typeof j.resolvedLocal === "string"
-                    ? j.resolvedLocal
-                    : (peek?.resolvedLocal ?? ""),
-                createdAt: new Date().toISOString(),
-                ...(peek?.expiresAt ? { expiresAt: peek.expiresAt } : {}),
-                ...(peek?.name ? { name: peek.name } : {}),
-                ...(peek?.payload.message ? { message: peek.payload.message } : {}),
+        if (ev.kind === "tool_call") {
+          toolsDispatched = true;
+          // Protocol: tool = { name, id? }; text carries args JSON when present.
+          this.emit("home:turn-delta", {
+            turnId: input.turnId,
+            sessionId: input.sessionId,
+            accountId: input.accountId,
+            agentId: input.agentId,
+            kind: "tool_call",
+            tool: { name: ev.tool ?? "unknown" },
+            ...(ev.text ? { text: ev.text } : {}),
+          });
+        }
+        if (ev.kind === "tool_result") {
+          this.emit("home:turn-delta", {
+            turnId: input.turnId,
+            sessionId: input.sessionId,
+            accountId: input.accountId,
+            agentId: input.agentId,
+            kind: "tool_result",
+            tool: { name: ev.tool ?? "unknown" },
+            ...(ev.text ? { text: ev.text } : {}),
+          });
+          if (ev.tool === "schedule" && ev.text) {
+            try {
+              const j = JSON.parse(ev.text) as {
+                proposalId?: unknown;
+                resolvedLocal?: unknown;
+                armed?: unknown;
+                updated?: unknown;
               };
+              if (j.armed === true || j.updated === true) scheduleArmed = true;
+              else if (typeof j.proposalId === "string" && j.proposalId.trim()) {
+                const peek = this.schedules?.store.getProposal(j.proposalId.trim());
+                capturedSchedule = {
+                  proposalId: j.proposalId.trim(),
+                  resolvedLocal:
+                    typeof j.resolvedLocal === "string"
+                      ? j.resolvedLocal
+                      : (peek?.resolvedLocal ?? ""),
+                  createdAt: new Date().toISOString(),
+                  ...(peek?.expiresAt ? { expiresAt: peek.expiresAt } : {}),
+                  ...(peek?.name ? { name: peek.name } : {}),
+                  ...(peek?.payload.message ? { message: peek.payload.message } : {}),
+                };
+              }
+            } catch {
+              /* non-JSON schedule result */
             }
-          } catch {
-            /* non-JSON schedule result */
           }
         }
         if (ev.kind === "text" && ev.text) {
@@ -2111,6 +2613,14 @@ ${lines.join("\n")}
           });
         }
         if (ev.kind === "error" && ev.text) {
+          this.emit("home:turn-delta", {
+            turnId: input.turnId,
+            sessionId: input.sessionId,
+            accountId: input.accountId,
+            agentId: input.agentId,
+            kind: "error",
+            text: ev.text,
+          });
           await appendTranscriptLine(sessionDir, {
             role: "system",
             text: ev.text,
@@ -2238,6 +2748,282 @@ ${lines.join("\n")}
     return { approvals: rows.map(wireApproval) };
   }
 
+  async listChoices(
+    accountId: string,
+    sessionId?: string,
+  ): Promise<Record<string, unknown>> {
+    const rows = await this.choices.list(accountId, sessionId);
+    return { choices: rows.map(wireChoice) };
+  }
+
+  async createChoiceAndEmit(
+    input: Omit<PendingChoice, "id" | "createdAt" | "expiresAt"> & { ttlSec?: number },
+  ): Promise<PendingChoice> {
+    const row = await this.choices.create(input);
+    this.emit("home:choice-needed", wireChoice(row));
+    return row;
+  }
+
+  async answerChoice(input: {
+    accountId: string;
+    id: string;
+    optionId?: string;
+    optionIds?: string[];
+    text?: string;
+    /** Explicit dismiss — fail closed, same as TTL expire for ask_user. */
+    cancel?: boolean;
+  }): Promise<Record<string, unknown>> {
+    const row = await this.choices.get(input.accountId, input.id);
+    if (!row) {
+      throw Object.assign(new Error("envoyhome.bad_params: unknown or expired choice"), {
+        code: "bad_params",
+      });
+    }
+
+    if (input.cancel === true) {
+      await this.choices.remove(input.accountId, input.id);
+      // ask_user: wake waiter only — tool emits choice-resolved once (no double emit).
+      if (row.turnId) {
+        const turn = active.get(row.turnId);
+        const waiter = turn?.choiceWaiters.get(row.id);
+        if (waiter) {
+          turn!.choiceWaiters.delete(row.id);
+          waiter(null);
+          return { ok: true, canceled: true, followUp: false };
+        }
+      }
+      this.emit("home:choice-resolved", {
+        id: row.id,
+        accountId: row.accountId,
+        sessionId: row.sessionId,
+        status: "canceled",
+      });
+      return { ok: true, canceled: true, followUp: false };
+    }
+
+    const resolved = this.choices.resolveAnswer(row, {
+      ...(input.optionId !== undefined ? { optionId: input.optionId } : {}),
+      ...(input.optionIds !== undefined ? { optionIds: input.optionIds } : {}),
+      ...(input.text !== undefined ? { text: input.text } : {}),
+    });
+    if (!resolved.ok) {
+      throw Object.assign(new Error(`envoyhome.bad_params: ${resolved.reason}`), {
+        code: "bad_params",
+      });
+    }
+    await this.choices.remove(input.accountId, input.id);
+    this.emit("home:choice-resolved", {
+      id: row.id,
+      accountId: row.accountId,
+      sessionId: row.sessionId,
+      status: "answered",
+      ...(resolved.optionIds.length ? { optionIds: resolved.optionIds } : {}),
+      ...(resolved.labels.length ? { labels: resolved.labels } : {}),
+      ...(resolved.text !== undefined ? { text: resolved.text } : {}),
+    });
+
+    // Wake ask_user tool if this turn is parked.
+    if (row.turnId) {
+      const turn = active.get(row.turnId);
+      const waiter = turn?.choiceWaiters.get(row.id);
+      if (waiter) {
+        turn!.choiceWaiters.delete(row.id);
+        waiter({
+          ...(resolved.optionIds[0] ? { optionId: resolved.optionIds[0] } : {}),
+          ...(resolved.optionIds.length ? { optionIds: resolved.optionIds } : {}),
+          ...(resolved.text !== undefined ? { text: resolved.text } : {}),
+        });
+        return {
+          ok: true,
+          labels: resolved.labels,
+          optionIds: resolved.optionIds,
+          ...(resolved.text !== undefined ? { text: resolved.text } : {}),
+          followUp: false,
+        };
+      }
+    }
+
+    // Schedule candidates: propose from picked WHEN (not base — when; base can
+    // still say "this weekend" and shadow Sat vs Sun).
+    if (row.purpose === "schedule_candidates" && this.schedules) {
+      const when = resolved.labels[0]?.trim() || "";
+      const base = row.detail?.trim() || "";
+      const attempts = scheduleCandidateProposeAttempts(base, when);
+      const notifyMsg = base ? extractScheduleMessage(base) : "";
+      for (const proposeText of attempts) {
+        try {
+          const proposal = await this.schedules.proposeFromText(
+            row.accountId,
+            proposeText,
+            undefined,
+            {
+              sessionId: row.sessionId,
+              ...(notifyMsg && notifyMsg !== "Reminder" ? { message: notifyMsg } : {}),
+            },
+          );
+          if (!("error" in proposal)) {
+            const pending = {
+              proposalId: proposal.proposalId,
+              resolvedLocal: proposal.resolvedLocal,
+              createdAt: new Date().toISOString(),
+              expiresAt: proposal.expiresAt,
+              name: proposal.name,
+              ...(proposal.payload.message ? { message: proposal.payload.message } : {}),
+            };
+            await this.sessions.patchMeta(row.accountId, row.sessionId, {
+              pendingScheduleConfirm: pending,
+            });
+            const live = this.schedules.store.getProposal(proposal.proposalId);
+            if (live) this.schedules.emitProposed(live);
+            return {
+              ok: true,
+              labels: resolved.labels,
+              optionIds: resolved.optionIds,
+              followUp: false,
+              proposed: true,
+            };
+          }
+        } catch {
+          /* try next attempt */
+        }
+      }
+    }
+
+    // Home / general / schedule fallback: labels as the next user message.
+    const followText = resolved.labels.join(", ").trim();
+    if (followText && row.purpose !== "ask_user") {
+      const text =
+        row.purpose === "home_disambiguation" && row.detail?.trim()
+          ? `${row.detail.trim()} — ${followText}`
+          : followText;
+      void this.sendMessage({
+        accountId: row.accountId,
+        sessionId: row.sessionId,
+        text,
+        callerKind: "loopback-owner",
+        origin: "attended",
+      }).catch(() => undefined);
+      return {
+        ok: true,
+        labels: resolved.labels,
+        optionIds: resolved.optionIds,
+        ...(resolved.text !== undefined ? { text: resolved.text } : {}),
+        followUp: true,
+      };
+    }
+    return {
+      ok: true,
+      labels: resolved.labels,
+      optionIds: resolved.optionIds,
+      ...(resolved.text !== undefined ? { text: resolved.text } : {}),
+      followUp: false,
+    };
+  }
+
+  private async runAskUserTool(
+    input: {
+      accountId: string;
+      sessionId: string;
+      turnId: string;
+      args: Record<string, unknown>;
+    },
+  ): Promise<string> {
+    const question =
+      typeof input.args.question === "string"
+        ? input.args.question.trim()
+        : typeof input.args.prompt === "string"
+          ? input.args.prompt.trim()
+          : "";
+    if (!question) throw new Error("envoyhome.bad_params: ask_user requires question");
+    const rawOptions = Array.isArray(input.args.options) ? input.args.options : [];
+    const options = rawOptions
+      .map((o, i) => {
+        if (typeof o === "string") return { id: String(i), label: o.trim() };
+        if (o && typeof o === "object" && !Array.isArray(o)) {
+          const rec = o as Record<string, unknown>;
+          const label =
+            typeof rec.label === "string"
+              ? rec.label.trim()
+              : typeof rec.text === "string"
+                ? rec.text.trim()
+                : "";
+          const id = typeof rec.id === "string" && rec.id.trim() ? rec.id.trim() : String(i);
+          return label ? { id, label } : null;
+        }
+        return null;
+      })
+      .filter((o): o is { id: string; label: string } => Boolean(o));
+    const selectionRaw =
+      typeof input.args.selection === "string" ? input.args.selection.trim().toLowerCase() : "";
+    const multiple = input.args.multiple === true;
+    const selection =
+      selectionRaw === "many" || selectionRaw === "text" || selectionRaw === "one"
+        ? selectionRaw
+        : multiple
+          ? "many"
+          : options.length === 0
+            ? "text"
+            : "one";
+    const row = await this.createChoiceAndEmit({
+      accountId: input.accountId,
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      question,
+      options,
+      selection,
+      purpose: "ask_user",
+      ...(typeof input.args.detail === "string" && input.args.detail.trim()
+        ? { detail: input.args.detail.trim() }
+        : {}),
+      ...(input.args.multiline === true ? { multiline: true } : {}),
+    });
+    const turn = active.get(input.turnId);
+    if (!turn) {
+      await this.choices.remove(input.accountId, row.id);
+      throw new Error("envoyhome.bad_params: turn gone");
+    }
+    type WaitOutcome =
+      | { kind: "answer"; answer: ChoiceAnswer }
+      | { kind: "canceled" }
+      | { kind: "expired" };
+    const outcome = await new Promise<WaitOutcome>((resolve) => {
+      let settled = false;
+      const settle = (o: WaitOutcome) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        turn.abort.signal.removeEventListener("abort", onAbort);
+        turn.choiceWaiters.delete(row.id);
+        resolve(o);
+      };
+      const ttlMs = Math.max(0, Date.parse(row.expiresAt) - Date.now());
+      const timer = setTimeout(() => settle({ kind: "expired" }), ttlMs);
+      const onAbort = () => settle({ kind: "canceled" });
+      turn.choiceWaiters.set(row.id, (a) => {
+        if (a === "expired") settle({ kind: "expired" });
+        else if (a === null) settle({ kind: "canceled" });
+        else settle({ kind: "answer", answer: a });
+      });
+      if (turn.abort.signal.aborted) onAbort();
+      else turn.abort.signal.addEventListener("abort", onAbort, { once: true });
+    });
+    if (outcome.kind !== "answer") {
+      await this.choices.remove(input.accountId, row.id).catch(() => undefined);
+      this.emit("home:choice-resolved", {
+        id: row.id,
+        accountId: row.accountId,
+        sessionId: row.sessionId,
+        status: outcome.kind === "expired" ? "expired" : "canceled",
+      });
+      throw new Error(
+        outcome.kind === "expired" ? "envoyhome.choice_expired" : "envoyhome.choice_canceled",
+      );
+    }
+    const resolved = this.choices.resolveAnswer(row, outcome.answer);
+    if (!resolved.ok) throw new Error(`envoyhome.bad_params: ${resolved.reason}`);
+    return resolved.labels.join(", ");
+  }
+
   async answerApproval(input: {
     id: string;
     decision: "allow" | "deny";
@@ -2312,6 +3098,257 @@ ${lines.join("\n")}
       throw Object.assign(new Error("envoyhome.auth: sandbox_root out of scope"), { code: "auth" });
     }
     safeJoin(this.paths.accountFiles(accountId), "documents");
+  }
+
+  /**
+   * V-P2-AGENT-3 — LocalMeshSubmitter + Agent child (Home jail tools, inherit origin).
+   */
+  private async runHomeMeshChild(input: {
+    accountId: string;
+    origin: TurnOrigin;
+    objective: string;
+    allowTools: string[];
+    parentCtx?: TurnContext;
+    approval?: ApprovalSink;
+    signal?: AbortSignal;
+  }): Promise<import("@envoymesh/envoy-harness").SubagentResult> {
+    const { createHomeMeshSubmitter, HomeModelAdapter, homeSubagentInput } =
+      await import("./home-harness-bridge.js");
+    const { filterChildAllowTools } = await import("./harness-subagents.js");
+    const allow = filterChildAllowTools(input.allowTools);
+    const sessionId = input.parentCtx?.session_id ?? "helper";
+    const turnId = newTurnId();
+    const account = await this.accounts.get(input.accountId);
+    const toolPolicy = account?.toolPolicy ?? "standard";
+    const forceLocal = await this.resolveForceLocal(
+      input.accountId,
+      input.objective,
+      input.origin,
+      "helper",
+    );
+    const provider = await this.makeProviderHandle(
+      input.accountId,
+      sessionId,
+      turnId,
+      forceLocal,
+      input.objective,
+    );
+    const model = HomeModelAdapter.fromProviderHandle(provider);
+    const workspace = await this.workspaceStamp(input.accountId);
+    const childCtx: TurnContext = {
+      account_id: input.accountId,
+      agent_id: input.parentCtx?.agent_id ?? "default",
+      session_id: sessionId,
+      turn_id: turnId,
+      sandbox_root: this.paths.accountFiles(input.accountId),
+      workspace_root: workspace.workspace_root,
+      workspace_mode: workspace.workspace_mode,
+      workspace_mounts: workspace.workspace_mounts,
+      origin: input.origin,
+      helper_depth: 1,
+      policy_snapshot: {
+        origin: input.origin,
+        tool_policy: toolPolicy,
+        model_mode: this.providers.modeForAccount(input.accountId),
+        homeSurface: false,
+        schedulesSurface: false,
+      },
+    };
+    const approval =
+      input.approval ??
+      new ApprovalSink({
+        store: this.approvals,
+        policy: childCtx.policy_snapshot,
+        toolPolicy,
+        onApprovalNeeded: () => {
+          /* fail closed without waiter */
+        },
+        waitForAnswer: async () => "deny",
+      });
+    const deps: TurnDeps = {
+      ctx: childCtx,
+      provider,
+      approval,
+      fs: this.sandboxFs(input.accountId),
+    };
+    const allowSet = new Set(allow);
+    const submitter = createHomeMeshSubmitter({
+      model,
+      allowTools: allow,
+      cwd: this.paths.accountFiles(input.accountId),
+      parentSessionId: sessionId,
+      dispatch: async (tool, args) => {
+        if (!allowSet.has(tool)) {
+          throw new Error(`envoyhome.tool_unavailable: helper allow-list excludes ${tool}`);
+        }
+        if (tool === "task" || tool === "spawn_helper") {
+          throw new Error(`envoyhome.tool_unavailable: helper allow-list excludes ${tool}`);
+        }
+        const result = await dispatchTool(deps, { tool, args });
+        if (!result.ok) throw new Error(result.reason);
+        return result.output;
+      },
+    });
+    const signal = input.signal ?? AbortSignal.timeout(120_000);
+    return submitter.submit(homeSubagentInput(input.objective), signal);
+  }
+
+  /**
+   * V-P2-AGENT-1 — legacy child helper loop (kept for direct tests / fallback).
+   * Prefer {@link runHomeMeshChild} in production.
+   */
+  private async runSpawnHelperChild(input: {
+    accountId: string;
+    origin: TurnOrigin;
+    prompt: string;
+    allowTools: string[];
+    parentCtx?: TurnContext;
+    approval?: ApprovalSink;
+    clientContext?: import("./client-context.js").ClientTurnContext;
+  }): Promise<string> {
+    const allow = new Set(
+      input.allowTools.filter(
+        (t) =>
+          t &&
+          t !== "spawn_helper" &&
+          t !== "task" &&
+          !t.startsWith("ha_") &&
+          !t.startsWith("mqtt_"),
+      ),
+    );
+    const sessionId = input.parentCtx?.session_id ?? "helper";
+    const turnId = newTurnId();
+    const account = await this.accounts.get(input.accountId);
+    const toolPolicy = account?.toolPolicy ?? "standard";
+    const forceLocal = await this.resolveForceLocal(
+      input.accountId,
+      input.prompt,
+      input.origin,
+      "helper",
+    );
+    const provider = await this.makeProviderHandle(
+      input.accountId,
+      sessionId,
+      turnId,
+      forceLocal,
+      input.prompt,
+    );
+    const allowList =
+      allow.size > 0
+        ? [...allow].join(", ")
+        : "(none — answer from the prompt only)";
+    const system =
+      `You are a turn-scoped helper (EnvoyHome §19.13). Allowed tools only: ${allowList}. ` +
+      "Never call spawn_helper, task, exec, ha_*, or mqtt_*. Prefer answering without tools when possible. " +
+      "When you need a tool, emit a ```envoyhome-tools fence with JSON array of {tool,args}.";
+
+    type Msg = { role: "system" | "user" | "assistant"; content: string };
+    const messages: Msg[] = [
+      { role: "system", content: system },
+      { role: "user", content: input.prompt.slice(0, 8000) },
+    ];
+
+    const workspace = await this.workspaceStamp(input.accountId);
+    const childCtx: TurnContext = {
+      account_id: input.accountId,
+      agent_id: input.parentCtx?.agent_id ?? "default",
+      session_id: sessionId,
+      turn_id: turnId,
+      sandbox_root: this.paths.accountFiles(input.accountId),
+      workspace_root: workspace.workspace_root,
+      workspace_mode: workspace.workspace_mode,
+      workspace_mounts: workspace.workspace_mounts,
+      origin: input.origin,
+      helper_depth: 1,
+      policy_snapshot: {
+        origin: input.origin,
+        tool_policy: toolPolicy,
+        model_mode: this.providers.modeForAccount(input.accountId),
+        homeSurface: false,
+        schedulesSurface: false,
+      },
+    };
+
+    const approval =
+      input.approval ??
+      new ApprovalSink({
+        store: this.approvals,
+        policy: childCtx.policy_snapshot,
+        toolPolicy,
+        onApprovalNeeded: () => {
+          /* unattended / no waiter — ApprovalSink denies grantable without grant */
+        },
+        waitForAnswer: async () => "deny",
+      });
+
+    const baseExtras = this.workflowDispatchExtras({
+      accountId: input.accountId,
+      origin: input.origin,
+      approval,
+      ctx: childCtx,
+      ...(input.clientContext ? { clientContext: input.clientContext } : {}),
+    });
+    const parentExtra = baseExtras.extraToolImpl;
+    const deps: TurnDeps = {
+      ctx: childCtx,
+      provider,
+      approval,
+      fs: this.sandboxFs(input.accountId),
+      ...baseExtras,
+      ...(parentExtra
+        ? {
+            extraToolImpl: async (tool: string, args: Record<string, unknown>) => {
+              if (!allow.has(tool)) {
+                throw new Error(
+                  `envoyhome.tool_unavailable: helper allow-list excludes ${tool}`,
+                );
+              }
+              return parentExtra(tool, args);
+            },
+          }
+        : {}),
+    };
+
+    const MAX_ROUNDS = 2;
+    let reply = "";
+    try {
+      for (let round = 0; round <= MAX_ROUNDS; round++) {
+        const out = await provider.complete({ messages });
+        reply = out.text;
+        if (round === MAX_ROUNDS || allow.size === 0) break;
+
+        const parsed = parseAssistantToolCalls(reply, { allowSandbox: true });
+        const steps = parsed.tools.filter(
+          (t) => allow.has(t.tool) && t.tool !== "spawn_helper",
+        );
+        if (steps.length === 0) {
+          return (parsed.replyText || reply).slice(0, 16_000);
+        }
+
+        const results: string[] = [];
+        for (const step of steps.slice(0, 6)) {
+          const result = await dispatchTool(deps, {
+            tool: step.tool,
+            args: step.args,
+            ...(step.summary ? { summary: step.summary } : {}),
+          });
+          if (result.ok) {
+            results.push(`${step.tool}: ${result.output.slice(0, 4000)}`);
+          } else {
+            results.push(`${step.tool}: ERROR ${result.reason}`);
+          }
+        }
+        messages.push({ role: "assistant", content: reply });
+        messages.push({
+          role: "user",
+          content: `Tool results (helper round ${round + 1}):\n${results.join("\n")}\nReply with the final answer or more tools from the allow-list only.`,
+        });
+      }
+      return reply.slice(0, 16_000);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return `helper_unavailable: ${message}`;
+    }
   }
 
   /**

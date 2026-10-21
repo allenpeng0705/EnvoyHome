@@ -34,6 +34,7 @@ import { ChannelService } from "../dist/channels/service.js";
 import { WorkflowStore } from "../dist/workflows.js";
 import { WorkflowStepTemplateStore } from "../dist/workflow-step-templates.js";
 import { ScheduleService } from "../dist/schedule/service.js";
+import { StandingOrderStore } from "../dist/standing-orders.js";
 import { SkillService } from "../dist/skills.js";
 import { ArtifactService } from "../dist/artifacts.js";
 import { WebSearchService } from "../dist/web-search.js";
@@ -94,6 +95,7 @@ function routerDeps(stateDir: string, devices = new DeviceCredentialStore()): Ro
     workflows: new WorkflowStore(paths),
     workflowStepTemplates: new WorkflowStepTemplateStore(paths),
     schedules: new ScheduleService({ paths }),
+    standingOrders: new StandingOrderStore(paths),
     skills: new SkillService(paths),
     artifacts: new ArtifactService(paths, () => "http://127.0.0.1:1"),
     webSearch: new WebSearchService(paths),
@@ -437,6 +439,7 @@ test("B3 RPC: create/list/update/delete accounts + sender/device bindings", asyn
     workflows: daemon.workflows,
         workflowStepTemplates: daemon.workflowStepTemplates,
     schedules: daemon.schedules,
+    standingOrders: daemon.standingOrders,
     skills: daemon.skills,
     artifacts: daemon.artifacts,
     webSearch: daemon.webSearch,

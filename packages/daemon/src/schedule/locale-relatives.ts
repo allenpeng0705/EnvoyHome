@@ -336,23 +336,27 @@ export function matchRecurring(text: string): RecurringHit | undefined {
   return undefined;
 }
 
-/** Ask-candidate labels (prefer caller's locale). */
+/**
+ * Ask-candidate labels (prefer caller's locale).
+ * Must be full WHEN phrases that resolve on their own (V-UX-14 choice → propose).
+ * Prefer this|本|diesen|ce|… forms so Sat vs Sun is not lost under "this weekend".
+ */
 export function weekendCandidates(locale: ProductLocale): string[] {
   switch (locale) {
     case "zh":
-      return ["周六上午10点", "周日上午10点"];
+      return ["本周六上午10点", "本周日上午10点"];
     case "de":
-      return ["Samstag um 10 Uhr", "Sonntag um 10 Uhr"];
+      return ["diesen Samstag um 10 Uhr", "diesen Sonntag um 10 Uhr"];
     case "fr":
-      return ["samedi à 10h", "dimanche à 10h"];
+      return ["ce samedi à 10h", "ce dimanche à 10h"];
     case "it":
-      return ["sabato alle 10", "domenica alle 10"];
+      return ["questo sabato alle 10", "questa domenica alle 10"];
     case "ja":
-      return ["土曜10時", "日曜10時"];
+      return ["今週の土曜10時", "今週の日曜10時"];
     case "ko":
-      return ["토요일 오전 10시", "일요일 오전 10시"];
+      return ["이번 토요일 오전 10시", "이번 일요일 오전 10시"];
     default:
-      return ["Saturday at 10am", "Sunday at 10am"];
+      return ["this Saturday at 10am", "this Sunday at 10am"];
   }
 }
 
@@ -555,12 +559,14 @@ export function matchThisNextWeekday(text: string): ThisNextWeekdayHit | undefin
     const dow = DOW_NAME_TO_NUM[k] ?? DOW_NAME_TO_NUM[raw];
     if (dow !== undefined) return { mode: "next", dow };
   }
-  // ZH: 这周一 / 下周一 / 下周一天
+  // ZH: 这周一 / 这周六 / 本周一 / 下周一
   const zhThis =
-    /这([一二三四五六日天])(?:周)?/.exec(text) || /本周([一二三四五六日天])/.exec(text);
+    /这周([一二三四五六日天])/.exec(text) ||
+    /这([一二三四五六日天])(?:周)?/.exec(text) ||
+    /本周([一二三四五六日天])/.exec(text);
   if (zhThis) return { mode: "this", dow: DOW_ZH[zhThis[1]!] ?? 1 };
   const zhNext =
-    /下(一|两|三|四|五|六|日|天)(?:周)?/.exec(text) || /下周([一二三四五六日天])/.exec(text);
+    /下周([一二三四五六日天])/.exec(text) || /下(一|两|三|四|五|六|日|天)(?:周)?/.exec(text);
   if (zhNext) return { mode: "next", dow: DOW_ZH[zhNext[1]!] ?? 1 };
   // JA: 今週の月曜 / 来週月曜
   const jaThis = /今週\s*(?:の)?\s*([日月火水木金土])/.exec(text);
@@ -572,5 +578,43 @@ export function matchThisNextWeekday(text: string): ThisNextWeekdayHit | undefin
   if (koThis) return { mode: "this", dow: DOW_KO[koThis[1]!] ?? 1 };
   const koNext = /다음\s*([월화수목금토일])(?:요일)?/.exec(text);
   if (koNext) return { mode: "next", dow: DOW_KO[koNext[1]!] ?? 1 };
+  return undefined;
+}
+
+/**
+ * Bare weekday name (no this/next/every) → upcoming occurrence ("this" semantics).
+ * Lets "Remind me Sunday at 10am" and "提醒我周日上午10点" honor the day
+ * instead of falling through to bare-clock today/tomorrow.
+ */
+export function matchBareWeekday(text: string): ThisNextWeekdayHit | undefined {
+  if (matchThisNextWeekday(text)) return undefined;
+  if (/\bevery\s+/i.test(text) || /每(?:个)?(?:周|星期)/.test(text)) return undefined;
+  const lower = text.toLowerCase();
+  const en =
+    /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun)\b/i.exec(
+      lower,
+    );
+  if (en) return { mode: "this", dow: DOW_NAME_TO_NUM[en[1]!.toLowerCase()]! };
+  const de =
+    /\b(montag|dienstag|mittwoch|donnerstag|freitag|samstag|sonntag)\b/i.exec(lower);
+  if (de) return { mode: "this", dow: DOW_NAME_TO_NUM[de[1]!.toLowerCase()]! };
+  const fr =
+    /\b(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\b/i.exec(lower);
+  if (fr) return { mode: "this", dow: DOW_NAME_TO_NUM[fr[1]!.toLowerCase()]! };
+  const it = /(luned[iì]|marted[iì]|mercoled[iì]|gioved[iì]|venerd[iì]|sabato|domenica)/i.exec(
+    lower,
+  );
+  if (it) {
+    const raw = it[1]!.toLowerCase();
+    const k = raw.normalize("NFD").replace(/\p{M}/gu, "");
+    const dow = DOW_NAME_TO_NUM[k] ?? DOW_NAME_TO_NUM[raw];
+    if (dow !== undefined) return { mode: "this", dow };
+  }
+  const zh = /(?:星期|周)([一二三四五六日天])/.exec(text);
+  if (zh) return { mode: "this", dow: DOW_ZH[zh[1]!] ?? 1 };
+  const ja = /([日月火水木金土])(?:曜)?(?:日)?/.exec(text);
+  if (ja && /曜|曜日|週/.test(text)) return { mode: "this", dow: DOW_JA[ja[1]!] ?? 1 };
+  const ko = /([월화수목금토일])요일/.exec(text);
+  if (ko) return { mode: "this", dow: DOW_KO[ko[1]!] ?? 1 };
   return undefined;
 }

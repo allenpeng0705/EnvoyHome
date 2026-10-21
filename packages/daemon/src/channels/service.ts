@@ -40,6 +40,14 @@ export interface ChannelServiceDeps {
   bundledPlugins?: ChannelPlugin[];
 }
 
+/** Design §19.10 — fire non-cron standing orders on inbound. */
+export type StandingOrderInboundFire = (input: {
+  accountId: string;
+  trigger:
+    | { kind: "channel_event"; channel: string; eventType?: string }
+    | { kind: "smarthome_event"; sourceId: string; eventType?: string };
+}) => Promise<void>;
+
 export class ChannelService {
   readonly loader: ChannelLoader;
   readonly objects: ObjectRegistry;
@@ -47,6 +55,7 @@ export class ChannelService {
   private readonly secrets = new Map<string, Record<string, string>>();
   private turns: TurnService | undefined;
   private privacyMode: PrivacyModeStore | undefined;
+  private standingFire: StandingOrderInboundFire | undefined;
 
   constructor(private readonly deps: ChannelServiceDeps) {
     this.objects = new ObjectRegistry(deps.stateDir);
@@ -70,6 +79,21 @@ export class ChannelService {
     this.turns = turns;
     this.privacyMode = privacyMode;
     turns.setOnComplete((info) => this.onTurnComplete(info));
+  }
+
+  /** Design §19.11 — message tool resolves bound chat targets. */
+  get bindings(): BindingStore {
+    return this.deps.bindings;
+  }
+
+  /** Design §19.11 — Privacy Mode fail-closed for message. */
+  getPrivacyMode(): PrivacyModeStore | undefined {
+    return this.privacyMode;
+  }
+
+  /** Design §19.10 — wire after StandingOrderStore is ready. */
+  setStandingOrderFire(fn: StandingOrderInboundFire): void {
+    this.standingFire = fn;
   }
 
   async loadPersisted(): Promise<void> {
@@ -323,6 +347,16 @@ export class ChannelService {
       this.deps.logger.info(
         `channel inbound ${event.channel}/${event.channelAccount} account=${binding.accountId}`,
       );
+      if (this.standingFire) {
+        await this.standingFire({
+          accountId: binding.accountId,
+          trigger: { kind: "channel_event", channel: event.channel },
+        }).catch((err) => {
+          this.deps.logger.warn(
+            `standing order channel_event failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
+      }
       const turn = await this.startTurnForAccount({
         accountId: binding.accountId,
         text: event.text ?? "",
@@ -343,6 +377,16 @@ export class ChannelService {
       if (!obj.accountId) {
         await this.objects.touchUnbound(event.channel, event.channelAccount, event.sourceId);
         return { accepted: true, reason: "unbound_no_turn" };
+      }
+      if (this.standingFire) {
+        await this.standingFire({
+          accountId: obj.accountId,
+          trigger: { kind: "smarthome_event", sourceId: event.sourceId },
+        }).catch((err) => {
+          this.deps.logger.warn(
+            `standing order smarthome_event failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        });
       }
       const text =
         event.text ??

@@ -361,8 +361,6 @@ class _SchedulesTabState extends State<_SchedulesTab> {
   List<Map<String, dynamic>> _items = [];
   List<Map<String, dynamic>> _workflows = [];
   List<Map<String, dynamic>> _tools = [];
-  List<Map<String, dynamic>> _receipts = [];
-  List<Map<String, dynamic>> _dismissed = [];
   Map<String, dynamic>? _proposal;
   /// Selected tool arg values (from sampleArgs / argChoices).
   final Map<String, String> _toolArgValues = {};
@@ -556,13 +554,6 @@ class _SchedulesTabState extends State<_SchedulesTab> {
           list.add(m);
         }
       }
-      final dismissedRaw = body['dismissed'];
-      final dismissedList = <Map<String, dynamic>>[];
-      if (dismissedRaw is List) {
-        for (final d in dismissedRaw) {
-          if (d is Map) dismissedList.add(Map<String, dynamic>.from(d));
-        }
-      }
       final wf = await home.listWorkflows(accountId: accountId);
       final wfRaw = wf['workflows'];
       final wfList = <Map<String, dynamic>>[];
@@ -582,24 +573,11 @@ class _SchedulesTabState extends State<_SchedulesTab> {
           toolList.add(m);
         }
       }
-      final receiptsBody = await home.listScheduleReceipts(
-        accountId: accountId,
-        limit: 20,
-      );
-      final receiptsRaw = receiptsBody['receipts'];
-      final receiptList = <Map<String, dynamic>>[];
-      if (receiptsRaw is List) {
-        for (final r in receiptsRaw) {
-          if (r is Map) receiptList.add(Map<String, dynamic>.from(r));
-        }
-      }
       if (mounted) {
         setState(() {
           _items = list;
           _workflows = wfList;
           _tools = toolList;
-          _receipts = receiptList;
-          _dismissed = dismissedList;
           _error = null;
         });
       }
@@ -959,26 +937,19 @@ class _SchedulesTabState extends State<_SchedulesTab> {
               value: 'once',
               label: Text('${l10n.schedTabOnce} (${_once.length})'),
             ),
-            ButtonSegment(
-              value: 'history',
-              label: Text(
-                '${l10n.schedTabHistory} (${_receipts.length + _dismissed.length})',
-              ),
-            ),
           ],
           selected: {_listView},
           onSelectionChanged: (s) => setState(() => _listView = s.first),
         ),
+        Padding(
+          padding: const EdgeInsets.only(top: 8, bottom: 4),
+          child: Text(
+            l10n.jobsHistoriesMovedHint,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
         const SizedBox(height: 8),
-        if (_listView == 'repeating') ...[
-          if (_repeating.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(l10n.schedNoneRepeating),
-            )
-          else
-            ..._repeating.map((s) => _jobTile(s, l10n, accountId)),
-        ] else if (_listView == 'once') ...[
+        if (_listView == 'once') ...[
           if (_once.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -987,44 +958,13 @@ class _SchedulesTabState extends State<_SchedulesTab> {
           else
             ..._once.map((s) => _jobTile(s, l10n, accountId)),
         ] else ...[
-          Text(l10n.schedHistoryNotSet, style: Theme.of(context).textTheme.titleSmall),
-          if (_dismissed.isEmpty)
+          if (_repeating.isEmpty)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(l10n.schedNoDismissed),
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(l10n.schedNoneRepeating),
             )
           else
-            ..._dismissed.take(20).map((d) {
-              final status = d['status']?.toString() == 'expired'
-                  ? l10n.schedDismissedExpired
-                  : l10n.schedDismissedCanceled;
-              final name = d['name']?.toString() ?? d['resolvedLocal']?.toString() ?? '';
-              final when = d['resolvedLocal']?.toString() ?? '';
-              return ListTile(
-                dense: true,
-                title: Text('$name · $status'),
-                subtitle: Text(when),
-              );
-            }),
-          const SizedBox(height: 8),
-          Text(l10n.schedHistoryRuns, style: Theme.of(context).textTheme.titleSmall),
-          if (_receipts.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: Text(l10n.schedNoReceipts),
-            )
-          else
-            ..._receipts.take(20).map((r) {
-              final jobId = r['jobId']?.toString() ?? '';
-              final status = r['execStatus']?.toString() ?? '';
-              final when =
-                  r['finishedAt']?.toString() ?? r['startedAt']?.toString() ?? '';
-              return ListTile(
-                dense: true,
-                title: Text('$jobId · $status'),
-                subtitle: Text(_formatNext(when)),
-              );
-            }),
+            ..._repeating.map((s) => _jobTile(s, l10n, accountId)),
         ],
       ],
     );

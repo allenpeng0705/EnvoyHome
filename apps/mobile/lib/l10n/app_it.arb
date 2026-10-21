@@ -270,8 +270,8 @@
   "schedHistoryNotSet": "Not set",
   "schedHistoryRuns": "Runs",
   "schedNoDismissed": "No canceled or expired proposals.",
-  "schedDismissedCanceled": "canceled",
-  "schedDismissedExpired": "expired",
+  "schedDismissedCanceled": "Annullato",
+  "schedDismissedExpired": "Scaduto",
   "schedNext": "Prossima",
   "schedKindRepeating": "Si ripete",
   "schedKindOnce": "Una volta",
@@ -284,7 +284,9 @@
   "schedDayOfMonth": "giorno {d}",
   "@schedDayOfMonth": {
     "placeholders": {
-      "d": { "type": "String" }
+      "d": {
+        "type": "String"
+      }
     }
   },
   "wfEditorTitle": "Workflow",
@@ -602,7 +604,9 @@
   "profilesTimeZoneValue": "Time zone: {tz}",
   "@profilesTimeZoneValue": {
     "placeholders": {
-      "tz": { "type": "String" }
+      "tz": {
+        "type": "String"
+      }
     }
   },
   "profilesTimeZoneEdit": "Time zone",
@@ -612,7 +616,9 @@
   "profilesTimeZoneDone": "Time zone set to {tz}",
   "@profilesTimeZoneDone": {
     "placeholders": {
-      "tz": { "type": "String" }
+      "tz": {
+        "type": "String"
+      }
     }
   },
   "profilesShareLocationTitle": "Condividi posizione con Home",
@@ -675,5 +681,57 @@
   "homeFolderComputer": "Computer",
   "homeFolderHome": "Home",
   "homeFolderParent": "Parent folder",
-  "homeFolderNoSubfolders": "No subfolders"
+  "homeFolderNoSubfolders": "No subfolders",
+  "choiceCardConfirm": "Conferma",
+  "choiceCardPickOne": "Seleziona almeno un'opzione.",
+  "choiceCardAnswered": "Ricevuto.",
+  "choiceCardFailed": "Impossibile inviare la scelta: {error}",
+  "@choiceCardFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatPendingChoices": "{count} in attesa della tua scelta",
+  "@chatPendingChoices": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "choiceCardCancel": "Annulla",
+  "choiceCardCanceled": "Scelta annullata.",
+  "choiceCardExpired": "Scaduto",
+  "choiceCardExpiredHint": "Questa scelta è scaduta — chiedi di nuovo se serve.",
+  "choiceCardExpiresIn": "Scade tra {mins} min",
+  "choiceCardTextPlaceholder": "Scrivi la risposta",
+  "@choiceCardExpiresIn": {
+    "placeholders": {
+      "mins": {
+        "type": "int"
+      }
+    }
+  },
+  "schedulesChatTabChat": "Programmi",
+  "schedulesChatTabHistories": "Cronologie",
+  "schedulesChatHistoriesHint": "Proposte annullate o scadute ed esecuzioni recenti.",
+  "jobsHistoriesMovedHint": "Cronologia in Programmi → Cronologie",
+  "schedulesChatClosedAt": "Chiuso {when}",
+  "@schedulesChatClosedAt": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "schedulesChatRanAt": "Eseguito {when}",
+  "@schedulesChatRanAt": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  }
 }

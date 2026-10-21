@@ -90,6 +90,8 @@ test("home.doctor includes migrate.homeclaw.plan when ENVOYHOME_HOMECLAW_ROOT se
         harnesses: daemon.harnesses,
         workflows: daemon.workflows,
         workflowStepTemplates: daemon.workflowStepTemplates,
+        schedules: daemon.schedules,
+        standingOrders: daemon.standingOrders,
         skills: daemon.skills,
         artifacts: daemon.artifacts,
     webSearch: daemon.webSearch,
@@ -133,6 +135,39 @@ test("fresh install doctor ok", async () => {
     assert.equal(
       issues.every((i) => i.severity !== "error"),
       true,
+    );
+    await daemon.stop();
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
+test("accounts.timezone_unset when profile lacks IANA TZ", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "eh-doc-tz-"));
+  try {
+    const daemon = await startDaemon({
+      config: { stateDir, wsPort: 0, httpPort: 0, hatchApiKey: "k" },
+      packageVersion: "0.0.0-test",
+    });
+    await daemon.accounts.create({ accountId: "alice", displayName: "Alice" });
+    const missing = await collectDoctorIssues({
+      config: daemon.config,
+      accounts: daemon.accounts,
+      bindings: daemon.bindings,
+      channels: daemon.channels,
+    });
+    assert.ok(missing.some((i) => i.id === "accounts.timezone_unset"));
+
+    await daemon.accounts.update({ accountId: "alice", timeZone: "Asia/Shanghai" });
+    const set = await collectDoctorIssues({
+      config: daemon.config,
+      accounts: daemon.accounts,
+      bindings: daemon.bindings,
+      channels: daemon.channels,
+    });
+    assert.equal(
+      set.some((i) => i.id === "accounts.timezone_unset"),
+      false,
     );
     await daemon.stop();
   } finally {

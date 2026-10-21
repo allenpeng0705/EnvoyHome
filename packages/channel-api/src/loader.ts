@@ -82,6 +82,8 @@ export class ChannelLoader {
     status: string;
     sourceCount: number;
     unboundSources: string[];
+    /** Design §19.11 — declared message/media capabilities. */
+    capabilities: string[];
   }> {
     return [...this.plugins.values()].map((p) => {
       const row = this.loaded.get(p.manifest.id);
@@ -96,8 +98,14 @@ export class ChannelLoader {
         status: row?.healthy === false ? "unhealthy" : enabled ? "running" : "stopped",
         sourceCount: sources.length,
         unboundSources: sources.map((s) => s.sourceId),
+        capabilities: [...(p.manifest.capabilities ?? [])],
       };
     });
+  }
+
+  /** Declared capabilities for a registered plugin (empty when unknown). */
+  getCapabilities(channelId: string): readonly string[] {
+    return this.plugins.get(channelId)?.manifest.capabilities ?? [];
   }
 
   async setChannelConfig(

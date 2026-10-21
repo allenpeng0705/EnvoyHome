@@ -2,6 +2,7 @@
 
 import {
   MixRouter,
+  chatContentToText,
   type MixPolicy,
   type ModelMode,
   type PlacementFilter,
@@ -32,7 +33,7 @@ export interface ProviderHandleOptions {
 function lastUserText(messages: ChatMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     const m = messages[i]!;
-    if (m.role === "user" && typeof m.content === "string") return m.content;
+    if (m.role === "user") return chatContentToText(m.content);
   }
   return "";
 }

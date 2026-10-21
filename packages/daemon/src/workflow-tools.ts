@@ -121,6 +121,22 @@ const BUILTIN_META: Record<
       "Write a UTF-8 file under the account sandbox (prefer documents/ or output/ for Shared files)",
     sampleArgs: { path: "documents/example.txt", content: "hello" },
   },
+  edit_file: {
+    summary:
+      "Surgical edit under the sandbox jail (unique oldString→newString, or startLine/endLine)",
+    sampleArgs: {
+      path: "documents/example.txt",
+      oldString: "hello",
+      newString: "hello world",
+    },
+  },
+  apply_patch: {
+    summary: "Apply a single-file unified diff under the sandbox jail (Design §19.9)",
+    sampleArgs: {
+      path: "documents/example.txt",
+      patch: "--- a/documents/example.txt\n+++ b/documents/example.txt\n@@ -1 +1 @@\n-hello\n+hello world\n",
+    },
+  },
   list_dir: {
     summary:
       "List one directory level under the account sandbox or workspace/… (empty path = tops)",
@@ -160,8 +176,67 @@ const BUILTIN_META: Record<
   },
   extract_document: {
     summary:
-      "Extract Office/PDF/text in the sandbox to Markdown under output/extracts/ (Design §9.5c)",
-    sampleArgs: { sourcePath: "documents/report.docx" },
+      "Extract Office/PDF/text in the sandbox to Markdown under output/extracts/ (Design §9.5c); optional startPage/endPage",
+    sampleArgs: { sourcePath: "documents/report.pdf", startPage: 1, endPage: 2 },
+  },
+  message: {
+    summary:
+      "Send/notify/reply/react to a bound chat target (Design §19.11; channel capabilities apply)",
+    sampleArgs: {
+      action: "send",
+      channel: "telegram",
+      channelAccount: "bot",
+      peerId: "123",
+      text: "Hello",
+    },
+  },
+  sessions_list: {
+    summary: "List recent sessions for this account (capped; Design §19.11)",
+    sampleArgs: { limit: 20 },
+  },
+  sessions_history: {
+    summary: "Read a capped transcript window for a same-account session",
+    sampleArgs: { sessionId: "…", limit: 40 },
+  },
+  sessions_status: {
+    summary: "Coarse status for a same-account session (open / idle / pending_approval)",
+    sampleArgs: { sessionId: "…" },
+  },
+  sessions_send: {
+    summary:
+      "Run (default) or inject text into another same-account session; optional waitMs (Design §19.11)",
+    sampleArgs: {
+      sessionId: "…",
+      text: "Follow up on the earlier draft",
+      run: true,
+      waitMs: 15000,
+    },
+  },
+  view_image: {
+    summary:
+      "Inspect a jail image or https URL (SSRF-gated; optional vision; Design §19.12 D1)",
+    sampleArgs: { path: "uploads/photo.png" },
+  },
+  image_generate: {
+    summary:
+      "Generate an image (async jobId by default; wait:true sync; Owner + Privacy; Design §19.12 D2)",
+    sampleArgs: { prompt: "a watercolor of a kitchen counter", wait: false },
+  },
+  spawn_helper: {
+    summary:
+      "Single helper (thin wrapper over task; Design §19.13 P2-E)",
+    sampleArgs: { prompt: "Summarize the open documents", allowTools: ["read_file", "list_dir"] },
+  },
+  task: {
+    summary:
+      "Parallel harness-style sub-agents (tasks[] / objective; caps; Design §19.13 P2-E2)",
+    sampleArgs: {
+      tasks: [
+        { objective: "Summarize doc A" },
+        { objective: "Summarize doc B" },
+      ],
+      allowTools: ["read_file", "list_dir"],
+    },
   },
   exec: {
     summary: "Run a shell command (asks / grants apply)",
@@ -619,6 +694,45 @@ export async function runExtendedWorkflowTool(input: {
   authorizeBrowserFallback?: (detail: {
     engines: Array<"bing" | "google">;
   }) => Promise<boolean>;
+  /** Design §19.11 — session tools. */
+  sessions?: import("./sessions.js").SessionStore | null;
+  /** Design §19.11 — tool policy for message fail-closed. */
+  toolPolicy?: "standard" | "restricted";
+  /** Design §19.13 — current helper nesting depth. */
+  helperDepth?: number;
+  /** Design §19.13 — legacy/test complete hook (text-only child). */
+  spawnHelperComplete?: (prompt: string, allowTools: string[]) => Promise<string>;
+  /** Design §19.13 P2-E2 — LocalMeshSubmitter child runner. */
+  runMeshChild?: (opts: {
+    objective: string;
+    allowTools: string[];
+    signal?: AbortSignal;
+  }) => Promise<import("@envoymesh/envoy-harness").SubagentResult>;
+  /** Optional abort for task parallel pool. */
+  abortSignal?: AbortSignal;
+  /** Design §19.12 D1 — optional vision describe for view_image. */
+  visionDescribe?: (meta: {
+    path: string;
+    mimeType: string;
+    bytesBase64: string;
+  }) => Promise<string | null>;
+  /** Design §19.12 D2 — Owner media-generate gate. */
+  mediaGenerate?: import("./media-generate-store.js").MediaGenerateStore | null;
+  /** Design §19.12 D2 — optional generate provider hook. */
+  imageGenerateImpl?: (
+    prompt: string,
+  ) => Promise<{ bytes: Buffer; mimeType: string; ext: string }>;
+  /** Design §19.12 D2 — async enqueue (default path when wait≠true). */
+  enqueueImageGenerate?: (prompt: string) => Promise<{ jobId: string }>;
+  /** Design §19.11 — sessions_send run+wait wake. */
+  sessionsSendWake?: (opts: {
+    sessionId: string;
+    text: string;
+    waitMs: number;
+    fromSessionId?: string | null;
+  }) => Promise<{ turnId: string; reply?: string; timedOut?: boolean }>;
+  /** SSRF-safe fetch for view_image https (same as http_fetch). */
+  httpFetchImpl?: typeof fetch;
 }): Promise<string> {
   ensureSmarthomeToolSpecsRegistered();
   const tool = normalizeWorkflowToolName(input.tool);
@@ -629,6 +743,19 @@ export async function runExtendedWorkflowTool(input: {
   }
   if (tool === "extract_document") {
     return runExtractDocumentTool(input);
+  }
+  if (
+    tool === "message" ||
+    tool === "sessions_list" ||
+    tool === "sessions_history" ||
+    tool === "sessions_status" ||
+    tool === "sessions_send" ||
+    tool === "view_image" ||
+    tool === "image_generate" ||
+    tool === "spawn_helper" ||
+    tool === "task"
+  ) {
+    return runPhase2Tool(input, tool, origin);
   }
   if (tool === "schedule") {
     return runScheduleTool({
@@ -927,11 +1054,30 @@ async function runExtractDocumentTool(input: {
     );
   }
 
-  const gfm = await extractDocumentText(ext, raw);
+  let gfm = await extractDocumentText(ext, raw);
   if (!gfm) {
     throw new Error(
       "envoyhome.bad_params: extract unavailable (unsupported, encrypted, scanned PDF, or malformed)",
     );
+  }
+
+  const { sliceExtractByPageRange } = await import("./phase2-tools.js");
+  const startPage =
+    typeof input.args.startPage === "number"
+      ? input.args.startPage
+      : typeof input.args.pageStart === "number"
+        ? input.args.pageStart
+        : undefined;
+  const endPage =
+    typeof input.args.endPage === "number"
+      ? input.args.endPage
+      : typeof input.args.pageEnd === "number"
+        ? input.args.pageEnd
+        : startPage;
+  let pages: { start: number; end: number } | undefined;
+  if (startPage !== undefined && endPage !== undefined) {
+    gfm = sliceExtractByPageRange(gfm, startPage, endPage);
+    pages = { start: Math.floor(startPage), end: Math.floor(endPage) };
   }
 
   const uri =
@@ -960,7 +1106,145 @@ async function runExtractDocumentTool(input: {
     sourcePath,
     text,
     ...(truncated ? { textTruncated: true } : {}),
+    ...(pages ? { pages } : {}),
   });
+}
+
+async function runPhase2Tool(
+  input: Parameters<typeof runExtendedWorkflowTool>[0],
+  tool: string,
+  origin: "attended" | "unattended",
+): Promise<string> {
+  const {
+    runMessageTool,
+    runSessionsListTool,
+    runSessionsHistoryTool,
+    runSessionsStatusTool,
+    runSessionsSendTool,
+    runViewImageTool,
+    runImageGenerateTool,
+    runSpawnHelperTool,
+    runTaskTool,
+  } = await import("./phase2-tools.js");
+  const { appendTranscriptLine, readTranscript } = await import("@envoyhome/harness-host");
+  if (!input.accountId) {
+    throw new Error(`envoyhome.bad_params: accountId required for ${tool}`);
+  }
+  if (tool === "message") {
+    const { resolveSandboxPath } = await import("./fs-jail.js");
+    return runMessageTool({
+      args: input.args,
+      accountId: input.accountId,
+      channels: input.channels,
+      bindings: input.channels.bindings,
+      privacyMode: input.channels.getPrivacyMode() ?? null,
+      ...(input.toolPolicy ? { toolPolicy: input.toolPolicy } : {}),
+      resolveMediaPath: async (rel) => {
+        const resolved = resolveSandboxPath({
+          accountFilesRoot: input.paths.accountFiles(input.accountId!),
+          shareRoot: input.paths.shareDir,
+          path: rel,
+          write: false,
+          ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
+          ...(input.workspaceMode ? { workspaceMode: input.workspaceMode } : {}),
+          ...(input.workspaceMounts ? { workspaceMounts: input.workspaceMounts } : {}),
+        });
+        // Return the original relative path (jail-validated by resolve).
+        void resolved.absolute;
+        return rel.replace(/\\/g, "/");
+      },
+    });
+  }
+  if (tool === "sessions_list") {
+    if (!input.sessions) throw new Error("envoyhome.tool_unavailable: sessions not configured");
+    return runSessionsListTool({
+      args: input.args,
+      accountId: input.accountId,
+      sessions: input.sessions,
+    });
+  }
+  if (tool === "sessions_history") {
+    if (!input.sessions) throw new Error("envoyhome.tool_unavailable: sessions not configured");
+    return runSessionsHistoryTool({
+      args: input.args,
+      accountId: input.accountId,
+      sessions: input.sessions,
+      readTranscript,
+    });
+  }
+  if (tool === "sessions_status") {
+    if (!input.sessions) throw new Error("envoyhome.tool_unavailable: sessions not configured");
+    return runSessionsStatusTool({
+      args: input.args,
+      accountId: input.accountId,
+      sessions: input.sessions,
+    });
+  }
+  if (tool === "sessions_send") {
+    if (!input.sessions) throw new Error("envoyhome.tool_unavailable: sessions not configured");
+    return runSessionsSendTool({
+      args: input.args,
+      accountId: input.accountId,
+      sessions: input.sessions,
+      origin,
+      ...(input.sessionId ? { fromSessionId: input.sessionId } : {}),
+      appendLine: appendTranscriptLine,
+      ...(input.sessionsSendWake ? { wake: input.sessionsSendWake } : {}),
+    });
+  }
+  if (tool === "view_image") {
+    return runViewImageTool({
+      args: input.args,
+      accountId: input.accountId,
+      paths: input.paths,
+      workspaceRoot: input.workspaceRoot ?? null,
+      workspaceMode: input.workspaceMode ?? null,
+      workspaceMounts: input.workspaceMounts ?? null,
+      ...(input.visionDescribe ? { visionDescribe: input.visionDescribe } : {}),
+      ...(input.httpFetchImpl ? { httpFetch: input.httpFetchImpl } : {}),
+    });
+  }
+  if (tool === "image_generate") {
+    return runImageGenerateTool({
+      args: input.args,
+      accountId: input.accountId,
+      paths: input.paths,
+      origin,
+      privacyMode: input.channels.getPrivacyMode() ?? null,
+      mediaGenerate: input.mediaGenerate ?? null,
+      ...(input.imageGenerateImpl ? { generateImpl: input.imageGenerateImpl } : {}),
+      ...(input.enqueueImageGenerate ? { enqueueGenerate: input.enqueueImageGenerate } : {}),
+    });
+  }
+  if (tool === "task") {
+    if (!input.runMeshChild && !input.spawnHelperComplete) {
+      throw new Error("envoyhome.tool_unavailable: task not configured");
+    }
+    return runTaskTool({
+      args: input.args,
+      accountId: input.accountId,
+      origin,
+      helperDepth: input.helperDepth ?? 0,
+      ...(input.runMeshChild ? { runMeshChild: input.runMeshChild } : {}),
+      ...(input.spawnHelperComplete ? { complete: input.spawnHelperComplete } : {}),
+      ...(input.abortSignal ? { signal: input.abortSignal } : {}),
+    });
+  }
+  if (tool === "spawn_helper") {
+    if (!input.runMeshChild && !input.spawnHelperComplete) {
+      throw new Error("envoyhome.tool_unavailable: spawn_helper not configured");
+    }
+    return runSpawnHelperTool({
+      args: input.args,
+      accountId: input.accountId,
+      origin,
+      helperDepth: input.helperDepth ?? 0,
+      ...(input.runMeshChild ? { runMeshChild: input.runMeshChild } : {}),
+      ...(input.spawnHelperComplete ? { complete: input.spawnHelperComplete } : {}),
+      ...(input.abortSignal ? { signal: input.abortSignal } : {}),
+    });
+  }
+  throw new Error(`envoyhome.bad_params: unknown phase2 tool ${tool}`);
 }
 
 /** Design §7.4 — chat-native schedule propose / confirm / list / change. */

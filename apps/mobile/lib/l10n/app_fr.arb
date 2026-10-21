@@ -270,8 +270,8 @@
   "schedHistoryNotSet": "Not set",
   "schedHistoryRuns": "Runs",
   "schedNoDismissed": "No canceled or expired proposals.",
-  "schedDismissedCanceled": "canceled",
-  "schedDismissedExpired": "expired",
+  "schedDismissedCanceled": "Annulé",
+  "schedDismissedExpired": "Expiré",
   "schedNext": "Prochain",
   "schedKindRepeating": "Récurrent",
   "schedKindOnce": "Une fois",
@@ -284,7 +284,9 @@
   "schedDayOfMonth": "jour {d}",
   "@schedDayOfMonth": {
     "placeholders": {
-      "d": { "type": "String" }
+      "d": {
+        "type": "String"
+      }
     }
   },
   "wfEditorTitle": "Workflow",
@@ -602,7 +604,9 @@
   "profilesTimeZoneValue": "Time zone: {tz}",
   "@profilesTimeZoneValue": {
     "placeholders": {
-      "tz": { "type": "String" }
+      "tz": {
+        "type": "String"
+      }
     }
   },
   "profilesTimeZoneEdit": "Time zone",
@@ -612,7 +616,9 @@
   "profilesTimeZoneDone": "Time zone set to {tz}",
   "@profilesTimeZoneDone": {
     "placeholders": {
-      "tz": { "type": "String" }
+      "tz": {
+        "type": "String"
+      }
     }
   },
   "profilesShareLocationTitle": "Partager la position avec Home",
@@ -675,5 +681,57 @@
   "homeFolderComputer": "Computer",
   "homeFolderHome": "Home",
   "homeFolderParent": "Parent folder",
-  "homeFolderNoSubfolders": "No subfolders"
+  "homeFolderNoSubfolders": "No subfolders",
+  "choiceCardConfirm": "Confirmer",
+  "choiceCardPickOne": "Choisissez au moins une option.",
+  "choiceCardAnswered": "Reçu.",
+  "choiceCardFailed": "Impossible d'envoyer ce choix : {error}",
+  "@choiceCardFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatPendingChoices": "{count} en attente de votre choix",
+  "@chatPendingChoices": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "choiceCardCancel": "Annuler",
+  "choiceCardCanceled": "Choix annulé.",
+  "choiceCardExpired": "Expiré",
+  "choiceCardExpiredHint": "Ce choix a expiré — reposez la question si besoin.",
+  "choiceCardExpiresIn": "Expire dans {mins} min",
+  "choiceCardTextPlaceholder": "Saisissez votre réponse",
+  "@choiceCardExpiresIn": {
+    "placeholders": {
+      "mins": {
+        "type": "int"
+      }
+    }
+  },
+  "schedulesChatTabChat": "Plannings",
+  "schedulesChatTabHistories": "Historiques",
+  "schedulesChatHistoriesHint": "Propositions annulées ou expirées, et exécutions récentes.",
+  "jobsHistoriesMovedHint": "Historique sous Plannings → Historiques",
+  "schedulesChatClosedAt": "Fermé {when}",
+  "@schedulesChatClosedAt": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "schedulesChatRanAt": "Exécuté {when}",
+  "@schedulesChatRanAt": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  }
 }

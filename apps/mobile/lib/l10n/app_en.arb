@@ -120,7 +120,9 @@
   "profilesWorkspaceCrossBody": "This adds a host folder for {name}. Continue only if you intend to configure their workspace.",
   "@profilesWorkspaceCrossBody": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "profilesWorkspaceDenied": "Not visible on this device",
@@ -132,7 +134,9 @@
   "profilesTimeZoneValue": "Time zone: {tz}",
   "@profilesTimeZoneValue": {
     "placeholders": {
-      "tz": { "type": "String" }
+      "tz": {
+        "type": "String"
+      }
     }
   },
   "profilesTimeZoneEdit": "Time zone",
@@ -142,7 +146,9 @@
   "profilesTimeZoneDone": "Time zone set to {tz}",
   "@profilesTimeZoneDone": {
     "placeholders": {
-      "tz": { "type": "String" }
+      "tz": {
+        "type": "String"
+      }
     }
   },
   "profilesShareLocationTitle": "Share location with Home",
@@ -154,14 +160,18 @@
   "profilesDeleteBody": "Delete {name}? Their sandbox and workspace config are removed. This cannot be undone.",
   "@profilesDeleteBody": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "profilesDeleteConfirm": "Delete",
   "profilesDeleteDone": "Deleted {name}",
   "@profilesDeleteDone": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "profilesDeleteOwnerBlocked": "Cannot delete the household Owner. Transfer ownership first.",
@@ -169,26 +179,34 @@
   "profilesTransferBody": "Make {name} the household Owner. They will control pairing, bindings, and household Settings.",
   "@profilesTransferBody": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "profilesTransferConfirm": "Transfer",
   "profilesTransferDone": "Owner is now {name}",
   "@profilesTransferDone": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "profilesTransferFailed": "Transfer failed: {error}",
   "@profilesTransferFailed": {
     "placeholders": {
-      "error": { "type": "String" }
+      "error": {
+        "type": "String"
+      }
     }
   },
   "profilesTransferTo": "Transfer to {name}",
   "@profilesTransferTo": {
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "profilesToolPolicy": "Tool policy",
@@ -203,13 +221,17 @@
   "connRevokeConfirm": "Revoke device {id}? It will need to pair again.",
   "@connRevokeConfirm": {
     "placeholders": {
-      "id": { "type": "String" }
+      "id": {
+        "type": "String"
+      }
     }
   },
   "connForgetConfirm": "Forget device {id}? The pairing record is removed permanently.",
   "@connForgetConfirm": {
     "placeholders": {
-      "id": { "type": "String" }
+      "id": {
+        "type": "String"
+      }
     }
   },
   "connOwnerWriteOnly": "Only the household Owner device can change this setting.",
@@ -395,8 +417,8 @@
   "schedHistoryNotSet": "Not set",
   "schedHistoryRuns": "Runs",
   "schedNoDismissed": "No canceled or expired proposals.",
-  "schedDismissedCanceled": "canceled",
-  "schedDismissedExpired": "expired",
+  "schedDismissedCanceled": "Canceled",
+  "schedDismissedExpired": "Expired",
   "schedNext": "Next",
   "schedKindRepeating": "Repeats",
   "schedKindOnce": "Once",
@@ -409,7 +431,9 @@
   "schedDayOfMonth": "day {d}",
   "@schedDayOfMonth": {
     "placeholders": {
-      "d": { "type": "String" }
+      "d": {
+        "type": "String"
+      }
     }
   },
   "wfEditorTitle": "Workflow",
@@ -655,6 +679,58 @@
     "placeholders": {
       "count": {
         "type": "int"
+      }
+    }
+  },
+  "choiceCardConfirm": "Confirm",
+  "choiceCardPickOne": "Pick at least one option.",
+  "choiceCardAnswered": "Got it.",
+  "choiceCardFailed": "Could not send that choice: {error}",
+  "@choiceCardFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatPendingChoices": "{count} waiting for your choice",
+  "@chatPendingChoices": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "choiceCardCancel": "Cancel",
+  "choiceCardCanceled": "Choice dismissed.",
+  "choiceCardExpired": "Expired",
+  "choiceCardExpiredHint": "This choice expired — ask again if you still need it.",
+  "choiceCardExpiresIn": "Expires in {mins} min",
+  "choiceCardTextPlaceholder": "Type your answer",
+  "@choiceCardExpiresIn": {
+    "placeholders": {
+      "mins": {
+        "type": "int"
+      }
+    }
+  },
+  "schedulesChatTabChat": "Schedules",
+  "schedulesChatTabHistories": "Histories",
+  "schedulesChatHistoriesHint": "Proposals you canceled or that expired, and recent job runs.",
+  "jobsHistoriesMovedHint": "History moved to Schedules → Histories",
+  "schedulesChatClosedAt": "Closed {when}",
+  "@schedulesChatClosedAt": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "schedulesChatRanAt": "Ran {when}",
+  "@schedulesChatRanAt": {
+    "placeholders": {
+      "when": {
+        "type": "String"
       }
     }
   }

@@ -38,6 +38,7 @@ import { WebSearchService } from "../dist/web-search.js";
 import { BrowserControlService } from "../dist/browser-control.js";
 import { PushTokenStore } from "../dist/push-tokens.js";
 import { ScheduleService } from "../dist/schedule/service.js";
+import { StandingOrderStore } from "../dist/standing-orders.js";
 import { SkillService } from "../dist/skills.js";
 import { WorkflowStore } from "../dist/workflows.js";
 import { WorkflowStepTemplateStore } from "../dist/workflow-step-templates.js";
@@ -180,6 +181,7 @@ async function makeRouterDeps(stateDir: string): Promise<RouterDeps> {
     workflows: new WorkflowStore(paths),
     workflowStepTemplates: new WorkflowStepTemplateStore(paths),
     schedules: new ScheduleService({ paths }),
+    standingOrders: new StandingOrderStore(paths),
     skills: new SkillService(paths),
     artifacts: new ArtifactService(paths, () => "http://127.0.0.1:1"),
     webSearch: new WebSearchService(paths),

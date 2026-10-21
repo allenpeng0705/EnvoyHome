@@ -8,6 +8,7 @@ import {
   createLlamaCppProvider,
   createOpenAICompatProvider,
   createAnthropicCompatProvider,
+  generateOpenAIImage,
   type ModelProvider,
   type ModelMode,
   type PlacementFilter,
@@ -681,6 +682,62 @@ export class ProviderStore {
         error: err instanceof Error ? err.message : String(err),
       };
     }
+  }
+
+  /**
+   * Design §19.12 D2 — pick an enabled OpenAI-compat cloud provider with a secret
+   * and call /v1/images/generations. Fail closed when none eligible.
+   */
+  async generateImage(input: {
+    accountId: string;
+    prompt: string;
+    signal?: AbortSignal;
+  }): Promise<{ bytes: Buffer; mimeType: string; ext: string; providerId: string; model: string }> {
+    void input.accountId;
+    const candidates = this.state.providers.filter(
+      (p) =>
+        p.enabled &&
+        (p.kind === "cloud_openai_compat" || p.kind === "local_openai_compat") &&
+        this.secrets.get(p.id) !== undefined,
+    );
+    // Prefer cloud; fall back to local openai-compat (some gateways expose images).
+    const ordered = [
+      ...candidates.filter((p) => p.kind === "cloud_openai_compat"),
+      ...candidates.filter((p) => p.kind === "local_openai_compat"),
+    ];
+    const rec = ordered[0];
+    if (!rec) {
+      throw new Error(
+        "envoyhome.tool_unavailable: no OpenAI-compat provider with secret for image_generate",
+      );
+    }
+    const secret = this.secrets.get(rec.id);
+    const out = await generateOpenAIImage({
+      baseUrl: rec.baseUrl ?? "https://api.openai.com/v1",
+      ...(secret ? { secret } : {}),
+      model: rec.model?.includes("image") || rec.model?.includes("dall")
+        ? rec.model
+        : "dall-e-3",
+      prompt: input.prompt,
+      ...(input.signal ? { signal: input.signal } : {}),
+    });
+    return {
+      bytes: out.bytes,
+      mimeType: out.mimeType,
+      ext: out.ext,
+      providerId: rec.id,
+      model: out.model,
+    };
+  }
+
+  /** True when at least one OpenAI-compat provider has a secret (D2 Doctor). */
+  hasImageGenerateProvider(): boolean {
+    return this.state.providers.some(
+      (p) =>
+        p.enabled &&
+        (p.kind === "cloud_openai_compat" || p.kind === "local_openai_compat") &&
+        this.secrets.get(p.id) !== undefined,
+    );
   }
 
   /**

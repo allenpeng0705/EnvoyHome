@@ -908,6 +908,178 @@ let chatPendingApprovals = [];
  */
 let chatPendingSchedule = null;
 
+/** @type {Array<{ id: string, question: string, options?: Array<{ id: string, label: string, destructive?: boolean }>, selection?: string, multiline?: boolean, sessionId?: string, turnId?: string, expiresAt?: string, detail?: string }>} */
+let chatPendingChoices = [];
+
+function choiceExpiryHint(expiresAt) {
+  if (!expiresAt) return "";
+  const ms = Date.parse(expiresAt) - Date.now();
+  if (Number.isNaN(ms)) return "";
+  if (ms <= 0) return t("choiceCard.expired");
+  const mins = Math.max(1, Math.ceil(ms / 60_000));
+  return t("choiceCard.expiresIn", { mins });
+}
+
+function choiceCardHtml(c) {
+  if (!c || !c.id) return "";
+  const selection = c.selection === "many" || c.selection === "text" ? c.selection : "one";
+  const q = escapeHtml(c.question || "");
+  const expired = c.expiresAt && Date.parse(c.expiresAt) < Date.now();
+  const expiry = choiceExpiryHint(c.expiresAt);
+  const expiryHtml = expiry
+    ? `<span class="badge chat-choice-expiry">${escapeHtml(expiry)}</span>`
+    : "";
+  // Do not echo detail (often the raw user line) — question is enough.
+  if (expired) {
+    return `<div class="chat-choice is-expired" data-choice-id="${escapeHtml(c.id)}">
+      <div class="chat-choice-head"><strong>${q}</strong>${expiryHtml}</div>
+      <p class="muted">${escapeHtml(t("choiceCard.expiredHint"))}</p>
+    </div>`;
+  }
+  const cancelBtn = `<button type="button" class="secondary" data-act="cancel">${escapeHtml(t("choiceCard.cancel"))}</button>`;
+  if (selection === "text") {
+    return `<div class="chat-choice" data-choice-id="${escapeHtml(c.id)}" data-selection="text">
+      <div class="chat-choice-head"><strong>${q}</strong>${expiryHtml}</div>
+      <textarea class="chat-choice-text" rows="3" placeholder="${escapeHtml(t("choiceCard.textPlaceholder"))}" aria-label="${q}"></textarea>
+      <div class="row">
+        <button type="button" data-act="confirm">${escapeHtml(t("choiceCard.confirm"))}</button>
+        ${cancelBtn}
+      </div>
+    </div>`;
+  }
+  if (selection === "many") {
+    const opts = (c.options || [])
+      .map(
+        (o) => `<label class="chat-choice-opt"><input type="checkbox" value="${escapeHtml(o.id)}" /> <span>${escapeHtml(o.label)}</span></label>`,
+      )
+      .join("");
+    return `<div class="chat-choice" data-choice-id="${escapeHtml(c.id)}" data-selection="many">
+      <div class="chat-choice-head"><strong>${q}</strong>${expiryHtml}</div>
+      <div class="chat-choice-opts">${opts}</div>
+      <div class="row">
+        <button type="button" data-act="confirm">${escapeHtml(t("choiceCard.confirm"))}</button>
+        ${cancelBtn}
+      </div>
+    </div>`;
+  }
+  const btns = (c.options || [])
+    .map((o) => {
+      const cls = o.destructive ? "danger" : "";
+      return `<button type="button" class="${cls}" data-act="one" data-option-id="${escapeHtml(o.id)}">${escapeHtml(o.label)}</button>`;
+    })
+    .join("");
+  return `<div class="chat-choice" data-choice-id="${escapeHtml(c.id)}" data-selection="one">
+    <div class="chat-choice-head"><strong>${q}</strong>${expiryHtml}</div>
+    <div class="row chat-choice-btns">${btns}${cancelBtn}</div>
+  </div>`;
+}
+
+function scrollChoiceCardIntoView(root) {
+  const el = root?.querySelector?.(".chat-choice:not(.is-expired)");
+  if (el && typeof el.scrollIntoView === "function") {
+    el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+}
+
+function bindChoiceCardActions(root, onDone) {
+  root.querySelectorAll(".chat-choice").forEach((card) => {
+    const choiceId = card.getAttribute("data-choice-id");
+    if (!choiceId) return;
+    if (card.classList.contains("is-expired")) return;
+    const selection = card.getAttribute("data-selection") || "one";
+    card.querySelectorAll("[data-act]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const aid = accountId();
+        if (!aid) return;
+        btn.disabled = true;
+        /** @type {Record<string, unknown>} */
+        const params = { accountId: aid, id: choiceId };
+        if (btn.getAttribute("data-act") === "cancel") {
+          params.cancel = true;
+        } else if (selection === "one") {
+          const oid = btn.getAttribute("data-option-id");
+          if (!oid) {
+            btn.disabled = false;
+            return;
+          }
+          params.optionId = oid;
+        } else if (selection === "many") {
+          const ids = [...card.querySelectorAll('input[type="checkbox"]:checked')].map(
+            (el) => /** @type {HTMLInputElement} */ (el).value,
+          );
+          if (!ids.length) {
+            showToast(t("choiceCard.pickOne"), "err");
+            btn.disabled = false;
+            return;
+          }
+          params.optionIds = ids;
+        } else {
+          const ta = card.querySelector("textarea");
+          const text = ta && "value" in ta ? String(ta.value).trim() : "";
+          if (!text) {
+            showToast(t("choiceCard.pickOne"), "err");
+            btn.disabled = false;
+            return;
+          }
+          params.text = text;
+        }
+        const ans = await rpc("home.answerChoice", params);
+        if (ans.error) {
+          showToast(errMsg(ans) || t("choiceCard.failed"), "err");
+          btn.disabled = false;
+          return;
+        }
+        chatPendingChoices = chatPendingChoices.filter((c) => c.id !== choiceId);
+        const canceled = params.cancel === true || ans.result?.canceled === true;
+        showToast(canceled ? t("choiceCard.canceledToast") : t("choiceCard.answeredToast"), "ok");
+        await onDone();
+      });
+    });
+  });
+}
+
+/** @type {ReturnType<typeof setTimeout> | null} */
+let chatChoiceExpiryTimer = null;
+
+function scheduleChoiceExpiryRefresh(sessionId) {
+  if (chatChoiceExpiryTimer) {
+    clearTimeout(chatChoiceExpiryTimer);
+    chatChoiceExpiryTimer = null;
+  }
+  let soonest = Infinity;
+  for (const c of chatPendingChoices) {
+    const t = c?.expiresAt ? Date.parse(c.expiresAt) : NaN;
+    if (!Number.isNaN(t) && t < soonest) soonest = t;
+  }
+  if (!Number.isFinite(soonest)) return;
+  const delay = Math.max(250, soonest - Date.now() + 50);
+  chatChoiceExpiryTimer = setTimeout(() => {
+    chatChoiceExpiryTimer = null;
+    void refreshChatPendingChoices(sessionId).then(() => {
+      if (isChatSurface(activeView)) refreshOpenChatView();
+    });
+  }, delay);
+}
+
+async function refreshChatPendingChoices(sessionId) {
+  const aid = accountId();
+  if (!aid || !sessionId) {
+    chatPendingChoices = [];
+    if (chatChoiceExpiryTimer) {
+      clearTimeout(chatChoiceExpiryTimer);
+      chatChoiceExpiryTimer = null;
+    }
+    return;
+  }
+  const body = await rpc("home.listChoices", {
+    accountId: aid,
+    sessionId,
+  }).catch(() => null);
+  const rows = body?.result?.choices || body?.choices || [];
+  chatPendingChoices = Array.isArray(rows) ? rows : [];
+  scheduleChoiceExpiryRefresh(sessionId);
+}
+
 function scheduleCardHtml(p) {
   if (!p || !p.proposalId) return "";
   const expired = p.expiresAt && Date.parse(p.expiresAt) < Date.now();
@@ -941,7 +1113,7 @@ function bindScheduleCardActions(root, onDone) {
       const card = btn.closest("[data-proposal-id]");
       const proposalId = card?.dataset.proposalId;
       if (!proposalId) return;
-      const aid = selectedAccountId();
+      const aid = accountId();
       if (!aid) return;
       btn.disabled = true;
       if (btn.dataset.act === "confirm") {
@@ -968,7 +1140,7 @@ function bindScheduleCardActions(root, onDone) {
 }
 
 async function refreshChatPendingSchedule(sessionId) {
-  const aid = selectedAccountId();
+  const aid = accountId();
   if (!aid || !sessionId) {
     chatPendingSchedule = null;
     return;
@@ -979,16 +1151,131 @@ async function refreshChatPendingSchedule(sessionId) {
   chatPendingSchedule = row?.pendingSchedule || null;
 }
 
+/** Schedules chat sub-pane: conversation vs Histories (Not set + Runs). */
+/** @type {"chat" | "histories"} */
+let schedulesChatPane = "chat";
+
+function formatScheduleWhen(iso) {
+  if (!iso) return "—";
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return String(iso);
+    return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+  } catch {
+    return String(iso);
+  }
+}
+
+function schedulesDismissedTitle(d) {
+  const name = typeof d?.name === "string" ? d.name.trim() : "";
+  if (name) return name;
+  const msg = typeof d?.message === "string" ? d.message.trim() : "";
+  if (msg) return msg;
+  const local = typeof d?.resolvedLocal === "string" ? d.resolvedLocal.trim() : "";
+  if (!local) return "—";
+  if (/^cron\s/i.test(local)) return t("jobs.kindRepeating");
+  return local;
+}
+
+function schedulesDismissedWhen(d) {
+  const local = typeof d?.resolvedLocal === "string" ? d.resolvedLocal.trim() : "";
+  if (!local || /^cron\s/i.test(local)) return "";
+  return local;
+}
+
+/** History panel for Schedules chat (moved from Skills → Schedules). */
+async function schedulesHistoriesPanelHtml(aid) {
+  const [listed, receiptsBody] = await Promise.all([
+    rpc("home.listSchedules", { accountId: aid }).catch(() => null),
+    rpc("home.listScheduleReceipts", { accountId: aid, limit: 20 }).catch(() => null),
+  ]);
+  const dismissed = Array.isArray(listed?.result?.dismissed)
+    ? listed.result.dismissed
+    : Array.isArray(listed?.dismissed)
+      ? listed.dismissed
+      : [];
+  const receipts = receiptsBody?.error
+    ? []
+    : receiptsBody?.result?.receipts || receiptsBody?.receipts || [];
+  const dismissedRows = dismissed
+    .slice(0, 20)
+    .map((d) => {
+      const statusLabel =
+        d.status === "expired" ? t("jobs.dismissedExpired") : t("jobs.dismissedCanceled");
+      const badgeClass = d.status === "expired" ? "sched-hist-badge is-expired" : "sched-hist-badge is-canceled";
+      const title = schedulesDismissedTitle(d);
+      const whenLine = schedulesDismissedWhen(d);
+      const closed = formatScheduleWhen(d.closedAt);
+      return `<li class="sched-hist-row">
+        <div class="sched-hist-row-top">
+          <strong class="sched-hist-title">${escapeHtml(title)}</strong>
+          <span class="${badgeClass}">${escapeHtml(statusLabel)}</span>
+        </div>
+        ${whenLine ? `<p class="sched-hist-meta">${escapeHtml(whenLine)}</p>` : ""}
+        <p class="sched-hist-meta muted">${escapeHtml(t("schedulesChat.closedAt", { when: closed }))}</p>
+      </li>`;
+    })
+    .join("");
+  const receiptRows = receipts
+    .slice(0, 20)
+    .map((r) => {
+      const when = formatScheduleWhen(r.finishedAt || r.startedAt);
+      const status = String(r.execStatus || "").trim() || "—";
+      const statusClass =
+        status === "ok"
+          ? "sched-hist-badge is-ok"
+          : status === "error"
+            ? "sched-hist-badge is-error"
+            : "sched-hist-badge";
+      const jobLabel = String(r.jobId || "").replace(/^job[_-]?/i, "") || "—";
+      const delivery =
+        r.deliveryStatus && r.deliveryStatus !== "none"
+          ? `<p class="sched-hist-meta muted">${escapeHtml(String(r.deliveryStatus))}</p>`
+          : "";
+      const err = r.error
+        ? `<p class="sched-hist-meta sched-hist-error">${escapeHtml(String(r.error))}</p>`
+        : "";
+      return `<li class="sched-hist-row">
+        <div class="sched-hist-row-top">
+          <strong class="sched-hist-title"><code>${escapeHtml(jobLabel)}</code></strong>
+          <span class="${statusClass}">${escapeHtml(status)}</span>
+        </div>
+        <p class="sched-hist-meta muted">${escapeHtml(t("schedulesChat.ranAt", { when }))}</p>
+        ${delivery}${err}
+      </li>`;
+    })
+    .join("");
+  return `<div class="schedules-histories">
+    <p class="muted schedules-histories-lede">${escapeHtml(t("schedulesChat.historiesHint"))}</p>
+    <section class="sched-hist-section">
+      <h4 class="job-history-heading">${escapeHtml(t("jobs.historyNotSet"))}</h4>
+      <ul class="sched-hist-list">${dismissedRows || `<li class="sched-hist-empty muted">${escapeHtml(t("jobs.noDismissed"))}</li>`}</ul>
+    </section>
+    <section class="sched-hist-section">
+      <h4 class="job-history-heading">${escapeHtml(t("jobs.historyRuns"))}</h4>
+      <ul class="sched-hist-list">${receiptRows || `<li class="sched-hist-empty muted">${escapeHtml(t("jobs.noReceipts"))}</li>`}</ul>
+    </section>
+  </div>`;
+}
+
+function schedulesPaneToggleHtml() {
+  return `<div class="page-tabs schedules-pane-tabs" role="tablist" aria-label="${escapeHtml(t("schedulesChat.paneLabel"))}">
+    <button type="button" class="page-tab${schedulesChatPane === "chat" ? " active" : ""}" data-schedules-pane="chat" role="tab" aria-selected="${schedulesChatPane === "chat"}">${escapeHtml(t("schedulesChat.tabChat"))}</button>
+    <button type="button" class="page-tab${schedulesChatPane === "histories" ? " active" : ""}" data-schedules-pane="histories" role="tab" aria-selected="${schedulesChatPane === "histories"}">${escapeHtml(t("schedulesChat.tabHistories"))}</button>
+  </div>`;
+}
+
 /**
- * Place each pending approval after the last bubble of its turn (Design V-UX-7 inline).
- * Unmatched approvals append at the end of the thread (not a sticky top strip).
+ * Place each pending approval / choice after the last bubble of its turn (V-UX-7 / V-UX-14).
+ * Unmatched cards append at the end of the thread.
  * @param {Array<{ role: string, text: string, turnId?: string }>} log
- * @param {unknown[]} pending
- * @returns {Array<{ kind: "msg", m: { role: string, text: string, turnId?: string } } | { kind: "approval", a: any }>}
+ * @param {unknown[]} pendingApprovals
+ * @param {unknown[]} [pendingChoices]
  */
-function mergeChatLogWithApprovals(log, pending) {
-  const rows = Array.isArray(pending) ? pending : [];
-  if (rows.length === 0) {
+function mergeChatLogWithCards(log, pendingApprovals, pendingChoices) {
+  const approvals = Array.isArray(pendingApprovals) ? pendingApprovals : [];
+  const choices = Array.isArray(pendingChoices) ? pendingChoices : [];
+  if (approvals.length === 0 && choices.length === 0) {
     return log.map((m) => ({ kind: "msg", m }));
   }
   /** @type {Map<string, number>} */
@@ -996,39 +1283,63 @@ function mergeChatLogWithApprovals(log, pending) {
   log.forEach((m, i) => {
     if (m.turnId) lastIdxByTurn.set(String(m.turnId), i);
   });
-  /** @type {Map<number, unknown[]>} */
+  /** @type {Map<number, Array<{ kind: string, a?: any, c?: any }>>} */
   const insertAfter = new Map();
-  const used = new Set();
-  for (const a of rows) {
+  const usedA = new Set();
+  const usedC = new Set();
+  for (const a of approvals) {
     const tid = a && typeof a === "object" && "turnId" in a ? String(a.turnId || "") : "";
     if (tid && lastIdxByTurn.has(tid)) {
       const idx = lastIdxByTurn.get(tid);
       if (idx === undefined) continue;
       if (!insertAfter.has(idx)) insertAfter.set(idx, []);
-      insertAfter.get(idx).push(a);
-      if (a && typeof a === "object" && "id" in a) used.add(String(a.id));
+      insertAfter.get(idx).push({ kind: "approval", a });
+      if (a && typeof a === "object" && "id" in a) usedA.add(String(a.id));
     }
   }
-  /** @type {Array<{ kind: "msg", m: any } | { kind: "approval", a: any }>} */
+  for (const c of choices) {
+    const tid = c && typeof c === "object" && "turnId" in c ? String(c.turnId || "") : "";
+    if (tid && lastIdxByTurn.has(tid)) {
+      const idx = lastIdxByTurn.get(tid);
+      if (idx === undefined) continue;
+      if (!insertAfter.has(idx)) insertAfter.set(idx, []);
+      insertAfter.get(idx).push({ kind: "choice", c });
+      if (c && typeof c === "object" && "id" in c) usedC.add(String(c.id));
+    }
+  }
+  /** @type {Array<{ kind: string, m?: any, a?: any, c?: any }>} */
   const out = [];
   log.forEach((m, i) => {
     out.push({ kind: "msg", m });
-    for (const a of insertAfter.get(i) || []) out.push({ kind: "approval", a });
+    for (const row of insertAfter.get(i) || []) out.push(row);
   });
-  for (const a of rows) {
+  for (const a of approvals) {
     const id = a && typeof a === "object" && "id" in a ? String(a.id) : "";
-    if (id && used.has(id)) continue;
+    if (id && usedA.has(id)) continue;
     out.push({ kind: "approval", a });
+  }
+  for (const c of choices) {
+    const id = c && typeof c === "object" && "id" in c ? String(c.id) : "";
+    if (id && usedC.has(id)) continue;
+    out.push({ kind: "choice", c });
   }
   return out;
 }
 
+/** @deprecated use mergeChatLogWithCards */
+function mergeChatLogWithApprovals(log, pending) {
+  return mergeChatLogWithCards(log, pending, []);
+}
+
 function chatThreadHtml(log, pending, emptyKey) {
-  const merged = mergeChatLogWithApprovals(log, pending);
+  const merged = mergeChatLogWithCards(log, pending, chatPendingChoices);
   const parts = [];
   for (const row of merged) {
     if (row.kind === "approval") parts.push(approvalCardHtml(row.a));
-    else {
+    else if (row.kind === "choice") {
+      const html = choiceCardHtml(row.c);
+      if (html) parts.push(html);
+    } else {
       const html = chatBubbleHtml(row.m);
       if (html) parts.push(html);
     }
@@ -1926,6 +2237,10 @@ function renderChatLogDom(log, emptyKey) {
   if (chatPendingSchedule) {
     bindScheduleCardActions(logEl, () => showView(activeView));
   }
+  if (chatPendingChoices.length) {
+    bindChoiceCardActions(logEl, () => showView(activeView));
+    scrollChoiceCardIntoView(logEl);
+  }
   return true;
 }
 
@@ -2317,6 +2632,8 @@ function connect() {
           "home:workflow-finished",
           "home:schedule-proposed",
           "home:schedule-proposal-closed",
+          "home:choice-needed",
+          "home:choice-resolved",
         ],
       });
       for (const event of [
@@ -2330,6 +2647,8 @@ function connect() {
         "home:workflow-finished",
         "home:schedule-proposed",
         "home:schedule-proposal-closed",
+        "home:choice-needed",
+        "home:choice-resolved",
       ]) {
         await rpc("on", { event }).catch(() => undefined);
       }
@@ -2494,6 +2813,7 @@ function connect() {
               }
               if (isChatSurface(activeView) && sid === readChatSessionId(purposeForView(activeView))) {
                 await refreshChatPendingSchedule(sid);
+                await refreshChatPendingChoices(sid);
               }
               refreshOpenChatView();
               if (activeView === "chat" && aid && sid === chatSessionId) {
@@ -2544,6 +2864,24 @@ function connect() {
         if (chatPendingSchedule?.proposalId === data.proposalId) {
           chatPendingSchedule = null;
           if (isChatSurface(activeView)) refreshOpenChatView();
+        }
+      }
+      if (name === "home:choice-needed" && data?.id) {
+        const purpose = purposeForView(activeView);
+        const sid = readChatSessionId(purpose);
+        if (sid && data.sessionId === sid) {
+          chatPendingChoices = [
+            ...chatPendingChoices.filter((c) => c.id !== data.id),
+            data,
+          ];
+          if (isChatSurface(activeView)) refreshOpenChatView();
+        }
+      }
+      if (name === "home:choice-resolved" && data?.id) {
+        const before = chatPendingChoices.length;
+        chatPendingChoices = chatPendingChoices.filter((c) => c.id !== data.id);
+        if (before !== chatPendingChoices.length && isChatSurface(activeView)) {
+          refreshOpenChatView();
         }
       }
       if (name === "home:local-model-download" && data?.fileName) {
@@ -4259,6 +4597,7 @@ async function showView(id) {
       }));
       chatPendingApprovals = approvalsBody.result?.approvals || [];
       await refreshChatPendingSchedule(readChatSessionId(purpose));
+      await refreshChatPendingChoices(readChatSessionId(purpose));
       const bannerKey =
         purpose === "home"
           ? "homeChat.banner"
@@ -4276,12 +4615,22 @@ async function showView(id) {
         : await currentGeneralChatTitle(aid);
       const sessionsOpen = isHome ? true : chatSessionsOpenPreferred();
       const sessionsRail = isHome ? "" : chatSessionsRailHtml();
+      const schedulesToggle = purpose === "schedules" ? schedulesPaneToggleHtml() : "";
+      const showSchedulesHistories =
+        purpose === "schedules" && schedulesChatPane === "histories";
+      const historiesBody = showSchedulesHistories
+        ? await schedulesHistoriesPanelHtml(aid)
+        : "";
       el.innerHTML = `<div class="chat-page${isHome ? "" : ` chat-page-split${sessionsOpen ? "" : " is-sessions-collapsed"}`}">
         ${sessionsRail}
         <div class="chat-main">
           ${chatChromeHtml(isHome, threadTitle, !sessionsOpen)}
-          ${banner}
-          <div class="chat-layout">
+          ${schedulesToggle}
+          ${showSchedulesHistories ? "" : banner}
+          ${
+            showSchedulesHistories
+              ? `<div class="schedules-histories-wrap" id="schedules-histories">${historiesBody}</div>`
+              : `<div class="chat-layout">
             <div class="chat-log" id="chat-log">${chatThreadHtml(log, chatPendingApprovals, emptyKey)}</div>
             <form id="chat-form" class="chat-composer">
               <div class="chat-composer-main">
@@ -4295,9 +4644,24 @@ async function showView(id) {
                 </div>
               </div>
             </form>
-          </div>
+          </div>`
+          }
         </div>
       </div>`;
+      if (purpose === "schedules") {
+        el.querySelectorAll("[data-schedules-pane]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const pane = btn.getAttribute("data-schedules-pane");
+            if (pane !== "chat" && pane !== "histories") return;
+            if (pane === schedulesChatPane) return;
+            schedulesChatPane = pane;
+            void showView("schedulesChat");
+          });
+        });
+      }
+      if (showSchedulesHistories) {
+        return;
+      }
       if (!isHome) {
         bindChatSessionsRail(aid);
         void (async () => {
@@ -4340,6 +4704,10 @@ async function showView(id) {
         }
         if (chatPendingSchedule) {
           bindScheduleCardActions(logEl, () => showView(id));
+        }
+        if (chatPendingChoices.length) {
+          bindChoiceCardActions(logEl, () => showView(id));
+          scrollChoiceCardIntoView(logEl);
         }
         logEl.scrollTop = logEl.scrollHeight;
         logEl.addEventListener("click", async (ev) => {
@@ -7678,6 +8046,8 @@ async function showView(id) {
         let daemonLocalOnly = false;
         let localEngineOn = false;
         let listErr = null;
+        let mediaGenEnabled = false;
+        let mediaGenHasProvider = false;
         if (aid) {
           const body = await listProvidersRpc(aid);
           if (body.error) listErr = errMsg(body);
@@ -7687,6 +8057,11 @@ async function showView(id) {
             placementFilter = body.result?.placementFilter || "any";
             autoSwitch = body.result?.autoModelSwitch?.enabled === true;
             daemonLocalOnly = body.result?.localOnly === true;
+          }
+          const mg = await rpc("home.getMediaGenerateConfig", { accountId: aid }).catch(() => null);
+          if (mg && !mg.error) {
+            mediaGenEnabled = mg.result?.enabled === true;
+            mediaGenHasProvider = mg.result?.hasProvider === true;
           }
         }
         try {
@@ -7734,10 +8109,41 @@ async function showView(id) {
             </fieldset>
             <div id="routing-extras"></div>
           </form>
+          <div class="card routing-card" style="margin-top:1rem">
+            <h3>${escapeHtml(t("mediaGen.title"))}</h3>
+            <p class="muted routing-hint">${escapeHtml(t("mediaGen.hint"))}</p>
+            <label class="routing-check">
+              <input type="checkbox" id="media-gen-enabled" ${mediaGenEnabled ? "checked" : ""} />
+              <span>${escapeHtml(t("mediaGen.enabled"))}</span>
+            </label>
+            <p class="muted routing-hint" id="media-gen-provider-hint"></p>
+            <div id="media-gen-msg"></div>
+          </div>
           <div id="routing-msg"></div>`
               : ""
           }`);
         wireTabs();
+        const mediaGenHint = document.getElementById("media-gen-provider-hint");
+        if (mediaGenHint) {
+          mediaGenHint.textContent = mediaGenHasProvider
+            ? t("mediaGen.providerOk")
+            : t("mediaGen.providerMissing");
+        }
+        const mediaGenCb = /** @type {HTMLInputElement | null} */ (
+          document.getElementById("media-gen-enabled")
+        );
+        mediaGenCb?.addEventListener("change", async () => {
+          const msg = document.getElementById("media-gen-msg");
+          const ans = await rpc("home.setMediaGenerateConfig", {
+            accountId: aid,
+            enabled: mediaGenCb.checked === true,
+          });
+          if (msg) {
+            msg.innerHTML = ans.error
+              ? `<p class="le-error">${escapeHtml(errMsg(ans))}</p>`
+              : `<p class="muted">${escapeHtml(t("mediaGen.saved"))}</p>`;
+          }
+        });
 
         const routingForm = /** @type {HTMLFormElement | null} */ (
           document.getElementById("routing-form")
@@ -8221,13 +8627,21 @@ async function showView(id) {
         `<button type="button" role="tab" class="page-tab${automationTab === tabId ? " active" : ""}" data-automation-tab="${tabId}" aria-selected="${
           automationTab === tabId ? "true" : "false"
         }">${escapeHtml(t(labelKey))}</button>`;
-      if (automationTab !== "skills" && automationTab !== "workflows" && automationTab !== "jobs") {
+      if (
+        automationTab !== "skills" &&
+        automationTab !== "workflows" &&
+        automationTab !== "jobs" &&
+        automationTab !== "heartbeat" &&
+        automationTab !== "standing"
+      ) {
         automationTab = "skills";
       }
       const tabsHtml = `<div class="page-tabs" role="tablist">
         ${tab("skills", "nav.skills")}
         ${tab("workflows", "nav.workflows")}
         ${tab("jobs", "nav.jobs")}
+        ${tab("heartbeat", "nav.heartbeat")}
+        ${tab("standing", "nav.standing")}
       </div>`;
       const shell = (panel) =>
         `<h2>${escapeHtml(t("nav.skills"))}</h2>${tabsHtml}<div class="page-tab-panel">${panel}</div>`;
@@ -8235,7 +8649,15 @@ async function showView(id) {
         el.querySelectorAll("[data-automation-tab]").forEach((btn) => {
           btn.addEventListener("click", async () => {
             const next = btn.getAttribute("data-automation-tab");
-            if (next !== "skills" && next !== "workflows" && next !== "jobs") return;
+            if (
+              next !== "skills" &&
+              next !== "workflows" &&
+              next !== "jobs" &&
+              next !== "heartbeat" &&
+              next !== "standing"
+            ) {
+              return;
+            }
             if (next === automationTab) return;
             automationTab = next;
             await showView("automation");
@@ -9663,6 +10085,181 @@ async function showView(id) {
         return;
       }
 
+      if (automationTab === "heartbeat") {
+        if (!aid) {
+          el.innerHTML = shell(`<p>${escapeHtml(t("profile.pick"))}</p>`);
+          wireTabs();
+          return;
+        }
+        const hb = await rpc("home.getHeartbeatConfig", { accountId: aid });
+        if (hb.error) {
+          el.innerHTML = shell(`<p class="le-error">${escapeHtml(errMsg(hb))}</p>`);
+          wireTabs();
+          return;
+        }
+        const cfg = hb.result || {};
+        const everyMin = Math.max(1, Math.round((cfg.everyMs || 1_800_000) / 60_000));
+        const minMin = Math.max(1, Math.round((cfg.minEveryMs || 900_000) / 60_000));
+        el.innerHTML = shell(`
+          <h3>${escapeHtml(t("heartbeat.title"))}</h3>
+          <p class="muted">${escapeHtml(t("heartbeat.hint"))}</p>
+          <form id="hb-form" class="stack-form">
+            <label class="check-row"><input type="checkbox" name="enabled" ${cfg.enabled ? "checked" : ""}/> ${escapeHtml(t("heartbeat.enabled"))}</label>
+            <label>${escapeHtml(t("heartbeat.everyMin"))}
+              <input type="number" name="everyMin" min="${minMin}" step="1" value="${everyMin}" />
+            </label>
+            <p class="muted">${escapeHtml(t("heartbeat.minHint", { min: String(minMin) }))}</p>
+            <label>${escapeHtml(t("heartbeat.prompt"))}
+              <textarea name="prompt" rows="4">${escapeHtml(cfg.prompt || "")}</textarea>
+            </label>
+            <button type="submit" class="primary">${escapeHtml(t("heartbeat.save"))}</button>
+          </form>
+          <div id="hb-banner"></div>
+        `);
+        wireTabs();
+        const form = el.querySelector("#hb-form");
+        const setBanner = (html) => {
+          const b = el.querySelector("#hb-banner");
+          if (b) b.innerHTML = html;
+        };
+        form?.addEventListener("submit", async (ev) => {
+          ev.preventDefault();
+          const fd = new FormData(form);
+          const enabled = fd.get("enabled") === "on";
+          const everyMinVal = Number(fd.get("everyMin") || everyMin);
+          const prompt = String(fd.get("prompt") || "").trim();
+          const ans = await rpc("home.setHeartbeatConfig", {
+            accountId: aid,
+            enabled,
+            everyMs: Math.round(everyMinVal * 60_000),
+            ...(prompt ? { prompt } : {}),
+          });
+          if (ans.error) {
+            setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+            return;
+          }
+          setBanner(`<p class="muted">${escapeHtml(t("heartbeat.saved"))}</p>`);
+          automationTab = "heartbeat";
+          await showView("automation");
+        });
+        return;
+      }
+
+      if (automationTab === "standing") {
+        if (!aid) {
+          el.innerHTML = shell(`<p>${escapeHtml(t("profile.pick"))}</p>`);
+          wireTabs();
+          return;
+        }
+        const listed = await rpc("home.listStandingOrders", { accountId: aid });
+        if (listed.error) {
+          el.innerHTML = shell(`<p class="le-error">${escapeHtml(errMsg(listed))}</p>`);
+          wireTabs();
+          return;
+        }
+        const orders = listed.result?.orders || [];
+        const rows = orders.length
+          ? `<ul class="sys-list">${orders
+              .map((o) => {
+                const whenKind =
+                  o.when && typeof o.when === "object" && o.when.kind
+                    ? String(o.when.kind)
+                    : "?";
+                return `<li class="sys-row">
+                  <div class="sys-row-main">
+                    <span class="sys-row-title">${escapeHtml(o.name || o.id)}</span>
+                    <span class="sys-row-meta muted">${escapeHtml(whenKind)}${
+                      o.enabled ? "" : ` · ${escapeHtml(t("standing.disabled"))}`
+                    }</span>
+                  </div>
+                  <div class="sys-row-actions">
+                    <button type="button" class="secondary" data-so-toggle="${escapeHtml(o.id)}" data-en="${o.enabled ? "1" : "0"}">${escapeHtml(
+                      o.enabled ? t("standing.disable") : t("standing.enable"),
+                    )}</button>
+                    <button type="button" class="secondary" data-so-remove="${escapeHtml(o.id)}">${escapeHtml(t("standing.remove"))}</button>
+                  </div>
+                </li>`;
+              })
+              .join("")}</ul>`
+          : `<p class="muted">${escapeHtml(t("standing.none"))}</p>`;
+        el.innerHTML = shell(`
+          <h3>${escapeHtml(t("standing.title"))}</h3>
+          <p class="muted">${escapeHtml(t("standing.hint"))}</p>
+          ${rows}
+          <h4>${escapeHtml(t("standing.addTitle"))}</h4>
+          <form id="so-form" class="stack-form">
+            <label>${escapeHtml(t("standing.name"))}
+              <input type="text" name="name" required maxlength="120" />
+            </label>
+            <label>${escapeHtml(t("standing.cron"))}
+              <input type="text" name="cron" placeholder="0 9 * * *" />
+            </label>
+            <label>${escapeHtml(t("standing.prompt"))}
+              <textarea name="prompt" rows="3" required></textarea>
+            </label>
+            <button type="submit" class="primary">${escapeHtml(t("standing.add"))}</button>
+          </form>
+          <div id="so-banner"></div>
+        `);
+        wireTabs();
+        const setBanner = (html) => {
+          const b = el.querySelector("#so-banner");
+          if (b) b.innerHTML = html;
+        };
+        el.querySelector("#so-form")?.addEventListener("submit", async (ev) => {
+          ev.preventDefault();
+          const fd = new FormData(/** @type {HTMLFormElement} */ (ev.target));
+          const name = String(fd.get("name") || "").trim();
+          const cron = String(fd.get("cron") || "").trim();
+          const prompt = String(fd.get("prompt") || "").trim();
+          if (!name || !cron || !prompt) return;
+          const ans = await rpc("home.putStandingOrder", {
+            accountId: aid,
+            name,
+            enabled: true,
+            when: { kind: "cron", cronExpr: cron },
+            action: { kind: "agentTurn", prompt },
+          });
+          if (ans.error) {
+            setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+            return;
+          }
+          automationTab = "standing";
+          await showView("automation");
+        });
+        el.querySelectorAll("[data-so-toggle]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-so-toggle");
+            const en = btn.getAttribute("data-en") === "1";
+            const ans = await rpc("home.setStandingOrderEnabled", {
+              accountId: aid,
+              id,
+              enabled: !en,
+            });
+            if (ans.error) {
+              setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+              return;
+            }
+            automationTab = "standing";
+            await showView("automation");
+          });
+        });
+        el.querySelectorAll("[data-so-remove]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-so-remove");
+            if (!window.confirm(t("standing.confirmRemove"))) return;
+            const ans = await rpc("home.removeStandingOrder", { accountId: aid, id });
+            if (ans.error) {
+              setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+              return;
+            }
+            automationTab = "standing";
+            await showView("automation");
+          });
+        });
+        return;
+      }
+
       if (automationTab === "jobs") {
         if (!aid) {
           el.innerHTML = shell(`<p>${escapeHtml(t("profile.pick"))}</p>`);
@@ -9705,16 +10302,7 @@ async function showView(id) {
           if (kind === "agentTurn") return t("jobs.payloadAgent");
           return t("jobs.payloadNotify");
         };
-        const formatNext = (iso) => {
-          if (!iso) return "—";
-          const d = new Date(iso);
-          if (Number.isNaN(d.getTime())) return iso;
-          try {
-            return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-          } catch {
-            return iso;
-          }
-        };
+        const formatNext = (iso) => formatScheduleWhen(iso);
         const DOW_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
         /** @param {{ kind?: string, cronExpr?: string, everyMs?: number, whenInstant?: string, timeZone?: string, nextRunAt?: string }} j */
         const formatJobWhen = (j) => {
@@ -9814,33 +10402,7 @@ async function showView(id) {
                 })
                 .join("")
             : `<li class="muted">${escapeHtml(t(emptyKey))}</li>`;
-        const receiptsBody = await rpc("home.listScheduleReceipts", { accountId: aid, limit: 20 });
-        const receipts = receiptsBody.error ? [] : receiptsBody.result?.receipts || [];
-        const dismissed = Array.isArray(listed.result?.dismissed)
-          ? listed.result.dismissed
-          : Array.isArray(listed.dismissed)
-            ? listed.dismissed
-            : [];
-        const receiptRows = receipts
-          .slice(0, 12)
-          .map((r) => {
-            const when = formatNext(r.finishedAt || r.startedAt);
-            return `<li class="muted job-receipt"><code>${escapeHtml(r.jobId || "")}</code> · ${escapeHtml(r.execStatus || "")}${
-              r.deliveryStatus && r.deliveryStatus !== "none" ? ` · ${escapeHtml(r.deliveryStatus)}` : ""
-            } · ${escapeHtml(when)}${r.error ? ` · ${escapeHtml(r.error)}` : ""}</li>`;
-          })
-          .join("");
-        const dismissedRows = dismissed
-          .slice(0, 20)
-          .map((d) => {
-            const statusLabel =
-              d.status === "expired" ? t("jobs.dismissedExpired") : t("jobs.dismissedCanceled");
-            const when = formatNext(d.closedAt);
-            return `<li class="muted job-receipt job-dismissed"><strong>${escapeHtml(d.name || d.resolvedLocal || "")}</strong> · ${escapeHtml(statusLabel)} · ${escapeHtml(d.resolvedLocal || "")} · ${escapeHtml(when)}</li>`;
-          })
-          .join("");
-        const historyCount = receipts.length + dismissed.length;
-        /** @type {"repeating" | "once" | "history"} */
+        /** @type {"repeating" | "once"} */
         let jobListView = "repeating";
         el.innerHTML = shell(`
           <p class="muted job-list-hint">${escapeHtml(t("jobs.hint"))}</p>
@@ -9906,16 +10468,10 @@ async function showView(id) {
           <div class="job-view-toggle" role="tablist" aria-label="${escapeHtml(t("jobs.listViews"))}">
             <button type="button" class="secondary is-active" data-job-view="repeating">${escapeHtml(t("jobs.tabRepeating"))} (${repeatingJobs.length})</button>
             <button type="button" class="secondary" data-job-view="once">${escapeHtml(t("jobs.tabOnce"))} (${onceJobs.length})</button>
-            <button type="button" class="secondary" data-job-view="history">${escapeHtml(t("jobs.tabHistory"))} (${historyCount})</button>
           </div>
+          <p class="muted job-histories-link">${escapeHtml(t("jobs.historiesMovedHint"))} <button type="button" class="linkish" id="jobs-open-histories">${escapeHtml(t("schedulesChat.tabHistories"))}</button></p>
           <ul class="job-list" id="job-list-repeating" data-job-view-pane="repeating">${renderJobRows(repeatingJobs, "jobs.noneRepeating")}</ul>
-          <ul class="job-list" id="job-list-once" data-job-view-pane="once" hidden>${renderJobRows(onceJobs, "jobs.noneOnce")}</ul>
-          <div class="card job-receipts" data-job-view-pane="history" hidden>
-            <h4 class="job-history-heading">${escapeHtml(t("jobs.historyNotSet"))}</h4>
-            <ul class="job-receipt-list">${dismissedRows || `<li class="muted">${escapeHtml(t("jobs.noDismissed"))}</li>`}</ul>
-            <h4 class="job-history-heading">${escapeHtml(t("jobs.historyRuns"))}</h4>
-            <ul class="job-receipt-list">${receiptRows || `<li class="muted">${escapeHtml(t("jobs.noReceipts"))}</li>`}</ul>
-          </div>`);
+          <ul class="job-list" id="job-list-once" data-job-view-pane="once" hidden>${renderJobRows(onceJobs, "jobs.noneOnce")}</ul>`);
         wireTabs();
         const setJobListView = (view) => {
           jobListView = view;
@@ -9931,12 +10487,16 @@ async function showView(id) {
         el.querySelectorAll("[data-job-view]").forEach((btn) => {
           btn.addEventListener("click", () => {
             const view = btn.getAttribute("data-job-view");
-            if (view === "repeating" || view === "once" || view === "history") {
+            if (view === "repeating" || view === "once") {
               setJobListView(view);
             }
           });
         });
         setJobListView(jobListView);
+        document.getElementById("jobs-open-histories")?.addEventListener("click", () => {
+          schedulesChatPane = "histories";
+          void showView("schedulesChat");
+        });
 
         /** @type {{ proposalId: string, whenText: string, resolvedLocal: string, kind: string, message?: string } | null} */
         let previewProposal = null;

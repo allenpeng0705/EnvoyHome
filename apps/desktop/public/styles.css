@@ -4200,6 +4200,61 @@ body[data-view="schedulesChat"] .chat-log .chat-schedule {
   margin-top: 0.55rem;
 }
 
+.chat-choice {
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel-2));
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  margin: 0.15rem 0;
+}
+
+.chat-choice.is-expired {
+  opacity: 0.72;
+  border-style: dashed;
+}
+
+.chat-choice-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin-bottom: 0.35rem;
+}
+
+.chat-choice-expiry {
+  font-weight: 500;
+}
+
+.chat-choice-detail {
+  margin: 0 0 0.35rem;
+}
+
+.chat-choice-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0.55rem;
+}
+
+.chat-choice-opt {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  cursor: pointer;
+}
+
+.chat-choice-btns {
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.chat-choice-text {
+  width: 100%;
+  margin: 0.35rem 0 0.55rem;
+  min-height: 4.5rem;
+  resize: vertical;
+}
+
 .job-history-heading {
   margin: 0.75rem 0 0.35rem;
   font-size: 0.9rem;
@@ -4208,6 +4263,135 @@ body[data-view="schedulesChat"] .chat-log .chat-schedule {
 
 .job-history-heading:first-child {
   margin-top: 0;
+}
+
+body[data-view="schedulesChat"] .schedules-pane-tabs {
+  margin: 0.1rem 0 0.85rem;
+}
+
+.schedules-histories-wrap {
+  flex: 1;
+  overflow: auto;
+  padding: 0 0 1rem;
+  min-height: 0;
+}
+
+.schedules-histories {
+  margin: 0;
+  max-width: 42rem;
+}
+
+.schedules-histories-lede {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.sched-hist-section {
+  margin: 0 0 1.35rem;
+}
+
+.sched-hist-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.sched-hist-row {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel-2, var(--panel));
+}
+
+.sched-hist-row-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.sched-hist-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.sched-hist-title code {
+  font-size: 0.88em;
+}
+
+.sched-hist-badge {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+  color: var(--muted);
+}
+
+.sched-hist-badge.is-expired {
+  background: color-mix(in srgb, var(--warn, #c47a2a) 18%, transparent);
+  color: var(--warn, #c47a2a);
+}
+
+.sched-hist-badge.is-canceled {
+  background: color-mix(in srgb, var(--muted) 22%, transparent);
+  color: var(--text);
+}
+
+.sched-hist-badge.is-ok {
+  background: color-mix(in srgb, var(--ok, #2f8f5b) 18%, transparent);
+  color: var(--ok, #2f8f5b);
+}
+
+.sched-hist-badge.is-error {
+  background: color-mix(in srgb, var(--danger, #c44) 18%, transparent);
+  color: var(--danger, #c44);
+}
+
+.sched-hist-meta {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.sched-hist-meta.muted {
+  color: var(--muted);
+}
+
+.sched-hist-error {
+  color: var(--danger, #c44);
+}
+
+.sched-hist-empty {
+  margin: 0;
+  padding: 0.65rem 0.2rem;
+  font-size: 0.9rem;
+}
+
+.job-histories-link {
+  margin: 0.35rem 0 0.75rem;
+}
+
+.job-histories-link .linkish {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  font: inherit;
 }
 
 .chat-layout {

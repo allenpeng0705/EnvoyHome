@@ -7,6 +7,7 @@ import type { TurnContext } from "./context.js";
 import { ApprovalSink, type ToolDispatchRequest } from "./approval-sink.js";
 import type { ProviderHandle } from "./provider-handle.js";
 import { toolSpec } from "./policy.js";
+import { applyEditFile, applyUnifiedPatch } from "./file-edit.js";
 import { validateIntent } from "./validator.js";
 
 export type TurnEventKind = "text" | "tool_call" | "tool_result" | "error";
@@ -67,6 +68,10 @@ export interface TurnDeps {
    */
   scheduleIntentOffer?: (userText: string) => string | undefined;
   /**
+   * Design V-UX-14 — park on a choice card; returns the user's selected labels.
+   */
+  askUserImpl?: (args: Record<string, unknown>) => Promise<string>;
+  /**
    * Home tool-loop: recover concrete tools from free-text claims/offers when the
    * model skipped the envoyhome-tools fence (multi-round honesty).
    */
@@ -97,21 +102,42 @@ function isSandboxToolName(tool: string): boolean {
   return (
     tool === "read_file" ||
     tool === "write_file" ||
+    tool === "edit_file" ||
+    tool === "apply_patch" ||
     tool === "list_dir" ||
     tool === "search_files" ||
     tool === "export_document" ||
-    tool === "extract_document"
+    tool === "extract_document" ||
+    tool === "view_image"
   );
 }
 
 /** First-class agent network tools (ApprovalSink still gates) — Design §9.5f/§9.5g. */
 function isAgentNetworkToolName(tool: string): boolean {
-  return tool === "web_search" || tool === "browser";
+  return tool === "web_search" || tool === "browser" || tool === "message";
+}
+
+/** Design §19.11 / §19.12 / §19.13 — session / media / helper tools. */
+function isPhase2AgentToolName(tool: string): boolean {
+  return (
+    tool === "sessions_list" ||
+    tool === "sessions_history" ||
+    tool === "sessions_status" ||
+    tool === "sessions_send" ||
+    tool === "image_generate" ||
+    tool === "spawn_helper" ||
+    tool === "task"
+  );
 }
 
 /** Design §7.4 V-CRON-9 — schedule propose/confirm/list via fence. */
 function isScheduleToolName(tool: string): boolean {
   return tool === "schedule";
+}
+
+/** Design V-UX-14 — EnvoyCoder ask_user peer. */
+function isAskUserToolName(tool: string): boolean {
+  return tool === "ask_user";
 }
 
 export type ParseToolCallsOptions = {
@@ -233,6 +259,79 @@ export async function dispatchTool(
       const echo = normalizeSandboxEchoPath(args.path);
       return { ok: true, output: `Written: \`${echo}\`` };
     }
+    if (req.tool === "edit_file") {
+      const args = req.args as Record<string, unknown>;
+      const path = typeof args.path === "string" ? args.path : "";
+      if (!path) throw new Error("path required");
+      const existing = await deps.fs.readFile(path);
+      const edited = applyEditFile(existing, {
+        path,
+        ...(typeof args.oldString === "string"
+          ? { oldString: args.oldString }
+          : typeof args.old_string === "string"
+            ? { oldString: args.old_string }
+            : {}),
+        ...(typeof args.newString === "string"
+          ? { newString: args.newString }
+          : typeof args.new_string === "string"
+            ? { newString: args.new_string }
+            : {}),
+        ...(typeof args.startLine === "number"
+          ? { startLine: args.startLine }
+          : typeof args.start_line === "number"
+            ? { startLine: args.start_line }
+            : {}),
+        ...(typeof args.endLine === "number"
+          ? { endLine: args.endLine }
+          : typeof args.end_line === "number"
+            ? { endLine: args.end_line }
+            : {}),
+      });
+      if (!edited.ok) throw new Error(edited.reason);
+      await deps.fs.writeFile(path, edited.content);
+      const echo = normalizeSandboxEchoPath(path);
+      return { ok: true, output: `Edited: \`${echo}\` (${edited.detail})` };
+    }
+    if (req.tool === "apply_patch") {
+      const args = req.args as Record<string, unknown>;
+      const patch =
+        typeof args.patch === "string"
+          ? args.patch
+          : typeof args.diff === "string"
+            ? args.diff
+            : "";
+      const pathHint = typeof args.path === "string" ? args.path.trim() : "";
+      const cache = new Map<string, string>();
+      const existingByPath = (rel: string): string | undefined => {
+        if (cache.has(rel)) return cache.get(rel);
+        return undefined;
+      };
+      // First pass: resolve path from args/headers (empty loader → "file not found" or path errors).
+      let applied = applyUnifiedPatch(existingByPath, {
+        ...(pathHint ? { path: pathHint } : {}),
+        patch,
+      });
+      if (!applied.ok && /file not found for patch/.test(applied.reason)) {
+        const missingPath = /file not found for patch: (.+)$/.exec(applied.reason)?.[1]?.trim();
+        const toRead = missingPath || pathHint;
+        if (toRead) {
+          try {
+            cache.set(toRead, await deps.fs.readFile(toRead));
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            throw new Error(`envoyhome.bad_params: cannot read ${toRead}: ${message}`);
+          }
+          applied = applyUnifiedPatch(existingByPath, {
+            ...(pathHint ? { path: pathHint } : {}),
+            patch,
+          });
+        }
+      }
+      if (!applied.ok) throw new Error(applied.reason);
+      await deps.fs.writeFile(applied.path, applied.content);
+      const echo = normalizeSandboxEchoPath(applied.path);
+      return { ok: true, output: `Patched: \`${echo}\` (${applied.detail})` };
+    }
     if (req.tool === "read_file") {
       const args = req.args as { path?: string };
       if (typeof args.path !== "string") throw new Error("path required");
@@ -275,6 +374,16 @@ export async function dispatchTool(
       if (!res.ok) throw new Error(`http_fetch → ${res.status}`);
       const text = await res.text();
       return { ok: true, output: text.slice(0, 64_000) };
+    }
+    if (req.tool === "ask_user") {
+      if (!deps.askUserImpl) {
+        throw new Error("envoyhome.tool_unavailable: ask_user not configured");
+      }
+      const args =
+        req.args && typeof req.args === "object" && !Array.isArray(req.args)
+          ? (req.args as Record<string, unknown>)
+          : {};
+      return { ok: true, output: await deps.askUserImpl(args) };
     }
     // export_document / skill: / ha_* / mqtt_* — daemon workflow dispatcher.
     if (deps.extraToolImpl) {
@@ -451,13 +560,15 @@ export function parseAssistantToolCalls(
     const name = o.tool.trim();
     // Never allow exec/http_fetch via fence — smart-home, sandbox, web_search, browser, schedule OK.
     const okSchedule = isScheduleToolName(name);
+    const okAskUser = isAskUserToolName(name);
     if (schedulesOnly) {
       if (!okSchedule) continue;
     } else {
       const okHome = allowSmartHome && isSmartHomeToolName(name);
       const okSandbox = allowSandbox && isSandboxToolName(name);
       const okAgentNet = isAgentNetworkToolName(name);
-      if (!okHome && !okSandbox && !okAgentNet && !okSchedule) continue;
+      const okPhase2 = isPhase2AgentToolName(name);
+      if (!okHome && !okSandbox && !okAgentNet && !okSchedule && !okAskUser && !okPhase2) continue;
     }
     const step: PlannedToolStep = {
       tool: name,

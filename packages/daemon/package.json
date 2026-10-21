@@ -44,6 +44,7 @@
     "@envoyhome/test-utils": "workspace:*",
     "@envoyhome/workflows": "workspace:*",
     "@envoymesh/api": "link:../../../EnvoyMesh/packages/api",
+    "@envoymesh/envoy-harness": "link:../../../envoy-harness/packages/envoy-harness",
     "@envoymesh/network": "link:../../../EnvoyMesh/packages/network",
     "@envoymesh/protocol": "link:../../../EnvoyMesh/packages/protocol",
     "@envoymesh/reuse-host": "link:../../../EnvoyMesh/packages/reuse-host",
@@ -53,7 +54,8 @@
     "docx": "^9.12.0",
     "exceljs": "^4.4.0",
     "pdfkit": "^0.20.2",
-    "playwright": "^1.51.0"
+    "playwright": "^1.51.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@envoyhome/test-utils": "workspace:*",

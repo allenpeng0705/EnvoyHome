@@ -119,6 +119,60 @@ export const EVENTS: Readonly<Record<string, EventSpec>> = {
       ["id", "accountId", "decision"],
     ),
   },
+  "home:choice-needed": {
+    summary: "A chat choice card is pending (one / many / text; Design V-UX-14)",
+    data: obj(
+      {
+        id: str({ minLength: 1 }),
+        accountId: str({ minLength: 1 }),
+        sessionId: str({ minLength: 1 }),
+        turnId: str(),
+        question: str({ minLength: 1 }),
+        detail: str(),
+        options: arr(
+          obj(
+            {
+              id: str({ minLength: 1 }),
+              label: str({ minLength: 1 }),
+              destructive: bool(),
+            },
+            ["id", "label"],
+          ),
+        ),
+        selection: enumOf("one", "many", "text"),
+        multiline: bool(),
+        purpose: enumOf("ask_user", "schedule_candidates", "home_disambiguation", "general"),
+        createdAt: iso(),
+        expiresAt: iso(),
+      },
+      [
+        "id",
+        "accountId",
+        "sessionId",
+        "question",
+        "options",
+        "selection",
+        "purpose",
+        "createdAt",
+        "expiresAt",
+      ],
+    ),
+  },
+  "home:choice-resolved": {
+    summary: "A chat choice card was answered or expired",
+    data: obj(
+      {
+        id: str({ minLength: 1 }),
+        accountId: str({ minLength: 1 }),
+        sessionId: str({ minLength: 1 }),
+        status: enumOf("answered", "canceled", "expired"),
+        optionIds: arr(str({ minLength: 1 })),
+        labels: arr(str()),
+        text: str(),
+      },
+      ["id", "accountId", "sessionId", "status"],
+    ),
+  },
   "home:learn-proposed": {
     summary: "A PendingLearn was queued",
     data: obj(

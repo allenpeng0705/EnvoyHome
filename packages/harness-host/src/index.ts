@@ -9,11 +9,22 @@ export {
   execPolicyAllows,
   registerToolSpec,
   requiresAttendedApproval,
+  unattendedRequiresGrant,
   toolSpec,
   type PolicySnapshot,
   type ToolPolicyPreset,
   type ToolSpec,
 } from "./policy.js";
+export {
+  applyEditFile,
+  applyUnifiedPatch,
+  MAX_EDIT_FILE_CHARS,
+  MAX_PATCH_CHARS,
+  type ApplyPatchArgs,
+  type ApplyPatchResult,
+  type EditFileArgs,
+  type EditFileResult,
+} from "./file-edit.js";
 export { ApprovalSink, type ApprovalDecision, type ToolDispatchRequest } from "./approval-sink.js";
 export { ProviderHandle, type ProviderHandleOptions } from "./provider-handle.js";
 export {

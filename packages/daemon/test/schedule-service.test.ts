@@ -56,6 +56,36 @@ test("V-CRON: account IANA TZ preferred over host default for propose", async ()
   }
 });
 
+test("V-CRON: resolveTimeZone override > account > host", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "eh-sched-tzord-"));
+  const clock = { now: new Date("2026-10-09T06:00:00.000Z") };
+  const svc = new ScheduleService({
+    paths: homePaths(stateDir),
+    now: () => clock.now,
+    defaultTimeZone: "UTC",
+    accountTimeZone: async (id) => (id === "alice" ? "Asia/Shanghai" : undefined),
+  });
+  try {
+    assert.equal(await svc.resolveTimeZone("alice", "America/New_York"), "America/New_York");
+    assert.equal(await svc.resolveTimeZone("alice"), "Asia/Shanghai");
+    assert.equal(await svc.resolveTimeZone("bob"), "UTC");
+    // clientContext.timeZone on propose wins over account
+    await svc.watchAccount("alice");
+    const proposal = await svc.proposeFromText(
+      "alice",
+      "Remind me tomorrow at 9:00 to call",
+      undefined,
+      { clientContext: { timeZone: "America/New_York" } },
+    );
+    assert.ok(!("error" in proposal));
+    if ("error" in proposal) return;
+    assert.equal(proposal.spec.timeZone, "America/New_York");
+  } finally {
+    await svc.stop();
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
 test("V-CRON: propose → confirm arms job; fire at due time", async () => {
   await withService(async (svc, clock) => {
     const proposal = await svc.proposeFromText("alice", "Remind me in 5 minutes to stretch");

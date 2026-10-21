@@ -270,8 +270,8 @@
   "schedHistoryNotSet": "Not set",
   "schedHistoryRuns": "Runs",
   "schedNoDismissed": "No canceled or expired proposals.",
-  "schedDismissedCanceled": "canceled",
-  "schedDismissedExpired": "expired",
+  "schedDismissedCanceled": "Abgebrochen",
+  "schedDismissedExpired": "Abgelaufen",
   "schedNext": "Nächste",
   "schedKindRepeating": "Wiederholt",
   "schedKindOnce": "Einmal",
@@ -284,7 +284,9 @@
   "schedDayOfMonth": "Tag {d}",
   "@schedDayOfMonth": {
     "placeholders": {
-      "d": { "type": "String" }
+      "d": {
+        "type": "String"
+      }
     }
   },
   "wfEditorTitle": "Workflow",
@@ -602,7 +604,9 @@
   "profilesTimeZoneValue": "Time zone: {tz}",
   "@profilesTimeZoneValue": {
     "placeholders": {
-      "tz": { "type": "String" }
+      "tz": {
+        "type": "String"
+      }
     }
   },
   "profilesTimeZoneEdit": "Time zone",
@@ -612,7 +616,9 @@
   "profilesTimeZoneDone": "Time zone set to {tz}",
   "@profilesTimeZoneDone": {
     "placeholders": {
-      "tz": { "type": "String" }
+      "tz": {
+        "type": "String"
+      }
     }
   },
   "profilesShareLocationTitle": "Standort mit Home teilen",
@@ -675,5 +681,57 @@
   "homeFolderComputer": "Computer",
   "homeFolderHome": "Home",
   "homeFolderParent": "Parent folder",
-  "homeFolderNoSubfolders": "No subfolders"
+  "homeFolderNoSubfolders": "No subfolders",
+  "choiceCardConfirm": "Bestätigen",
+  "choiceCardPickOne": "Bitte mindestens eine Option wählen.",
+  "choiceCardAnswered": "Erhalten.",
+  "choiceCardFailed": "Auswahl konnte nicht gesendet werden: {error}",
+  "@choiceCardFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "chatPendingChoices": "{count} warten auf Ihre Auswahl",
+  "@chatPendingChoices": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "choiceCardCancel": "Abbrechen",
+  "choiceCardCanceled": "Auswahl verworfen.",
+  "choiceCardExpired": "Abgelaufen",
+  "choiceCardExpiredHint": "Diese Auswahl ist abgelaufen — fragen Sie erneut, falls nötig.",
+  "choiceCardExpiresIn": "Läuft in {mins} Min. ab",
+  "choiceCardTextPlaceholder": "Antwort eingeben",
+  "@choiceCardExpiresIn": {
+    "placeholders": {
+      "mins": {
+        "type": "int"
+      }
+    }
+  },
+  "schedulesChatTabChat": "Zeitpläne",
+  "schedulesChatTabHistories": "Verläufe",
+  "schedulesChatHistoriesHint": "Abgebrochene oder abgelaufene Vorschläge und letzte Läufe.",
+  "jobsHistoriesMovedHint": "Verlauf unter Zeitpläne → Verläufe",
+  "schedulesChatClosedAt": "Geschlossen {when}",
+  "@schedulesChatClosedAt": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  },
+  "schedulesChatRanAt": "Gelaufen {when}",
+  "@schedulesChatRanAt": {
+    "placeholders": {
+      "when": {
+        "type": "String"
+      }
+    }
+  }
 }

@@ -933,10 +933,10 @@ class AppLocalizationsIt extends AppLocalizations {
   String get schedNoDismissed => 'No canceled or expired proposals.';
 
   @override
-  String get schedDismissedCanceled => 'canceled';
+  String get schedDismissedCanceled => 'Annullato';
 
   @override
-  String get schedDismissedExpired => 'expired';
+  String get schedDismissedExpired => 'Scaduto';
 
   @override
   String get schedNext => 'Prossima';
@@ -1478,5 +1478,68 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String chatPendingApprovals(int count) {
     return '$count in attesa della tua approvazione';
+  }
+
+  @override
+  String get choiceCardConfirm => 'Conferma';
+
+  @override
+  String get choiceCardPickOne => 'Seleziona almeno un\'opzione.';
+
+  @override
+  String get choiceCardAnswered => 'Ricevuto.';
+
+  @override
+  String choiceCardFailed(String error) {
+    return 'Impossibile inviare la scelta: $error';
+  }
+
+  @override
+  String chatPendingChoices(int count) {
+    return '$count in attesa della tua scelta';
+  }
+
+  @override
+  String get choiceCardCancel => 'Annulla';
+
+  @override
+  String get choiceCardCanceled => 'Scelta annullata.';
+
+  @override
+  String get choiceCardExpired => 'Scaduto';
+
+  @override
+  String get choiceCardExpiredHint =>
+      'Questa scelta è scaduta — chiedi di nuovo se serve.';
+
+  @override
+  String choiceCardExpiresIn(int mins) {
+    return 'Scade tra $mins min';
+  }
+
+  @override
+  String get choiceCardTextPlaceholder => 'Scrivi la risposta';
+
+  @override
+  String get schedulesChatTabChat => 'Programmi';
+
+  @override
+  String get schedulesChatTabHistories => 'Cronologie';
+
+  @override
+  String get schedulesChatHistoriesHint =>
+      'Proposte annullate o scadute ed esecuzioni recenti.';
+
+  @override
+  String get jobsHistoriesMovedHint => 'Cronologia in Programmi → Cronologie';
+
+  @override
+  String schedulesChatClosedAt(String when) {
+    return 'Chiuso $when';
+  }
+
+  @override
+  String schedulesChatRanAt(String when) {
+    return 'Eseguito $when';
   }
 }

@@ -118,6 +118,8 @@ export interface RouterDeps {
   workflows: WorkflowStore;
   workflowStepTemplates: import("./workflow-step-templates.js").WorkflowStepTemplateStore;
   schedules: ScheduleService;
+  /** Design §19.10 standing orders. */
+  standingOrders: import("./standing-orders.js").StandingOrderStore;
   skills: SkillService;
   artifacts: ArtifactService;
   /** Design §9.5f household web search. */
@@ -1558,6 +1560,40 @@ export function createDispatcher(deps: RouterDeps) {
           mapStoreError(err);
         }
       }
+      case "home.listChoices": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          const sessionId =
+            typeof params.sessionId === "string" && params.sessionId.trim()
+              ? params.sessionId.trim()
+              : undefined;
+          return await deps.turns.listChoices(accountId, sessionId);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.answerChoice": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          const optionIds = Array.isArray(params.optionIds)
+            ? params.optionIds.map(String).filter((s) => s.trim())
+            : undefined;
+          return await deps.turns.answerChoice({
+            accountId,
+            id: String(params.id),
+            ...(typeof params.optionId === "string" && params.optionId.trim()
+              ? { optionId: params.optionId.trim() }
+              : {}),
+            ...(optionIds?.length ? { optionIds } : {}),
+            ...(typeof params.text === "string" && params.text.trim()
+              ? { text: params.text.trim() }
+              : {}),
+            ...(params.cancel === true ? { cancel: true } : {}),
+          });
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
       case "home.listGrants": {
         try {
           const accountId =
@@ -1939,6 +1975,9 @@ export function createDispatcher(deps: RouterDeps) {
             webSearch: deps.webSearch,
             browserControl: deps.browserControl,
             schedules: deps.schedules,
+            policy: deps.turns.policy,
+            mediaGenerate: deps.turns.mediaGenerate,
+            hasImageGenerateProvider: () => deps.providers.hasImageGenerateProvider(),
           },
           {
             dualModeNotes: deps.meshDualModeNotes?.() ?? [],
@@ -1974,6 +2013,9 @@ export function createDispatcher(deps: RouterDeps) {
             webSearch: deps.webSearch,
             browserControl: deps.browserControl,
             schedules: deps.schedules,
+            policy: deps.turns.policy,
+            mediaGenerate: deps.turns.mediaGenerate,
+            hasImageGenerateProvider: () => deps.providers.hasImageGenerateProvider(),
           },
           { meshStatus: deps.meshStatus(), ownerAccountId },
         );
@@ -2457,7 +2499,9 @@ export function createDispatcher(deps: RouterDeps) {
       case "home.listSchedules": {
         const accountId = requireBoundAccount(method, caller, params);
         await deps.schedules.watchAccount(accountId);
-        const jobs = await deps.schedules.store.listJobs(accountId);
+        const jobs = (await deps.schedules.store.listJobs(accountId)).filter(
+          (j) => j.payload.kind !== "system" && !j.id.startsWith("standing:"),
+        );
         const dismissed = await deps.schedules.listDismissed(accountId);
         return {
           jobs: jobs.map((j) => ({
@@ -2734,6 +2778,201 @@ export function createDispatcher(deps: RouterDeps) {
             ...(receipt.error !== undefined ? { error: receipt.error } : {}),
           },
         };
+      }
+
+      /* ---- P2-B ambient: heartbeat + standing orders (Design §19.10) ---- */
+      case "home.getHeartbeatConfig": {
+        const accountId = requireBoundAccount(method, caller, params);
+        const { MIN_HEARTBEAT_INTERVAL_MS } = await import("./schedule/heartbeat.js");
+        const pol = await deps.turns.policy.get(accountId);
+        return {
+          enabled: pol.heartbeatEnabled,
+          everyMs: pol.heartbeatEveryMs,
+          prompt: pol.heartbeatPrompt,
+          minEveryMs: MIN_HEARTBEAT_INTERVAL_MS,
+        };
+      }
+      case "home.setHeartbeatConfig": {
+        const accountId = requireBoundAccount(method, caller, params);
+        const {
+          clampHeartbeatIntervalMs,
+          DEFAULT_HEARTBEAT_PROMPT,
+          MIN_HEARTBEAT_INTERVAL_MS,
+        } = await import("./schedule/heartbeat.js");
+        const patch: {
+          heartbeatEnabled?: boolean;
+          heartbeatEveryMs?: number;
+          heartbeatPrompt?: string;
+        } = {};
+        if (typeof params.enabled === "boolean") patch.heartbeatEnabled = params.enabled;
+        if (typeof params.everyMs === "number") {
+          patch.heartbeatEveryMs = clampHeartbeatIntervalMs(params.everyMs);
+        }
+        if (typeof params.prompt === "string" && params.prompt.trim()) {
+          patch.heartbeatPrompt = params.prompt.trim().slice(0, 4000);
+        }
+        const next = await deps.turns.policy.write(accountId, patch);
+        await deps.schedules.watchAccount(accountId, {
+          heartbeatEnabled: next.heartbeatEnabled,
+          heartbeatEveryMs: next.heartbeatEveryMs,
+          heartbeatPrompt: next.heartbeatPrompt || DEFAULT_HEARTBEAT_PROMPT,
+        });
+        return {
+          ok: true,
+          enabled: next.heartbeatEnabled,
+          everyMs: next.heartbeatEveryMs,
+          prompt: next.heartbeatPrompt,
+          minEveryMs: MIN_HEARTBEAT_INTERVAL_MS,
+        };
+      }
+      case "home.listStandingOrders": {
+        const accountId = requireBoundAccount(method, caller, params);
+        const orders = await deps.standingOrders.list(accountId);
+        return {
+          orders: orders.map((o) => ({
+            id: o.id,
+            name: o.name,
+            enabled: o.enabled,
+            when: o.when,
+            action: o.action,
+            createdAt: o.createdAt,
+            updatedAt: o.updatedAt,
+          })),
+        };
+      }
+      case "home.putStandingOrder": {
+        const accountId = requireBoundAccount(method, caller, params);
+        const when = params.when as import("./standing-orders.js").StandingWhen;
+        const action = params.action as import("./standing-orders.js").StandingAction;
+        if (when && typeof when === "object" && when.kind === "smarthome_event") {
+          const sourceId = typeof when.sourceId === "string" ? when.sourceId.trim() : "";
+          if (!sourceId) {
+            throw Object.assign(new Error("envoyhome.bad_params: sourceId required"), {
+              rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "sourceId required"),
+            });
+          }
+          const objs = await deps.channels.objects.list({
+            accountId,
+            bound: true,
+          });
+          const hit = objs.find((o) => o.sourceId === sourceId && o.bound && o.accountId === accountId);
+          if (!hit) {
+            throw Object.assign(
+              new Error("envoyhome.object_unknown: standing order sourceId unbound or unregistered"),
+              {
+                rpcError: makeError(
+                  TRANSPORT_CODE_BAD_PARAMS,
+                  "bad_params",
+                  "standing order sourceId unbound or unregistered",
+                ),
+              },
+            );
+          }
+        }
+        try {
+          const order = await deps.standingOrders.put({
+            accountId,
+            name: String(params.name ?? ""),
+            when,
+            action,
+            ...(typeof params.id === "string" && params.id.trim()
+              ? { id: params.id.trim() }
+              : {}),
+            ...(typeof params.enabled === "boolean" ? { enabled: params.enabled } : {}),
+          });
+          await deps.schedules.syncStandingCronJobs(
+            accountId,
+            await deps.standingOrders.list(accountId),
+          );
+          return {
+            order: {
+              id: order.id,
+              name: order.name,
+              enabled: order.enabled,
+              when: order.when,
+              action: order.action,
+              createdAt: order.createdAt,
+              updatedAt: order.updatedAt,
+            },
+          };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (msg.includes("bad_params")) {
+            throw Object.assign(err instanceof Error ? err : new Error(msg), {
+              rpcError: makeError(
+                TRANSPORT_CODE_BAD_PARAMS,
+                "bad_params",
+                msg.replace(/^envoyhome\.bad_params:\s*/, ""),
+              ),
+            });
+          }
+          throw err;
+        }
+      }
+      case "home.removeStandingOrder": {
+        const accountId = requireBoundAccount(method, caller, params);
+        const id = String(params.id);
+        const ok = await deps.standingOrders.remove(accountId, id);
+        if (!ok) {
+          throw Object.assign(new Error("envoyhome.bad_params: unknown standing order"), {
+            rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "unknown standing order"),
+          });
+        }
+        await deps.schedules.syncStandingCronJobs(
+          accountId,
+          await deps.standingOrders.list(accountId),
+        );
+        return { ok: true };
+      }
+      case "home.setStandingOrderEnabled": {
+        const accountId = requireBoundAccount(method, caller, params);
+        const order = await deps.standingOrders.setEnabled(
+          accountId,
+          String(params.id),
+          params.enabled === true,
+        );
+        if (!order) {
+          throw Object.assign(new Error("envoyhome.bad_params: unknown standing order"), {
+            rpcError: makeError(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "unknown standing order"),
+          });
+        }
+        await deps.schedules.syncStandingCronJobs(
+          accountId,
+          await deps.standingOrders.list(accountId),
+        );
+        return {
+          order: {
+            id: order.id,
+            name: order.name,
+            enabled: order.enabled,
+            when: order.when,
+            action: order.action,
+            createdAt: order.createdAt,
+            updatedAt: order.updatedAt,
+          },
+        };
+      }
+
+      /* ---- P2-D2 media generate (Design §19.12) ---- */
+      case "home.getMediaGenerateConfig": {
+        const accountId = requireBoundAccount(method, caller, params);
+        const state = await deps.turns.mediaGenerate.get(accountId);
+        const today = new Date().toISOString().slice(0, 10);
+        const dayCount = state.dayKey === today ? (state.dayCount ?? 0) : 0;
+        return {
+          enabled: state.enabled,
+          maxPerDay: state.maxPerDay,
+          dayCount,
+          hasProvider: deps.providers.hasImageGenerateProvider(),
+        };
+      }
+      case "home.setMediaGenerateConfig": {
+        const accountId = requireBoundAccount(method, caller, params);
+        const patch: { enabled?: boolean; maxPerDay?: number } = {};
+        if (typeof params.enabled === "boolean") patch.enabled = params.enabled;
+        if (typeof params.maxPerDay === "number") patch.maxPerDay = params.maxPerDay;
+        const next = await deps.turns.mediaGenerate.set(accountId, patch);
+        return { ok: true, enabled: next.enabled, maxPerDay: next.maxPerDay };
       }
 
       /* ---- B10 skills ---- */

@@ -19,6 +19,16 @@ export interface OutboundMessage {
   format?: "plain" | "markdown";
   /** Notification-only for event-source — never actuation. */
   kind?: "notify" | "reply";
+  /**
+   * Design §19.11 Adapt — rich action hint for chat plugins.
+   * Unknown actions are stripped by normalizeOutbound; plugins MAY ignore.
+   * Capability-gated: react / edit / delete / pin (unpin uses pin).
+   */
+  action?: "send" | "notify" | "reply" | "react" | "edit" | "delete" | "pin" | "unpin";
+  /** Required when action is `react` (emoji / shortcode). */
+  reaction?: string;
+  /** Jail-relative media paths already validated by the daemon. */
+  mediaPaths?: string[];
 }
 
 export interface InboundEvent {

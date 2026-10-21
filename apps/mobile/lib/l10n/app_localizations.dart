@@ -1797,13 +1797,13 @@ abstract class AppLocalizations {
   /// No description provided for @schedDismissedCanceled.
   ///
   /// In en, this message translates to:
-  /// **'canceled'**
+  /// **'Canceled'**
   String get schedDismissedCanceled;
 
   /// No description provided for @schedDismissedExpired.
   ///
   /// In en, this message translates to:
-  /// **'expired'**
+  /// **'Expired'**
   String get schedDismissedExpired;
 
   /// No description provided for @schedNext.
@@ -2795,6 +2795,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} waiting for your approval'**
   String chatPendingApprovals(int count);
+
+  /// No description provided for @choiceCardConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get choiceCardConfirm;
+
+  /// No description provided for @choiceCardPickOne.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick at least one option.'**
+  String get choiceCardPickOne;
+
+  /// No description provided for @choiceCardAnswered.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it.'**
+  String get choiceCardAnswered;
+
+  /// No description provided for @choiceCardFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not send that choice: {error}'**
+  String choiceCardFailed(String error);
+
+  /// No description provided for @chatPendingChoices.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} waiting for your choice'**
+  String chatPendingChoices(int count);
+
+  /// No description provided for @choiceCardCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get choiceCardCancel;
+
+  /// No description provided for @choiceCardCanceled.
+  ///
+  /// In en, this message translates to:
+  /// **'Choice dismissed.'**
+  String get choiceCardCanceled;
+
+  /// No description provided for @choiceCardExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Expired'**
+  String get choiceCardExpired;
+
+  /// No description provided for @choiceCardExpiredHint.
+  ///
+  /// In en, this message translates to:
+  /// **'This choice expired — ask again if you still need it.'**
+  String get choiceCardExpiredHint;
+
+  /// No description provided for @choiceCardExpiresIn.
+  ///
+  /// In en, this message translates to:
+  /// **'Expires in {mins} min'**
+  String choiceCardExpiresIn(int mins);
+
+  /// No description provided for @choiceCardTextPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Type your answer'**
+  String get choiceCardTextPlaceholder;
+
+  /// No description provided for @schedulesChatTabChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedules'**
+  String get schedulesChatTabChat;
+
+  /// No description provided for @schedulesChatTabHistories.
+  ///
+  /// In en, this message translates to:
+  /// **'Histories'**
+  String get schedulesChatTabHistories;
+
+  /// No description provided for @schedulesChatHistoriesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Proposals you canceled or that expired, and recent job runs.'**
+  String get schedulesChatHistoriesHint;
+
+  /// No description provided for @jobsHistoriesMovedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'History moved to Schedules → Histories'**
+  String get jobsHistoriesMovedHint;
+
+  /// No description provided for @schedulesChatClosedAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed {when}'**
+  String schedulesChatClosedAt(String when);
+
+  /// No description provided for @schedulesChatRanAt.
+  ///
+  /// In en, this message translates to:
+  /// **'Ran {when}'**
+  String schedulesChatRanAt(String when);
 }
 
 class _AppLocalizationsDelegate

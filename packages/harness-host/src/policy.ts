@@ -25,6 +25,16 @@ export interface ToolSpec {
 export const BUILTIN_TOOLS: Readonly<Record<string, ToolSpec>> = {
   read_file: { name: "read_file", risk: "read", grantable: false },
   write_file: { name: "write_file", risk: "write", grantable: true },
+  /**
+   * Design §19.9 / V-P2-EDIT — surgical replace (unique oldString or line range).
+   * Unattended requires a grant (see unattendedRequiresGrant).
+   */
+  edit_file: { name: "edit_file", risk: "write", grantable: true },
+  /**
+   * Design §19.9 / V-P2-EDIT — single-file unified diff under the path jail.
+   * Unattended requires a grant (see unattendedRequiresGrant).
+   */
+  apply_patch: { name: "apply_patch", risk: "write", grantable: true },
   /** Design §9.5e — one-level directory list through the path jail. */
   list_dir: { name: "list_dir", risk: "read", grantable: false },
   /** Design §9.5e — basename glob/substring search under sandbox/workspace. */
@@ -52,6 +62,83 @@ export const BUILTIN_TOOLS: Readonly<Record<string, ToolSpec>> = {
   schedule: {
     name: "schedule",
     risk: "write",
+    grantable: true,
+  },
+  /**
+   * Design V-UX-14 — EnvoyCoder ask_user peer.
+   * Parks the turn on a choice card (one / many / text); not a tool approval.
+   */
+  ask_user: {
+    name: "ask_user",
+    risk: "read",
+    grantable: false,
+  },
+  /** Design §19.11 — send to a bound chat target (same account). */
+  message: {
+    name: "message",
+    risk: "network",
+    grantable: true,
+  },
+  /** Design §19.11 — list sessions for the turn's account (capped). */
+  sessions_list: {
+    name: "sessions_list",
+    risk: "read",
+    grantable: false,
+  },
+  /** Design §19.11 — capped transcript for a same-account session. */
+  sessions_history: {
+    name: "sessions_history",
+    risk: "read",
+    grantable: false,
+  },
+  /** Design §19.11 — coarse session status. */
+  sessions_status: {
+    name: "sessions_status",
+    risk: "read",
+    grantable: false,
+  },
+  /**
+   * Design §19.11 — inject text into another same-account session (no swarm).
+   * Attended ask; unattended requires grant.
+   */
+  sessions_send: {
+    name: "sessions_send",
+    risk: "write",
+    grantable: true,
+    attendedAsk: true,
+  },
+  /** Design §19.12 D1 — describe / metadata (+ optional vision) for jail images. */
+  view_image: {
+    name: "view_image",
+    risk: "read",
+    grantable: false,
+  },
+  /**
+   * Design §19.12 D2 — generate image under output/media/ (Owner enable + Privacy Mode).
+   * Attended ask; unattended requires grant; Privacy Mode blocks in tool body.
+   */
+  image_generate: {
+    name: "image_generate",
+    risk: "network",
+    grantable: true,
+    attendedAsk: true,
+  },
+  /**
+   * Design §19.13 — turn-scoped helper with reduced allow-list; inherits origin.
+   * Unattended requires a grant (cannot launder admin). Thin wrapper over `task`.
+   */
+  spawn_helper: {
+    name: "spawn_helper",
+    risk: "exec",
+    grantable: true,
+  },
+  /**
+   * Design §19.13 P2-E2 — harness-style parallel sub-agents (caps/batching).
+   * Unattended requires a grant (cannot launder admin).
+   */
+  task: {
+    name: "task",
+    risk: "exec",
     grantable: true,
   },
 };
@@ -111,6 +198,18 @@ export function unattendedRequiresGrant(spec: ToolSpec, origin: TurnOrigin): boo
   if (origin !== "unattended") return false;
   // V-CRON-9 — arming a schedule from unattended always needs a grant.
   if (spec.name === "schedule" && spec.grantable) return true;
+  // V-P2-EDIT-2 — surgical edit/patch from unattended always needs a grant.
+  if ((spec.name === "edit_file" || spec.name === "apply_patch") && spec.grantable) {
+    return true;
+  }
+  // V-P2-AGENT-1 — helpers from unattended always need a grant (no origin launder).
+  if ((spec.name === "spawn_helper" || spec.name === "task") && spec.grantable) {
+    return true;
+  }
+  // V-P2-MSG-3 / V-P2-MEDIA-2 — cross-session inject + generate always need a grant unattended.
+  if ((spec.name === "sessions_send" || spec.name === "image_generate") && spec.grantable) {
+    return true;
+  }
   if (spec.risk === "read" || spec.risk === "write") return false;
   return spec.grantable || spec.risk === "exec" || spec.risk === "network" || spec.risk === "admin";
 }
