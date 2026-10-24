@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "resources": [
+      "resources/daemon/main.mjs",
+      "resources/daemon/**/*",
+      "resources/node-runtime/**/*",
+      "resources/push/**/*"
+    ]
+  }
+}

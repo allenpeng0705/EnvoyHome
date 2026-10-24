@@ -767,7 +767,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get connPairingHint =>
-      'Mint and revoke phones from desktop Settings → Pair devices. This list is read-only on mobile.';
+      'Household Owner devices can mint and revoke pairing here. Members see status only.';
 
   @override
   String get connNoDevices => 'No paired devices listed.';
@@ -1022,10 +1022,63 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sysTabGrants => 'Grants';
 
   @override
+  String get sysTabMachine => 'This machine';
+
+  @override
+  String get sysMachineHint =>
+      'Daemon listen status from home.health. OS service install/restart is loopback-only on the home desktop — not available over mesh.';
+
+  @override
+  String get sysMachineDaemonOk => 'Daemon reachable';
+
+  @override
+  String get sysMachineDaemonBad => 'Daemon health failed';
+
+  @override
+  String get sysMachineWsPort => 'WebSocket port';
+
+  @override
+  String get sysMachineHttpPort => 'HTTP hatch port';
+
+  @override
+  String get sysMachinePublicUrl => 'Public base URL';
+
+  @override
+  String get sysMachinePublicUrlEmpty => 'Not set';
+
+  @override
+  String get sysMachineUptime => 'Uptime';
+
+  @override
+  String get sysMachineConnections => 'Clients / active turns';
+
+  @override
+  String get sysMachineMesh => 'Mesh';
+
+  @override
+  String get sysMachineOsServiceNote =>
+      'Install or restart the OS service from desktop Settings → System → This machine (loopback-owner).';
+
+  @override
+  String get sysMachineRefresh => 'Refresh';
+
+  @override
   String get sysTestPush => 'Send test push';
 
   @override
   String get sysTestPushSent => 'Test push requested';
+
+  @override
+  String get wfModeYaml => 'YAML';
+
+  @override
+  String get wfModeDiagram => 'Diagram';
+
+  @override
+  String get wfDiagramEmpty => 'No steps yet — draft or edit YAML.';
+
+  @override
+  String get wfDiagramEdge => '↓';
 
   @override
   String get sysDoctorFix => 'Fix';
@@ -1518,4 +1571,115 @@ class AppLocalizationsJa extends AppLocalizations {
   String schedulesChatRanAt(String when) {
     return '実行 $when';
   }
+
+  @override
+  String get welcomeSkip => 'スキップ';
+
+  @override
+  String get welcomeNext => '次へ';
+
+  @override
+  String get commonContinue => '続ける';
+
+  @override
+  String get welcomeSlide1Title => 'EnvoyHome へようこそ';
+
+  @override
+  String get welcomeSlide1Body =>
+      'スマホはセルフホストのホームエージェントへの窓です。チャット・承認・スマートホームはデスクトップ側に残ります。';
+
+  @override
+  String get welcomeSlide2Title => '処理はパソコンで行います';
+
+  @override
+  String get welcomeSlide2Body =>
+      '自宅の Mac または PC に EnvoyHome をインストールします。デーモン・モデル・世帯メモリはそのマシンにあり、スマホは遠隔ウィンドウです。';
+
+  @override
+  String get welcomeSlide3Title => 'QR でペアリング';
+
+  @override
+  String get welcomeSlide3Body =>
+      'パソコンで EnvoyHome を開き、ペアリング QR を表示します。このスマホで「今すぐペア」をタップしてスキャン。リンクの貼り付けもできます。';
+
+  @override
+  String get welcomeSlideRequiredTitle => 'まずはペアリング';
+
+  @override
+  String get welcomeSlideRequiredBody =>
+      'EnvoyHome にはデスクトップアプリが動くパソコンが必要です。エージェントとホーム制御はそこで動きます。このスマホをそのパソコンとペアしてください。';
+
+  @override
+  String get setupGuideTitle => 'EnvoyHome の使い方';
+
+  @override
+  String get setupGuideIntro =>
+      'スマホの EnvoyHome は自宅パソコンの EnvoyHome と通信します。デスクトップを入れ、一度ペアすれば、どこからでもチャットと承認ができます。';
+
+  @override
+  String get setupGuidePairRequiredTitle => 'ペアして続行';
+
+  @override
+  String get setupGuidePairRequiredBody =>
+      'EnvoyHome は自宅デスクトップのスマホ伴侶です。ペアしたパソコンがないと、ここにはまだ表示するものがありません。';
+
+  @override
+  String get setupGuideStep1Title => 'パソコンを用意';
+
+  @override
+  String get setupGuideStep1Body =>
+      '自宅の Mac または Windows/Linux PC が必要です。それが EnvoyHome ホストになり、デーモンとエージェントが動きます。';
+
+  @override
+  String get setupGuideStep2Title => 'EnvoyHome をダウンロードしてインストール';
+
+  @override
+  String get setupGuideStep2Body =>
+      'QuickStart を開き、そのパソコンにデーモンとデスクトップアプリを入れます。起動して動かしたままにします。';
+
+  @override
+  String get setupGuideDownloadCta => 'EnvoyHome QuickStart を開く';
+
+  @override
+  String get setupGuideStep3Title => 'ペアリング QR を表示';
+
+  @override
+  String get setupGuideStep3Body =>
+      'デスクトップの EnvoyHome で「設定 → デバイスをペア」。QR を画面に出したままにします（LAN のみではなく mesh/リレー付き）。';
+
+  @override
+  String get setupGuideStep4Title => 'このスマホでスキャン';
+
+  @override
+  String get setupGuideStep4Body =>
+      '下の「今すぐペア」をタップ。カメラを許可して QR をスキャン。envoy:// リンクや host:port / SSH も使えます。';
+
+  @override
+  String get setupGuideStep5Title => '接続完了';
+
+  @override
+  String get setupGuideStep5Body =>
+      'ペアが終わると、このスマホにそのホームのチャット・承認・設定が表示されます。スマホがオフラインでもデスクトップは動き続けます。';
+
+  @override
+  String get setupGuideNoHomeTitle => 'あとでペアしても大丈夫';
+
+  @override
+  String get setupGuideNoHomeBody =>
+      '今は先に進み、「接続」からいつでもペアできます。パソコンがないと、ここにはまだ表示するものがありません。';
+
+  @override
+  String get setupGuidePairCta => '今すぐペア';
+
+  @override
+  String get setupGuidePairLaterCta => 'あとでペア';
+
+  @override
+  String get setupGuideSkipCta => '先に見る';
+
+  @override
+  String get setupGuideDoneCta => '了解';
+
+  @override
+  String get settingsSetupGuideSubtitle => 'デスクトップのインストールとこのスマホのペア方法。';
 }

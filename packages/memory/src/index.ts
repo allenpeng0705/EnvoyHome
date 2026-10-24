@@ -156,4 +156,4 @@ export {
   type ProvenanceTrust,
 } from "./provenance.js";
 export { baseDigest, computeDiffKey, canonicalJson, sha256Digest } from "./digest.js";
-export { SkillsStore } from "./skills-store.js";
+export { SkillsStore, type SkillL7Backend } from "./skills-store.js";

@@ -152,6 +152,8 @@ export interface HomeMeshPeerOptions {
   sessionIdentity: SessionIdentityResolver<unknown>;
   dispatch: HostRpcDispatcher<unknown>;
   subscribe?: (send: (event: string, data: unknown) => void) => () => void;
+  /** Design `2026-10-24` — mesh stream end clears live-presence (same as WS close). */
+  onAuthenticatedClose?: (deviceId: string) => void;
   createNode?: HomeMeshNodeFactory;
   toDuplex?: (stream: unknown) => FramedDuplex;
 }
@@ -167,17 +169,22 @@ export interface HomeMeshPeer {
 }
 
 function createProxyServe(
-  ports: Pick<HomeMeshPeerOptions, "sessionIdentity" | "dispatch" | "subscribe">,
+  ports: Pick<
+    HomeMeshPeerOptions,
+    "sessionIdentity" | "dispatch" | "subscribe" | "onAuthenticatedClose"
+  >,
   registry: ReturnType<typeof createProxyCloseRegistry>,
 ): (duplex: FramedDuplex) => Promise<void> {
   return createMeshHostTransport<unknown>((duplex: FramedDuplex): MeshHostTransportOptions<unknown> => {
     let unregister: () => void = () => undefined;
+    let deviceId: string | undefined;
     return {
       sessionIdentity: {
         localScopeKey: ports.sessionIdentity.localScopeKey,
         resolveSession: async (token: string) => {
           const session = await ports.sessionIdentity.resolveSession(token);
           if (!session) return null;
+          deviceId = session.deviceId;
           unregister = registry.register(session.deviceId, () => {
             void duplex.close();
           });
@@ -190,6 +197,7 @@ function createProxyServe(
         return () => {
           unsubscribe();
           unregister();
+          if (deviceId) ports.onAuthenticatedClose?.(deviceId);
         };
       },
     };
@@ -381,7 +389,13 @@ export function createHomeMeshPeer(options: HomeMeshPeerOptions): HomeMeshPeer {
   };
 }
 
-/** Snapshot for `home.mintPairing` QR mesh fields (EnvoyDev pairingUri mesh* → homeNodePeerId). */
+/**
+ * Snapshot for `home.mintPairing` QR mesh fields (EnvoyDev / EnvoyCoder peer).
+ *
+ * `bootstrapPeers` is the whole multiaddr half of the contract: local/LAN listen
+ * addrs, one `/p2p-circuit` per community relay, and the bare relay hints —
+ * same shape EnvoyCoder's host-bridge regression locks.
+ */
 export function meshMintFields(peer: HomeMeshPeer | null | undefined): {
   homeNodePeerId?: string;
   bootstrapPeers?: string[];
@@ -389,17 +403,23 @@ export function meshMintFields(peer: HomeMeshPeer | null | undefined): {
   if (!peer) return {};
   const st = peer.status();
   if (st.kind !== "hosting" || !st.peerId) return {};
-  const addrs = [
-    ...(st.multiaddrs ?? peer.multiaddrs),
-    ...(st.relayHints ?? peer.relayHints),
-  ];
+  const peerId = st.peerId;
+  const hints = [...(st.relayHints ?? peer.relayHints)];
   const seen = new Set<string>();
   const bootstrapPeers: string[] = [];
-  for (const a of addrs) {
-    const t = a.trim();
-    if (!t || !seen.add(t)) continue;
+  const push = (addr: string) => {
+    const t = addr.trim();
+    if (!t || !seen.add(t)) return;
     bootstrapPeers.push(t);
+  };
+  for (const a of st.multiaddrs ?? peer.multiaddrs) push(a);
+  for (const hint of hints) {
+    push(hint);
+    // Circuit through this home node — phone seeds peer store without DHT.
+    if (hint && !hint.includes("/p2p-circuit/")) {
+      push(`${hint}/p2p-circuit/p2p/${peerId}`);
+    }
   }
   if (bootstrapPeers.length === 0) return {};
-  return { homeNodePeerId: st.peerId, bootstrapPeers };
+  return { homeNodePeerId: peerId, bootstrapPeers };
 }

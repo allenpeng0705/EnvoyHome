@@ -12,6 +12,7 @@ export default {
   "app.themeLight": "ライト",
   "app.themeDark": "ダーク",
   "app.pairingQrTip": "ペアリングQR — 接続を開いてコードを表示",
+  "app.setupGuideTip": "セットアップガイド — モデル、ローカルエンジン、スマホペア",
   "app.loading": "読み込み中…",
   "app.waitingDaemon": "デーモン接続を待機中…",
   "app.unknownView": "不明なビュー",
@@ -154,6 +155,30 @@ export default {
   "profile.displayName": "表示名",
   "profile.displayNamePlaceholder": "例: Alice",
   "profile.continue": "続ける",
+  "setupGuide.title": "EnvoyHome を設定",
+  "setupGuide.introFirst":
+    "チャットにはモデルが必要です。クラウド提供元を追加するか、この PC でローカルモデルを有効にしてください。その後、任意でスマホをペアできます。",
+  "setupGuide.intro":
+    "モデルの設定とスマホのペア方法。「システム → このマシン」からいつでも開けます。",
+  "setupGuide.stepCloudTitle": "クラウド提供元を追加",
+  "setupGuide.stepCloudBody":
+    "OpenAI 互換、Anthropic、DeepSeek などのプリセット。API キーを貼ってモデルを選びます。",
+  "setupGuide.stepCloudCta": "モデルを開く",
+  "setupGuide.stepLocalTitle": "またはローカルモデル",
+  "setupGuide.stepLocalBody":
+    "GGUF をダウンロードするか、このマシンの Ollama に接続 — クラウドキー不要。",
+  "setupGuide.stepLocalCta": "ローカルモデルを開く",
+  "setupGuide.stepPhoneTitle": "スマホをペア（任意）",
+  "setupGuide.stepPhoneBody":
+    "ペアリング QR を表示し、スマホの EnvoyHome が LAN または mesh/リレーでこのデスクトップに届くようにします。",
+  "setupGuide.stepPhoneCta": "ペアリングを開く",
+  "setupGuide.note":
+    "チャットにはクラウドかローカルのどちらか一方で十分です。スマホのペアは後からで構いません。",
+  "setupGuide.skipCta": "先に見る",
+  "setupGuide.doneCta": "了解",
+  "setupGuide.openCta": "セットアップガイドを表示",
+  "setupGuide.settingsHint":
+    "初回のモデルとスマホペアのチェックリスト — 必要なときいつでも再表示できます。",
   "profile.title": "プロフィール",
   "profile.intro": "本機の各人に表示名を付けます。記憶・モデル・チャットはプロフィールごとに分離されます。",
   "profile.empty": "プロフィールがありません。",
@@ -339,8 +364,9 @@ export default {
   "pairing.qrTitle": "QR コードをスキャン",
   "pairing.qrPrimary": "推奨",
   "pairing.qrDetail": "スマホで EnvoyHome を開き、「QR をスキャン」を選び、このコードにカメラを向けます。",
-  "pairing.qrMeshHosting": "スマホがネットワーク経由でこのマシンに届く場合、このコードには直接 mesh ルートが含まれます。",
-  "pairing.qrMeshUnavailable": "mesh ピアはホスティングしていません — このコードはネットワーク住所と SSH で依然使えます。",
+  "pairing.qrMeshHosting": "このコードには mesh + コミュニティリレー経路が含まれます（EnvoyDev / EnvoyMesh と同じ）。",
+  "pairing.qrMeshUnavailable": "mesh ピアはまだホスティングしていません — 準備ができてから新しいコードを表示してください。LAN のみの QR では Wi‑Fi 外で再接続できません。",
+  "pairing.qrMeshRequired": "mesh ホスティング（homeNodePeerId + リレー bootstrap）なしではスマホ QR を発行できません。詳細設定 → mesh ホスティングを確認して再試行してください。",
   "pairing.qrBusy": "ペアリングコードを準備中…",
   "pairing.qrAction": "新しいコードを表示",
   "pairing.qrAlt": "ペアリングコード",

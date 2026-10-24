@@ -38,18 +38,15 @@ class _HomeShellState extends State<HomeShell> {
   /// Phone: Chat / Home? / Settings. Tablet: Chat / Home? / Profiles / LLM / Connections / Skills / System.
   int _tab = 0;
   bool _haHomeReady = false;
-  final _accountCtrl = TextEditingController();
   final _settingsNav = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
     super.initState();
-    _accountCtrl.text = widget.session.accountId ?? '';
     final bound = _helloAccounts;
     if (bound.length == 1 &&
         (widget.session.accountId == null || widget.session.accountId!.isEmpty)) {
       widget.session.setAccountId(bound.first);
-      _accountCtrl.text = bound.first;
     }
     PushService.instance.onTap = _onPushTap;
     final pending = PushService.instance.consumePendingTap();
@@ -60,9 +57,29 @@ class _HomeShellState extends State<HomeShell> {
     widget.session.addListener(_onSession);
   }
 
+  String? _lastShownError;
+
   void _onSession() {
     unawaited(_refreshHaReady());
+    _maybeShowSessionError();
     if (mounted) setState(() {});
+  }
+
+  void _maybeShowSessionError() {
+    final err = widget.session.error;
+    if (err == null || err.isEmpty || err == _lastShownError) return;
+    if (widget.session.isConnected || widget.session.busy) return;
+    _lastShownError = err;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(err),
+          duration: const Duration(seconds: 6),
+        ),
+      );
+    });
   }
 
   Future<void> _openPairing() async {
@@ -75,11 +92,21 @@ class _HomeShellState extends State<HomeShell> {
 
   /// Prefer silent reconnect from saved pairing; open QR only when none saved.
   Future<void> _requestConnect() async {
-    if (widget.session.hasSavedPairing) {
+    _lastShownError = null;
+    // Reload join from prefs when memory is empty (soft-disconnect / cold edge).
+    if (!widget.session.hasSavedPairing) {
       await widget.session.reconnect();
+      if (widget.session.isConnected) return;
+      if (!widget.session.hasSavedPairing) {
+        await _openPairing();
+        return;
+      }
+      // Prefs had a join; reconnect already ran (and may have failed).
+      if (mounted) _maybeShowSessionError();
       return;
     }
-    await _openPairing();
+    await widget.session.reconnect();
+    if (mounted) _maybeShowSessionError();
   }
 
   Future<void> _refreshHaReady() async {
@@ -131,16 +158,11 @@ class _HomeShellState extends State<HomeShell> {
     final account = data['accountId']?.toString();
     if (account != null && account.isNotEmpty) {
       widget.session.setAccountId(account);
-      _accountCtrl.text = account;
     }
-    if (type == 'approval' || type == 'test') {
-      setState(() => _tab = 0);
-    } else if (type == 'schedule' || type == 'schedule-fired') {
-      setState(() => _tab = _phoneSettingsIndex);
-    }
+    // Design `2026-10-22f` tap targets (Chat=0, Schedules=1).
+    final tab = pushTapTabIndex(type);
+    if (tab != null) setState(() => _tab = tab);
   }
-
-  int get _phoneSettingsIndex => _haHomeReady ? 2 : 1;
 
   @override
   void dispose() {
@@ -148,7 +170,6 @@ class _HomeShellState extends State<HomeShell> {
     if (PushService.instance.onTap == _onPushTap) {
       PushService.instance.onTap = null;
     }
-    _accountCtrl.dispose();
     super.dispose();
   }
 
@@ -162,33 +183,13 @@ class _HomeShellState extends State<HomeShell> {
         .toList();
   }
 
-  Future<void> _createAccount() async {
-    final home = widget.session.session;
+  Future<void> _confirmForgetPairing() async {
     final l10n = AppLocalizations.of(context);
-    if (home == null) return;
-    final nameCtrl = TextEditingController();
-    final idCtrl = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l10n.shellCreateProfile),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: InputDecoration(labelText: l10n.shellProfileDisplayName),
-              autofocus: true,
-            ),
-            TextField(
-              controller: idCtrl,
-              decoration: InputDecoration(
-                labelText: l10n.shellProfileIdOptional,
-                hintText: 'alice',
-              ),
-            ),
-          ],
-        ),
+        title: Text(l10n.shellForgetPairing),
+        content: Text(l10n.connForgetConfirm('this phone')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -196,42 +197,50 @@ class _HomeShellState extends State<HomeShell> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(l10n.shellCreate),
+            child: Text(l10n.shellForgetPairing),
           ),
         ],
       ),
     );
-    if (ok != true || !mounted) return;
-    final name = nameCtrl.text.trim();
-    if (name.isEmpty) return;
-    try {
-      final res = await home.createAccount(
-        displayName: name,
-        accountId: idCtrl.text.trim().isEmpty ? null : idCtrl.text.trim(),
-      );
-      final account = res['account'];
-      final newId = account is Map
-          ? account['accountId']?.toString() ?? account['id']?.toString()
-          : null;
-      if (newId != null && newId.isNotEmpty) {
-        widget.session.setAccountId(newId);
-        _accountCtrl.text = newId;
-      }
-      // Refresh hello so chips update if daemon returns new accountIds.
-      final hello = await home.hello();
-      widget.session.applyHello(hello);
-      if (mounted) setState(() {});
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.shellProfileCreated)),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(l10n.shellProfileCreateFailed('$e'))),
-        );
-      }
+    if (ok == true && mounted) {
+      await widget.session.disconnect(forgetPairing: true);
+    }
+  }
+
+  Future<void> _onShellMenu(String value) async {
+    final session = widget.session;
+    if (value.startsWith('profile:')) {
+      final id = value.substring('profile:'.length);
+      session.setAccountId(id);
+      setState(() {});
+      return;
+    }
+    if (value.startsWith('locale:')) {
+      await widget.locales.setLocaleId(value.substring('locale:'.length));
+      return;
+    }
+    switch (value) {
+      case 'theme:system':
+        await widget.themes.setMode(ThemeMode.system);
+        return;
+      case 'theme:light':
+        await widget.themes.setMode(ThemeMode.light);
+        return;
+      case 'theme:dark':
+        await widget.themes.setMode(ThemeMode.dark);
+        return;
+      case 'conn:reconnect':
+        await _requestConnect();
+        return;
+      case 'conn:disconnect':
+        await session.disconnect();
+        return;
+      case 'conn:forget':
+        await _confirmForgetPairing();
+        return;
+      case 'conn:pair':
+        await _openPairing();
+        return;
     }
   }
 
@@ -403,20 +412,30 @@ class _HomeShellState extends State<HomeShell> {
     final l10n = AppLocalizations.of(context);
     final connected = session.isConnected;
     final product = session.hello?['product'] ?? l10n.appName;
-    final mesh = (session.hello?['mesh'] as Map?)?['kind'] ?? '—';
     final healthOk = session.health?['ok'] == true;
     final theme = Theme.of(context);
     final bound = _helloAccounts;
     final wide = MediaQuery.sizeOf(context).width >= _kWideBreakpoint;
 
-    final statusLabel = !connected
+    final statusColor = !connected
+        ? theme.colorScheme.onSurface.withValues(alpha: 0.35)
+        : (healthOk ? theme.colorScheme.primary : theme.colorScheme.error);
+    final statusTip = !connected
         ? l10n.shellOffline
         : (healthOk ? l10n.shellOnline : l10n.shellDegraded);
-    final statusColor = !connected
-        ? theme.colorScheme.onSurface.withValues(alpha: 0.45)
-        : (healthOk ? theme.colorScheme.primary : theme.colorScheme.error);
+
+    final themeMode = widget.themes.mode;
+    final localeId = widget.locales.override?.languageCode ??
+        Localizations.localeOf(context).languageCode;
+
+    TextStyle menuStyle({required bool selected}) =>
+        theme.textTheme.bodyMedium!.copyWith(
+          color: theme.colorScheme.onSurface,
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+        );
 
     final appBar = AppBar(
+      titleSpacing: 12,
       title: Row(
         children: [
           ClipRRect(
@@ -430,182 +449,103 @@ class _HomeShellState extends State<HomeShell> {
           ),
           const SizedBox(width: 10),
           Flexible(child: Text('$product')),
+          const SizedBox(width: 8),
+          Tooltip(
+            message: statusTip,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: statusColor,
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
         ],
       ),
       actions: [
-        Padding(
-          padding: const EdgeInsets.only(right: 4),
-          child: Center(
-            child: Chip(
-              avatar: Icon(
-                connected
-                    ? (healthOk ? Icons.circle : Icons.error_outline)
-                    : Icons.circle_outlined,
-                size: 12,
-                color: statusColor,
-              ),
-              label: Text(statusLabel),
-              visualDensity: VisualDensity.compact,
-              padding: EdgeInsets.zero,
-            ),
-          ),
-        ),
-        PopupMenuButton<ThemeMode>(
-          tooltip: l10n.appThemePicker,
-          icon: Icon(
-            Theme.of(context).brightness == Brightness.dark
-                ? Icons.dark_mode_outlined
-                : Icons.light_mode_outlined,
-          ),
-          onSelected: (mode) => widget.themes.setMode(mode),
-          itemBuilder: (context) {
-            final current = widget.themes.mode;
-            PopupMenuItem<ThemeMode> item(ThemeMode mode, String label) {
-              final theme = Theme.of(context);
-              return PopupMenuItem<ThemeMode>(
-                value: mode,
-                child: Text(
-                  label,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurface,
-                    fontWeight: mode == current
-                        ? FontWeight.w700
-                        : FontWeight.w400,
-                  ),
-                ),
-              );
-            }
-
-            return [
-              item(ThemeMode.system, l10n.appThemeSystem),
-              item(ThemeMode.light, l10n.appThemeLight),
-              item(ThemeMode.dark, l10n.appThemeDark),
-            ];
-          },
-        ),
         PopupMenuButton<String>(
-          tooltip: l10n.appLanguage,
-          icon: const Icon(Icons.language),
-          onSelected: (id) => widget.locales.setLocaleId(id),
-          itemBuilder: (context) {
-            final current = widget.locales.override?.languageCode ??
-                Localizations.localeOf(context).languageCode;
-            return [
-              for (final id in supportedLocaleIds)
+          tooltip: MaterialLocalizations.of(context).moreButtonTooltip,
+          enabled: !session.busy,
+          icon: session.busy
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.more_vert),
+          onSelected: (value) => unawaited(_onShellMenu(value)),
+          itemBuilder: (context) => [
+            if (connected) ...[
+              PopupMenuItem(
+                value: 'conn:disconnect',
+                child: Text(l10n.shellDisconnect, style: menuStyle(selected: false)),
+              ),
+            ] else ...[
+              if (session.hasSavedPairing)
                 PopupMenuItem(
-                  value: id,
+                  value: 'conn:reconnect',
+                  child: Text(l10n.shellReconnect, style: menuStyle(selected: false)),
+                ),
+              PopupMenuItem(
+                value: 'conn:pair',
+                child: Text(l10n.shellConnect, style: menuStyle(selected: false)),
+              ),
+              if (session.hasSavedPairing)
+                PopupMenuItem(
+                  value: 'conn:forget',
                   child: Text(
-                    localeLabels[id] ?? id,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurface,
-                          fontWeight:
-                              id == current ? FontWeight.w700 : FontWeight.w400,
-                        ),
+                    l10n.shellForgetPairing,
+                    style: menuStyle(selected: false),
                   ),
                 ),
-            ];
-          },
+            ],
+            if (connected && bound.length > 1) ...[
+              const PopupMenuDivider(),
+              for (final id in bound)
+                PopupMenuItem(
+                  value: 'profile:$id',
+                  child: Text(
+                    l10n.shellProfileOne(id),
+                    style: menuStyle(selected: session.accountId == id),
+                  ),
+                ),
+            ],
+            const PopupMenuDivider(),
+            PopupMenuItem(
+              value: 'theme:system',
+              child: Text(
+                '${l10n.appThemePicker}: ${l10n.appThemeSystem}',
+                style: menuStyle(selected: themeMode == ThemeMode.system),
+              ),
+            ),
+            PopupMenuItem(
+              value: 'theme:light',
+              child: Text(
+                '${l10n.appThemePicker}: ${l10n.appThemeLight}',
+                style: menuStyle(selected: themeMode == ThemeMode.light),
+              ),
+            ),
+            PopupMenuItem(
+              value: 'theme:dark',
+              child: Text(
+                '${l10n.appThemePicker}: ${l10n.appThemeDark}',
+                style: menuStyle(selected: themeMode == ThemeMode.dark),
+              ),
+            ),
+            const PopupMenuDivider(),
+            for (final id in supportedLocaleIds)
+              PopupMenuItem(
+                value: 'locale:$id',
+                child: Text(
+                  '${l10n.appLanguage}: ${localeLabels[id] ?? id}',
+                  style: menuStyle(selected: id == localeId),
+                ),
+              ),
+          ],
         ),
-        if (connected)
-          IconButton(
-            tooltip: l10n.shellDisconnect,
-            onPressed: () => session.disconnect(),
-            icon: const Icon(Icons.link_off),
-          )
-        else if (session.hasSavedPairing) ...[
-          IconButton(
-            tooltip: l10n.shellReconnect,
-            onPressed: session.busy ? null : _requestConnect,
-            icon: session.busy
-                ? const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.link),
-          ),
-          IconButton(
-            tooltip: l10n.shellConnect,
-            onPressed: _openPairing,
-            icon: const Icon(Icons.qr_code_2),
-          ),
-        ] else
-          IconButton(
-            tooltip: l10n.shellConnect,
-            onPressed: _openPairing,
-            icon: const Icon(Icons.qr_code_2),
-          ),
       ],
     );
-
-    final profileCard = !connected
-        ? const SizedBox.shrink()
-        : Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-            child: Card(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: bound.isEmpty
-                              ? Text(
-                                  l10n.shellProfilePending,
-                                  style: theme.textTheme.bodyMedium,
-                                )
-                              : bound.length == 1
-                                  ? Text(
-                                      l10n.shellProfileOne(bound.first),
-                                      style: theme.textTheme.titleSmall?.copyWith(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    )
-                                  : Text(
-                                      l10n.shellProfile,
-                                      style: theme.textTheme.labelLarge,
-                                    ),
-                        ),
-                        TextButton.icon(
-                          onPressed: _createAccount,
-                          icon: const Icon(Icons.person_add_alt_1, size: 18),
-                          label: Text(l10n.shellCreateProfile),
-                        ),
-                      ],
-                    ),
-                    if (bound.length > 1) ...[
-                      const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          for (final id in bound)
-                            ChoiceChip(
-                              label: Text(id),
-                              selected: session.accountId == id,
-                              onSelected: (_) {
-                                _accountCtrl.text = id;
-                                session.setAccountId(id);
-                                setState(() {});
-                              },
-                            ),
-                        ],
-                      ),
-                    ],
-                    const SizedBox(height: 4),
-                    Text(
-                      l10n.shellMeshHint(mesh.toString()),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.55),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
 
     if (wide) {
       final destinations = _tabletDestinations(l10n);
@@ -624,16 +564,9 @@ class _HomeShellState extends State<HomeShell> {
             ),
             const VerticalDivider(width: 1),
             Expanded(
-              child: Column(
-                children: [
-                  profileCard,
-                  Expanded(
-                    child: IndexedStack(
-                      index: selected,
-                      children: bodies,
-                    ),
-                  ),
-                ],
+              child: IndexedStack(
+                index: selected,
+                children: bodies,
               ),
             ),
           ],
@@ -645,25 +578,24 @@ class _HomeShellState extends State<HomeShell> {
     final dests = _phoneDestinations(l10n);
     final maxIdx = dests.length - 1;
     final selected = _tab.clamp(0, maxIdx);
+    // Soft keyboard: hide the bottom nav so chat isn't squeezed above
+    // NavigationBar + keyboard (newest bubbles were ending up under the keys).
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return Scaffold(
       appBar: appBar,
-      body: Column(
-        children: [
-          profileCard,
-          Expanded(
-            child: IndexedStack(
-              index: selected,
-              children: bodies,
+      resizeToAvoidBottomInset: true,
+      body: IndexedStack(
+        index: selected,
+        children: bodies,
+      ),
+      bottomNavigationBar: keyboardOpen
+          ? null
+          : NavigationBar(
+              selectedIndex: selected,
+              onDestinationSelected: (i) => setState(() => _tab = i),
+              destinations: dests,
             ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: selected,
-        onDestinationSelected: (i) => setState(() => _tab = i),
-        destinations: dests,
-      ),
     );
   }
 }

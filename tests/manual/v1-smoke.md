@@ -2,6 +2,7 @@
 
 **Bar:** Design §21 item 4 / Plan §8 item 4.  
 **Last automated run:** 2026-10-08 (`node scripts/smoke-v1.mjs` → **8/8 PASS** with live-deferred notes).  
+**Early-adopter claims:** [`design_doc/reviews/2026-10-22-early-adopter-claims.md`](../../design_doc/reviews/2026-10-22-early-adopter-claims.md) — live phone / Telegram / HA still optional for preview; **required** before honest `v1.0.0`.  
 **Operator:** fill the Pass column for any live-only gaps you care about before tagging `v1.0.0`.
 
 | # | Flow | Pass? | Notes |

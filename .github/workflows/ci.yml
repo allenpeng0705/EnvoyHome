@@ -79,3 +79,42 @@ jobs:
         env:
           CI: "true"
         run: pnpm -r lint
+
+  # Flutter / Dart thin client — needs EnvoyMesh siblings (path deps). Fail-closed
+  # when peers are configured; same fetch/peers-check as the Node job.
+  mobile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Make scripts executable
+        run: chmod +x scripts/*.sh
+
+      - name: Fetch sibling repos (required)
+        env:
+          ENVOYHOME_PEERS_GIT_BASE: ${{ vars.ENVOYHOME_PEERS_GIT_BASE }}
+          PEERS_TOKEN: ${{ secrets.PEERS_TOKEN }}
+        run: |
+          if [ -z "${ENVOYHOME_PEERS_GIT_BASE:-}" ] && [ -n "${PEERS_TOKEN:-}" ]; then
+            echo "PEERS_TOKEN is set but ENVOYHOME_PEERS_GIT_BASE is not."
+            exit 1
+          fi
+          ./scripts/fetch-peers.sh
+
+      - name: peers:check (fail-closed)
+        run: ./scripts/peers-check.sh
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: mobile:test (packages/mobile-client)
+        run: ./scripts/mobile-test.sh
+
+      - name: mobile:flutter (apps/mobile)
+        run: |
+          cd apps/mobile
+          flutter pub get
+          flutter test

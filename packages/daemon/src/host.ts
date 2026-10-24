@@ -47,6 +47,11 @@ export async function startWsHost(input: {
   eventDispositions?: Readonly<Record<string, EventDisposition>>;
   /** Stamp lastSeenAt when a paired device authenticates. */
   onDeviceSeen?: (deviceId: string) => void;
+  /**
+   * Design `2026-10-24` — clear live-presence on WS disconnect so kill-app
+   * still receives interactive push (turn-finished / approval / choice).
+   */
+  onAuthenticatedClose?: (deviceId: string) => void;
 }): Promise<HostHandle> {
   let connections = 0;
   const sessionIdentity = createSessionIdentity(input.devices, {
@@ -72,6 +77,13 @@ export async function startWsHost(input: {
     onConnectionChange: (n) => {
       connections = n;
     },
+    ...(input.onAuthenticatedClose
+      ? {
+          onAuthenticatedClose: (info: { deviceId: string }) => {
+            input.onAuthenticatedClose?.(info.deviceId);
+          },
+        }
+      : {}),
   });
 
   await host.serve(input.nodeService);

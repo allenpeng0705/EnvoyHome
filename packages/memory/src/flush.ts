@@ -2,6 +2,7 @@
 
 import { RAW_SOFT_CAP } from "./bootstrap-inject.js";
 import type { LearnQueue, PendingLearnKind } from "./learn-queue.js";
+import { todayIsoDate } from "./notes.js";
 import { provenanceLine, stampProvenance, type ProvenanceTrust } from "./provenance.js";
 import type { StandingStore } from "./standing-store.js";
 import { mayDirectStandingWrite } from "./taint.js";
@@ -181,5 +182,6 @@ export async function applyFlush(
 }
 
 function today(now: Date): string {
-  return now.toISOString().slice(0, 10);
+  // Must match StandingStore.appendDaily (local calendar day — not UTC ISO).
+  return todayIsoDate(now);
 }

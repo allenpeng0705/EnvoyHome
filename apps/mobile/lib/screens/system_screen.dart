@@ -7,7 +7,7 @@ import '../state/session_controller.dart';
 import 'artifacts_tab.dart';
 import 'profiles_screen.dart';
 
-/// System: Profiles | Shared files | Health | Grants (Design §10.1).
+/// System: Profiles | Files | Health | Grants | This machine (Design §10.1).
 class SystemScreen extends StatelessWidget {
   const SystemScreen({super.key, required this.session});
 
@@ -17,7 +17,7 @@ class SystemScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return DefaultTabController(
-      length: 4,
+      length: 5,
       child: Scaffold(
         appBar: AppBar(
           title: Text(l10n.navSystem),
@@ -28,6 +28,7 @@ class SystemScreen extends StatelessWidget {
               Tab(text: l10n.sysTabFiles),
               Tab(text: l10n.sysTabHealth),
               Tab(text: l10n.sysTabGrants),
+              Tab(text: l10n.sysTabMachine),
             ],
           ),
         ),
@@ -37,8 +38,164 @@ class SystemScreen extends StatelessWidget {
             ArtifactsTab(session: session),
             _DoctorTab(session: session),
             _GrantsTab(session: session),
+            _ThisMachineTab(session: session),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ThisMachineTab extends StatefulWidget {
+  const _ThisMachineTab({required this.session});
+  final SessionController session;
+
+  @override
+  State<_ThisMachineTab> createState() => _ThisMachineTabState();
+}
+
+class _ThisMachineTabState extends State<_ThisMachineTab> {
+  Map<String, dynamic>? _health;
+  Map<String, dynamic>? _mesh;
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_reload());
+  }
+
+  Future<void> _reload() async {
+    final home = widget.session.session;
+    if (home == null) return;
+    setState(() => _busy = true);
+    try {
+      final health = await home.health();
+      Map<String, dynamic>? mesh;
+      try {
+        mesh = await home.meshStatus();
+      } catch (_) {
+        mesh = null;
+      }
+      if (mounted) {
+        setState(() {
+          _health = health;
+          _mesh = mesh;
+          _error = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _testPush() async {
+    final home = widget.session.session;
+    if (home == null) return;
+    try {
+      await home.sendTestPush(accountId: widget.session.accountId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(AppLocalizations.of(context).sysTestPushSent)),
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    }
+  }
+
+  String _fmtUptime(Object? sec) {
+    final n = sec is num ? sec.toInt() : int.tryParse('$sec') ?? 0;
+    if (n <= 0) return '—';
+    final h = n ~/ 3600;
+    final m = (n % 3600) ~/ 60;
+    final s = n % 60;
+    if (h > 0) return '${h}h ${m}m';
+    if (m > 0) return '${m}m ${s}s';
+    return '${s}s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    final h = _health;
+    final ok = h != null && h['ok'] != false && _error == null;
+    final publicUrl = h?['publicBaseUrl']?.toString() ?? '';
+    final meshKind = _mesh?['kind']?.toString() ?? '—';
+
+    return RefreshIndicator(
+      onRefresh: _reload,
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(l10n.sysMachineHint, style: theme.textTheme.bodySmall),
+          const SizedBox(height: 12),
+          if (_error != null)
+            Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              Chip(
+                avatar: Icon(
+                  ok ? Icons.check_circle : Icons.error_outline,
+                  size: 18,
+                  color: ok ? theme.colorScheme.primary : theme.colorScheme.error,
+                ),
+                label: Text(ok ? l10n.sysMachineDaemonOk : l10n.sysMachineDaemonBad),
+              ),
+              FilledButton.tonal(
+                onPressed: _busy ? null : _reload,
+                child: Text(l10n.sysMachineRefresh),
+              ),
+              FilledButton.tonal(
+                onPressed: _testPush,
+                child: Text(l10n.sysTestPush),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _kv(l10n.sysMachineWsPort, '${h?['wsPort'] ?? '—'}'),
+          _kv(l10n.sysMachineHttpPort, '${h?['httpPort'] ?? '—'}'),
+          _kv(
+            l10n.sysMachinePublicUrl,
+            publicUrl.isEmpty ? l10n.sysMachinePublicUrlEmpty : publicUrl,
+          ),
+          _kv(l10n.sysMachineUptime, _fmtUptime(h?['uptimeSec'])),
+          _kv(
+            l10n.sysMachineConnections,
+            '${h?['connections'] ?? '—'} / ${h?['activeTurns'] ?? '—'}',
+          ),
+          _kv(l10n.sysMachineMesh, meshKind),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Text(l10n.sysMachineOsServiceNote, style: theme.textTheme.bodySmall),
+            ),
+          ),
+          if (_busy) const LinearProgressIndicator(),
+        ],
+      ),
+    );
+  }
+
+  Widget _kv(String k, String v) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 140,
+            child: Text(k, style: Theme.of(context).textTheme.bodySmall),
+          ),
+          Expanded(child: Text(v, style: const TextStyle(fontFamily: 'monospace'))),
+        ],
       ),
     );
   }

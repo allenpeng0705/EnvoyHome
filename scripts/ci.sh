@@ -21,6 +21,10 @@ cd "$REPO_ROOT"
 #    class of defect by hand; see scripts/docs-lint.mjs.)
 node scripts/docs-lint.mjs
 
+# 1b. Desktop product version: root VERSION in lockstep with package.json / Tauri / Cargo
+#     (EnvoyCoder version:desktop:check).
+node scripts/sync-desktop-version.mjs --check
+
 # 2. Siblings present, on the expected branch, with the linked packages. Fail closed.
 ./scripts/peers-check.sh
 
@@ -36,5 +40,14 @@ pnpm -r test
 # 5. NOW CI is safe.
 export CI=true
 pnpm -r lint
+
+# 6. Mobile thin client (skip quietly if Flutter/Dart absent — GitHub Actions
+#    runs a dedicated mobile job with Flutter installed).
+if command -v dart >/dev/null 2>&1; then
+  ./scripts/mobile-test.sh
+fi
+if command -v flutter >/dev/null 2>&1; then
+  (cd apps/mobile && flutter pub get && flutter test)
+fi
 
 echo "ci: OK"

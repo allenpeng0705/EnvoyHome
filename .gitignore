@@ -18,6 +18,12 @@ build/
 .env.local
 .env.*.local
 *.pem
+*.p8
+AuthKey_*.p8
+push-config.json
+serviceAccountKey.json
+firebase-service-account.json
+*-firebase-adminsdk-*.json
 secrets/
 
 # Logs
@@ -50,4 +56,16 @@ apps/mobile/build/
 apps/desktop/target/
 apps/desktop/src-tauri/target/
 apps/desktop/dist/
+apps/desktop/dist-daemon/
 apps/desktop/ui-dist/
+apps/desktop/src-tauri/resources/daemon/
+apps/desktop/src-tauri/resources/node-runtime/
+apps/desktop/src-tauri/resources/push/
+# Legacy staging name (removed; keep ignore so old trees stay untracked)
+apps/desktop/src-tauri/resources/envoyhome-daemon.js
+
+# Desktop installer output (scripts/build-desktop.*)
+release/
+
+# Optional local Apple signing env (see scripts/sign-macos-release.env.example)
+scripts/sign-macos-release.env

@@ -39,9 +39,10 @@ import { homePaths } from "./home-paths.js";
 import { ActuationService } from "./actuation-service.js";
 import { PushTokenStore } from "./push-tokens.js";
 import { PushDispatcher } from "./push-dispatch.js";
+import { LiveDevicePresence } from "./push-live.js";
 import { WorkflowStore } from "./workflows.js";
 import { WorkflowStepTemplateStore } from "./workflow-step-templates.js";
-import { SkillService } from "./skills.js";
+import { SkillService, createSkillServiceL7Adapter } from "./skills.js";
 import { ArtifactService } from "./artifacts.js";
 import { WebSearchService } from "./web-search.js";
 import { BrowserControlService } from "./browser-control.js";
@@ -77,6 +78,7 @@ export interface RunningDaemon {
   actuations: ActuationService;
   pushTokens: PushTokenStore;
   push: PushDispatcher;
+  liveDevices: LiveDevicePresence;
   localEngine: LocalEngineService;
   mesh: MeshHostHandle;
   /** Live hosting peer when meshHostingEnabled (null when stub-only). */
@@ -112,7 +114,6 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   const household = new HouseholdStore(config.stateDir);
   const bindings = new BindingStore(config.stateDir, devices);
   const pairing = new PairingStore(config.stateDir, devices, bindings);
-  const memory = new MemoryFacade({ stateDir: config.stateDir });
   const channels = new ChannelService({
     stateDir: config.stateDir,
     bindings,
@@ -141,6 +142,16 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   await workflows.reload();
   const workflowStepTemplates = new WorkflowStepTemplateStore(paths);
   const skills = new SkillService(paths);
+  // Design `2026-10-22b`/`c` — acceptLearn → household packs; migrate orphan flat files.
+  await skills.migrateFlatAccountSkillFiles(config.stateDir).catch((err) => {
+    logger.warn(
+      `skill flat-file migrate skipped: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  });
+  const memory = new MemoryFacade({
+    stateDir: config.stateDir,
+    skillL7: createSkillServiceL7Adapter(skills),
+  });
   const artifacts = new ArtifactService(paths, () => config.publicBaseUrl);
   artifacts.setWorkspaceLookup(async (accountId) => {
     const mounts = await accounts.getWorkspaceMountRefs(
@@ -195,21 +206,26 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     emit: (event, data) => events.emit(event, data),
   });
   turns.setSchedules(schedules);
-  const push = new PushDispatcher(pushTokens, config.stateDir, logger);
+  const liveDevices = new LiveDevicePresence();
+  const push = new PushDispatcher(pushTokens, config.stateDir, logger, liveDevices);
   await push.init();
-  // Notify → EnvoyMesh super channel: live WS (`home:schedule-fired`) + APNs/FCM wake.
+  // Notify → EnvoyMesh super channel: live WS (`home:schedule-fired`) + APNs/FCM always.
   schedules.setFireHandler(async (job) => {
     if (job.payload.kind === "notify") {
       const body = String(job.payload.message ?? job.name ?? "Reminder");
-      const { sent } = await push.notifyAccount(job.accountId, {
-        title: "EnvoyHome",
-        body,
-        data: {
-          type: "schedule",
-          jobId: job.id,
-          accountId: job.accountId,
+      const { sent } = await push.notifyAccount(
+        job.accountId,
+        {
+          title: "EnvoyHome",
+          body,
+          data: {
+            type: "schedule",
+            jobId: job.id,
+            accountId: job.accountId,
+          },
         },
-      });
+        "always",
+      );
       const live = events.hasListeners("home:schedule-fired");
       return {
         execStatus: "ok",
@@ -258,15 +274,19 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
           return { execStatus: "ok", deliveryStatus: "none" };
         }
         const body = (hb.reply.trim() || "Heartbeat needs attention").slice(0, 500);
-        const { sent } = await push.notifyAccount(job.accountId, {
-          title: "EnvoyHome",
-          body,
-          data: {
-            type: "heartbeat",
-            jobId: job.id,
-            accountId: job.accountId,
+        const { sent } = await push.notifyAccount(
+          job.accountId,
+          {
+            title: "EnvoyHome",
+            body,
+            data: {
+              type: "heartbeat",
+              jobId: job.id,
+              accountId: job.accountId,
+            },
           },
-        });
+          "suppressIfLive",
+        );
         const live = events.hasListeners("home:schedule-fired");
         return {
           execStatus: "ok",
@@ -311,11 +331,15 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       orders,
       trigger,
       onNotify: async (_order, message) => {
-        await push.notifyAccount(accountId, {
-          title: "EnvoyHome",
-          body: message.slice(0, 500),
-          data: { type: "standing-order", accountId, kind: trigger.kind },
-        });
+        await push.notifyAccount(
+          accountId,
+          {
+            title: "EnvoyHome",
+            body: message.slice(0, 500),
+            data: { type: "standing-order", accountId, kind: trigger.kind },
+          },
+          "always",
+        );
         events.emit("home:schedule-fired", {
           jobId: `standing-event:${trigger.kind}`,
           accountId,
@@ -402,10 +426,27 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   pairing.onRevokeLive = (deviceId) => {
     wsRef?.disconnectClientsForDevice(deviceId);
     meshPeer?.closeStreamsForDevice(deviceId);
+    // Design `2026-10-22f` — revoked/forgotten devices must not keep waking.
+    void pushTokens.unregister(deviceId).catch((err) => {
+      logger.warn(
+        `push token clear on revoke failed deviceId=${deviceId}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    });
   };
 
   const meshStatus = () => (meshPeer ? meshPeer.status() : meshStub.status());
   const meshDualModeNotes = () => meshStub.dualModeNotes();
+
+  // Mint awaits this so a QR issued while the peer is still starting still
+  // carries libp2p + community relay fields (EnvoyCoder awaitMeshReady).
+  // Declared before WS serve: handlers close over the promise; settle after mesh start.
+  let settleMeshReady: () => void = () => undefined;
+  const meshReady = new Promise<void>((resolve) => {
+    settleMeshReady = resolve;
+  });
+  if (!config.meshHostingEnabled) settleMeshReady();
 
   const ws = await startWsHost({
     port: config.wsPort,
@@ -413,6 +454,8 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     nodeService: events.asNodeService(),
     eventDispositions: homeEventDispositions(),
     onDeviceSeen: (deviceId) => pairing.noteSeen(deviceId),
+    // Design `2026-10-24` — kill-app / soft disconnect must clear suppressIfLive.
+    onAuthenticatedClose: (deviceId) => liveDevices.clear(deviceId),
     routerDeps: {
       config,
       startedAt,
@@ -439,12 +482,14 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       actuations,
       pushTokens,
       push,
+      liveDevices,
       localEngine,
       demoHa,
       demoMqtt,
       activeTurns: () => turns.activeTurnCount(),
       meshStatus,
       meshDualModeNotes,
+      awaitMeshReady: () => meshReady,
       onShutdown: (_reason, graceSec) => {
         setTimeout(() => {
           void stop();
@@ -452,13 +497,20 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       },
     },
   });
-  wsRef = ws;
+  wsRef = {
+    ...ws,
+    disconnectClientsForDevice: (deviceId: string) => {
+      liveDevices.clear(deviceId);
+      return ws.disconnectClientsForDevice(deviceId);
+    },
+  };
 
   if (config.meshHostingEnabled) {
     meshPeer = createHomeMeshPeer({
       paths,
       sessionIdentity: ws.sessionIdentity,
       dispatch: ws.dispatch,
+      onAuthenticatedClose: (deviceId) => liveDevices.clear(deviceId),
       subscribe: (send) => {
         const offs = (["home:turn-delta", "home:approval", "home:schedule-fired"] as const).map(
           (ev) => events.on(ev, (data) => send(ev, data)),
@@ -480,6 +532,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       );
     }
     pairing.meshForMint = () => meshMintFields(meshPeer);
+    settleMeshReady();
     stoppers.push(() => meshPeer?.stop() ?? Promise.resolve());
   }
 
@@ -564,6 +617,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     actuations,
     pushTokens,
     push,
+    liveDevices,
     localEngine,
     mesh,
     meshPeer,

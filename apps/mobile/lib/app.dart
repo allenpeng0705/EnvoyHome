@@ -4,7 +4,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
 import 'l10n/locale_controller.dart';
 import 'l10n/theme_controller.dart';
-import 'screens/home_shell.dart';
+import 'screens/onboarding/app_entry.dart';
+import 'services/connectivity_observer.dart';
 import 'state/session_controller.dart';
 import 'theme.dart';
 
@@ -16,7 +17,9 @@ class EnvoyHomeApp extends StatefulWidget {
 }
 
 class _EnvoyHomeAppState extends State<EnvoyHomeApp> {
-  final SessionController session = SessionController();
+  final SessionController session = SessionController(
+    connectivity: RealConnectivityObserver(),
+  );
   final LocaleController locales = LocaleController();
   final ThemeController themes = ThemeController();
 
@@ -58,8 +61,8 @@ class _EnvoyHomeAppState extends State<EnvoyHomeApp> {
           localeResolutionCallback: (device, supported) {
             return locales.resolve(device);
           },
-          // Always the tab shell — guide to Connect when unpaired.
-          home: HomeShell(
+          // First launch: slides → setup guide → shell (EnvoyDev / EnvoyGo peer).
+          home: AppEntry(
             session: session,
             locales: locales,
             themes: themes,

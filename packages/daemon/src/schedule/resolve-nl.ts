@@ -11,11 +11,16 @@ import {
   matchMonthYear,
   matchRecurring,
   matchThisNextWeekday,
+  formatRelativeDayClock,
+  fuzzyOffsetMinutes,
+  matchDurationOffset,
+  matchFuzzyWhenKind,
   matchUnitOffset,
   monthlyCandidates,
   normalizeProductLocale,
   weekendCandidates,
   yearlyCandidates,
+  type FuzzyWhenKind,
   type ProductLocale,
 } from "./locale-relatives.js";
 import type { SchedulePayload, ScheduleSpec } from "./types.js";
@@ -443,7 +448,7 @@ function resolveClock(text: string, lower: string): { hour: number; minute: numb
   if (!clock && /\bat\s+midnight\b|\bmidnight\b/i.test(text)) {
     clock = { hour: 0, minute: 0 };
   }
-  // half/quarter in free text without "at" fragment capture
+  // half/quarter BEFORE bare "3pm" — otherwise "quarter past 3pm" collapses to 3pm.
   if (!clock) {
     const hp = /\bhalf\s+past\s+(\d{1,2})\s*(am|pm)?\b/i.exec(lower);
     if (hp) clock = parseClock(`half past ${hp[1]}${hp[2] ? ` ${hp[2]}` : ""}`);
@@ -456,20 +461,46 @@ function resolveClock(text: string, lower: string): { hour: number; minute: numb
     const qt = /\bquarter\s+to\s+(\d{1,2})\s*(am|pm)?\b/i.exec(lower);
     if (qt) clock = parseClock(`quarter to ${qt[1]}${qt[2] ? ` ${qt[2]}` : ""}`);
   }
+  // Bare "9 am" / "9:30pm" / "9am" (before/by/around without "at").
+  if (!clock) {
+    const bare =
+      /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/i.exec(lower) ||
+      /\b(\d{1,2}):(\d{2})\b/.exec(lower);
+    if (bare) {
+      const frag =
+        bare[3] !== undefined
+          ? `${bare[1]}${bare[2] ? `:${bare[2]}` : ""}${bare[3]}`
+          : `${bare[1]}:${bare[2]}`;
+      clock = parseClock(frag);
+    }
+  }
   // Multi-locale short clocks (product UI locales).
   if (!clock) {
-    const de = /\bum\s+(\d{1,2})\s*uhr\b/i.exec(lower);
+    const de =
+      /\bum\s+(\d{1,2})(?:[:.](\d{2}))?\s*uhr\b/i.exec(lower) ||
+      /\b(\d{1,2})(?:[:.](\d{2}))?\s*uhr\b/i.exec(lower);
     if (de) {
       const hour = parseInt(de[1]!, 10);
-      if (hour >= 0 && hour <= 23) clock = { hour, minute: 0 };
+      const minute = de[2] ? parseInt(de[2], 10) : 0;
+      if (hour >= 0 && hour <= 23 && minute <= 59) clock = { hour, minute };
     }
   }
   if (!clock) {
     // No leading `\b` — `à` is non-ASCII and JS `\b` is ASCII-only.
-    const fr = /à\s+(\d{1,2})\s*h(?:eurs?)?\b/i.exec(lower);
+    // Prefer explicit `à Nh`. Bare `Nh` only when a soft/fuzzy cue is present —
+    // otherwise "dans 2h" / random "5h" fragments steal clocks from durations.
+    const frA =
+      /à\s+(\d{1,2})\s*h(?:eurs?)?(?:(\d{2}))?\b/i.exec(lower);
+    const frBare =
+      !frA &&
+      /\b(?:avant|vers|après|apres|entre|environ|d['']ici|autour)\b/i.test(lower)
+        ? /\b(\d{1,2})\s*h(?:eurs?)?(?:(\d{2}))?\b/i.exec(lower)
+        : null;
+    const fr = frA ?? frBare;
     if (fr) {
       const hour = parseInt(fr[1]!, 10);
-      if (hour >= 0 && hour <= 23) clock = { hour, minute: 0 };
+      const minute = fr[2] ? parseInt(fr[2], 10) : 0;
+      if (hour >= 0 && hour <= 23 && minute <= 59) clock = { hour, minute };
     }
   }
   if (!clock) {
@@ -524,11 +555,11 @@ function extractMessage(text: string): string {
   s = s.replace(/^remind\s+me\s+(to\s+)?/i, "");
   s = s.replace(/^(能不能|能否|可不可以|请|麻烦|帮我|记得)?\s*(提醒我|提醒一下)?\s*/u, "");
   s = s.replace(
-    /\b(in\s+\d+\s*(minutes?|mins?|hours?|hrs?|days?)|tomorrow|today|tonight|every\s+\w+|next\s+\w+|this\s+\w+|week after next\s+\w+|at\s+\d{1,2}(:\d{2})?\s*(am|pm)?|at\s+noon|at\s+midnight|half\s+past\s+\d+|quarter\s+(past|to)\s+\d+|this weekend|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2})\b/gi,
+    /\b((?:in|after|within)\s+(?:a|an|one|two|three|four|five|\d+)\s*(?:seconds?|secs?|minutes?|mins?|hours?|hrs?|d(?:ays?|yas?))|in\s+half\s+(?:an?\s+)?(?:minute|hour)|after\s+half\s+(?:an?\s+)?(?:minute|hour)|half\s+(?:an?\s+)?(?:minute|hour)|tomorrow|today|tonight|every\s+\w+|next\s+\w+|this\s+\w+|week after next\s+\w+|at\s+\d{1,2}(:\d{2})?\s*(am|pm)?|at\s+noon|at\s+midnight|half\s+past\s+\d+|quarter\s+(past|to)\s+\d+|this weekend|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+\d{1,2})\b/gi,
     "",
   );
   s = s.replace(
-    /(明天|后天|今天|今晚|每天|每周|工作日|下下周[一二三四五六日天]?|下周[一二三四五六日天]?|下[一二三四五六日天](?:周)?|这个周末|本周末|早上|上午|中午|下午|晚上|凌晨|差一刻|一刻|((?:\d{1,2})|[零〇一二两三四五六七八九十]+)\s*点(半|一刻)?|\d+\s*分钟后|\d+\s*小时后|\d+\s*天后|\d{1,2}\s*月\s*\d{1,2}\s*日?)/gu,
+    /(明天|后天|今天|今晚|每天|每周|工作日|下下周[一二三四五六日天]?|下周[一二三四五六日天]?|下[一二三四五六日天](?:周)?|这个周末|本周末|早上|上午|中午|下午|晚上|凌晨|差一刻|一刻|过?半\s*(?:个|個)?\s*(?:分钟|小时)|((?:\d{1,2})|[零〇一二两三四五六七八九十]+)\s*点(半|一刻)?|(?:\d+|[一二两三兩四五六七八九十]+)\s*(?:秒(?:钟|鐘)?|分钟|分鐘|小时|小時|天)\s*后|\d{1,2}\s*月\s*\d{1,2}\s*日?)/gu,
     "",
   );
   s = s.replace(/\s+/g, " ").trim();
@@ -536,6 +567,173 @@ function extractMessage(text: string): string {
   if (!s || s.length < 1) return "Reminder";
   if (s.length > 120) s = s.slice(0, 120);
   return s;
+}
+
+/**
+ * Fuzzy WHEN → ask. Candidates are full today/tomorrow+clock phrases that
+ * resolve alone (V-UX-14). Skip offsets that land in the past.
+ */
+function resolveFuzzyWhenAsk(input: {
+  kind: FuzzyWhenKind;
+  text: string;
+  lower: string;
+  now: Date;
+  tz: string;
+  locale: ProductLocale;
+  msg: string;
+}): Extract<ResolveNlResult, { ok: false }> {
+  const { kind, text, lower, now, tz, locale } = input;
+  const detailFor = (d: string): Extract<ResolveNlResult, { ok: false }> => ({
+    ok: false,
+    reason: "ambiguous",
+    detail: d,
+  });
+
+  if (kind === "between") {
+    const clocks = extractBetweenClocks(text, lower);
+    if (clocks.length < 2) {
+      return {
+        ok: false,
+        reason: "missing_time",
+        detail: "between/from–to needs two clock times",
+      };
+    }
+    const [a, b] = clocks;
+    const midMin = Math.round((a!.hour * 60 + a!.minute + b!.hour * 60 + b!.minute) / 2);
+    const mid = { hour: Math.floor(midMin / 60) % 24, minute: midMin % 60 };
+    const candidates = uniqueCandidates(
+      [a!, mid, b!].map((c) => candidateForClock(c, now, tz, locale)),
+    );
+    return {
+      ok: false,
+      reason: "ambiguous",
+      detail: "time range — pick one fire time",
+      candidates,
+    };
+  }
+
+  const clock = resolveClock(text, lower);
+  if (!clock) {
+    return {
+      ok: false,
+      reason: "missing_time",
+      detail:
+        kind === "before"
+          ? "before/by needs a clock (and how early — 15/30/60 min)"
+          : kind === "after"
+            ? "after needs a clock (and how late)"
+            : "around/about needs a clock",
+    };
+  }
+
+  const anchorWhen = nextOccurrenceOfClock(clock, now, tz);
+  if (!anchorWhen) {
+    return detailFor("could not resolve that clock in this time zone");
+  }
+
+  const candidates = uniqueCandidates(
+    fuzzyOffsetMinutes(kind).map((mins) => {
+      const t = new Date(anchorWhen.getTime() + mins * 60_000);
+      if (t.getTime() <= now.getTime()) return "";
+      const p = zonedParts(t, tz);
+      const today = zonedParts(now, tz);
+      const isToday =
+        p.year === today.year && p.month === today.month && p.day === today.day;
+      return formatRelativeDayClock(
+        locale,
+        isToday ? "today" : "tomorrow",
+        p.hour,
+        p.minute,
+      );
+    }),
+  );
+
+  if (candidates.length === 0) {
+    return detailFor("that soft time is already past — pick another clock");
+  }
+
+  const detail =
+    kind === "before"
+      ? "before/by is a deadline — pick how early (or exactly on the hour)"
+      : kind === "after"
+        ? "after is open-ended — pick how late after the clock"
+        : "around/about is approximate — pick a concrete time";
+
+  return {
+    ok: false,
+    reason: "ambiguous",
+    detail,
+    candidates,
+  };
+}
+
+function uniqueCandidates(rows: string[]): string[] {
+  return [...new Set(rows.filter(Boolean))];
+}
+
+/** Next occurrence of hour:minute at/after `now` (today if still ahead, else tomorrow). */
+function nextOccurrenceOfClock(
+  clock: { hour: number; minute: number },
+  now: Date,
+  tz: string,
+  dayShift = 0,
+): Date | undefined {
+  const base = addDaysWall(now, tz, dayShift);
+  let when = atInstant(base.year, base.month, base.day, clock.hour, clock.minute, tz);
+  if (!when) return undefined;
+  if (dayShift === 0 && when.getTime() <= now.getTime()) {
+    const tom = addDaysWall(now, tz, 1);
+    when = atInstant(tom.year, tom.month, tom.day, clock.hour, clock.minute, tz);
+  }
+  return when ?? undefined;
+}
+
+function candidateForClock(
+  clock: { hour: number; minute: number },
+  now: Date,
+  tz: string,
+  locale: ProductLocale,
+): string {
+  const when = nextOccurrenceOfClock(clock, now, tz);
+  if (!when || when.getTime() <= now.getTime()) return "";
+  const p = zonedParts(when, tz);
+  const today = zonedParts(now, tz);
+  const isToday =
+    p.year === today.year && p.month === today.month && p.day === today.day;
+  return formatRelativeDayClock(
+    locale,
+    isToday ? "today" : "tomorrow",
+    p.hour,
+    p.minute,
+  );
+}
+
+/** Pull two clocks out of between/from–to / A至B style ranges. */
+function extractBetweenClocks(
+  text: string,
+  lower: string,
+): Array<{ hour: number; minute: number }> {
+  const out: Array<{ hour: number; minute: number }> = [];
+  const en =
+    /\bbetween\s+(.+?)\s+and\s+(.+?)(?:\s+to\b|$)/i.exec(lower) ||
+    /\bfrom\s+(.+?)\s+to\s+(.+?)(?:\s+to\b|$)/i.exec(lower);
+  if (en) {
+    for (const frag of [en[1]!, en[2]!]) {
+      const c = resolveClock(frag, frag.toLowerCase()) ?? parseClock(frag.trim());
+      if (c) out.push(c);
+    }
+    return out;
+  }
+  const zh = /((?:\d{1,2})|[零〇一二两三四五六七八九十]+)\s*点(?:半)?\s*(?:到|至)\s*((?:\d{1,2})|[零〇一二两三四五六七八九十]+)\s*点(?:半)?/.exec(
+    text,
+  );
+  if (zh) {
+    for (const frag of [`${zh[1]}点`, `${zh[2]}点`]) {
+      const c = resolveClock(frag, frag.toLowerCase());
+      if (c) out.push(c);
+    }
+  }
+  return out;
 }
 
 function okAt(
@@ -728,6 +926,29 @@ export function resolveScheduleFromText(input: ResolveNlInput): ResolveNlResult 
     return okAt(when, tz, msg);
   }
 
+  // --- relative seconds / minutes / hours (all UI locales) BEFORE calendar offsets ---
+  // So "in 2 hours" is never confused with day/month packs; "in 2 days" stays calendar.
+  const durationEarly = matchDurationOffset(text);
+  if (durationEarly) {
+    return okAt(new Date(now.getTime() + durationEarly.ms), tz, msg);
+  }
+
+  // --- fuzzy / soft WHEN (before / by / around / after+clock / between) ---
+  // Never invent lead time — ask with self-resolving today/tomorrow candidates.
+  const fuzzy = matchFuzzyWhenKind(text);
+  if (fuzzy) {
+    const fuzzyAsk = resolveFuzzyWhenAsk({
+      kind: fuzzy,
+      text,
+      lower,
+      now,
+      tz,
+      locale,
+      msg,
+    });
+    if (fuzzyAsk) return fuzzyAsk;
+  }
+
   // --- multi-locale in N days/months/years (ahead) / ago (refuse) ---
   const unitOff = matchUnitOffset(text);
   if (unitOff) {
@@ -877,39 +1098,8 @@ export function resolveScheduleFromText(input: ResolveNlInput): ResolveNlResult 
     return okCron(`${clock.minute} ${clock.hour} * * ${dow}`, tz, msg, locale);
   }
 
-  // --- relative minutes / hours / days ---
-  const inMin = /\bin\s+(\d+)\s*(minutes?|mins?)\b/i.exec(text) || /(\d+)\s*分钟后/.exec(text);
-  if (inMin) {
-    const n = parseInt(inMin[1]!, 10);
-    if (n > 0 && n <= 43200) {
-      return okAt(new Date(now.getTime() + n * 60_000), tz, msg);
-    }
-  }
-  const inHr = /\bin\s+(\d+)\s*(hours?|hrs?)\b/i.exec(text) || /(\d+)\s*小时后/.exec(text);
-  if (inHr) {
-    const n = parseInt(inHr[1]!, 10);
-    if (n > 0 && n <= 720) {
-      return okAt(new Date(now.getTime() + n * 3600_000), tz, msg);
-    }
-  }
-  const inDays = /\bin\s+(\d+)\s*days?\b/i.exec(text) || /(\d+)\s*天后/.exec(text);
-  if (inDays) {
-    const n = parseInt(inDays[1]!, 10);
-    if (n > 0 && n <= 366) {
-      const clock = resolveClock(text, lower);
-      if (!clock) {
-        return {
-          ok: false,
-          reason: "missing_time",
-          detail: "in N days needs a clock time",
-        };
-      }
-      const wall = addDaysWall(now, tz, n);
-      const when = atInstant(wall.year, wall.month, wall.day, clock.hour, clock.minute, tz);
-      if (!when) return civilHole();
-      return okAt(when, tz, msg);
-    }
-  }
+  // Duration (sec/min/hr) handled earlier via matchDurationOffset.
+  // Calendar "in N days" handled earlier via matchUnitOffset (needs a clock).
 
   // --- calendar date + time (EN Oct 20 / ZH 10月20日) ---
   const dateEn =
@@ -1085,7 +1275,8 @@ export function resolveScheduleFromText(input: ResolveNlInput): ResolveNlResult 
   // --- today / heute / aujourd'hui / oggi / 今天 / am Morgen (period today) ---
   if (
     /\btoday\b/i.test(text) ||
-    /今天|今晚/.test(text) ||
+    /今天|今晚|今日/.test(text) ||
+    /오늘/.test(text) ||
     /\bheute\b/i.test(text) ||
     /\baujourd['']hui\b/i.test(text) ||
     /\boggi\b/i.test(text) ||

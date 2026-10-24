@@ -130,14 +130,21 @@ export interface RouterDeps {
   actuations: ActuationService;
   /** Mobile APNs/FCM token registry. */
   pushTokens: PushTokenStore;
-  /** APNs/FCM sender (approval wake-ups). */
+  /** APNs/FCM sender (approval / choice / schedule wake-ups). */
   push: PushDispatcher;
+  /** Per-device recent RPC for interactive push suppress (`2026-10-22f`). */
+  liveDevices?: import("./push-live.js").LiveDevicePresence;
   /** EnvoyHome Local / Ollama engine (Design §8.5). */
   localEngine: import("./local-engine/service.js").LocalEngineService;
   /** Local fake-ha demo (optional — tests may omit). */
   demoHa?: import("./demo-ha.js").DemoHaService;
   /** Local fake-mqtt demo (optional — tests may omit; can run alongside demoHa). */
   demoMqtt?: import("./demo-mqtt.js").DemoMqttService;
+  /**
+   * Settle before `home.mintPairing` reads mesh fields (EnvoyCoder `awaitMeshReady`).
+   * Prevents LAN-only QRs minted while the hosting peer is still starting.
+   */
+  awaitMeshReady?: () => Promise<void>;
 }
 
 function scopeOf(method: string): "loopback-owner" | "owner-scope" | "account-scoped" | undefined {
@@ -400,6 +407,20 @@ export function createDispatcher(deps: RouterDeps) {
     const scopeErr = assertScope(method, session, ownerAccountId);
     if (scopeErr) {
       throw Object.assign(new Error(scopeErr.error.message), { rpcError: scopeErr.error });
+    }
+
+    // Interactive push suppress — touch before work so a mid-turn approval still sees live.
+    // Skip subscription / handshake RPCs (not user activity) so suppressIfLive is
+    // not held warm by reconnect noise while the UI is backgrounded. Peer WS skips
+    // transport on/off the same way.
+    if (
+      session?.caller.kind === "device" &&
+      session.deviceId &&
+      method !== "home.subscribe" &&
+      method !== "home.hello" &&
+      method !== "home.health"
+    ) {
+      deps.liveDevices?.touch(session.deviceId);
     }
 
     const zeroErr = assertZeroBindingAllow(method, session);
@@ -794,6 +815,8 @@ export function createDispatcher(deps: RouterDeps) {
       /* ---- B4 pairing (Design A.2) ---- */
       case "home.mintPairing": {
         try {
+          // EnvoyCoder: settle mesh before reading multiaddrs / relay hints for the QR.
+          await deps.awaitMeshReady?.();
           const input: {
             deviceLabel: string;
             host?: string;
@@ -929,19 +952,13 @@ export function createDispatcher(deps: RouterDeps) {
         return { ok: true };
       }
       case "home.sendTestPush": {
-        if (caller.kind !== "loopback-owner") {
-          throwRpc(
-            TRANSPORT_CODE_UNAUTHORIZED,
-            "auth",
-            "home.sendTestPush requires loopback-owner",
-          );
-        }
+        // Owner-scope via assertScope / METHODS — exclusive-Owner device or loopback.
         const title =
           typeof params.title === "string" && params.title ? params.title : "EnvoyHome";
         const body =
           typeof params.body === "string" && params.body
             ? params.body
-            : "Test push from Settings / loopback";
+            : "Test push from Settings";
         const deviceId = typeof params.deviceId === "string" ? params.deviceId : undefined;
         const result = await deps.push.sendTest(deviceId, {
           title,
@@ -1437,6 +1454,9 @@ export function createDispatcher(deps: RouterDeps) {
               ? { clientTurnId: params.clientTurnId }
               : {}),
             ...(clientContext ? { clientContext } : {}),
+            ...(caller.kind === "device" && caller.deviceId
+              ? { deviceId: caller.deviceId }
+              : {}),
           });
         } catch (err) {
           mapStoreError(err);

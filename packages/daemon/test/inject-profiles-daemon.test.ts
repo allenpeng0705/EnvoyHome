@@ -6,12 +6,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { startDaemon } from "../dist/index.js";
-import { HARD_MIN_TOTAL } from "@envoyhome/memory";
+import { HARD_MIN_TOTAL, deriveInjectPackage } from "@envoyhome/memory";
 
 test("V-MEM-22: force-local turn uses local inject package; unknown local → HARD_MIN", async () => {
   const stateDir = await mkdtemp(join(tmpdir(), "eh-inj-"));
+  let daemon: Awaited<ReturnType<typeof startDaemon>> | undefined;
   try {
-    const daemon = await startDaemon({
+    daemon = await startDaemon({
       config: { stateDir, wsPort: 0, httpPort: 0, hatchApiKey: "k" },
       packageVersion: "0.0.0-test",
     });
@@ -55,7 +56,11 @@ test("V-MEM-22: force-local turn uses local inject package; unknown local → HA
       (local.resolved.caps.l1?.injectBudget ?? 0) +
       (local.resolved.caps.l2?.injectBudget ?? 0) +
       (local.resolved.caps.l3?.injectBudget ?? 0);
-    assert.equal(localTotal, Math.floor(8192 * 4 * 0.2));
+    const expectedLocal = deriveInjectPackage(8192, "local");
+    assert.equal(
+      localTotal,
+      expectedLocal.l1 + expectedLocal.l2 + expectedLocal.l3,
+    );
     assert.ok(localTotal < 20_000);
 
     // Unknown local context → HARD_MIN, not full OpenClaw 44k.
@@ -71,9 +76,8 @@ test("V-MEM-22: force-local turn uses local inject package; unknown local → HA
       unk.injectProfiles.local.l1 + unk.injectProfiles.local.l2 + unk.injectProfiles.local.l3;
     assert.equal(unkTotal, HARD_MIN_TOTAL);
     assert.equal(unk.injectProfiles.local.contextTokens, undefined);
-
-    await daemon.stop();
   } finally {
+    await daemon?.stop().catch(() => undefined);
     await rm(stateDir, { recursive: true, force: true });
   }
 });

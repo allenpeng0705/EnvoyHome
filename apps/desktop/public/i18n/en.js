@@ -13,6 +13,7 @@ export default {
   "app.themeLight": "Light",
   "app.themeDark": "Dark",
   "app.pairingQrTip": "Pairing QR — open Connections and show a code",
+  "app.setupGuideTip": "Setup guide — models, local engine, and phone pairing",
   "app.loading": "Loading…",
   "app.waitingDaemon": "Waiting for daemon connection…",
   "app.unknownView": "unknown view",
@@ -174,6 +175,30 @@ export default {
   "profile.displayName": "Display name",
   "profile.displayNamePlaceholder": "e.g. Alice",
   "profile.continue": "Continue",
+  "setupGuide.title": "Set up EnvoyHome",
+  "setupGuide.introFirst":
+    "Chat needs a model. Add a cloud provider or enable Local Model on this computer — then optionally pair a phone.",
+  "setupGuide.intro":
+    "How to configure a model and pair a phone. You can open this guide anytime from System → This machine.",
+  "setupGuide.stepCloudTitle": "Add a cloud provider",
+  "setupGuide.stepCloudBody":
+    "OpenAI-compatible, Anthropic, DeepSeek, and other presets. Paste an API key and pick a model.",
+  "setupGuide.stepCloudCta": "Open Models",
+  "setupGuide.stepLocalTitle": "Or run Local Model",
+  "setupGuide.stepLocalBody":
+    "Download a GGUF or connect Ollama on this machine — no cloud key required.",
+  "setupGuide.stepLocalCta": "Open Local Model",
+  "setupGuide.stepPhoneTitle": "Pair a phone (optional)",
+  "setupGuide.stepPhoneBody":
+    "Show a pairing QR so EnvoyHome on your phone can reach this desktop over LAN or mesh/relays.",
+  "setupGuide.stepPhoneCta": "Open Pairing",
+  "setupGuide.note":
+    "You only need one of cloud or local to chat. Phone pairing can wait.",
+  "setupGuide.skipCta": "Explore first",
+  "setupGuide.doneCta": "Got it",
+  "setupGuide.openCta": "Show setup guide",
+  "setupGuide.settingsHint":
+    "First-launch checklist for models and phone pairing — open it again whenever you need it.",
   "profile.title": "Profiles",
   "profile.intro":
     "People in this household. Memory, models, and chat stay separate per profile. Workspace folders let the agent reach host dirs via workspace/<id>/…",
@@ -369,9 +394,11 @@ export default {
   "pairing.qrPrimary": "Recommended",
   "pairing.qrDetail": "Open EnvoyHome on the phone, choose Scan QR, and point the camera at this code.",
   "pairing.qrMeshHosting":
-    "This code includes a direct mesh route when the phone can reach this machine over the network.",
+    "This code includes mesh + community relay routes (same shape as EnvoyDev / EnvoyMesh).",
   "pairing.qrMeshUnavailable":
-    "The mesh peer is not hosting — this code still works over the network address and SSH.",
+    "Mesh peer is not hosting yet — wait until hosting is ready, then show a new code. A LAN-only QR cannot reconnect off Wi‑Fi.",
+  "pairing.qrMeshRequired":
+    "Cannot mint a phone QR without mesh hosting (homeNodePeerId + relay bootstrap). Check Advanced → mesh hosting, then try again.",
   "pairing.qrBusy": "Preparing pairing code…",
   "pairing.qrAction": "Show a new code",
   "pairing.qrAlt": "Pairing code",

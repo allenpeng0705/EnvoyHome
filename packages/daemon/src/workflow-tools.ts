@@ -38,6 +38,7 @@ import { isHomeAssistantReady, isMqttReady } from "./home-intent.js";
 import type { HomePaths } from "./home-paths.js";
 import { assertPublicHttpsUrl } from "./skill-remote.js";
 import type { SkillService } from "./skills.js";
+import type { MemoryFacade } from "@envoyhome/memory";
 import type { WebSearchService } from "./web-search.js";
 import type { BrowserControlService } from "./browser-control.js";
 import { describeScheduleSpec } from "./schedule/chat-card.js";
@@ -221,6 +222,26 @@ const BUILTIN_META: Record<
     summary:
       "Generate an image (async jobId by default; wait:true sync; Owner + Privacy; Design §19.12 D2)",
     sampleArgs: { prompt: "a watercolor of a kitchen counter", wait: false },
+  },
+  skills_list: {
+    summary:
+      "List verified+enabled skills (id/name/description — no bodies; Design §9.2 progressive disclosure)",
+    sampleArgs: {},
+  },
+  skill_view: {
+    summary:
+      "Load a skill's SKILL.md or a references/ file under that skill (path-jailed; Design §9.2)",
+    sampleArgs: { id: "morning-brief", path: "SKILL.md" },
+  },
+  skill_propose: {
+    summary:
+      "Propose skill create/patch/delete as PendingLearn only (Design §9.2 — no silent write)",
+    sampleArgs: {
+      action: "create",
+      id: "morning-brief",
+      content: "---\nname: Morning brief\n---\n# Steps\n…",
+      summary: "Add morning brief procedure",
+    },
   },
   spawn_helper: {
     summary:
@@ -658,6 +679,83 @@ async function journaledActuate(input: {
   }
 }
 
+function sanitizeSkillProposeId(raw: string): string {
+  const cleaned = raw.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/^\.+/, "");
+  return cleaned || "";
+}
+
+/**
+ * Design §9.2 (`2026-10-22b`) — enqueue skill create/patch/delete as PendingLearn only.
+ */
+async function runSkillPropose(input: {
+  args: Record<string, unknown>;
+  accountId?: string;
+  memory?: MemoryFacade | null;
+  memoryTrust?: "owner" | "agent" | "untrusted";
+  turnId?: string;
+}): Promise<string> {
+  if (!input.memory) {
+    throw new Error("envoyhome.tool_unavailable: memory not configured for skill_propose");
+  }
+  if (!input.accountId) {
+    throw new Error("envoyhome.bad_params: accountId required for skill_propose");
+  }
+  const actionRaw = typeof input.args.action === "string" ? input.args.action.trim() : "";
+  if (actionRaw !== "create" && actionRaw !== "patch" && actionRaw !== "delete") {
+    throw new Error(
+      "envoyhome.bad_params: skill_propose action must be create|patch|delete",
+    );
+  }
+  const idRaw = typeof input.args.id === "string" ? input.args.id.trim() : "";
+  const id = sanitizeSkillProposeId(idRaw);
+  if (!id) {
+    throw new Error("envoyhome.bad_params: skill_propose requires id");
+  }
+  const content =
+    typeof input.args.content === "string" ? input.args.content : "";
+  if ((actionRaw === "create" || actionRaw === "patch") && !content.trim()) {
+    throw new Error(
+      `envoyhome.bad_params: skill_propose ${actionRaw} requires non-empty content`,
+    );
+  }
+  const kind =
+    actionRaw === "create"
+      ? ("skill_create" as const)
+      : actionRaw === "patch"
+        ? ("skill_patch" as const)
+        : ("skill_delete" as const);
+  const summary =
+    typeof input.args.summary === "string" && input.args.summary.trim()
+      ? input.args.summary.trim().slice(0, 200)
+      : `${actionRaw} skill ${id}`;
+  const trust = input.memoryTrust ?? "agent";
+  try {
+    const result = await input.memory.proposeLearn(input.accountId, {
+      kind,
+      targetPath: `skills/${id}.md`,
+      payload: actionRaw === "delete" ? "" : content,
+      summary,
+      trust,
+      ...(input.turnId !== undefined ? { sourceTurnId: input.turnId } : {}),
+    });
+    return JSON.stringify({
+      ok: true,
+      learnId: result.learn.id,
+      coalesced: result.coalesced,
+      kind,
+      id,
+      applied: false,
+      note: "PendingLearn queued; SKILL.md unchanged until home.acceptLearn + home.verifySkill",
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/learn_rejected_full|queue_full/i.test(msg)) {
+      throw new Error("envoyhome.learn_rejected_full: pending learn queue is full");
+    }
+    throw err;
+  }
+}
+
 /**
  * Run export_document / skill: / ha_* / mqtt_* after ApprovalSink has already allowed the call.
  * Actuation still goes through resolveObject + safety + journal (Design §5.7.3 / §5.7.7).
@@ -688,6 +786,15 @@ export async function runExtendedWorkflowTool(input: {
   clientContext?: import("./client-context.js").ClientTurnContext;
   /** Chat session for schedule proposal cards. */
   sessionId?: string;
+  /**
+   * When schedule propose/reschedule returns ambiguous candidates — emit a
+   * choice card (and leave structured JSON for the model).
+   */
+  onScheduleCandidates?: (info: {
+    candidates: string[];
+    detail: string;
+    reason: string;
+  }) => void;
   /** Design §9.5g.1 — Owner seat for elevated profiles. */
   ownerAccountId?: string | null;
   /** Design §9.5f.1 — mid-tool ask for browser SERP fallback. */
@@ -731,6 +838,15 @@ export async function runExtendedWorkflowTool(input: {
     waitMs: number;
     fromSessionId?: string | null;
   }) => Promise<{ turnId: string; reply?: string; timedOut?: boolean }>;
+  /**
+   * Design §9.2 (`2026-10-22b`) — skill_propose → PendingLearn.
+   * Required when tool === skill_propose.
+   */
+  memory?: MemoryFacade | null;
+  /** Provenance trust for skill_propose (default agent). */
+  memoryTrust?: "owner" | "agent" | "untrusted";
+  /** sourceTurnId for skill_propose PendingLearn. */
+  turnId?: string;
   /** SSRF-safe fetch for view_image https (same as http_fetch). */
   httpFetchImpl?: typeof fetch;
 }): Promise<string> {
@@ -771,6 +887,9 @@ export async function runExtendedWorkflowTool(input: {
       ...(input.browserControl !== undefined
         ? { browserControl: input.browserControl }
         : {}),
+      ...(input.onScheduleCandidates
+        ? { onScheduleCandidates: input.onScheduleCandidates }
+        : {}),
     });
   }
   if (tool === "web_search") {
@@ -798,15 +917,30 @@ export async function runExtendedWorkflowTool(input: {
     });
   }
 
+  // Design §9.2 (`2026-10-22a` / `2026-10-22b`) — progressive disclosure + propose.
+  if (tool === "skills_list") {
+    const catalog = await input.skills.listVerifiedCatalog();
+    return JSON.stringify({ skills: catalog, count: catalog.length });
+  }
+  if (tool === "skill_view") {
+    const id = typeof input.args.id === "string" ? input.args.id.trim() : "";
+    if (!id) {
+      throw new Error("envoyhome.bad_params: skill_view requires id");
+    }
+    const path =
+      typeof input.args.path === "string" && input.args.path.trim()
+        ? input.args.path.trim()
+        : typeof input.args.file === "string" && input.args.file.trim()
+          ? input.args.file.trim()
+          : "SKILL.md";
+    return await input.skills.readSkillResource(id, path);
+  }
+  if (tool === "skill_propose") {
+    return await runSkillPropose(input);
+  }
   if (tool.startsWith("skill:")) {
     const id = tool.slice("skill:".length);
-    const rows = await input.skills.listSkills();
-    const row = rows.find((r) => r.id === id);
-    if (!row || !row.enabled || !row.verified) {
-      throw new Error(`envoyhome.tool_unavailable: skill ${id} not verified/enabled`);
-    }
-    const text = await readFile(join(input.paths.skillsDir, id, "SKILL.md"), "utf8");
-    return text;
+    return await input.skills.readSkillResource(id, "SKILL.md");
   }
 
   if (tool.startsWith("ha_")) {
@@ -1259,7 +1393,33 @@ async function runScheduleTool(input: {
   browserControl?: BrowserControlService | null;
   clientContext?: import("./client-context.js").ClientTurnContext;
   sessionId?: string;
+  onScheduleCandidates?: (info: {
+    candidates: string[];
+    detail: string;
+    reason: string;
+  }) => void;
 }): Promise<string> {
+  const surfaceAmbiguous = (
+    proposal: { reason: string; error: string; candidates?: string[] },
+    detail: string,
+  ): string | undefined => {
+    if (!proposal.candidates || proposal.candidates.length === 0) return undefined;
+    input.onScheduleCandidates?.({
+      candidates: proposal.candidates,
+      detail,
+      reason: proposal.reason,
+    });
+    return JSON.stringify({
+      ok: false,
+      reason: proposal.reason,
+      error: proposal.error,
+      candidates: proposal.candidates,
+      // Choice chips are already emitted when onScheduleCandidates is wired —
+      // prefer that path; do not also open ask_user (duplicate cards).
+      note:
+        "Time is ambiguous — a choice card was offered to the user with these candidates. Wait for their pick (or quote one candidate exactly) and schedule propose again with that phrase as text. Do not call ask_user for the same options.",
+    });
+  };
   if (!input.schedules) {
     throw new Error("envoyhome.tool_unavailable: schedule service not configured");
   }
@@ -1326,6 +1486,8 @@ async function runScheduleTool(input: {
       ...(input.sessionId ? { sessionId: input.sessionId } : {}),
     });
     if ("error" in proposal) {
+      const soft = surfaceAmbiguous(proposal, text);
+      if (soft) return soft;
       throw new Error(`envoyhome.bad_params: ${formatProposeFailure(proposal)}`);
     }
     return JSON.stringify({
@@ -1401,6 +1563,8 @@ async function runScheduleTool(input: {
       ...(input.sessionId ? { sessionId: input.sessionId } : {}),
     });
     if ("error" in proposal) {
+      const soft = surfaceAmbiguous(proposal, text);
+      if (soft) return soft;
       throw new Error(`envoyhome.bad_params: ${formatProposeFailure(proposal)}`);
     }
     return JSON.stringify({

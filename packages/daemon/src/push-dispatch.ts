@@ -1,5 +1,6 @@
 // APNs (iOS) + FCM (Android) alert dispatch — EnvoyMesh node push-notification.ts pattern.
 // Credentials: env vars first, then `<stateDir>/push-config.json`.
+// Wake catalogue: Design §11.3 / `2026-10-22f`.
 
 import { createSign, createPrivateKey } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
@@ -8,13 +9,43 @@ import { connect as http2Connect, type ClientHttp2Session } from "node:http2";
 import { request as httpsRequest } from "node:https";
 import { dirname, isAbsolute, join } from "node:path";
 import type { DaemonLogger } from "./logger.js";
+import type { LiveDevicePresence } from "./push-live.js";
 import type { PushTokenRecord, PushTokenStore } from "./push-tokens.js";
+import {
+  normalizeProductLocale,
+  type ProductLocale,
+} from "./schedule/locale-relatives.js";
 
 export interface PushPayload {
   title: string;
   body: string;
   data?: Record<string, string>;
 }
+
+/** Lock-screen turn wake — product UI locales (never assistant preview). */
+const TURN_REPLY_READY: Record<ProductLocale, string> = {
+  en: "Your reply is ready",
+  zh: "回复已就绪",
+  de: "Deine Antwort ist fertig",
+  fr: "Votre réponse est prête",
+  it: "La risposta è pronta",
+  ja: "返信の準備ができました",
+  ko: "답변이 준비되었습니다",
+};
+
+/** Exported for tests — falls back to English. */
+export function turnReplyReadyBody(locale?: string): string {
+  return TURN_REPLY_READY[normalizeProductLocale(locale)];
+}
+
+/** Interactive wakes may skip a recently active device; always never skips. */
+export type PushWakePolicy = "always" | "suppressIfLive";
+
+/** Test / alternate transport hook — return HTTP status or undefined if skipped. */
+export type PushSendFn = (
+  row: PushTokenRecord,
+  payload: PushPayload,
+) => Promise<number | undefined>;
 
 export interface PushConfigFile {
   apns?: {
@@ -35,6 +66,37 @@ interface ResolvedCreds {
   baseDir: string;
 }
 
+/** APNs alert body — custom fields nested under `data` (iOS AppDelegate unwraps). */
+export function buildApnsBody(payload: PushPayload): Record<string, unknown> {
+  return {
+    aps: {
+      alert: { title: payload.title, body: payload.body },
+      sound: "default",
+      badge: 1,
+    },
+    ...(payload.data ? { data: payload.data } : {}),
+  };
+}
+
+/** FCM HTTP v1 message — `data` values must be strings; notification + android HIGH. */
+export function buildFcmMessage(
+  token: string,
+  payload: PushPayload,
+): Record<string, unknown> {
+  const data: Record<string, string> = {};
+  for (const [k, v] of Object.entries(payload.data ?? {})) {
+    data[k] = String(v);
+  }
+  return {
+    message: {
+      token,
+      notification: { title: payload.title, body: payload.body },
+      data,
+      android: { priority: "HIGH" },
+    },
+  };
+}
+
 function envTruthy(name: string): boolean | undefined {
   const v = process.env[name];
   if (v === undefined) return undefined;
@@ -52,58 +114,175 @@ export class PushDispatcher {
     private readonly store: PushTokenStore,
     private readonly stateDir: string,
     private readonly logger: DaemonLogger,
+    private readonly live?: LiveDevicePresence,
+    /** When set, skips real APNs/FCM (unit tests). */
+    private readonly sendOverride?: PushSendFn,
   ) {}
 
   async init(): Promise<void> {
     this.creds = await loadPushConfig(this.stateDir);
     const apns = this.apnsConfigured();
     const fcm = this.fcmConfigured();
+    const sandbox = apnsSandbox(this.creds);
     this.logger.info(
-      `push dispatch ready (apns=${apns ? "configured" : "off"} fcm=${fcm ? "configured" : "off"})`,
+      `push dispatch ready (apns=${apns ? "configured" : "off"} fcm=${fcm ? "configured" : "off"} apnsSandbox=${sandbox})`,
     );
   }
 
-  /** React to product events — approval-needed is the phone wake path. */
+  /** Re-read `<stateDir>/push-config.json` so sandbox flips apply without restart. */
+  private async refreshCreds(): Promise<void> {
+    this.creds = await loadPushConfig(this.stateDir);
+  }
+
+  /**
+   * Interactive product events — approval + choice + turn-finished ok
+   * (Design `2026-10-22f` / `2026-10-24`). Policy: suppressIfLive.
+   */
   async onProductEvent(event: string, data: unknown): Promise<void> {
-    if (event !== "home:approval-needed") return;
-    const row = data as {
-      accountId?: string;
-      id?: string;
-      tool?: string;
-      summary?: string;
-      risk?: string;
-    };
-    if (!row?.accountId) return;
-    await this.notifyAccount(row.accountId, {
-      title: "Approval needed",
-      body: String(row.summary || row.tool || "Open EnvoyHome to respond"),
-      data: {
-        type: "approval",
-        approvalId: String(row.id ?? ""),
-        accountId: row.accountId,
-        tool: String(row.tool ?? ""),
-        risk: String(row.risk ?? ""),
-      },
-    });
+    if (event === "home:approval-needed") {
+      const row = data as {
+        accountId?: string;
+        id?: string;
+        tool?: string;
+        summary?: string;
+        risk?: string;
+      };
+      if (!row?.accountId) return;
+      await this.notifyAccount(
+        row.accountId,
+        {
+          title: "Approval needed",
+          body: String(row.summary || row.tool || "Open EnvoyHome to respond"),
+          data: {
+            type: "approval",
+            approvalId: String(row.id ?? ""),
+            accountId: row.accountId,
+            tool: String(row.tool ?? ""),
+            risk: String(row.risk ?? ""),
+          },
+        },
+        "suppressIfLive",
+      );
+      return;
+    }
+    if (event === "home:choice-needed") {
+      const row = data as {
+        accountId?: string;
+        id?: string;
+        question?: string;
+        selection?: string;
+      };
+      if (!row?.accountId) return;
+      await this.notifyAccount(
+        row.accountId,
+        {
+          title: "Choice needed",
+          body: String(row.question || "Open EnvoyHome to respond").slice(0, 200),
+          data: {
+            type: "choice",
+            choiceId: String(row.id ?? ""),
+            accountId: row.accountId,
+            selection: String(row.selection ?? ""),
+          },
+        },
+        "suppressIfLive",
+      );
+      return;
+    }
+    if (event === "home:turn-finished") {
+      const row = data as {
+        accountId?: string;
+        sessionId?: string;
+        turnId?: string;
+        status?: string;
+        /** Originating paired device (thin-client sendMessage). Prefer fan-out. */
+        deviceId?: string;
+        /** Account / client locale for the generic lock-screen body. */
+        locale?: string;
+        /** Optional transcript snippet — never put on the lock-screen body. */
+        preview?: string;
+      };
+      if (!row?.accountId) return;
+      // Cancelled / error: no banner (user left or saw the failure path live).
+      if (row.status !== "ok") return;
+      // Lock-screen privacy: generic body only (Design `2026-10-24b`). Preview stays
+      // on the event for in-app clients; APNs/FCM must not leak assistant text.
+      const preferDeviceId =
+        typeof row.deviceId === "string" && row.deviceId.trim()
+          ? row.deviceId.trim()
+          : undefined;
+      const result = await this.notifyAccount(
+        row.accountId,
+        {
+          title: "EnvoyHome",
+          body: turnReplyReadyBody(row.locale),
+          data: {
+            type: "turn",
+            accountId: row.accountId,
+            sessionId: String(row.sessionId ?? ""),
+            turnId: String(row.turnId ?? ""),
+          },
+        },
+        "suppressIfLive",
+        preferDeviceId ? { preferDeviceId } : undefined,
+      );
+      this.logger.info(
+        `push turn-finished account=${row.accountId} sent=${result.sent} skippedLive=${result.skippedLive}${preferDeviceId ? ` prefer=${preferDeviceId}` : ""}`,
+      );
+    }
   }
 
-  async notifyAccount(accountId: string, payload: PushPayload): Promise<{ sent: number }> {
-    const tokens = (await this.store.list()).filter(
-      (t) => t.accountIds.length === 0 || t.accountIds.includes(accountId),
+  async notifyAccount(
+    accountId: string,
+    payload: PushPayload,
+    policy: PushWakePolicy = "always",
+    opts?: { preferDeviceId?: string },
+  ): Promise<{ sent: number; skippedLive: number }> {
+    await this.refreshCreds();
+    // Fail closed: empty accountIds never means "all seats" (zero-binding / race
+    // before accountId would otherwise wake every household account).
+    let tokens = (await this.store.list()).filter((t) =>
+      t.accountIds.includes(accountId),
     );
+    // Turn wake: prefer the phone that sent the message (less noisy than waking
+    // every seat-bound device). Fall back to full fan-out if that token is gone.
+    const prefer = opts?.preferDeviceId?.trim();
+    if (prefer) {
+      const only = tokens.filter((t) => t.deviceId === prefer);
+      if (only.length > 0) tokens = only;
+      else {
+        this.logger.warn(
+          `push: prefer deviceId=${prefer} has no registered token — fan-out to ${tokens.length} account token(s) (open the phone app so home.registerPushToken can run)`,
+        );
+      }
+    }
     let sent = 0;
+    let skippedLive = 0;
     for (const row of tokens) {
+      if (policy === "suppressIfLive" && this.live?.isRecentlyActive(row.deviceId)) {
+        skippedLive += 1;
+        continue;
+      }
       const status = await this.sendToDevice(row, payload);
       if (status === 200) sent += 1;
       else if (status !== undefined && this.deadStatuses.has(status)) {
         await this.store.unregister(row.deviceId);
         this.logger.warn(`push: dropped dead token deviceId=${row.deviceId} status=${status}`);
+      } else if (status !== undefined) {
+        this.logger.warn(
+          `push: send failed deviceId=${row.deviceId} platform=${row.platform} status=${status}`,
+        );
+      } else {
+        this.logger.warn(
+          `push: send skipped deviceId=${row.deviceId} platform=${row.platform} (credentials/transport)`,
+        );
       }
     }
-    return { sent };
+    return { sent, skippedLive };
   }
 
   async sendTest(deviceId: string | undefined, payload: PushPayload): Promise<{ sent: number }> {
+    await this.refreshCreds();
     const rows = deviceId
       ? [(await this.store.get(deviceId))].filter((r): r is PushTokenRecord => Boolean(r))
       : await this.store.list();
@@ -111,6 +290,15 @@ export class PushDispatcher {
     for (const row of rows) {
       const status = await this.sendToDevice(row, payload);
       if (status === 200) sent += 1;
+      else if (status !== undefined && this.deadStatuses.has(status)) {
+        // Same prune as notifyAccount — BadDeviceToken / gone must not linger.
+        await this.store.unregister(row.deviceId);
+        this.logger.warn(`push: dropped dead token deviceId=${row.deviceId} status=${status}`);
+      } else if (status !== undefined) {
+        this.logger.warn(
+          `push: sendTest failed deviceId=${row.deviceId} platform=${row.platform} status=${status}`,
+        );
+      }
     }
     return { sent };
   }
@@ -119,6 +307,7 @@ export class PushDispatcher {
     row: PushTokenRecord,
     payload: PushPayload,
   ): Promise<number | undefined> {
+    if (this.sendOverride) return await this.sendOverride(row, payload);
     if (row.platform === "ios") return await sendApns(row.token, payload, this.creds);
     return await sendFcm(row.token, payload, this.creds);
   }
@@ -141,7 +330,9 @@ export class PushDispatcher {
 }
 
 async function loadPushConfig(stateDir: string): Promise<ResolvedCreds> {
+  const fromEnv = process.env.ENVOYHOME_PUSH_CONFIG?.trim();
   const candidates = [
+    ...(fromEnv ? [fromEnv] : []),
     join(stateDir, "push-config.json"),
     join(process.cwd(), "push-config.json"),
   ];
@@ -212,14 +403,7 @@ async function sendApns(
   const topic = cred("APNS_TOPIC", resolved, "apns", "topic");
   if (!jwt || !topic) return undefined;
 
-  const body = JSON.stringify({
-    aps: {
-      alert: { title: payload.title, body: payload.body },
-      sound: "default",
-      badge: 1,
-    },
-    ...(payload.data ? { data: payload.data } : {}),
-  });
+  const body = JSON.stringify(buildApnsBody(payload));
 
   const host = apnsSandbox(resolved) ? "api.sandbox.push.apple.com" : "api.push.apple.com";
   return await new Promise((resolve) => {
@@ -320,14 +504,7 @@ async function sendFcm(
   const projectId = cred("FCM_PROJECT_ID", resolved, "fcm", "projectId");
   const accessToken = await signFcmAccessToken(resolved);
   if (!projectId || !accessToken) return undefined;
-  const body = JSON.stringify({
-    message: {
-      token,
-      notification: { title: payload.title, body: payload.body },
-      data: payload.data ?? {},
-      android: { priority: "HIGH" },
-    },
-  });
+  const body = JSON.stringify(buildFcmMessage(token, payload));
   return await new Promise((resolve) => {
     const req = httpsRequest(
       {

@@ -7,7 +7,7 @@ Repo overview: [`../../README.md`](../../README.md) · Hands-on: [`../../QuickSt
 - **iOS bundle ID / Android applicationId:** `com.envoymesh.envoyhome` (locked in Xcode `PRODUCT_BUNDLE_IDENTIFIER` + Android `applicationId` / Kotlin package)
 - **Pairing:** scan desktop QR or paste `envoy://pair?…&app=EnvoyHome`
 - **Dial:** hosting / LAN WS from the pairing URI (never attach-as-phone-route). On iOS, **Allow Local Network** when prompted (needed for `ws://192.168.…`).
-- **Push:** iOS APNs (`Runner.entitlements` + `remote-notification` background mode + MethodChannel) · Android FCM (`POST_NOTIFICATIONS` + `envoyhome_alerts` channel; needs `android/app/google-services.json`). Tokens → `home.registerPushToken`. Operator checklist: [`docs/mobile-ios-android-setup.md`](../../docs/mobile-ios-android-setup.md).
+- **Push:** iOS APNs (Debug: `Runner.entitlements` development; Release/TestFlight: `RunnerRelease.entitlements` production) · Android FCM (`google-services.json`). Tokens → `home.registerPushToken`. Operator: [`docs/mobile-ios-android-setup.md`](../../docs/mobile-ios-android-setup.md) · live verify: [`docs/mobile-live-verify.md`](../../docs/mobile-live-verify.md).
 
 Depends on `packages/mobile-client` → sibling `envoy_thin_client`.
 
@@ -18,17 +18,19 @@ cd apps/mobile
 flutter pub get
 flutter run          # device / simulator
 flutter test
+# from repo root:
+pnpm mobile:test && pnpm mobile:flutter
 ```
 
-Daemon must be reachable (desktop Settings → Mint pairing → QR).
+Daemon must be reachable (desktop Settings → Mint pairing → QR). Android Play releases: copy [`android/key.properties.example`](android/key.properties.example) → `android/key.properties` (gitignored).
 
 ## Navigation (Design §10.1 mirror)
 
-**Phone:** bottom **Chat · Home · Settings** (Home hidden until Home Assistant is configured + enabled).
+**Phone:** bottom **Chats · Schedules · Home? · Settings** (Home hidden until Home Assistant is configured + enabled).
 
-**Settings hub:** LLM · Connections · Skills · System (same groups as desktop sidebar). Nested screens cover Models/Local (HF·GGUF download on host)/Routing/Memory, HA·MQTT bind, IM channels, Skills/Workflows (AI draft + YAML)/Schedules, Artifacts/Doctor/Grants.
+**Settings hub:** LLM · Connections · Skills · System. System tabs: Profiles · Files · Health · Grants · **This machine** (read-only `home.health`; OS service remains desktop loopback-owner).
 
-**Chat / Home:** attach (`home.uploadChatMedia`), OS speech dictation, inline approvals. Pairing **mint** stays on desktop; phone joins via QR / host / SSH.
+**Chat / Home:** attach, OS speech dictation, inline approvals. **Owner** phones may mint/revoke pairing on Connections; members see status only. Workflows: AI draft + **Diagram ↔ YAML** toggle.
 
 ## Push setup
 

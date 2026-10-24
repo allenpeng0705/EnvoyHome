@@ -755,8 +755,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get webSearchUnattendedBrowser => '允许计划任务使用浏览器回退';
 
   @override
-  String get connPairingHint =>
-      'Mint and revoke phones from desktop Settings → Pair devices. This list is read-only on mobile.';
+  String get connPairingHint => '家庭 Owner 设备可在此签发或撤销配对。成员仅可查看状态。';
 
   @override
   String get connNoDevices => 'No paired devices listed.';
@@ -1005,16 +1004,69 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sysTabFiles => '文件';
 
   @override
-  String get sysTabHealth => 'Health';
+  String get sysTabHealth => '健康检查';
 
   @override
-  String get sysTabGrants => 'Grants';
+  String get sysTabGrants => '授权';
 
   @override
-  String get sysTestPush => 'Send test push';
+  String get sysTabMachine => '本机';
 
   @override
-  String get sysTestPushSent => 'Test push requested';
+  String get sysMachineHint =>
+      '来自 home.health 的守护进程监听状态。安装/重启 OS 服务仅限家庭桌面本机回环，不可经 mesh 操作。';
+
+  @override
+  String get sysMachineDaemonOk => '守护进程可达';
+
+  @override
+  String get sysMachineDaemonBad => '健康检查失败';
+
+  @override
+  String get sysMachineWsPort => 'WebSocket 端口';
+
+  @override
+  String get sysMachineHttpPort => 'HTTP hatch 端口';
+
+  @override
+  String get sysMachinePublicUrl => '公网基础 URL';
+
+  @override
+  String get sysMachinePublicUrlEmpty => '未设置';
+
+  @override
+  String get sysMachineUptime => '运行时长';
+
+  @override
+  String get sysMachineConnections => '客户端 / 进行中回合';
+
+  @override
+  String get sysMachineMesh => 'Mesh';
+
+  @override
+  String get sysMachineOsServiceNote =>
+      '请在桌面 设置 → 系统 → 本机 安装或重启 OS 服务（loopback-owner）。';
+
+  @override
+  String get sysMachineRefresh => '刷新';
+
+  @override
+  String get sysTestPush => '发送测试推送';
+
+  @override
+  String get sysTestPushSent => '已请求测试推送';
+
+  @override
+  String get wfModeYaml => 'YAML';
+
+  @override
+  String get wfModeDiagram => '图示';
+
+  @override
+  String get wfDiagramEmpty => '暂无步骤 — 请草稿或编辑 YAML。';
+
+  @override
+  String get wfDiagramEdge => '↓';
 
   @override
   String get sysDoctorFix => 'Fix';
@@ -1507,4 +1559,112 @@ class AppLocalizationsZh extends AppLocalizations {
   String schedulesChatRanAt(String when) {
     return '运行于 $when';
   }
+
+  @override
+  String get welcomeSkip => '跳过';
+
+  @override
+  String get welcomeNext => '下一步';
+
+  @override
+  String get commonContinue => '继续';
+
+  @override
+  String get welcomeSlide1Title => '欢迎使用 EnvoyHome';
+
+  @override
+  String get welcomeSlide1Body => '手机是通往自托管家庭智能体的窗口 — 聊天、审批和智能家居控制都留在家中桌面上。';
+
+  @override
+  String get welcomeSlide2Title => '工作在电脑上完成';
+
+  @override
+  String get welcomeSlide2Body =>
+      '在家中的 Mac 或 PC 上安装 EnvoyHome。守护进程、模型和家庭记忆都在那台机器上 — 手机只是远程窗口。';
+
+  @override
+  String get welcomeSlide3Title => '用二维码配对';
+
+  @override
+  String get welcomeSlide3Body =>
+      '在电脑上打开 EnvoyHome 并显示配对二维码。在本手机上点「立即配对」并扫描。也可以粘贴配对链接。';
+
+  @override
+  String get welcomeSlideRequiredTitle => '先完成配对';
+
+  @override
+  String get welcomeSlideRequiredBody =>
+      'EnvoyHome 需要一台运行桌面应用的电脑。智能体与家庭控制在那里运行 — 请将本手机与那台电脑配对后再继续。';
+
+  @override
+  String get setupGuideTitle => 'EnvoyHome 使用说明';
+
+  @override
+  String get setupGuideIntro =>
+      '手机上的 EnvoyHome 与家中电脑上的 EnvoyHome 通信。安装桌面应用、配对一次，即可随时聊天与审批。';
+
+  @override
+  String get setupGuidePairRequiredTitle => '配对后继续';
+
+  @override
+  String get setupGuidePairRequiredBody =>
+      'EnvoyHome 是家中桌面的手机伴侣。未配对电脑时，这里还没有可显示的内容。';
+
+  @override
+  String get setupGuideStep1Title => '准备一台电脑';
+
+  @override
+  String get setupGuideStep1Body =>
+      '需要一台家中的 Mac 或 Windows/Linux PC。那台机器将成为 EnvoyHome 主机 — 守护进程与智能体在此运行。';
+
+  @override
+  String get setupGuideStep2Title => '下载并安装 EnvoyHome';
+
+  @override
+  String get setupGuideStep2Body => '打开 QuickStart，在那台电脑上安装守护进程和桌面应用。启动并保持运行。';
+
+  @override
+  String get setupGuideDownloadCta => '打开 EnvoyHome QuickStart';
+
+  @override
+  String get setupGuideStep3Title => '显示配对二维码';
+
+  @override
+  String get setupGuideStep3Body =>
+      '在桌面版 EnvoyHome 中打开「设置 → 配对设备」。保持二维码显示（应包含 mesh/中继，而非仅局域网）。';
+
+  @override
+  String get setupGuideStep4Title => '用本手机扫描';
+
+  @override
+  String get setupGuideStep4Body =>
+      '点下方「立即配对」。允许相机权限后扫描二维码。也可以粘贴 envoy:// 配对链接，或使用主机:端口 / SSH。';
+
+  @override
+  String get setupGuideStep5Title => '连接完成';
+
+  @override
+  String get setupGuideStep5Body =>
+      '配对完成后，本手机将显示该家庭的聊天、审批与设置。无论手机是否在线，桌面都会继续运行。';
+
+  @override
+  String get setupGuideNoHomeTitle => '稍后配对也可以';
+
+  @override
+  String get setupGuideNoHomeBody => '可以先继续浏览，之后随时从「连接」配对。未配对电脑时，这里还没有可显示的内容。';
+
+  @override
+  String get setupGuidePairCta => '立即配对';
+
+  @override
+  String get setupGuidePairLaterCta => '暂不配对';
+
+  @override
+  String get setupGuideSkipCta => '先看看';
+
+  @override
+  String get setupGuideDoneCta => '知道了';
+
+  @override
+  String get settingsSetupGuideSubtitle => '如何安装桌面应用并配对本手机。';
 }

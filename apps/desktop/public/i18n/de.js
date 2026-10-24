@@ -12,6 +12,7 @@ export default {
   "app.themeLight": "Hell",
   "app.themeDark": "Dunkel",
   "app.pairingQrTip": "Pairing-QR — Verbindungen öffnen und Code zeigen",
+  "app.setupGuideTip": "Setup-Guide — Modelle, Local Engine und Telefon-Pairing",
   "app.loading": "Laden…",
   "app.waitingDaemon": "Warte auf Daemon-Verbindung…",
   "app.unknownView": "unbekannte Ansicht",
@@ -154,6 +155,30 @@ export default {
   "profile.displayName": "Anzeigename",
   "profile.displayNamePlaceholder": "z. B. Alice",
   "profile.continue": "Weiter",
+  "setupGuide.title": "EnvoyHome einrichten",
+  "setupGuide.introFirst":
+    "Chat braucht ein Modell. Fügen Sie einen Cloud-Anbieter hinzu oder aktivieren Sie Local Model — optional danach ein Telefon koppeln.",
+  "setupGuide.intro":
+    "Modell konfigurieren und Telefon koppeln. Jederzeit unter System → Dieser Rechner erneut öffnen.",
+  "setupGuide.stepCloudTitle": "Cloud-Anbieter hinzufügen",
+  "setupGuide.stepCloudBody":
+    "OpenAI-kompatibel, Anthropic, DeepSeek und andere Presets. API-Schlüssel einfügen und Modell wählen.",
+  "setupGuide.stepCloudCta": "Modelle öffnen",
+  "setupGuide.stepLocalTitle": "Oder Local Model nutzen",
+  "setupGuide.stepLocalBody":
+    "GGUF herunterladen oder Ollama auf diesem Rechner verbinden — kein Cloud-Schlüssel nötig.",
+  "setupGuide.stepLocalCta": "Local Model öffnen",
+  "setupGuide.stepPhoneTitle": "Telefon koppeln (optional)",
+  "setupGuide.stepPhoneBody":
+    "Pairing-QR anzeigen, damit EnvoyHome auf dem Telefon diesen Desktop über LAN oder Mesh/Relays erreicht.",
+  "setupGuide.stepPhoneCta": "Pairing öffnen",
+  "setupGuide.note":
+    "Für Chat reicht Cloud oder Local. Telefon-Pairing kann warten.",
+  "setupGuide.skipCta": "Erst erkunden",
+  "setupGuide.doneCta": "Verstanden",
+  "setupGuide.openCta": "Setup-Guide anzeigen",
+  "setupGuide.settingsHint":
+    "Checkliste für Modelle und Telefon-Pairing — jederzeit erneut öffnen.",
   "profile.title": "Profile",
   "profile.intro": "Jede Person auf diesem Rechner erhält einen Anzeigenamen. Erinnerung, Modelle und Chat bleiben pro Profil getrennt.",
   "profile.empty": "Noch keine Profile.",
@@ -339,8 +364,9 @@ export default {
   "pairing.qrTitle": "QR-Code scannen",
   "pairing.qrPrimary": "Empfohlen",
   "pairing.qrDetail": "Öffnen Sie EnvoyHome auf dem Telefon, wählen Sie QR scannen und richten Sie die Kamera auf diesen Code.",
-  "pairing.qrMeshHosting": "Dieser Code enthält eine direkte Mesh-Route, wenn das Telefon diesen Rechner im Netz erreichen kann.",
-  "pairing.qrMeshUnavailable": "Der Mesh-Peer hostet nicht — dieser Code funktioniert weiterhin über Netzadresse und SSH.",
+  "pairing.qrMeshHosting": "Dieser Code enthält Mesh- und Community-Relay-Routen (wie EnvoyDev / EnvoyMesh).",
+  "pairing.qrMeshUnavailable": "Der Mesh-Peer hostet noch nicht — warten Sie, bis Hosting bereit ist, und zeigen Sie dann einen neuen Code. Ein nur-LAN-QR kann sich außerhalb von Wi‑Fi nicht neu verbinden.",
+  "pairing.qrMeshRequired": "Kein Telefon-QR ohne Mesh-Hosting (homeNodePeerId + Relay-Bootstrap). Prüfen Sie Erweitert → Mesh-Hosting und versuchen Sie es erneut.",
   "pairing.qrBusy": "Pairing-Code wird vorbereitet…",
   "pairing.qrAction": "Neuen Code anzeigen",
   "pairing.qrAlt": "Pairing-Code",

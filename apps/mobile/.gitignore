@@ -44,5 +44,11 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 
+# Release signing + FCM (never commit secrets)
+/android/key.properties
+*.jks
+*.keystore
+/android/app/google-services.json
+
 # Widget Preview related
 .widget_preview/

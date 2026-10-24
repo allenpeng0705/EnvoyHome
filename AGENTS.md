@@ -34,7 +34,7 @@
 - Don't mask `peers:check` or any merge gate with `|| echo ...` (Plan §5.7).
 - Don't rely on Ext-Agent-only as the long-term phone path (Design §14 item 9).
 - Don't put EnvoyMesh Social product inside EnvoyHome (Design §14 item 10).
-- Don't ship OpenClaw-shaped **shared interactive terminal/PTY**, **swarm-as-default** / **`sessions_spawn`**, or a **Lobster-style** second workflow engine in core — Phase 2 uses path-jailed `edit_file`/`apply_patch`, ScheduleService heartbeat + standing orders, `spawn_helper`, and **`task`** (P2-E2/E3: envoy-harness `LocalMeshSubmitter`+`Agent` children; **parent** harness turns use `Agent.run` — `runTurn` is fallback/tests only; `ENVOYHOME_PARENT_AGENT=0` rollback) under Q10 (Design §19.3, §19.9–§19.13; `2026-10-20t`).
+- Don't ship OpenClaw-shaped **shared interactive terminal/PTY**, **swarm-as-default** / **`sessions_spawn`**, a **Lobster-style** second workflow engine, or **device nodes** (`nodes` / camera/screen/computer-use as core tools) — Phase 2 uses path-jailed `edit_file`/`apply_patch`, ScheduleService heartbeat + standing orders, `spawn_helper`, and **`task`** (P2-E2/E3: envoy-harness `LocalMeshSubmitter`+`Agent` children; **parent** harness turns use `Agent.run` — `runTurn` is fallback/tests only; `ENVOYHOME_PARENT_AGENT=0` rollback) under Q10. Nodes stay Defer / mesh-first (Design §19.3 `2026-10-22`; §19.9–§19.13; `2026-10-20t`).
 
 ## Do
 

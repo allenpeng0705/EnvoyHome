@@ -31,6 +31,7 @@ import {
   parseAssistantToolCalls,
 } from "@envoyhome/harness-host";
 import { isFilesystemRoot, resolveSandboxPath, safeJoin } from "./fs-jail.js";
+import { isHarnessAgentSystemPromptLeak } from "./home-agent-session.js";
 import type { HomePaths } from "./home-paths.js";
 import { listSandboxDir, searchSandboxFiles } from "./sandbox-fs-browse.js";
 import type { WebSearchService } from "./web-search.js";
@@ -125,6 +126,10 @@ export interface TurnCompleteInfo {
   channel?: string;
   rawRef?: string;
   origin: TurnOrigin;
+  /** Paired device that sent home.sendMessage — turn-finished push prefers it. */
+  deviceId?: string;
+  /** Thin-client UI locale for generic turn-push body (preferred over account). */
+  locale?: string;
 }
 
 interface ActiveTurn {
@@ -183,11 +188,29 @@ function transcriptToHistory(lines: Record<string, unknown>[]): HistoryMessage[]
           ? line.content
           : "";
     if (!text) continue;
+    // Drop leaked Agent systemPrompt rows (pre-fix transcripts).
+    if (role === "system" && isHarnessAgentSystemPromptLeak(text)) continue;
     if (role === "user" || role === "assistant" || role === "system") {
       out.push({ role, content: text });
     }
   }
   return out;
+}
+
+/** Hide harness systemPrompt leaks from mobile/desktop hydrate. */
+function filterTranscriptForClient(
+  lines: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  return lines.filter((line) => {
+    if (String(line.role ?? "") !== "system") return true;
+    const text =
+      typeof line.text === "string"
+        ? line.text
+        : typeof line.content === "string"
+          ? line.content
+          : "";
+    return !isHarnessAgentSystemPromptLeak(text);
+  });
 }
 
 function wireChoice(row: PendingChoice): Record<string, unknown> {
@@ -340,7 +363,10 @@ export class TurnService {
       throw Object.assign(new Error("envoyhome.bad_params: unknown session"), { code: "bad_params" });
     }
     // Locked migrate+read: messageIds + coalesce-by-turnId persisted (mobile/desktop hydrate).
-    return readTranscriptEnsuringMessageIds(this.sessions.sessionDir(accountId, sessionId));
+    const lines = await readTranscriptEnsuringMessageIds(
+      this.sessions.sessionDir(accountId, sessionId),
+    );
+    return filterTranscriptForClient(lines);
   }
 
   /** Empty the transcript; keep the session id (Home chat single-session + general Empty). */
@@ -661,6 +687,8 @@ export class TurnService {
     hasMedia?: boolean;
     /** Design §7.4 / 2026-10-19m — thin-client now/TZ/locale/location. */
     clientContext?: import("./client-context.js").ClientTurnContext;
+    /** Paired device id (thin-client) — for turn-finished push prefer-fan-out. */
+    deviceId?: string;
   }): Promise<TurnWireResult> {
     const session = await this.sessions.get(input.accountId, input.sessionId);
     if (!session) {
@@ -1224,6 +1252,8 @@ export class TurnService {
     approval?: ApprovalSink;
     ctx?: TurnContext;
     clientContext?: import("./client-context.js").ClientTurnContext;
+    /** Design §9.2 / `2026-10-22b` — skill_propose PendingLearn trust. */
+    memoryTrust?: "owner" | "agent" | "untrusted";
   }): Pick<
     TurnDeps,
     "httpFetchImpl" | "extraToolImpl" | "browserDefaultProfile" | "peekScheduleProposal"
@@ -1268,6 +1298,9 @@ export class TurnService {
           tool,
           args,
           skills: this.skills,
+          memory: this.memory,
+          memoryTrust: input.memoryTrust ?? "agent",
+          ...(input.ctx?.turn_id ? { turnId: input.ctx.turn_id } : {}),
           channels: this.channels,
           paths: this.paths,
           accountId: input.accountId,
@@ -1282,6 +1315,32 @@ export class TurnService {
           workflows: this.workflows,
           sessions: this.sessions,
           ...(input.ctx?.session_id ? { sessionId: input.ctx.session_id } : {}),
+          ...(input.ctx?.session_id
+            ? {
+                onScheduleCandidates: (info: {
+                  candidates: string[];
+                  detail: string;
+                  reason: string;
+                }) => {
+                  const replyZh = /[\u4e00-\u9fff]/.test(info.detail);
+                  void this.createChoiceAndEmit({
+                    accountId: input.accountId,
+                    sessionId: input.ctx!.session_id,
+                    ...(input.ctx?.turn_id ? { turnId: input.ctx.turn_id } : {}),
+                    question: replyZh
+                      ? "时间还不明确，请选一个："
+                      : "Time is not settled — pick one:",
+                    options: info.candidates.map((c, i) => ({
+                      id: String(i),
+                      label: c,
+                    })),
+                    selection: "one",
+                    purpose: "schedule_candidates",
+                    detail: info.detail.trim().slice(0, 2000),
+                  }).catch(() => undefined);
+                },
+              }
+            : {}),
           toolPolicy: pol.toolPolicy,
           helperDepth: input.ctx?.helper_depth ?? 0,
           httpFetchImpl: workflowHttpFetch as typeof fetch,
@@ -1678,6 +1737,37 @@ ${lines.join("\n")}
       return;
     }
     finished.add(info.turnId);
+    // Preview for interactive push (Design 2026-10-24) — best-effort; empty is fine.
+    let preview: string | undefined;
+    if (info.status === "ok") {
+      try {
+        const lines = await readTranscript(
+          this.sessions.sessionDir(info.accountId, info.sessionId),
+        );
+        for (let i = lines.length - 1; i >= 0; i--) {
+          const line = lines[i];
+          if (line?.role === "assistant" && line.turnId === info.turnId) {
+            const text = String(line.text ?? "").trim().replace(/\s+/g, " ");
+            if (text) {
+              preview = text.slice(0, 180);
+              break;
+            }
+          }
+        }
+      } catch {
+        /* preview is optional */
+      }
+    }
+    // Locale for generic turn-push body: turn clientContext first, else account profile.
+    let locale = info.locale?.trim() || undefined;
+    if (!locale) {
+      try {
+        const account = await this.accounts.get(info.accountId);
+        if (account?.locale?.trim()) locale = account.locale.trim();
+      } catch {
+        /* optional */
+      }
+    }
     this.emit("home:turn-finished", {
       turnId: info.turnId,
       sessionId: info.sessionId,
@@ -1685,6 +1775,9 @@ ${lines.join("\n")}
       agentId: "default",
       status: info.status,
       at: new Date().toISOString(),
+      ...(preview ? { preview } : {}),
+      ...(info.deviceId ? { deviceId: info.deviceId } : {}),
+      ...(locale ? { locale } : {}),
     });
     if (info.status === "ok") {
       void this.maybeAfterTurnEnrich(info);
@@ -1943,6 +2036,7 @@ ${lines.join("\n")}
     }>;
     /** Design §7.4 / 2026-10-19m — must not drop on keyword→workflow route. */
     clientContext?: import("./client-context.js").ClientTurnContext;
+    deviceId?: string;
   }): Promise<void> {
     const record = active.get(input.turnId);
     if (!record) return;
@@ -2105,6 +2199,10 @@ ${lines.join("\n")}
         origin,
         ...(input.channel !== undefined ? { channel: input.channel } : {}),
         ...(input.rawRef !== undefined ? { rawRef: input.rawRef } : {}),
+        ...(input.deviceId ? { deviceId: input.deviceId } : {}),
+        ...(input.clientContext?.locale
+          ? { locale: input.clientContext.locale }
+          : {}),
       });
     }
   }
@@ -2135,6 +2233,7 @@ ${lines.join("\n")}
     }>;
     /** Design §7.4 / 2026-10-19m. */
     clientContext?: import("./client-context.js").ClientTurnContext;
+    deviceId?: string;
   }): Promise<void> {
     const record = active.get(input.turnId);
     if (!record) return;
@@ -2420,6 +2519,9 @@ ${lines.join("\n")}
           approval: approvalSink,
           ctx,
           ...(input.clientContext ? { clientContext: input.clientContext } : {}),
+          ...(input.memoryTrust !== undefined
+            ? { memoryTrust: input.memoryTrust }
+            : {}),
         }),
         ...(completionText !== undefined ? { completionText } : {}),
         ...(toolLoop
@@ -2683,6 +2785,10 @@ ${lines.join("\n")}
         origin,
         ...(input.channel !== undefined ? { channel: input.channel } : {}),
         ...(input.rawRef !== undefined ? { rawRef: input.rawRef } : {}),
+        ...(input.deviceId ? { deviceId: input.deviceId } : {}),
+        ...(input.clientContext?.locale
+          ? { locale: input.clientContext.locale }
+          : {}),
       });
     }
   }

@@ -595,11 +595,14 @@ test("owner-scope: member device denied enableLocalEngine", async () => {
   try {
     const deps = await makeRouterDeps(stateDir);
     await deps.accounts.create({ accountId: "alice", displayName: "Alice" });
+    await deps.household.onAccountCreated("alice");
+    await deps.accounts.create({ accountId: "bob", displayName: "Bob" });
+    // Exclusive bind to a non-Owner seat is not owner-scope (§4.1.1).
     const denied = await dispatchForTest(
       deps,
       "home.enableLocalEngine",
-      { prefer: "spawn", accountId: "alice" },
-      memberSession(["alice"]),
+      { prefer: "spawn", accountId: "bob" },
+      memberSession(["bob"]),
     );
     assert.equal("error" in denied, true);
     if ("error" in denied) {
@@ -616,6 +619,7 @@ test("V-SEC-7: owner device cannot enable for unbound accountId", async () => {
     const deps = await makeRouterDeps(stateDir);
     await installFakeLlamaServer(homePaths(stateDir));
     await deps.accounts.create({ accountId: "alice", displayName: "Alice" });
+    await deps.household.onAccountCreated("alice");
     await deps.accounts.create({ accountId: "bob", displayName: "Bob" });
     const denied = await dispatchForTest(
       deps,
@@ -638,6 +642,7 @@ test("loopback enableLocalEngine succeeds (owner-scope)", async () => {
     const deps = await makeRouterDeps(stateDir);
     await installFakeLlamaServer(homePaths(stateDir));
     await deps.accounts.create({ accountId: "alice", displayName: "Alice" });
+    await deps.household.onAccountCreated("alice");
     try {
       const ans = await dispatchForTest(
         deps,

@@ -130,6 +130,16 @@ function isPhase2AgentToolName(tool: string): boolean {
   );
 }
 
+/** Design §9.2 — progressive skill disclosure + propose + legacy skill:<id> shortcut. */
+function isSkillDiscoveryToolName(tool: string): boolean {
+  return (
+    tool === "skills_list" ||
+    tool === "skill_view" ||
+    tool === "skill_propose" ||
+    (tool.startsWith("skill:") && tool.length > "skill:".length)
+  );
+}
+
 /** Design §7.4 V-CRON-9 — schedule propose/confirm/list via fence. */
 function isScheduleToolName(tool: string): boolean {
   return tool === "schedule";
@@ -426,7 +436,25 @@ export interface RunTurnInput {
   toolLoop?: boolean;
 }
 
-const TOOL_FENCE_RE = /```envoyhome-tools\s*([\s\S]*?)```/i;
+/**
+ * Extract ```envoyhome-tools body. Models often nest ```json inside, and a
+ * non-greedy ```…``` would close on that opener and yield an empty body.
+ */
+function extractEnvoyhomeToolsFence(
+  text: string,
+): { body: string; fullMatch: string } | undefined {
+  const open = /```envoyhome-tools\b/i.exec(text);
+  if (!open) return undefined;
+  let i = open.index + open[0].length;
+  while (i < text.length && /[ \t\r\n]/.test(text[i]!)) i += 1;
+  const nest = /^```(?:json|javascript)?[ \t]*\r?\n?/i.exec(text.slice(i));
+  if (nest) i += nest[0].length;
+  const close = text.indexOf("```", i);
+  const end = close >= 0 ? close : text.length;
+  const body = text.slice(i, end).trim();
+  const fullMatch = text.slice(open.index, close >= 0 ? close + 3 : text.length);
+  return { body, fullMatch };
+}
 
 /** True when the model claims an Approvals proposal without emitting tools. */
 export function claimsActuationWithoutTools(text: string): boolean {
@@ -539,14 +567,14 @@ export function parseAssistantToolCalls(
   const allowSmartHome = opts?.allowSmartHome !== false;
   const allowSandbox = opts?.allowSandbox === true;
   const schedulesOnly = opts?.schedulesOnly === true;
-  const fence = text.match(TOOL_FENCE_RE);
-  if (!fence?.[1]) {
+  const fence = extractEnvoyhomeToolsFence(text);
+  if (!fence?.body) {
     const bare = bareScheduleSteps(text);
     return { tools: bare, replyText: text };
   }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(fence[1].trim());
+    parsed = JSON.parse(fence.body);
   } catch {
     const bare = bareScheduleSteps(text);
     return { tools: bare, replyText: text };
@@ -568,7 +596,19 @@ export function parseAssistantToolCalls(
       const okSandbox = allowSandbox && isSandboxToolName(name);
       const okAgentNet = isAgentNetworkToolName(name);
       const okPhase2 = isPhase2AgentToolName(name);
-      if (!okHome && !okSandbox && !okAgentNet && !okSchedule && !okAskUser && !okPhase2) continue;
+      // Skills discovery is read-tier; allow whenever sandbox tools are allowed (not schedules-only).
+      const okSkill = allowSandbox && isSkillDiscoveryToolName(name);
+      if (
+        !okHome &&
+        !okSandbox &&
+        !okAgentNet &&
+        !okSchedule &&
+        !okAskUser &&
+        !okPhase2 &&
+        !okSkill
+      ) {
+        continue;
+      }
     }
     const step: PlannedToolStep = {
       tool: name,
@@ -577,7 +617,9 @@ export function parseAssistantToolCalls(
     if (typeof o.summary === "string" && o.summary.trim()) step.summary = o.summary;
     tools.push(step);
   }
-  const replyText = fence?.[0] ? text.replace(fence[0], "").trim() : text;
+  const replyText = fence.fullMatch
+    ? text.replace(fence.fullMatch, "").trim()
+    : text;
   if (!tools.some((t) => t.tool === "schedule")) {
     for (const step of bareScheduleSteps(text)) tools.push(step);
   }

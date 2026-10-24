@@ -1,0 +1,8 @@
+# Copy to android/key.properties (gitignored) for Play / release APKs.
+# Generate a keystore once, e.g.:
+#   keytool -genkey -v -keystore upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+#
+# storePassword=...
+# keyPassword=...
+# keyAlias=upload
+# storeFile=/absolute/path/to/upload-keystore.jks

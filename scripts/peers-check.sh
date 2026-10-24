@@ -62,14 +62,18 @@ for entry in "${PEER_PACKAGES[@]}"; do
   seen_repos+=("$dir")
 done
 
+# Reference-only siblings (EnvoyCoder): warn if missing, never fail the gate.
+# Packagers / desktop builds do not need them (Design: patterns only, not link:).
+ref_warnings=()
 for dir in "${PEER_REPOS[@]}"; do
   if [ ! -d "$dir" ]; then
-    problems+=("$dir — sibling repo missing (reference checkout, not a pnpm dep)")
+    ref_warnings+=("$dir — reference checkout missing (optional; not a pnpm dep)")
+  else
+    seen_repos+=("$dir")
   fi
-  seen_repos+=("$dir")
 done
 
-# Branch check, once per repo.
+# Branch check, once per *linked* + present reference repo.
 for dir in $(printf '%s\n' "${seen_repos[@]}" | sort -u); do
   [ -d "$dir" ] || continue
   if [ ! -d "$dir/.git" ]; then
@@ -81,6 +85,11 @@ for dir in $(printf '%s\n' "${seen_repos[@]}" | sort -u); do
     problems+=("$dir — on branch '$branch', expected '$EXPECTED_BRANCH' (override with ENVOYHOME_PEER_BRANCH)")
   fi
 done
+
+if [ ${#ref_warnings[@]} -gt 0 ]; then
+  echo "peers:check note — optional reference sibling(s):"
+  for p in "${ref_warnings[@]}"; do echo "  - $p"; done
+fi
 
 if [ ${#problems[@]} -gt 0 ]; then
   if [ "$WARN_ONLY" -eq 1 ]; then

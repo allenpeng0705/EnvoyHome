@@ -462,8 +462,13 @@ export class PairingStore {
       ownerId: identity.ownerId,
       app: PRODUCT_NAME,
     };
+    // Always echo lanWsUrl when we know a non-loopback LAN host (EnvoyMesh /
+    // EnvoyDev QR shape) — even when it matches reach — so phones keep an
+    // explicit LAN rung after persist/re-encode.
     if (lanHost !== undefined) {
       uriParams.lanWsUrl = wsUrlFor(lanHost, input.wsPort, path);
+    } else if (reach !== "127.0.0.1" && !reach.startsWith("127.")) {
+      uriParams.lanWsUrl = wsUrl;
     }
     if (homeNodePeerId && bootstrapPeers.length > 0) {
       uriParams.homeNodePeerId = homeNodePeerId;

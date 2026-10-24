@@ -1,4 +1,6 @@
 {
+  "_comment": "Install at <stateDir>/push-config.json (default ~/.envoyhome/push-config.json). Repo-root copy is only used when the daemon cwd is the repo.",
+  "_comment_sandbox": "true for Xcode debug / flutter run (development signing). false for TestFlight / App Store (RunnerRelease.entitlements production aps).",
   "apns": {
     "keyId": "ABC1234567",
     "teamId": "1A2B3C4D5E",

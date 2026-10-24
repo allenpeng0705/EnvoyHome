@@ -12,6 +12,7 @@ export default {
   "app.themeLight": "Clair",
   "app.themeDark": "Sombre",
   "app.pairingQrTip": "QR d’appairage — ouvrir Connexions et afficher un code",
+  "app.setupGuideTip": "Guide de configuration — modèles, moteur local et téléphone",
   "app.loading": "Chargement…",
   "app.waitingDaemon": "En attente de la connexion au démon…",
   "app.unknownView": "vue inconnue",
@@ -154,6 +155,30 @@ export default {
   "profile.displayName": "Nom affiché",
   "profile.displayNamePlaceholder": "ex. Alice",
   "profile.continue": "Continuer",
+  "setupGuide.title": "Configurer EnvoyHome",
+  "setupGuide.introFirst":
+    "Le chat a besoin d’un modèle. Ajoutez un fournisseur cloud ou activez Local Model — puis associez un téléphone si vous voulez.",
+  "setupGuide.intro":
+    "Configurer un modèle et associer un téléphone. Rouvrez ce guide dans Système → Cet ordinateur.",
+  "setupGuide.stepCloudTitle": "Ajouter un fournisseur cloud",
+  "setupGuide.stepCloudBody":
+    "Préréglages OpenAI-compatibles, Anthropic, DeepSeek, etc. Collez une clé API et choisissez un modèle.",
+  "setupGuide.stepCloudCta": "Ouvrir Modèles",
+  "setupGuide.stepLocalTitle": "Ou utiliser Local Model",
+  "setupGuide.stepLocalBody":
+    "Téléchargez un GGUF ou connectez Ollama sur cet ordinateur — pas de clé cloud requise.",
+  "setupGuide.stepLocalCta": "Ouvrir Local Model",
+  "setupGuide.stepPhoneTitle": "Associer un téléphone (optionnel)",
+  "setupGuide.stepPhoneBody":
+    "Affichez un QR pour qu’EnvoyHome sur le téléphone joigne ce bureau via LAN ou mesh/relais.",
+  "setupGuide.stepPhoneCta": "Ouvrir Appariement",
+  "setupGuide.note":
+    "Cloud ou local suffit pour chatter. L’appariement téléphone peut attendre.",
+  "setupGuide.skipCta": "Explorer d’abord",
+  "setupGuide.doneCta": "Compris",
+  "setupGuide.openCta": "Afficher le guide",
+  "setupGuide.settingsHint":
+    "Checklist premier lancement pour modèles et téléphone — rouvrez-la quand vous voulez.",
   "profile.title": "Profils",
   "profile.intro": "Chaque personne sur cet ordinateur a un nom affiché. Mémoire, modèles et chat restent séparés par profil.",
   "profile.empty": "Aucun profil pour l’instant.",
@@ -339,8 +364,9 @@ export default {
   "pairing.qrTitle": "Scanner un QR code",
   "pairing.qrPrimary": "Recommandé",
   "pairing.qrDetail": "Ouvrez EnvoyHome sur le téléphone, choisissez Scanner le QR et pointez la caméra vers ce code.",
-  "pairing.qrMeshHosting": "Ce code inclut une route mesh directe lorsque le téléphone peut atteindre cette machine sur le réseau.",
-  "pairing.qrMeshUnavailable": "Le pair mesh n’héberge pas — ce code fonctionne toujours via l’adresse réseau et SSH.",
+  "pairing.qrMeshHosting": "Ce code inclut les routes mesh + relais communautaires (comme EnvoyDev / EnvoyMesh).",
+  "pairing.qrMeshUnavailable": "Le pair mesh n’héberge pas encore — attendez que l’hébergement soit prêt, puis affichez un nouveau code. Un QR LAN seul ne peut pas se reconnecter hors Wi‑Fi.",
+  "pairing.qrMeshRequired": "Impossible d’émettre un QR téléphone sans hébergement mesh (homeNodePeerId + bootstrap relais). Vérifiez Avancé → hébergement mesh, puis réessayez.",
   "pairing.qrBusy": "Préparation du code d’appairage…",
   "pairing.qrAction": "Afficher un nouveau code",
   "pairing.qrAlt": "Code d’appairage",

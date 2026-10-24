@@ -5,7 +5,16 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../state/session_controller.dart';
 
-/// Full-screen workflow authoring: AI draft + YAML (+ simple node list as phone DAG).
+enum _WfEditorMode { yaml, diagram }
+
+class _WfStep {
+  const _WfStep({required this.id, this.type, this.tool});
+  final String id;
+  final String? type;
+  final String? tool;
+}
+
+/// Full-screen workflow authoring: AI draft + YAML ↔ Diagram (V-UX-9 phone parity).
 class WorkflowEditorPage extends StatefulWidget {
   const WorkflowEditorPage({
     super.key,
@@ -27,8 +36,9 @@ class _WorkflowEditorPageState extends State<WorkflowEditorPage> {
   String? _error;
   String? _note;
   bool _busy = false;
-  List<String> _nodes = [];
+  List<_WfStep> _steps = [];
   List<Map<String, dynamic>> _tools = [];
+  _WfEditorMode _mode = _WfEditorMode.yaml;
 
   @override
   void initState() {
@@ -59,11 +69,11 @@ class _WorkflowEditorPageState extends State<WorkflowEditorPage> {
   }
 
   void _insertTool(String name) {
-    final snippet = '\n  - id: step_${_nodes.length + 1}\n'
+    final snippet = '\n  - id: step_${_steps.length + 1}\n'
         '    type: tool\n'
         '    tool: $name\n';
     _yamlCtrl.text = '${_yamlCtrl.text.trimRight()}$snippet';
-    _parseNodes(_yamlCtrl.text);
+    _parseSteps(_yamlCtrl.text);
     setState(() {});
   }
 
@@ -75,15 +85,43 @@ class _WorkflowEditorPageState extends State<WorkflowEditorPage> {
     super.dispose();
   }
 
-  void _parseNodes(String yaml) {
-    final nodes = <String>[];
-    for (final line in yaml.split('\n')) {
+  void _parseSteps(String yaml) {
+    final steps = <_WfStep>[];
+    String? curId;
+    String? curType;
+    String? curTool;
+    void flush() {
+      if (curId != null && curId!.isNotEmpty) {
+        steps.add(_WfStep(id: curId!, type: curType, tool: curTool));
+      }
+      curId = null;
+      curType = null;
+      curTool = null;
+    }
+
+    for (final raw in yaml.split('\n')) {
+      final line = raw.trimRight();
       final t = line.trimLeft();
-      if (t.startsWith('- id:') || t.startsWith('id:')) {
-        nodes.add(t.replaceFirst(RegExp(r'^-?\s*id:\s*'), '').trim());
+      final indent = line.length - t.length;
+      if (t.startsWith('- id:')) {
+        flush();
+        curId = t.substring(5).trim();
+      } else if (indent >= 2 && t.startsWith('id:') && curId == null) {
+        // Top-level workflow id — skip for steps.
+        continue;
+      } else if (curId != null && t.startsWith('type:')) {
+        curType = t.substring(5).trim();
+      } else if (curId != null && t.startsWith('tool:')) {
+        curTool = t.substring(5).trim();
+      } else if (t.startsWith('- id:') == false &&
+          t.startsWith('- ') &&
+          indent <= 2 &&
+          curId != null) {
+        flush();
       }
     }
-    _nodes = nodes;
+    flush();
+    _steps = steps;
   }
 
   Future<void> _load() async {
@@ -95,7 +133,7 @@ class _WorkflowEditorPageState extends State<WorkflowEditorPage> {
       final body = await home.getWorkflow(id: id);
       final yaml = body['yaml']?.toString() ?? '';
       _yamlCtrl.text = yaml;
-      _parseNodes(yaml);
+      _parseSteps(yaml);
       if (mounted) setState(() {});
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
@@ -121,7 +159,7 @@ class _WorkflowEditorPageState extends State<WorkflowEditorPage> {
       );
       final yaml = body['yaml']?.toString() ?? '';
       _yamlCtrl.text = yaml;
-      _parseNodes(yaml);
+      _parseSteps(yaml);
       if (mounted) setState(() => _note = AppLocalizations.of(context).wfDrafted);
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
@@ -139,7 +177,6 @@ class _WorkflowEditorPageState extends State<WorkflowEditorPage> {
     });
     try {
       var yaml = _yamlCtrl.text;
-      // Ensure id is present for new workflows when YAML lacks one.
       if (!yaml.contains(RegExp(r'^id:\s*', multiLine: true)) &&
           _idCtrl.text.trim().isNotEmpty) {
         yaml = 'id: ${_idCtrl.text.trim()}\n$yaml';
@@ -150,7 +187,7 @@ class _WorkflowEditorPageState extends State<WorkflowEditorPage> {
         yaml: yaml,
         accountId: widget.session.accountId,
       );
-      _parseNodes(yaml);
+      _parseSteps(yaml);
       if (mounted) {
         setState(() => _note = AppLocalizations.of(context).wfSaved);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -178,6 +215,38 @@ class _WorkflowEditorPageState extends State<WorkflowEditorPage> {
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     }
+  }
+
+  Widget _diagram(AppLocalizations l10n, ThemeData theme) {
+    if (_steps.isEmpty) {
+      return Text(l10n.wfDiagramEmpty, style: theme.textTheme.bodySmall);
+    }
+    return Column(
+      children: [
+        for (var i = 0; i < _steps.length; i++) ...[
+          if (i > 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Text(l10n.wfDiagramEdge, style: theme.textTheme.titleMedium),
+            ),
+          Card(
+            child: ListTile(
+              leading: CircleAvatar(
+                radius: 14,
+                child: Text('${i + 1}', style: const TextStyle(fontSize: 12)),
+              ),
+              title: Text(_steps[i].id),
+              subtitle: Text(
+                [
+                  if (_steps[i].type != null) _steps[i].type!,
+                  if (_steps[i].tool != null) 'tool: ${_steps[i].tool}',
+                ].join(' · '),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
   }
 
   @override
@@ -228,47 +297,49 @@ class _WorkflowEditorPageState extends State<WorkflowEditorPage> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(l10n.wfDiagramNodes, style: theme.textTheme.titleSmall),
-          if (_nodes.isEmpty)
-            Text(l10n.wfNoNodes, style: theme.textTheme.bodySmall)
-          else
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final n in _nodes)
-                  Chip(label: Text(n), visualDensity: VisualDensity.compact),
-              ],
-            ),
-          if (_tools.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(l10n.wfTools, style: theme.textTheme.titleSmall),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final t in _tools.take(24))
-                  ActionChip(
-                    label: Text(
-                      t['name']?.toString() ?? t['id']?.toString() ?? '?',
+          SegmentedButton<_WfEditorMode>(
+            segments: [
+              ButtonSegment(value: _WfEditorMode.diagram, label: Text(l10n.wfModeDiagram)),
+              ButtonSegment(value: _WfEditorMode.yaml, label: Text(l10n.wfModeYaml)),
+            ],
+            selected: {_mode},
+            onSelectionChanged: (s) => setState(() => _mode = s.first),
+          ),
+          const SizedBox(height: 12),
+          if (_mode == _WfEditorMode.diagram) ...[
+            Text(l10n.wfDiagramNodes, style: theme.textTheme.titleSmall),
+            const SizedBox(height: 8),
+            _diagram(l10n, theme),
+          ] else ...[
+            if (_tools.isNotEmpty) ...[
+              Text(l10n.wfTools, style: theme.textTheme.titleSmall),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final t in _tools.take(24))
+                    ActionChip(
+                      label: Text(
+                        t['name']?.toString() ?? t['id']?.toString() ?? '?',
+                      ),
+                      onPressed: () => _insertTool(
+                        t['name']?.toString() ?? t['id']?.toString() ?? '',
+                      ),
                     ),
-                    onPressed: () => _insertTool(
-                      t['name']?.toString() ?? t['id']?.toString() ?? '',
-                    ),
-                  ),
-              ],
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
+            Text(l10n.wfYaml, style: theme.textTheme.titleSmall),
+            TextField(
+              controller: _yamlCtrl,
+              minLines: 12,
+              maxLines: 24,
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              onChanged: (v) => setState(() => _parseSteps(v)),
             ),
           ],
-          const SizedBox(height: 12),
-          Text(l10n.wfYaml, style: theme.textTheme.titleSmall),
-          TextField(
-            controller: _yamlCtrl,
-            minLines: 12,
-            maxLines: 24,
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-            decoration: const InputDecoration(border: OutlineInputBorder()),
-            onChanged: (v) => setState(() => _parseNodes(v)),
-          ),
           if (_busy) const LinearProgressIndicator(),
         ],
       ),

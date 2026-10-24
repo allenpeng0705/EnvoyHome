@@ -139,6 +139,71 @@ test("V-P2-AGENT-4: parent Agent end_turn text → TurnEvent text", async () => 
   assert.match(text, /Hello from parent Agent/);
 });
 
+test("V-P2-AGENT-4: Agent systemPrompt must not write to Home transcript", async () => {
+  const { isHarnessAgentSystemPromptLeak } = await import("../dist/index.js");
+  const { appendTranscriptLine, readTranscript } = await import("@envoyhome/harness-host");
+  const dir = await mkdtemp(join(tmpdir(), "eh-parent-sys-"));
+  const model = scriptedModel([
+    {
+      content: [
+        {
+          type: "text",
+          text: "<think>planning</think>\nHello — real reply only.",
+        },
+      ],
+      stopReason: "end_turn",
+    },
+  ]);
+  const deps = stubDeps(baseCtx());
+  for await (const _ev of runAgentTurn({
+    userText: "hi",
+    history: [],
+    deps,
+    sessionDir: dir,
+    sessionId: "sess-1",
+    turnId: "turn-1",
+    model,
+  })) {
+    /* drain */
+  }
+  // TurnService persists assistant text; HomeAgentSession must not persist systemPrompt.
+  // Simulate what Agent would have written if persist leaked — ensure our session skips it.
+  const { HomeAgentSession } = await import("../dist/index.js");
+  const session = new HomeAgentSession({
+    id: "s-leak",
+    sessionDir: dir,
+    cwd: dir,
+    turnId: "turn-leak",
+    userAlreadyPersisted: true,
+  });
+  session.appendMessage("system", [
+    {
+      type: "text",
+      text: "You are EnvoyHome, the household agent (Design §19.13 P2-E3).\nAvailable tools: read_file",
+    },
+  ]);
+  await session.flush();
+  const lines = await readTranscript(dir);
+  const leaked = lines.filter(
+    (l) =>
+      String(l.role) === "system" &&
+      isHarnessAgentSystemPromptLeak(String(l.text ?? l.content ?? "")),
+  );
+  assert.equal(leaked.length, 0, "systemPrompt must not appear in transcript.jsonl");
+  assert.ok(isHarnessAgentSystemPromptLeak("You are EnvoyHome, the household agent (Design §19.13 P2-E3)."));
+  // Pre-existing leak still detectable for client filter.
+  await appendTranscriptLine(dir, {
+    role: "system",
+    text: "You are EnvoyHome, the household agent (Design §19.13 P2-E3).\nAvailable tools: x",
+    at: new Date().toISOString(),
+  });
+  const after = await readTranscript(dir);
+  assert.ok(
+    after.some((l) => isHarnessAgentSystemPromptLeak(String(l.text ?? ""))),
+    "fixture leak present for filter test",
+  );
+});
+
 test("V-P2-AGENT-4: parent fence → read_file via jail dispatch", async () => {
   const dir = await mkdtemp(join(tmpdir(), "eh-parent-"));
   const dispatched: string[] = [];

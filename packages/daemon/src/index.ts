@@ -77,7 +77,17 @@ export {
   type PushTokenType,
 } from "./push-tokens.js";
 
-export { PushDispatcher, type PushPayload, type PushConfigFile } from "./push-dispatch.js";
+export {
+  PushDispatcher,
+  buildApnsBody,
+  buildFcmMessage,
+  type PushPayload,
+  type PushConfigFile,
+  type PushWakePolicy,
+  type PushSendFn,
+} from "./push-dispatch.js";
+
+export { LiveDevicePresence, PUSH_LIVE_IDLE_MS } from "./push-live.js";
 
 export { startWsHost, type HostHandle } from "./host.js";
 
@@ -301,7 +311,10 @@ export {
   HOME_PARENT_MAX_ITERATIONS,
 } from "./home-harness-bridge.js";
 
-export { HomeAgentSession } from "./home-agent-session.js";
+export {
+  HomeAgentSession,
+  isHarnessAgentSystemPromptLeak,
+} from "./home-agent-session.js";
 
 export {
   runAgentTurn,

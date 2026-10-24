@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:envoyhome_mobile_client/envoyhome_mobile_client.dart';
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
@@ -54,6 +55,8 @@ class _LocalDownloadTab extends StatefulWidget {
 class _LocalDownloadTabState extends State<_LocalDownloadTab> {
   final _queryCtrl = TextEditingController(text: 'gguf');
   final _unsubs = <void Function()>[];
+  /// Session whose download progress listener is live — rebind after redial.
+  EnvoyHomeSession? _boundSession;
   List<Map<String, dynamic>> _models = [];
   List<Map<String, dynamic>> _files = [];
   String? _selectedRepo;
@@ -66,25 +69,47 @@ class _LocalDownloadTabState extends State<_LocalDownloadTab> {
   @override
   void initState() {
     super.initState();
+    _boundSession = widget.session.session;
+    widget.session.addListener(_onSessionChanged);
     unawaited(_probe());
   }
 
   @override
   void dispose() {
+    widget.session.removeListener(_onSessionChanged);
+    _clearUnsubs();
+    _queryCtrl.dispose();
+    super.dispose();
+  }
+
+  void _clearUnsubs() {
     for (final u in _unsubs) {
       u();
     }
-    _queryCtrl.dispose();
-    super.dispose();
+    _unsubs.clear();
+  }
+
+  void _onSessionChanged() {
+    final home = widget.session.session;
+    if (identical(home, _boundSession)) return;
+    _clearUnsubs();
+    _boundSession = home;
+    if (home == null) {
+      if (mounted) setState(() => _owner = false);
+      return;
+    }
+    unawaited(_probe());
   }
 
   Future<void> _probe() async {
     final home = widget.session.session;
     if (home == null) return;
+    _boundSession = home;
     try {
       await home.getLocalEngineStatus();
-      if (!mounted) return;
+      if (!mounted || !identical(widget.session.session, home)) return;
       setState(() => _owner = true);
+      if (_unsubs.isNotEmpty) return;
       _unsubs.add(home.onEvent('home:local-model-download', (data) {
         if (!mounted || data is! Map) return;
         final m = Map<String, dynamic>.from(data);
@@ -98,7 +123,8 @@ class _LocalDownloadTabState extends State<_LocalDownloadTab> {
         });
       }));
     } catch (_) {
-      if (mounted) setState(() => _owner = false);
+      if (!mounted || !identical(widget.session.session, home)) return;
+      setState(() => _owner = false);
     }
   }
 

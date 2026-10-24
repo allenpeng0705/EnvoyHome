@@ -774,7 +774,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get connPairingHint =>
-      'Mint and revoke phones from desktop Settings → Pair devices. This list is read-only on mobile.';
+      'Household Owner devices can mint and revoke pairing here. Members see status only.';
 
   @override
   String get connNoDevices => 'No paired devices listed.';
@@ -1029,10 +1029,63 @@ class AppLocalizationsFr extends AppLocalizations {
   String get sysTabGrants => 'Grants';
 
   @override
+  String get sysTabMachine => 'This machine';
+
+  @override
+  String get sysMachineHint =>
+      'Daemon listen status from home.health. OS service install/restart is loopback-only on the home desktop — not available over mesh.';
+
+  @override
+  String get sysMachineDaemonOk => 'Daemon reachable';
+
+  @override
+  String get sysMachineDaemonBad => 'Daemon health failed';
+
+  @override
+  String get sysMachineWsPort => 'WebSocket port';
+
+  @override
+  String get sysMachineHttpPort => 'HTTP hatch port';
+
+  @override
+  String get sysMachinePublicUrl => 'Public base URL';
+
+  @override
+  String get sysMachinePublicUrlEmpty => 'Not set';
+
+  @override
+  String get sysMachineUptime => 'Uptime';
+
+  @override
+  String get sysMachineConnections => 'Clients / active turns';
+
+  @override
+  String get sysMachineMesh => 'Mesh';
+
+  @override
+  String get sysMachineOsServiceNote =>
+      'Install or restart the OS service from desktop Settings → System → This machine (loopback-owner).';
+
+  @override
+  String get sysMachineRefresh => 'Refresh';
+
+  @override
   String get sysTestPush => 'Send test push';
 
   @override
   String get sysTestPushSent => 'Test push requested';
+
+  @override
+  String get wfModeYaml => 'YAML';
+
+  @override
+  String get wfModeDiagram => 'Diagram';
+
+  @override
+  String get wfDiagramEmpty => 'No steps yet — draft or edit YAML.';
+
+  @override
+  String get wfDiagramEdge => '↓';
 
   @override
   String get sysDoctorFix => 'Fix';
@@ -1546,4 +1599,116 @@ class AppLocalizationsFr extends AppLocalizations {
   String schedulesChatRanAt(String when) {
     return 'Exécuté $when';
   }
+
+  @override
+  String get welcomeSkip => 'Passer';
+
+  @override
+  String get welcomeNext => 'Suivant';
+
+  @override
+  String get commonContinue => 'Continuer';
+
+  @override
+  String get welcomeSlide1Title => 'Bienvenue sur EnvoyHome';
+
+  @override
+  String get welcomeSlide1Body =>
+      'Votre téléphone est une fenêtre vers un agent maison auto-hébergé — chat, validations et maison connectée restent sur le bureau.';
+
+  @override
+  String get welcomeSlide2Title => 'Le travail se fait sur l’ordinateur';
+
+  @override
+  String get welcomeSlide2Body =>
+      'Installez EnvoyHome sur un Mac ou PC à la maison. Le démon, les modèles et la mémoire du foyer restent là — le téléphone est une fenêtre à distance.';
+
+  @override
+  String get welcomeSlide3Title => 'Apparier avec un QR';
+
+  @override
+  String get welcomeSlide3Body =>
+      'Sur l’ordinateur, ouvrez EnvoyHome et affichez le QR d’appariement. Sur ce téléphone, touchez Apparier maintenant et scannez. Vous pouvez aussi coller un lien.';
+
+  @override
+  String get welcomeSlideRequiredTitle => 'Apparier pour commencer';
+
+  @override
+  String get welcomeSlideRequiredBody =>
+      'EnvoyHome a besoin d’un ordinateur avec l’app bureau. Agents et contrôle maison y tournent — appariez ce téléphone pour continuer.';
+
+  @override
+  String get setupGuideTitle => 'Comment fonctionne EnvoyHome';
+
+  @override
+  String get setupGuideIntro =>
+      'EnvoyHome sur le téléphone parle à EnvoyHome sur l’ordinateur de maison. Installez le bureau, appariez une fois, puis discutez et validez de partout.';
+
+  @override
+  String get setupGuidePairRequiredTitle => 'Apparier pour continuer';
+
+  @override
+  String get setupGuidePairRequiredBody =>
+      'EnvoyHome est le compagnon téléphone de votre bureau maison. Sans ordinateur apparié, il n’y a encore rien à afficher ici.';
+
+  @override
+  String get setupGuideStep1Title => 'Préparer un ordinateur';
+
+  @override
+  String get setupGuideStep1Body =>
+      'Il vous faut un Mac ou un PC Windows/Linux à la maison. C’est l’hôte EnvoyHome — démon et agents y tournent.';
+
+  @override
+  String get setupGuideStep2Title => 'Télécharger et installer EnvoyHome';
+
+  @override
+  String get setupGuideStep2Body =>
+      'Ouvrez le QuickStart et installez le démon ainsi que l’app bureau. Lancez-les et laissez-les tourner.';
+
+  @override
+  String get setupGuideDownloadCta => 'Ouvrir le QuickStart EnvoyHome';
+
+  @override
+  String get setupGuideStep3Title => 'Afficher le QR d’appariement';
+
+  @override
+  String get setupGuideStep3Body =>
+      'Dans EnvoyHome bureau : Réglages → Apparier des appareils. Gardez le QR à l’écran (avec mesh/relais, pas LAN seul).';
+
+  @override
+  String get setupGuideStep4Title => 'Scanner avec ce téléphone';
+
+  @override
+  String get setupGuideStep4Body =>
+      'Touchez Apparier maintenant. Autorisez la caméra, scannez le QR. Ou collez un lien envoy:// / hôte:port / SSH.';
+
+  @override
+  String get setupGuideStep5Title => 'Vous êtes connecté';
+
+  @override
+  String get setupGuideStep5Body =>
+      'Après l’appariement, ce téléphone montre chats, validations et Réglages. Le bureau continue même sans téléphone.';
+
+  @override
+  String get setupGuideNoHomeTitle => 'Apparier plus tard convient';
+
+  @override
+  String get setupGuideNoHomeBody =>
+      'Vous pouvez continuer et apparier à tout moment depuis Connexion. Sans ordinateur, il n’y a encore rien à afficher.';
+
+  @override
+  String get setupGuidePairCta => 'Apparier maintenant';
+
+  @override
+  String get setupGuidePairLaterCta => 'Plus tard';
+
+  @override
+  String get setupGuideSkipCta => 'Explorer d’abord';
+
+  @override
+  String get setupGuideDoneCta => 'Compris';
+
+  @override
+  String get settingsSetupGuideSubtitle =>
+      'Installer l’app bureau et apparier ce téléphone.';
 }

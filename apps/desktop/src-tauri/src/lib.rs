@@ -25,9 +25,24 @@ fn resolve_daemon_js(app: &tauri::AppHandle) -> Option<PathBuf> {
       return Some(p);
     }
   }
-  // From apps/desktop (tauri cwd) or apps/desktop/src-tauri.
+  // Packaged installer (scripts/stage-desktop-bundle.mjs → resources/daemon/).
+  // Prefer `.mjs` (always ESM). A legacy `envoyhome-daemon.js` copy is not staged.
+  if let Ok(resource) = app.path().resource_dir() {
+    for rel in [
+      "daemon/main.mjs",
+      "resources/daemon/main.mjs",
+    ] {
+      let candidate = resource.join(rel);
+      if candidate.is_file() {
+        return Some(candidate);
+      }
+    }
+  }
+  // Dev: checkout dist (tsc) or packaged dist-daemon before install staging.
   if let Ok(cwd) = std::env::current_dir() {
     for rel in [
+      "dist-daemon/main.mjs",
+      "../dist-daemon/main.mjs",
       "packages/daemon/dist/bin/envoyhome-daemon.js",
       "../packages/daemon/dist/bin/envoyhome-daemon.js",
       "../../packages/daemon/dist/bin/envoyhome-daemon.js",
@@ -39,10 +54,49 @@ fn resolve_daemon_js(app: &tauri::AppHandle) -> Option<PathBuf> {
       }
     }
   }
+  None
+}
+
+/// Prefer `ENVOYHOME_NODE`, then the staged Node sidecar (installer), then PATH `node`.
+fn resolve_node_exe(app: &tauri::AppHandle) -> PathBuf {
+  if let Ok(raw) = std::env::var("ENVOYHOME_NODE") {
+    let trimmed = raw.trim();
+    if !trimmed.is_empty() {
+      return PathBuf::from(trimmed);
+    }
+  }
   if let Ok(resource) = app.path().resource_dir() {
-    let bundled = resource.join("envoyhome-daemon.js");
-    if bundled.exists() {
-      return Some(bundled);
+    for rel in [
+      "node-runtime/bin/node",
+      "node-runtime/node.exe",
+      "resources/node-runtime/bin/node",
+      "resources/node-runtime/node.exe",
+    ] {
+      let candidate = resource.join(rel);
+      if candidate.is_file() {
+        return candidate;
+      }
+    }
+  }
+  PathBuf::from("node")
+}
+
+/// Staged `resources/push/push-config.json` from `stage-desktop-bundle.mjs`.
+/// The daemon loads it via `ENVOYHOME_PUSH_CONFIG` and resolves AuthKey / FCM
+/// paths relative to that file's directory.
+fn resolve_push_config(app: &tauri::AppHandle) -> Option<PathBuf> {
+  if let Ok(explicit) = std::env::var("ENVOYHOME_PUSH_CONFIG") {
+    let p = PathBuf::from(explicit.trim());
+    if p.is_file() {
+      return Some(p);
+    }
+  }
+  if let Ok(resource) = app.path().resource_dir() {
+    for rel in ["push/push-config.json", "resources/push/push-config.json"] {
+      let candidate = resource.join(rel);
+      if candidate.is_file() {
+        return Some(candidate);
+      }
     }
   }
   None
@@ -223,8 +277,9 @@ fn spawn_daemon(app: &tauri::AppHandle) -> Result<(), String> {
 
   let script =
     resolve_daemon_js(app).ok_or_else(|| {
-      "envoyhome-daemon.js not found — build @envoyhome/daemon (ENVOYHOME_DAEMON_JS)".to_string()
+      "envoyhome-daemon not found — run `pnpm --filter @envoyhome/daemon build` (dev) or `./scripts/build-desktop.sh` (installer), or set ENVOYHOME_DAEMON_JS".to_string()
     })?;
+  let node = resolve_node_exe(app);
 
   let state_dir = std::env::var("ENVOYHOME_STATE_DIR")
     .map(PathBuf::from)
@@ -239,15 +294,21 @@ fn spawn_daemon(app: &tauri::AppHandle) -> Result<(), String> {
   stop_orphan_daemon_on_port(ws_port);
   stop_orphan_daemon_on_port(ws_port.saturating_add(1));
 
-  let child = Command::new("node")
+  let mut cmd = Command::new(&node);
+  cmd
     .arg(&script)
     .env("ENVOYHOME_STATE_DIR", &state_dir)
     .env("ENVOYHOME_MANAGED_BY", "app")
     .stdout(Stdio::null())
     // Inherit stderr so EADDRINUSE / claim errors show in the Tauri console.
-    .stderr(Stdio::inherit())
+    .stderr(Stdio::inherit());
+  // Packaged push credentials (APNs + FCM) — see scripts/stage-desktop-bundle.mjs.
+  if let Some(push_config) = resolve_push_config(app) {
+    cmd.env("ENVOYHOME_PUSH_CONFIG", &push_config);
+  }
+  let child = cmd
     .spawn()
-    .map_err(|e| format!("spawn daemon: {e}"))?;
+    .map_err(|e| format!("spawn daemon ({node:?}): {e}"))?;
 
   let mut guard = state.child.lock().map_err(|e| e.to_string())?;
   *guard = Some(child);

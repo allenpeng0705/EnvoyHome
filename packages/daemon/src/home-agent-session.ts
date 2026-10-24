@@ -21,6 +21,21 @@ function textFromContent(content: ReadonlyArray<ContentBlock>): string {
   return parts.join("\n").trim();
 }
 
+/**
+ * Harness Agent injects `systemPrompt` via `session.appendMessage("system", …)`.
+ * That must never land in the Home chat transcript (UI would show it above
+ * `<think>` / the real reply — desktop; mobile often only saw this line).
+ */
+export function isHarnessAgentSystemPromptLeak(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  return (
+    t.includes("You are EnvoyHome, the household agent") ||
+    t.includes("Design §19.13 P2-E3") ||
+    (t.includes("envoyhome-tools") && t.includes("Available tools:"))
+  );
+}
+
 export type HomeHistoryLine = {
   role: "user" | "assistant" | "system";
   content: string;
@@ -95,15 +110,18 @@ export class HomeAgentSession implements Session {
     content: ReadonlyArray<ContentBlock>,
   ): Promise<void> {
     if (role === "tool") return;
+    // Never persist harness systemPrompt (or any Agent system line) — Home
+    // transcript system rows are TurnService errors / status only.
+    if (role === "system") return;
     if (role === "user" && this.userAlreadyPersisted) {
       this.userAlreadyPersisted = false;
       return;
     }
     if (role === "assistant" && !this.persistAssistant) return;
-    // Assistant/system with only tool_call blocks — no Home transcript line.
+    // Assistant with only tool_call blocks — no Home transcript line.
     const text = textFromContent(content);
     if (!text) return;
-    const wireRole = role === "assistant" || role === "system" || role === "user" ? role : "system";
+    const wireRole = role === "assistant" || role === "user" ? role : "assistant";
     try {
       await appendTranscriptLine(this.sessionDir, {
         role: wireRole,

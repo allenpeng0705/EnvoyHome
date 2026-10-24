@@ -1,8 +1,8 @@
 {
   "name": "envoyhome",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
-  "description": "EnvoyHome \u2014 self-hosted home agent control plane. Workspace root (B0).",
+  "description": "EnvoyHome — self-hosted home agent control plane. Workspace root (B0).",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "engines": {
@@ -26,6 +26,10 @@
     "smoke:v1": "node ./scripts/smoke-v1.mjs",
     "desktop:dev": "./scripts/desktop-dev.sh",
     "desktop:tauri:build": "pnpm --filter @envoyhome/desktop tauri:build",
+    "desktop:build": "./scripts/build-desktop.sh",
+    "desktop:stage": "node ./scripts/stage-desktop-bundle.mjs",
+    "version:desktop": "node ./scripts/sync-desktop-version.mjs",
+    "version:desktop:check": "node ./scripts/sync-desktop-version.mjs --check",
     "mobile:test": "./scripts/mobile-test.sh",
     "mobile:live": "./scripts/mobile-live-smoke.sh",
     "mobile:flutter": "cd apps/mobile && flutter pub get && flutter test"

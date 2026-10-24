@@ -67,6 +67,143 @@ test("V-CRON-NL: in N minutes is relative to referenceNow only", () => {
   assert.equal(when.getTime(), REF.getTime() + 20 * 60_000);
 });
 
+test("V-CRON-NL: multi-locale duration offsets (sec/min/hr + articles)", () => {
+  const cases: Array<{ text: string; ms: number }> = [
+    { text: "in a minute", ms: 60_000 },
+    { text: "after 2 hours ping me", ms: 2 * 3_600_000 },
+    { text: "Remind me in 30 seconds", ms: 30_000 },
+    { text: "in half a minute", ms: 30_000 },
+    { text: "过半分钟给我回复一条消息", ms: 30_000 },
+    { text: "半小时后提醒我", ms: 30 * 60_000 },
+    { text: "一分钟后", ms: 60_000 },
+    { text: "两小时后叫我", ms: 2 * 3_600_000 },
+    { text: "in einer Minute", ms: 60_000 },
+    { text: "nach 2 Stunden", ms: 2 * 3_600_000 },
+    { text: "dans une heure", ms: 3_600_000 },
+    { text: "dans 2 minutes", ms: 2 * 60_000 },
+    { text: "tra un'ora", ms: 3_600_000 },
+    { text: "tra 2 minuti", ms: 2 * 60_000 },
+    { text: "5分後", ms: 5 * 60_000 },
+    { text: "2시간 후", ms: 2 * 3_600_000 },
+  ];
+  for (const { text, ms } of cases) {
+    const r = at(text);
+    assert.ok(r.ok, text);
+    if (!r.ok) continue;
+    assert.equal(r.spec.kind, "at", text);
+    assert.equal(
+      new Date(r.spec.whenInstant!).getTime(),
+      REF.getTime() + ms,
+      text,
+    );
+  }
+});
+
+test("V-CRON-NL: fuzzy before/by/around/after+clock → ambiguous + resolvable candidates", () => {
+  const afternoon = REF; // 14:00 local Friday — 9am is tomorrow
+  const cases = [
+    "Remind me before 9 am",
+    "Remind me by 9am to leave",
+    "Remind me around 9 am",
+    "Remind me after 9am",
+    "9点前提醒我",
+    "9点左右叫我",
+    "vor 9 Uhr erinnern",
+    "avant 9h",
+  ];
+  for (const text of cases) {
+    const r = resolveScheduleFromText({
+      text,
+      referenceNow: afternoon,
+      timeZone: TZ,
+    });
+    assert.equal(r.ok, false, text);
+    if (r.ok) continue;
+    assert.equal(r.reason, "ambiguous", text);
+    assert.ok(r.candidates && r.candidates.length >= 2, text);
+    for (const c of r.candidates!) {
+      const picked = resolveScheduleFromText({
+        text: c,
+        referenceNow: afternoon,
+        timeZone: TZ,
+      });
+      assert.ok(picked.ok, `${text} candidate ${c}`);
+    }
+  }
+
+  // Exact "at 9am" still resolves (not fuzzy).
+  const exact = at("Remind me at 9 am");
+  assert.ok(exact.ok);
+
+  // Duration "after 2 hours" must NOT become fuzzy-after.
+  const dur = at("Remind me after 2 hours");
+  assert.ok(dur.ok);
+  if (dur.ok) {
+    assert.equal(
+      new Date(dur.spec.whenInstant!).getTime(),
+      REF.getTime() + 2 * 3_600_000,
+    );
+  }
+});
+
+test("V-CRON-NL: between 9 and 10 → ambiguous range candidates", () => {
+  const r = at("Remind me between 9am and 10am");
+  assert.equal(r.ok, false);
+  if (!r.ok) {
+    assert.equal(r.reason, "ambiguous");
+    assert.ok(r.candidates && r.candidates.length >= 2);
+  }
+});
+
+test("V-CRON-NL: DE vor / FR avant need nearby clock; bare Nh needs soft cue", () => {
+  // Past relative must not become fuzzy-before.
+  const pastDe = at("vor drei Tagen erinnern");
+  assert.equal(pastDe.ok, false);
+  if (!pastDe.ok) assert.notEqual(pastDe.reason, "ambiguous");
+
+  // Clock-adjacent DE/FR still fuzzy-ask.
+  for (const text of ["vor 9 Uhr erinnern", "avant 9h"]) {
+    const r = at(text);
+    assert.equal(r.ok, false, text);
+    if (!r.ok) {
+      assert.equal(r.reason, "ambiguous", text);
+      assert.ok(r.candidates && r.candidates.length >= 2, text);
+    }
+  }
+
+  // Bare FR "9h" without soft cue must not invent a clock resolve.
+  const bareFr = at("Rappelle-moi 9h");
+  assert.equal(bareFr.ok, false);
+  if (!bareFr.ok) {
+    assert.ok(
+      bareFr.reason === "missing_time" || bareFr.reason === "not_schedule",
+      bareFr.reason,
+    );
+  }
+});
+
+test("V-CRON-NL: in N days needs a clock; with clock resolves", () => {
+  const bare = at("Remind me in 2 days");
+  assert.equal(bare.ok, false);
+  if (!bare.ok) assert.equal(bare.reason, "missing_time");
+
+  const typo = at("Remind me in 2 dyas at 9am");
+  assert.ok(typo.ok, "dyas typo");
+  if (typo.ok) {
+    const p = zonedParts(new Date(typo.spec.whenInstant!), TZ);
+    assert.equal(p.day, 11); // REF Fri 10-09 + 2 days = Sun 10-11
+    assert.equal(p.hour, 9);
+  }
+
+  const zh = at("2天后上午九点提醒我");
+  assert.ok(zh.ok);
+  if (zh.ok) {
+    const p = zonedParts(new Date(zh.spec.whenInstant!), TZ);
+    assert.equal(p.day, 11);
+    assert.equal(p.hour, 9);
+  }
+});
+
 test("V-CRON-NL: missing time asks — does not guess", () => {
   const r = at("Remind me to call mom");
   assert.equal(r.ok, false);

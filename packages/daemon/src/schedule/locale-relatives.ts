@@ -27,6 +27,21 @@ export type UnitOffsetHit = {
   direction: "ahead" | "ago";
 };
 
+/**
+ * Clock-additive duration (seconds / minutes / hours) — not calendar day/month/year.
+ * `in a minute` / `after 2 hours` / `半分钟后` / `dans une heure` / …
+ */
+export type DurationOffsetHit = {
+  ms: number;
+  unit: "second" | "minute" | "hour";
+};
+
+/**
+ * Fuzzy / soft WHEN around a clock — never invent a lead time (Design §7.4).
+ * Caller asks with {@link formatRelativeDayClock} candidates.
+ */
+export type FuzzyWhenKind = "before" | "after" | "around" | "between";
+
 export type MonthYearHit =
   | { kind: "next_month" }
   | { kind: "month_after_next" }
@@ -115,15 +130,168 @@ const DAY_OFFSET: Array<{ days: number; re: RegExp }> = [
 const UNIT_AHEAD: Array<{ unit: UnitOffsetHit["unit"]; re: RegExp }> = [
   {
     unit: "day",
-    re: /(\d+)\s*(?:days?\s+later|days?\s+from\s+now|日後|天后|日内|jours?\s+plus\s+tard|tagen?\s+später|giorni\s+dopo|일\s*후)/iu,
+    // EN "in 2 days" / "after 2 days" + "2 days later"; DE/FR/IT/ZH/JA/KO packs.
+    // Allow light EN typo "dyas" (common phone mistype).
+    re: /(?:(?:\bin|after)\s+)?(\d+)\s*(?:d(?:ays?|yas?)(?:\s+later|\s+from\s+now)?|日後|天后|日内|jours?(?:\s+plus\s+tard)?|tagen?(?:\s+später)?|giorni(?:\s+dopo)?|일\s*후)/iu,
   },
   {
     unit: "month",
-    re: /(\d+)\s*(?:months?\s+later|months?\s+from\s+now|个月后|個月後|ヶ月後|mois\s+plus\s+tard|monaten?\s+später|mesi\s+dopo|달\s*후|개월\s*후)/iu,
+    re: /(?:(?:\bin|after)\s+)?(\d+)\s*(?:months?(?:\s+later|\s+from\s+now)?|个月后|個月後|ヶ月後|mois(?:\s+plus\s+tard)?|monaten?(?:\s+später)?|mesi(?:\s+dopo)?|달\s*후|개월\s*후)/iu,
   },
   {
     unit: "year",
-    re: /(\d+)\s*(?:years?\s+later|years?\s+from\s+now|年后|年後|ans?\s+plus\s+tard|jahren?\s+später|anni\s+dopo|년\s*후)/iu,
+    re: /(?:(?:\bin|after)\s+)?(\d+)\s*(?:years?(?:\s+later|\s+from\s+now)?|年后|年後|ans?(?:\s+plus\s+tard)?|jahren?(?:\s+später)?|anni(?:\s+dopo)?|년\s*후)/iu,
+  },
+];
+
+/** Word / Chinese numerals used in duration phrases (a minute, 两小时, une heure). */
+function parseDurationAmount(raw: string): number | undefined {
+  // Strip Italian/French elision mark: un'ora → un
+  const s = raw.trim().toLowerCase().replace(/['']$/u, "");
+  if (!s) return undefined;
+  if (/^\d+$/.test(s)) {
+    const n = parseInt(s, 10);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  }
+  const words: Record<string, number> = {
+    a: 1,
+    an: 1,
+    one: 1,
+    two: 2,
+    three: 3,
+    four: 4,
+    five: 5,
+    six: 6,
+    seven: 7,
+    eight: 8,
+    nine: 9,
+    ten: 10,
+    eleven: 11,
+    twelve: 12,
+    // DE
+    eine: 1,
+    einer: 1,
+    einem: 1,
+    einen: 1,
+    zwei: 2,
+    drei: 3,
+    vier: 4,
+    fünf: 5,
+    // FR
+    une: 1,
+    un: 1,
+    deux: 2,
+    trois: 3,
+    quatre: 4,
+    cinq: 5,
+    // IT
+    uno: 1,
+    una: 1,
+    due: 2,
+    tre: 3,
+    quattro: 4,
+    cinque: 5,
+    // ZH / JA digits-as-words (shared CJK)
+    一: 1,
+    二: 2,
+    两: 2,
+    兩: 2,
+    三: 3,
+    四: 4,
+    五: 5,
+    六: 6,
+    七: 7,
+    八: 8,
+    九: 9,
+    十: 10,
+  };
+  return words[s];
+}
+
+/**
+ * Half-unit idioms first (半分钟 / half a minute / demi-heure), then numbered
+ * second / minute / hour packs for every product UI locale.
+ */
+const DURATION_HALF: Array<{ ms: number; unit: DurationOffsetHit["unit"]; re: RegExp }> = [
+  {
+    ms: 30_000,
+    unit: "second",
+    re: any([
+      /过?半\s*分钟/,
+      /半\s*分钟\s*后/,
+      /\bhalf\s+(?:a\s+)?minute\b/i,
+      /\bin\s+half\s+(?:a\s+)?minute\b/i,
+      /\bafter\s+half\s+(?:a\s+)?minute\b/i,
+      /\bin\s+einer\s+halben\s+minute\b/i,
+      /\bdans\s+(?:une\s+)?demi[- ]?minute\b/i,
+      /\bmezzo\s+minuto\b/i,
+      /半分後|はんぶんご/i,
+      /30\s*초\s*후|반\s*분\s*후/,
+    ]),
+  },
+  {
+    ms: 30 * 60_000,
+    unit: "minute",
+    re: any([
+      /过?半\s*小时/,
+      /半\s*(?:个|個)?\s*小时\s*后/,
+      /\bhalf\s+(?:an\s+)?hour\b/i,
+      /\bin\s+half\s+(?:an\s+)?hour\b/i,
+      /\bafter\s+half\s+(?:an\s+)?hour\b/i,
+      /\bin\s+einer\s+halben\s+stunde\b/i,
+      /\bdans\s+(?:une\s+)?demi[- ]?heure\b/i,
+      /\bmezz['']?\s*ora\b/i,
+      /半時間後|はんじかんご/i,
+      /30\s*분\s*후|반\s*시간\s*후/,
+    ]),
+  },
+];
+
+/** EN/DE/FR/IT prepositions before the amount; ZH/JA/KO often use suffix 后/後/후 only. */
+const DURATION_PRE =
+  "(?:(?:\\b(?:in|after|within|nach)\\b|\\bdans\\b|\\bapr[eè]s\\b|\\btra\\b|\\bdopo\\b|\\bfra\\b)\\s+|过|再)?";
+const DURATION_AMT = "(\\d+|[a-zàâäéèêëïîôùûüç']+|[一二两三兩四五六七八九十]+)";
+const DURATION_TAIL =
+  "(?:后|後|later|from\\s+now|später|plus\\s+tard|dopo|후)?";
+
+/**
+ * Latin unit tokens MUST use `\b` — otherwise `mins?` matches the `min` inside
+ * "Remind" and duration lookup returns undefined after a bogus capture.
+ * CJK units rely on script boundaries (JS `\b` is ASCII-only).
+ */
+const DURATION_NUMBERED: Array<{
+  unit: DurationOffsetHit["unit"];
+  msPer: number;
+  maxN: number;
+  re: RegExp;
+}> = [
+  {
+    unit: "second",
+    msPer: 1_000,
+    maxN: 3600,
+    re: new RegExp(
+      `${DURATION_PRE}${DURATION_AMT}\\s*(?:\\bseconds?\\b|\\bsecs?\\b|\\bsekunden?\\b|\\bsecondes?\\b|\\bsecondi\\b|秒(?:钟|鐘)?|초)\\s*${DURATION_TAIL}`,
+      "iu",
+    ),
+  },
+  {
+    unit: "minute",
+    msPer: 60_000,
+    maxN: 43200,
+    re: new RegExp(
+      `${DURATION_PRE}${DURATION_AMT}\\s*(?:\\bminutes?\\b|\\bmins?\\b|\\bminuten?\\b|\\bminuti\\b|分钟|分鐘|分(?!钟|鐘)|분)\\s*${DURATION_TAIL}`,
+      "iu",
+    ),
+  },
+  {
+    unit: "hour",
+    msPer: 3_600_000,
+    maxN: 720,
+    // Optional apostrophe: Italian un'ora / French glue before heure.
+    re: new RegExp(
+      `${DURATION_PRE}${DURATION_AMT}\\s*['']?(?:\\bhours?\\b|\\bhrs?\\b|\\bstunden?\\b|\\bheures?\\b|\\bore\\b|\\bora\\b|小时|小時|時間|시간)\\s*${DURATION_TAIL}`,
+      "iu",
+    ),
   },
 ];
 
@@ -318,6 +486,26 @@ export function matchUnitOffset(text: string): UnitOffsetHit | undefined {
   return undefined;
 }
 
+/**
+ * Relative duration from now (additive ms). Seconds / minutes / hours across
+ * product UI locales — calendar day/month/year stay on {@link matchUnitOffset}.
+ */
+export function matchDurationOffset(text: string): DurationOffsetHit | undefined {
+  for (const row of DURATION_HALF) {
+    if (row.re.test(text)) return { ms: row.ms, unit: row.unit };
+  }
+  // Prefer longer units last so "2 hours" is not stolen by a stray "2" + noise;
+  // try hour → minute → second so "90 minutes" wins over embedding "90".
+  for (const row of [...DURATION_NUMBERED].reverse()) {
+    const m = row.re.exec(text);
+    if (!m) continue;
+    const n = parseDurationAmount(m[1]!);
+    if (n === undefined || n <= 0 || n > row.maxN) continue;
+    return { ms: Math.round(n * row.msPer), unit: row.unit };
+  }
+  return undefined;
+}
+
 export function matchMonthYear(text: string): MonthYearHit | undefined {
   for (const row of MONTH_YEAR) {
     if (row.re.test(text)) return row.hit;
@@ -380,6 +568,127 @@ function clockHintLocal(locale: ProductLocale, hour: number, minute: number): st
       const ampm = hour < 12 ? "am" : "pm";
       return minute === 0 ? `${h12}${ampm}` : `${h12}${mm}${ampm}`;
     }
+  }
+}
+
+/**
+ * Self-resolving WHEN label for fuzzy-ask candidates (V-UX-14).
+ * Must parse alone via resolveScheduleFromText (today/tomorrow + clock).
+ */
+export function formatRelativeDayClock(
+  locale: ProductLocale,
+  day: "today" | "tomorrow",
+  hour: number,
+  minute: number,
+): string {
+  const c = clockHintLocal(locale, hour, minute);
+  switch (locale) {
+    case "zh":
+      return day === "today" ? `今天${c}` : `明天${c}`;
+    case "ja":
+      return day === "today" ? `今日${c}` : `明日${c}`;
+    case "ko":
+      return day === "today" ? `오늘 ${c}` : `내일 ${c}`;
+    case "de":
+      return day === "today" ? `heute um ${c}` : `morgen um ${c}`;
+    case "fr":
+      return day === "today" ? `aujourd'hui à ${c}` : `demain à ${c}`;
+    case "it":
+      return day === "today" ? `oggi alle ${c}` : `domani alle ${c}`;
+    default:
+      return day === "today" ? `today at ${c}` : `tomorrow at ${c}`;
+  }
+}
+
+/**
+ * Soft/fuzzy WHEN packs — deadline, open-after, approximate, range.
+ * Duration phrases (`after 2 hours`) are handled earlier by {@link matchDurationOffset};
+ * call this only after that so hour-offset durations are not stolen.
+ */
+export function matchFuzzyWhenKind(text: string): FuzzyWhenKind | undefined {
+  const lower = text.toLowerCase();
+
+  // Range first (more specific).
+  if (
+    /\bbetween\b/i.test(text) ||
+    /\bfrom\b.+\bto\b/i.test(lower) ||
+    /之间|至(?!\s*少)|から.+まで/.test(text) ||
+    /\bzwischen\b/i.test(text) ||
+    /\bentre\b/i.test(text) ||
+    /\btra\s+le\b/i.test(text)
+  ) {
+    return "between";
+  }
+
+  // Approximate / soft.
+  if (
+    /\b(around|about|approximately|roughly|circa|ish)\b/i.test(lower) ||
+    /\d\s*-?\s*ish\b/i.test(lower) ||
+    /左右|前后|大概|大约|差不多/.test(text) ||
+    /\bgegen\b/i.test(text) ||
+    /\bvers\b/i.test(text) ||
+    /\benviron\b/i.test(text) ||
+    /\bverso\b/i.test(text) ||
+    /頃|ぐらい|くらい/.test(text) ||
+    /쯤|경/.test(text)
+  ) {
+    return "around";
+  }
+
+  // Deadline / upper bound (before / by / no later than).
+  // DE `vor` / FR `avant` require a nearby clock — bare "vor"/"avant" alone is too
+  // broad (e.g. "vor drei Tagen", "avant-hier" already handled as day-offset).
+  if (
+    /\b(before|by|no\s+later\s+than|at\s+the\s+latest|not\s+after)\b/i.test(lower) ||
+    /点前|之前|前为止|前告诉|前叫/.test(text) ||
+    /\bvor\s+(?:\d{1,2}|mittag|mitternacht)/i.test(text) ||
+    /\bvor\b(?=[\s\S]{0,32}\buhr\b)/i.test(text) ||
+    /\bbis\s+(spätestens\s+)?/i.test(text) ||
+    /\bspätestens\b/i.test(text) ||
+    /\bavant\s+(?:\d{1,2}|midi|minuit)/i.test(text) ||
+    /\bavant\b(?=[\s\S]{0,24}\d{1,2}\s*h)/i.test(text) ||
+    /\bau\s+plus\s+tard\b/i.test(text) ||
+    /\bd['']ici\b/i.test(text) ||
+    /\bprima\s+(delle?|di|che)\b/i.test(text) ||
+    /\bentro\b/i.test(text) ||
+    /前に|までに/.test(text) ||
+    /전에|까지/.test(text)
+  ) {
+    return "before";
+  }
+
+  // Open lower bound after a clock (not duration — those already matched).
+  // "after" must sit next to the clock — never steal "week after next Monday at 9".
+  if (
+    /\bafter\s+(?:\d{1,2}(?::\d{2})?\s*(?:am|pm)\b|\d{1,2}:\d{2}\b|noon\b|midnight\b)/i.test(
+      lower,
+    ) ||
+    /点后|点之後|点之后/.test(text) ||
+    /\bnach\s+\d{1,2}(?:[:.]\d{2})?\s*uhr\b/i.test(text) ||
+    /\baprès\s+\d{1,2}\s*h(?:eurs?)?\b/i.test(text) ||
+    /\bdopo\s+le\s+\d{1,2}\b/i.test(text) ||
+    (/\d{1,2}\s*時/.test(text) && /の?\s*後に|あとで/.test(text)) ||
+    (/\d{1,2}\s*시/.test(text) && /후에/.test(text))
+  ) {
+    return "after";
+  }
+
+  return undefined;
+}
+
+/** Minute offsets from the anchor clock for fuzzy-ask candidates. */
+export function fuzzyOffsetMinutes(kind: FuzzyWhenKind): number[] {
+  switch (kind) {
+    case "before":
+      return [-60, -30, -15, 0];
+    case "after":
+      return [0, 15, 30, 60];
+    case "around":
+      return [-15, 0, 15];
+    case "between":
+      return [0]; // endpoints filled by caller
+    default:
+      return [0];
   }
 }
 

@@ -5,7 +5,7 @@
 | **Document** | Single all-in-one design for EnvoyHome |
 | **Role** | Ground truth for **implementation** and **verification** |
 | **Status** | Living draft — refine in place; bump changelog |
-| **Last updated** | 2026-10-20 (Phase 2 P2-E3 parent Agent §19.13) |
+| **Last updated** | 2026-10-24 (turn-push privacy) |
 | **Not** | A port of HomeClaw; a clone of Hermes / OpenClaw / OpenHuman |
 
 **How to use this doc**
@@ -22,6 +22,17 @@
 
 | Date | Change |
 |------|--------|
+| 2026-10-24b | **Normative (push wake):** Turn-finished APNs/FCM body is **generic** (localized “reply ready” from account `locale`; never assistant `preview` on the lock screen). Prefer fan-out to the originating `deviceId` when present (else account fan-out). Live touch skips `home.subscribe` / `home.hello` / `home.health`. Soft/fuzzy DE `vor` / FR `avant` require a nearby clock; FR bare `Nh` only with a soft cue. Ambiguous schedule propose surfaces `schedule_candidates` choice + structured tool JSON. §11.3 / A.4. No wire bump. |
+| 2026-10-24 | **Adapt (§7.4 NL packs):** Soft/fuzzy WHEN (`before`/`by`/`around`/`about`/`after`+clock / `between`, + ZH `点前`/`左右` + DE/FR/IT/JA/KO packs) → **`ambiguous`** with self-resolving today/tomorrow candidates (15/30/60 min offsets) — never invent lead time. Exact `at 9am` still resolves. Duration `after 2 hours` unchanged. No wire bump. |
+| 2026-10-24 | **Adapt (§7.4 NL packs):** Relative **durations** (seconds / minutes / hours) across all product UI locales — `in a minute`, `after 2 hours`, `过半分钟`, `dans une heure`, `tra un'ora`, `nach 2 Stunden`, `5分後`, `2시간 후`, half-minute/half-hour idioms, Arabic + word/CJK amounts. Calendar `in N days` / `after N days` (incl. light `dyas` typo) still needs a clock. No wire bump. |
+| 2026-10-24 | **Normative (push wake catalogue):** `home:turn-finished` with `status: ok` is an **interactive** wake (`data.type: turn`, suppressIfLive) so a phone that sent a message then backgrounded/force-quit still gets a reply banner. WS disconnect clears that device's live-presence bit (kill-app must not stay "recently active" for 20s). Soft disconnect still keeps the token. §11.3. No wire bump. |
+| 2026-10-22f | **Normative (push wake catalogue):** Desktop→mobile APNs/FCM catalogue — interactive (`approval-needed` / `choice-needed` / heartbeat needs-attention) suppress when **that device** recently active; schedule `notify` + standing-order notify **always** wake; never push turn replies (desktop- or phone-originated). Soft disconnect keeps token; forget/revoke unregisters. `home.sendTestPush` Owner-scope (not loopback-only). §7.4 notify + §11.3. No wire bump. |
+| 2026-10-22e | **Product (mobile gaps):** §11.3/Q12 text matches shipped Flutter thin client; System → This machine (read-only health); workflow Diagram↔YAML toggle; live verify + privacy/store listing docs; Android release keystore pattern; iOS Release `aps-environment=production`; CI mobile job; l10n pairing hint fix. No wire bump. |
+| 2026-10-22d | **Product (early-adopter):** Freeze marketing claims in [`reviews/2026-10-22-early-adopter-claims.md`](reviews/2026-10-22-early-adopter-claims.md) — Mesh phone + desktop + HA/MQTT demo/fixture in; **no** `v1.0.0` tag, **no** Privacy Mode product claim (`home.setPrivacyMode` remains §19.4), **no** production IM-zoo claim until live verify. Live HA ops checklist: `docs/smart-home-live-checklist.md`. No wire bump. |
+| 2026-10-22c | **Hygiene:** Agent-accepted L7 skills are **household** SkillService packs (`stateDir/skills/`; L7 adapter ignores `accountId`). Boot migrates orphan flat `accounts/*/skills/*.md` → unverified packs. Catalogue `home.getMediaGenerateConfig` / `home.setMediaGenerateConfig` in §4.3.1 + Appendix A (account-scoped). No wire bump. |
+| 2026-10-22b | **Ship (Hermes Adapt §9.2/§9.3):** Builtin `skill_propose` (`action`: `create`\|`patch`\|`delete`, `id`, optional `content`/`summary`) — risk `write`; enqueues PendingLearn only (no silent SKILL.md write; **no** `skill_manage`). On `home.acceptLearn`, materialize into household SkillService pack (`skills/<id>/SKILL.md`) with `verified:false` / `enabled:false` until `home.verifySkill` (V-SKILL-1). Patch accept resets verified/enabled. No wire bump. |
+| 2026-10-22a | **Ship (Hermes Adapt §9.2):** Agent-facing progressive skill disclosure — builtins `skills_list` (verified catalogue) + `skill_view` (body / optional `references/` under skill root, path-jailed). Risk `read`; no write / no `skill_manage`. `skill:<id>` remains as a one-shot load shortcut. No silent overwrite (§9.3). No wire bump. |
+| 2026-10-22 | **Owner decision (§19.3):** OpenClaw-shaped **device nodes** (camera / screen / computer-use / `nodes` tool) stay **Defer** — no core epic, no `nodes` builtin. Phone remains thin-client → hosting daemon. If device capabilities are needed later, investigate **EnvoyMesh** capability edge first; require Owner Accept before any EnvoyHome coding. No wire bump. |
 | 2026-10-20t | **Ship (P2-E3):** Parent harness turns use envoy-harness `Agent.run` (HomeModelAdapter + full Home ToolRegistry + `meshSubmitter` for `task` + Home transcript Session). TurnService preambles (`plannedTools` / schedule affirm / home recover callbacks) stay outside Agent. `runTurn` retained as tested fallback (`ENVOYHOME_PARENT_AGENT=0` rollback). Q10 + `sessions_spawn` Reject unchanged. V-P2-AGENT-4. No wire bump. |
 | 2026-10-20s | **Ship (P2-E2 honesty):** `task` children are real envoy-harness `LocalMeshSubmitter` + `Agent` (HomeModelAdapter + jail ToolRegistry). Parent turn remains harness-host `runTurn`. Caps unchanged. V-P2-AGENT-3. No wire bump. |
 | 2026-10-20r | **Ship (P2-E2):** Builtin `task` tool — parallel children via envoy-harness `mapBoundedParallel` (caps: 8/call, parallel 4, account 8). `spawn_helper` thin wrapper (`via: "task"`). OpenClaw `sessions_spawn` still Reject. V-P2-AGENT-3. No wire bump. |
@@ -193,7 +204,7 @@
 | 2026-10-09k | **Product:** Settings §10.1 nav (bindings/skills/workflows/artifacts/harness) + smart-home bind/flags/journal (V-UX-6); Approvals labels actuations (V-UX-7). Mobile Artifacts tab opens signed URLs. No wire break. |
 | 2026-10-09j | **Additive:** `home.hello` optionally returns `accountIds` (+ `deviceId` for paired devices) so the mobile thin client can pick the mint-bound account. Desktop Approvals/Pairing gain grants + revoke (V-UX-2). Demo IM parked. |
 | 2026-10-09i | **Product:** Telegram demo IM — Settings Channels form (V-UX-3), pairing hint on unbound sender, operator checklist `docs/telegram-demo-setup.md`. No wire break. |
-| 2026-10-09h | **Additive:** `home.sendTestPush` (loopback-owner). Daemon dispatches APNs/FCM on `home:approval-needed` when credentials are configured (`APNS_*` / `FCM_*` or `push-config.json`). Operator checklist: `docs/mobile-ios-android-setup.md`. |
+| 2026-10-09h | **Additive:** `home.sendTestPush` (Owner-scope — see `2026-10-22f`). Daemon dispatches APNs/FCM on interactive wakes when credentials are configured (`APNS_*` / `FCM_*` or `push-config.json`). Operator checklist: `docs/mobile-ios-android-setup.md`. |
 | 2026-10-09g | **Additive:** `home.registerPushToken` / `home.unregisterPushToken` (paired-device; APNs iOS + FCM Android). Flutter shell `apps/mobile` bundle/application id `com.envoymesh.envoyhome`. Discovered via `home.hello.methods[]`; no `protocolApiVersion` bump. |
 | 2026-10-09e | **Additive:** `home.setMemorySettings` (account-scoped) — flush/review toggles + session retention for Settings Memory (V-UX-MEM-1 / V-UX-5). Discovered via `home.hello.methods[]`; no `protocolApiVersion` bump. `home.health` optionally returns `wsPort` / `httpPort` / `publicBaseUrl` (V-UX-4). |
 | 2026-10-09 | **G1/G6 re-accepted for changelog `2026-10-08f`** (owner: Allen Peng). Packet [`reviews/2026-10-08f-acceptance.md`](reviews/2026-10-08f-acceptance.md). Residual gaps in §15.2 remain non-gating (live HA C.4 optional; B14 live exercise ongoing; Phase 2 Privacy/mobile/IM out of this Accept). Product order: desktop → EnvoyMesh mobile → demo IM last. |
@@ -468,7 +479,7 @@ Three transports carry `home.*`: the local/LAN WebSocket host (reuse-host), the 
 | **Skills** | `home.listSkills`, `home.searchClawHubSkills`, `home.installSkill`, `home.removeSkill`, `home.verifySkill` | AgentSkills / ClawHub path |
 | **Profile / memory** | `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.recall`, `home.forget`, `home.listMemory`, `home.setMemorySettings`, `home.compactMemory` | Account-scoped |
 | **Learning** | `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn` | Gated skill/memory patches (§9.3) |
-| **Artifacts** | `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl` | Mesh-first bytes + folder browse + optional signed HTTP (§9.5 / §4.1b) |
+| **Artifacts** | `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getMediaGenerateConfig`, `home.setMediaGenerateConfig` | Mesh-first bytes + folder browse + optional signed HTTP (§9.5 / §4.1b); image_generate Owner config (§19.12 D2) |
 | **Doctor** | `home.doctor`, `home.doctorFix` | Config migrations |
 
 ### 3.5 Events (Normative initial set)
@@ -781,7 +792,7 @@ Verification: V-SEC-13, V-SEC-14, V-SEC-20; Settings on `account.detail` (§10.1
 |-------|---------|------|
 | **loopback-owner** | `home.getDaemonLog`, `home.shutdown`, `home.getServiceStatus`, `home.installService`, `home.uninstallService`, `home.restartService` | Only from the home machine Settings window — never over mesh, never from a paired device. Host OS / process lifecycle. |
 | **owner-scope** | `home.mintPairing`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts`, `home.listPairedDevices`, `home.sendTestPush`, `home.transferHouseholdOwner`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig`, `home.setBinding`, `home.removeBinding`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations`, `home.createAccount`, `home.deleteAccount`, `home.enableChannel`, `home.disableChannel`, `home.setChannelConfig`, `home.stopDemoHa`, `home.stopDemoMqtt`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.searchClawHubSkills`, `home.installSkill`, `home.verifySkill`, `home.removeSkill`, `home.setHarness`, `home.doctorFix`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate` | **`isHouseholdOwner(caller)`** (§4.1.1): loopback **or** device with `accountIds = [ownerAccountId]`. Mobile OK. `setWorkspace` filesystem root only for Owner seat (R3). |
-| **account-scoped** | bootstrap/negotiation: `home.hello`, `home.health`, `home.subscribe`, `home.meshStatus`, `home.registerPushToken`, `home.unregisterPushToken`. Reads of shared catalogs: `home.listAccounts`, `home.listChannels`, `home.getChannelStatus`, `home.listHarnesses`, `home.listProviders`, `home.listWorkflows`, `home.getWorkflow`, `home.listSkills`, `home.doctor`, `home.listWorkflowStepTemplates`, `home.getDemoHaStatus`, `home.getDemoMqttStatus`, `home.listSources` (household object registry — Design `2026-10-16l`), `home.getHouseholdOwner`. Seat-or-Owner (§4.1.1 `mayActForSeat`): `home.listGrants`, `home.revokeGrant`, `home.listBindings`, `home.updateAccount` (field rules: `toolPolicy` still Owner-only), `home.getWorkspace`. Own-account data: `home.getUsage`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.listMemory`, `home.setMemorySettings`, `home.recall`, `home.forget`, `home.compactMemory`, `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.clearTranscript`, `home.deleteTranscriptMessages`, `home.archiveSession`, `home.unarchiveSession`, `home.removeSession`, `home.renameSession`, `home.listChoices`, `home.answerChoice`, `home.listSessions`, `home.listApprovals`, `home.answerApproval`, `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.cancelScheduleProposal`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts`, `home.getHeartbeatConfig`, `home.setHeartbeatConfig`, `home.listStandingOrders`, `home.putStandingOrder`, `home.removeStandingOrder`, `home.setStandingOrderEnabled`, `home.runWorkflow`, `home.listWorkflowTools`, `home.startDemoHa`, `home.startDemoMqtt` | Default: device bound to that account (§4.1). **Seat-or-Owner** as §4.1.1. Zero-binding devices may still call bootstrap methods including push register/unregister. A method that appears in **none** of the three rows is a spec bug — `scripts/docs-lint.mjs` fails the build if a catalogued method is missing here. |
+| **account-scoped** | bootstrap/negotiation: `home.hello`, `home.health`, `home.subscribe`, `home.meshStatus`, `home.registerPushToken`, `home.unregisterPushToken`. Reads of shared catalogs: `home.listAccounts`, `home.listChannels`, `home.getChannelStatus`, `home.listHarnesses`, `home.listProviders`, `home.listWorkflows`, `home.getWorkflow`, `home.listSkills`, `home.doctor`, `home.listWorkflowStepTemplates`, `home.getDemoHaStatus`, `home.getDemoMqttStatus`, `home.listSources` (household object registry — Design `2026-10-16l`), `home.getHouseholdOwner`. Seat-or-Owner (§4.1.1 `mayActForSeat`): `home.listGrants`, `home.revokeGrant`, `home.listBindings`, `home.updateAccount` (field rules: `toolPolicy` still Owner-only), `home.getWorkspace`. Own-account data: `home.getUsage`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getMediaGenerateConfig`, `home.setMediaGenerateConfig`, `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.listMemory`, `home.setMemorySettings`, `home.recall`, `home.forget`, `home.compactMemory`, `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.clearTranscript`, `home.deleteTranscriptMessages`, `home.archiveSession`, `home.unarchiveSession`, `home.removeSession`, `home.renameSession`, `home.listChoices`, `home.answerChoice`, `home.listSessions`, `home.listApprovals`, `home.answerApproval`, `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.cancelScheduleProposal`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts`, `home.getHeartbeatConfig`, `home.setHeartbeatConfig`, `home.listStandingOrders`, `home.putStandingOrder`, `home.removeStandingOrder`, `home.setStandingOrderEnabled`, `home.runWorkflow`, `home.listWorkflowTools`, `home.startDemoHa`, `home.startDemoMqtt` | Default: device bound to that account (§4.1). **Seat-or-Owner** as §4.1.1. Zero-binding devices may still call bootstrap methods including push register/unregister. A method that appears in **none** of the three rows is a spec bug — `scripts/docs-lint.mjs` fails the build if a catalogued method is missing here. |
 
 A method's scope is **transport-independent** (§3.3.1), except loopback-owner methods which are refused on both remote transports. Owner-scope over mesh requires an **exclusive** Owner-bound device.
 
@@ -1733,7 +1744,7 @@ Rules:
 
 **Propose visibility (Normative — `2026-10-19j` / `2026-10-19l`):** Chat propose tool output MAY stay structured for the model, but the harness turn text and thin-client bubbles MUST surface **`resolvedLocal`** in plain language — never dump raw propose JSON as the user-visible body. Propose MAY also include additive **`relativeHint`** / **`nextRunAt`** (preview from the same `computeNext` math as arm). If the assistant promises a reminder without a `schedule` propose, the harness MUST append a short honesty disclaimer (does not invent WHEN).
 
-**Notify delivery (Normative):** `notify` is delivered on the **EnvoyMesh super channel** — live paired thin clients receive `home:schedule-fired`; registered phones additionally get APNs/FCM. `deliveryStatus` is `delivered` when at least one of those paths succeeds, else `not-delivered`. IM ChannelPlugins are optional extra outlets, not the default.
+**Notify delivery (Normative):** `notify` is delivered on the **EnvoyMesh super channel** — live paired thin clients receive `home:schedule-fired`; registered phones **always** get APNs/FCM for `payload.kind === notify` (banner is the product — do **not** suppress when that device is live). `deliveryStatus` is `delivered` when at least one of those paths succeeds, else `not-delivered`. IM ChannelPlugins are optional extra outlets, not the default. See §11.3 push wake catalogue for the full APNs/FCM matrix.
 
 **Consolidate / review clock:** each watched account gets `system:consolidate:<accountId>` at `consolidateAt` (default `03:30` local, Memory Design §9). When `reviewEnabled`, also `system:review:<accountId>` (nightly). Flush remains primarily mid-session (Memory Design §8); a scheduled `system:flush` job MAY exist and MUST execute when fired.
 
@@ -1981,8 +1992,9 @@ Rules:
 - **ClawHub search + install.** `home.searchClawHubSkills` queries the public registry (`GET /api/v1/search`); install still goes through `home.installSkill` `source: "clawhub"` + Verify. Peer UX: EnvoyMesh Skill Manager (HTTP search; EnvoyHome does **not** require the `clawhub` CLI).
 - **OpenClaw skills vs plugins.** OpenClaw / ClawHub **SKILL.md** packs are in scope after our Verify gate. OpenClaw **code plugins** (`package.json` `openclaw.family: "plugin"|"bundle"`, etc.) are **refused** at install — they are not EnvoyHome skills.
 - Progressive disclosure: catalog → load body → `references/` on demand (**Adapt** Hermes).
+- **Agent tools (Normative `2026-10-22a` / `2026-10-22b` / `2026-10-22c`):** Builtin `skills_list` returns the **verified + enabled** catalogue (`id`, `name`, short `description` from frontmatter when present, capability flags). Builtin `skill_view` loads `SKILL.md` (default) or a path under that skill’s directory (e.g. `references/…`) through `safeJoin` — escape / `..` / absolute paths fail closed. Risk **`read`**, not grantable. Builtin **`skill_propose`** (`action`: `create`\|`patch`\|`delete`, `id`, optional `content` / `summary`) — risk **`write`**; **only** enqueues a PendingLearn (`skill_create` / `skill_patch` / `skill_delete`); **never** writes SKILL.md itself. **No** agent `skill_manage` / silent patch. On `home.acceptLearn`, the daemon materializes a **household** SkillService pack under `stateDir/skills/<id>/` (shared by every seat; the L7 adapter **ignores** `accountId`) and leaves it **`verified: false` / `enabled: false`** until `home.verifySkill` (V-SKILL-1); patch accept resets those flags. Legacy `skill:<id>` (one-shot full `SKILL.md`) remains available for workflows and fences. Boot migrates any leftover flat `accounts/*/skills/*.md` into household packs as unverified (`2026-10-22c`).
 - Operator-installed skills work from day one. **Project-local** skill directories are **opt-in per install path**, because a skill dropped into a cloned repo is untrusted by default — the family precedent is Hermes' `HERMES_ENABLE_PROJECT_PLUGINS` opt-in.
-- Agent-authored skill create/patch/delete → **pending learn only** until accept (§9.3).
+- Agent-authored skill create/patch/delete → **pending learn only** until accept (§9.3); accept lands in household SkillService unverified (`2026-10-22b`/`c`).
 
 ### 9.3 Closed learning loop (Normative — Adapt Hermes, invent EnvoyHome gate)
 
@@ -2388,11 +2400,33 @@ YAML/JSON export is secondary. Desktop Settings is a **single window** with a le
 
 Naming only; architecture unchanged.
 
-### 11.3 Mobile (Q12 — closed)
+### 11.3 Mobile (Q12 — closed; shipped as thin client)
 
-- **MVP1:** desktop + `home.*` protocol. **Do not** ship a full EnvoyHome mobile app.
-- **Later:** shared **Dart thin-client library** (EnvoyGo / `envoy-thin-client-dart` patterns) speaking `home.*` + an EnvoyHome UI skin.
-- Phone remains a thin client — **not** a second brain. Do not fork EnvoyGo into a separate product brain. Do not require EnvoyDev mobile.
+- **Shipped:** Flutter app `apps/mobile` (`com.envoymesh.envoyhome`) + Dart library `packages/mobile-client` speaking `home.*` over EnvoyMesh **hosting** (QR / direct / SSH hop). Phone is a **thin client** — not a second brain; no local model; dial path asserts hosting (V-P2-MOB-1, V-P2-MESH-1/2).
+- **IA:** Chat · Schedules · Home (HA-gated) · Settings hub (LLM / Connections / Skills / System including **This machine** read-only health). Owner-bound phones may mint/revoke pairing. OS service install remains **loopback-owner** on desktop (§4.3.1).
+- **Store / preview:** early-adopter claim sheet + [`docs/mobile-live-verify.md`](../docs/mobile-live-verify.md); do not claim App Store production until live verify + release signing + privacy URL.
+- Do not fork EnvoyGo into a separate product brain. Do not require EnvoyDev mobile.
+- **Q12 history:** MVP1 originally deferred a full mobile app; that deferral is **superseded** by the shipped Flutter thin client. The closed decision that remains is **thin client only** (no on-phone brain).
+
+#### Push wake catalogue (Normative — `2026-10-22f`)
+
+Push wakes a human who is **away**, not a second chat mirror. Live `home.*` frames remain primary when that phone is connected. Suppress uses **per-device recent activity** (EnvoyMesh peer: recent RPC window) — never global `hasListeners` (desktop loopback would starve the phone).
+
+| Wake class | Trigger | APNs/FCM | Suppress if this device recently active? | `data.type` | Tap |
+|------------|---------|----------|------------------------------------------|-------------|-----|
+| Interactive | `home:approval-needed` | Yes | Yes | `approval` | Chat |
+| Interactive | `home:choice-needed` | Yes | Yes | `choice` | Chat |
+| Interactive | Heartbeat needs-attention (non-`HEARTBEAT_OK`) | Yes | Yes | `heartbeat` | Chat |
+| Interactive | `home:turn-finished` (`status: ok`) — reply ready (generic lock-screen body; prefer originating device) | Yes | Yes | `turn` | Chat |
+| Always | Schedule `payload.kind === notify` | Yes | **No** | `schedule` | Schedules |
+| Always | Standing-order notify | Yes | **No** | `standing-order` | Chat |
+| Always | `home.sendTestPush` | Yes | No | `test` | Chat |
+| Never | `home:turn-delta` (streaming chunks) | No | — | — | — |
+| Never | `home:turn-finished` cancelled/error; `HEARTBEAT_OK` silent; schedule workflow/tool/agentTurn/system alone; approval/choice-resolved | No | — | — | — |
+
+**Token lifecycle:** Soft Disconnect (keep pairing) MUST NOT `unregisterPushToken`. Forget pairing / revoke MUST unregister.
+
+**`home.sendTestPush`:** Owner-scope (§4.1.1) — exclusive-Owner device or loopback; not loopback-only.
 
 ### 11.4 Monorepo sketch
 
@@ -2412,11 +2446,11 @@ EnvoyHome/
     memory/                   # @envoyhome/memory — facade + standing store + L4 FTS + LearnQueue
     smarthome/                # @envoyhome/smarthome — HA + MQTT clients and the ha_*/mqtt_* tool bundle (B14)
     test-utils/               # @envoyhome/test-utils — flushLoop + __resetActiveXForTests (R8)
+    mobile-client/            # Dart thin-client library used by apps/mobile
   plugins/                    # bundled channel plugins: channel-telegram (B7); channel-mqtt, channel-homeassistant (B14)
   scripts/                    # peers-check, fetch-peers, build, lint, test, ci
   tests/min/conventions.md    # R1–R13 must-follow rules
   # Siblings are linked with `link:` + `overrides:` (not workspace members, not on npm).
-  # packages/mobile-client — Dart thin-client skin (Phase 2 start; no full Flutter app yet)
 ```
 
 ---
@@ -2582,7 +2616,7 @@ We do **not** copy products. Each idea is fitness-checked. Detail analysis: `ana
 | Q9 | Artifact signing | **Closed — HMAC-SHA256** token scheme | §4.1b |
 | Q10 | Multi-agent UX v1 | **Closed — single default agent** | §4.1 |
 | Q11 | npm package scope | **Closed — `@envoyhome/*` product; depend on `@envoymesh/*` for mesh** | §11.2 |
-| Q12 | Mobile packaging | **Closed — no full mobile app in MVP1; later shared Dart thin-client + EnvoyHome UI** | §11.3 |
+| Q12 | Mobile packaging | **Closed — Dart thin-client + Flutter UI shipped** (`apps/mobile` / `packages/mobile-client`); no on-phone brain | §11.3 |
 
 ### 15.1 Licensing (Q6 — Normative)
 
@@ -2680,11 +2714,15 @@ Federation, Bot Mode, silent skill overwrite, vLLM-as-required, **EnvoyMesh Soci
 
 **Reject as core (OpenClaw-shaped non-goals for §19.9–§19.13):** shared interactive operator `terminal`/PTY; swarm-as-default / ACP agent marketplace; Lobster-style resumable workflow engine (use §7 workflows + §7.4 schedules); cross-account `message` / session tools; Code Mode + Tool Search as required; MCP runtime in core (investigate only); device **nodes** (camera/screen/computer-use) — §13.1 deferral, not this epic set.
 
-**Investigate (not Normative yet):** Memory Tree, auto-fetch, TokenJuice, fleets — see §19.7.
+**Device nodes — Owner reaffirm `2026-10-22` (Defer, not a Phase 2 epic):** Do **not** ship an OpenClaw-shaped `nodes` / `node.invoke` surface in EnvoyHome core. Mobile stays a **thin client** to the hosting daemon (chat + Settings), not a capability edge for camera/screen/computer-use. Household actuation remains HA/MQTT + path jail + ApprovalSink. **Investigate later only via EnvoyMesh** capability/node patterns if a concrete Owner need appears (e.g. “snap from kitchen iPad”); require Owner Accept + Design changelog before any daemon tool or RPC. No `protocolApiVersion` implication until then.
+
+**Investigate (not Normative yet):** Memory Tree, auto-fetch, TokenJuice, fleets — see §19.7. Mesh device capabilities only under the node Defer paragraph above.
 
 ### 19.4 Phase 2 RPC / Settings
 
 `home.setPrivacyMode` (**Phase 2**, §19.4 — not in the v1 catalogue); mobile uses same pairing as desktop (hosting). Memory/learn RPCs are **v1** (§9.4). No Social settings surface. **Smart home adds exactly four `home.*` methods and no device/state API** (§3.4, §5.7.3, §5.7.7): `home.listSources`, `home.setSourceBinding`, `home.removeSourceBinding` (the object registry the safety class depends on) and `home.listActuations` (the journal). Everything else is channel plugins, a tool bundle and workflow definitions; its Settings surface reuses `home.setChannelConfig` and the smart-home screen.
+
+**Early-adopter silence (`2026-10-22d`):** A on-disk `privacy-mode.json` stub MUST NOT be marketed as Privacy Mode. No Settings toggle and no `home.setPrivacyMode` ⇒ no product claim (see [`reviews/2026-10-22-early-adopter-claims.md`](reviews/2026-10-22-early-adopter-claims.md)).
 
 ⚠️ **Privacy Mode must cover smart home.** A "local-only" switch that still publishes to a remote MQTT broker or calls a cloud HA instance is a lie — §5.7.4 rule 4 makes that a requirement on the Phase 2 feature.
 
@@ -3259,9 +3297,12 @@ Returns the household object registry for callers on this EnvoyHome (Design `202
 }
 ```
 
-**`home:turn-finished`** — `{ …common, "status": "ok"|"cancelled"|"error", "error?": { "code", "message" }, "usage?": { "localTokens", "cloudTokens" }, "at": "ISO-8601" }`
+**`home:turn-finished`** — `{ …common, "status": "ok"|"cancelled"|"error", "error?": { "code", "message" }, "usage?": { "localTokens", "cloudTokens" }, "at": "ISO-8601", "preview?": "short assistant text (in-app only)", "deviceId?": "originating paired device" }`
 
 - `home:turn-finished` is emitted **exactly once** per turn, including on cancel and on error. A client that misses it has a broken stream; it must not be inferred from deltas.
+- `preview` is optional and additive (`2026-10-24`); **must not** be copied into the APNs/FCM alert body (`2026-10-24b` — lock-screen privacy). Push body is a generic localized “reply ready” string (`locale` on the event from thin-client `clientContext` when present, else account profile; else English).
+- `deviceId` is optional; when present, turn wake prefers that device’s push token (falls back to account fan-out if missing).
+- `locale?` is optional and additive (`2026-10-24b`); used only for the generic push body.
 
 **Approval events** — `home:approval-needed` `{ "id", "accountId", "agentId", "turnId", "tool", "argsDigest", "risk", "origin", "createdAt", "expiresAt", "summary", "objectId?", "desiredState?", "safetyClass", "answerableBy" }` — **the same fields as `home.listApprovals` (A.5)**, because the event is what the human actually sees; an event that omitted `argsDigest` or `summary` would make the §4.4 echo requirement unanswerable. `home:approval-resolved` `{ "id", "accountId", "decision", "scope", "grantId?" }`. The `origin` field is what lets the UI label an unattended actuation differently from an interactive tool call (V-UX-7, V-HA-20).
 
@@ -3445,6 +3486,9 @@ Returns the household object registry for callers on this EnvoyHome (Design `202
 **`home.listSandboxEntries`** params `{ "accountId", "path?" }` → `{ "path", "parent?", "entries": [{ "name", "kind": "dir"|"file", "path", "size?", "modifiedAt?" }], "roots": ["documents", …] }` — File Explore one-level browse; empty `path` → synthetic roots; refuse `share/` / inactive `workspace/` (§9.5d / V-OUT-4)  
 **`home.getArtifactContent`** params `{ "accountId", "path" }` → `{ "path", "mimeType", "encoding": "utf8"|"base64", "text?", "base64?", "bytes" }` — mesh/paired open for sandbox **or** `workspace/…` (R3-effective jail); refuse `share/`; 8 MiB stat-before-read (§9.5 / §9.5d); no `publicBaseUrl` required; Office MIME on common export extensions  
 **`home.getArtifactUrl`** params `{ "accountId", "path", "ttlSec?": 3600 }` → `{ "url": "https://…/artifacts/{accountId}/{token}", "expiresAt": "…" }` — optional LAN/tunnel; **sandbox paths only** (refuse `workspace/` / `share/`); URL shape and token framing are §4.1b; `ttlSec` is clamped to 86400
+
+**`home.getMediaGenerateConfig`** params `{ "accountId" }` → `{ "enabled", "maxPerDay", "dayCount?", "hasProvider" }` — §19.12 D2 image_generate Owner opt-in + daily cap; `dayCount` optional on wire  
+**`home.setMediaGenerateConfig`** params `{ "accountId", "enabled?", "maxPerDay?" }` → `{ "ok": true, "enabled", "maxPerDay" }` — Owner configures enable + cap for that seat (fail-closed default)
 
 **`home.doctor`** → `{ "ok": true, "issues": [{ "id", "severity", "message", "fixable" }] }`  
 **`home.doctorFix`** params `{ "issueIds": ["…"] }` → `{ "fixed": [], "failed": [] }`

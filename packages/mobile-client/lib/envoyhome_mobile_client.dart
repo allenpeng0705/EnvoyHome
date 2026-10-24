@@ -10,4 +10,6 @@ export 'src/ssh_tunnel.dart';
 export 'src/dial_policy.dart';
 export 'src/home_session.dart';
 export 'src/libp2p_transport.dart';
+export 'src/lan_reachability.dart';
 export 'src/route_plan.dart';
+export 'src/transient_drop.dart';

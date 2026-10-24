@@ -35,18 +35,27 @@ AcceptedPairing pairing({
   );
 }
 
-List<String> namesFor(AcceptedPairing p) =>
-    candidatesFor(p).map((c) => c.name).toList();
+List<String> namesFor(
+  AcceptedPairing p, {
+  bool isOnWifi = false,
+  bool sameLan = false,
+}) =>
+    candidatesFor(p, isOnWifi: isOnWifi, sameLan: sameLan)
+        .map((c) => c.name)
+        .toList();
 
 void main() {
-  test('QR host walks family order, relay last', () {
-    final names = namesFor(pairing(
-      lanWsUrl: 'ws://192.168.1.9:4780/ws',
-      homePeerId: home,
-      bootstrapPeers: [directAddr, 'ws://relay-b.example/ws'],
-      relayWsUrl: 'wss://relay.example/ws',
-      relayWsUrls: ['wss://relay-c.example/ws'],
-    ));
+  test('QR host walks family order, relay last (on home LAN)', () {
+    final names = namesFor(
+      pairing(
+        lanWsUrl: 'ws://192.168.1.9:4780/ws',
+        homePeerId: home,
+        bootstrapPeers: [directAddr, 'ws://relay-b.example/ws'],
+        relayWsUrl: 'wss://relay.example/ws',
+        relayWsUrls: ['wss://relay-c.example/ws'],
+      ),
+      sameLan: true,
+    );
 
     expect(names, [
       'lan',
@@ -60,20 +69,92 @@ void main() {
     ]);
   });
 
+  test('5G / off-LAN drops private LAN rungs so the circuit is first', () {
+    final names = namesFor(pairing(
+      lanWsUrl: 'ws://192.168.1.9:4780/ws',
+      homePeerId: home,
+      bootstrapPeers: [directAddr, 'ws://relay-b.example/ws'],
+      relayWsUrl: 'wss://relay.example/ws',
+      relayWsUrls: ['wss://relay-c.example/ws'],
+    ));
+
+    expect(names.first, 'p2p-cn-relay');
+    expect(names, isNot(contains('lan')));
+    expect(names, isNot(contains('p2p-direct')));
+  });
+
+  test('Wi‑Fi that is not the home LAN also drops private LAN rungs', () {
+    final names = namesFor(
+      pairing(
+        lanWsUrl: 'ws://192.168.1.9:4780/ws',
+        homePeerId: home,
+        bootstrapPeers: [directAddr],
+      ),
+      isOnWifi: true,
+      sameLan: false,
+    );
+    expect(names, isNot(contains('lan')));
+    expect(names, isNot(contains('p2p-direct')));
+    expect(names, contains('p2p-cn-relay'));
+  });
+
+  test('LAN-only QR off-LAN still keeps hosting WS (no empty plan)', () {
+    // Real mint without mesh: ws://192.168.x only — must not throw "no dial target".
+    final names = namesFor(
+      pairing(
+        wsUrl: 'ws://192.168.0.104:4780/ws',
+        lanWsUrl: null,
+      ),
+      sameLan: false,
+    );
+    expect(names, isNotEmpty);
+    expect(names.first, anyOf('lan', 'hosting-ws'));
+    final urls = candidatesFor(
+      pairing(wsUrl: 'ws://192.168.0.104:4780/ws'),
+      sameLan: false,
+    ).map((c) => c.url).toList();
+    expect(urls.first, contains('192.168.0.104'));
+    expect(urls.first, contains('token=tok'));
+  });
+
+  test('a public direct address is kept off-LAN', () {
+    final names = namesFor(pairing(
+      wsUrl: 'ws://203.0.113.7:4780/ws',
+      homePeerId: home,
+      bootstrapPeers: [directAddr],
+    ));
+    expect(names.first, 'lan');
+  });
+
+  test('SSH keepPrivateLanForSsh keeps private lan off-LAN', () {
+    final p = AcceptedPairing(
+      pairing(
+        lanWsUrl: 'ws://192.168.1.9:4780/ws',
+      ).data,
+      joinChannel: JoinChannel.ssh,
+      ssh: const SshHop(host: 'bastion.example', user: 'u'),
+    );
+    final names = candidatesFor(p, sameLan: false).map((c) => c.name).toList();
+    expect(names, contains('lan'));
+  });
+
   test('LAN pairing still offers circuit for cellular', () {
     const loopback = '/ip4/127.0.0.1/tcp/49204/p2p/$home';
     const circuit =
         '/ip4/47.93.11.212/tcp/4001/p2p/12D3KooWrelay/p2p-circuit/p2p/$home';
-    final p2p = candidatesFor(pairing(
-      homePeerId: home,
-      bootstrapPeers: [loopback, directAddr, circuit],
-    )).where((c) => c.name.startsWith('p2p-'));
+    final p2p = candidatesFor(
+      pairing(
+        homePeerId: home,
+        bootstrapPeers: [loopback, directAddr, circuit],
+      ),
+      sameLan: false,
+    ).where((c) => c.name.startsWith('p2p-'));
     expect(p2p.map((c) => c.url), contains(circuit));
     expect(p2p.any((c) => c.url.contains('127.0.0.1')), isFalse);
   });
 
-  test('primary address becomes LAN when no lanWsUrl', () {
-    final candidates = candidatesFor(pairing());
+  test('primary address becomes LAN when no lanWsUrl (on home LAN)', () {
+    final candidates = candidatesFor(pairing(), sameLan: true);
     expect(candidates.first.name, 'lan');
     expect(candidates.first.url, contains('token=tok'));
   });
@@ -145,7 +226,7 @@ void main() {
     expect(accepted, isNotNull);
     expect(accepted!.data.homeNodePeerId, home);
     expect(accepted.data.bootstrapPeers, [directAddr]);
-    final names = namesFor(accepted);
+    final names = namesFor(accepted, sameLan: true);
     expect(names.first, 'lan');
     expect(names.where((n) => n.startsWith('p2p-')), isNotEmpty);
   });

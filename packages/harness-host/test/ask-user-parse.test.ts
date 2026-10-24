@@ -21,6 +21,18 @@ test("V-UX-14: schedulesOnly drops ask_user", () => {
   assert.equal(tools.length, 0);
 });
 
+test("parseAssistantToolCalls: nested ```json inside envoyhome-tools", () => {
+  const text = `Sure.
+\`\`\`envoyhome-tools
+\`\`\`json
+[{"tool":"schedule","args":{"action":"propose","text":"in a minute","message":"ping"}}]
+\`\`\``;
+  const { tools } = parseAssistantToolCalls(text, { allowSandbox: true });
+  assert.equal(tools.length, 1);
+  assert.equal(tools[0]!.tool, "schedule");
+  assert.equal((tools[0]!.args as { text?: string }).text, "in a minute");
+});
+
 test("V-UX-14: parse ask_user many + text + object options", () => {
   const many = `\`\`\`envoyhome-tools
 {"tool":"ask_user","args":{"question":"Rooms?","options":[{"id":"a","label":"A"},{"id":"b","label":"B"}],"selection":"many"}}

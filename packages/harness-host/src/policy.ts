@@ -124,6 +124,32 @@ export const BUILTIN_TOOLS: Readonly<Record<string, ToolSpec>> = {
     attendedAsk: true,
   },
   /**
+   * Design §9.2 (`2026-10-22a`) — progressive skill disclosure (Hermes Adapt).
+   * Verified+enabled catalogue only; no bodies.
+   */
+  skills_list: {
+    name: "skills_list",
+    risk: "read",
+    grantable: false,
+  },
+  /**
+   * Design §9.2 (`2026-10-22a`) — load SKILL.md or references/ under skill root (path jail).
+   */
+  skill_view: {
+    name: "skill_view",
+    risk: "read",
+    grantable: false,
+  },
+  /**
+   * Design §9.2 (`2026-10-22b`) — enqueue skill create/patch/delete as PendingLearn only.
+   * Never writes SKILL.md; accept → SkillService unverified until verifySkill.
+   */
+  skill_propose: {
+    name: "skill_propose",
+    risk: "write",
+    grantable: true,
+  },
+  /**
    * Design §19.13 — turn-scoped helper with reduced allow-list; inherits origin.
    * Unattended requires a grant (cannot launder admin). Thin wrapper over `task`.
    */

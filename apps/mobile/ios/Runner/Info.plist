@@ -92,5 +92,9 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<!-- iOS uses native APNs (envoyhome/alert_push), not FCM. Disable Firebase's
+	     AppDelegate swizzling so didRegisterForRemoteNotifications reaches us. -->
+	<key>FirebaseAppDelegateProxyEnabled</key>
+	<false/>
 </dict>
 </plist>

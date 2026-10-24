@@ -32,8 +32,8 @@ EnvoyHome links `@envoymesh/*` and harness packages with `link:` — they are **
 ```text
 parent/
   EnvoyHome/
-  EnvoyMesh/
-  envoy-harness/
+  EnvoyMesh/           # required (link: @envoymesh/*)
+  envoy-harness/       # auto-cloned from scripts/envoy-harness.pin on desktop package if missing
   EnvoyCoder/          # optional; patterns only
 ```
 
@@ -48,6 +48,8 @@ export ENVOYHOME_PEERS_GIT_BASE='git@github.com:YOUR_ORG'
 ```
 
 Default expected peer branch: `main` (override with `ENVOYHOME_PEER_BRANCH`).
+
+For **desktop installers**, you mainly need **EnvoyMesh**; `./scripts/build-desktop.sh` will fetch **envoy-harness** at the commit in `scripts/envoy-harness.pin` if `../envoy-harness` is absent.
 
 ## 2. Install
 
@@ -102,6 +104,13 @@ Release build:
 ```bash
 pnpm run desktop:tauri:build
 # or: pnpm --filter @envoyhome/desktop tauri:build
+
+# Desktop version + installers — see scripts/README.md
+pnpm version:desktop -- 0.1.0             # bump VERSION (syncs Tauri / Cargo)
+./scripts/build-desktop.sh macos          # → release/envoyhome-desktop-{ver}-macos-{arch}.dmg
+# Linux: ./scripts/build-desktop.sh linux
+# Windows: .\scripts\build-desktop.ps1
+
 ```
 
 Icons / branding: `apps/branding/` — see [`apps/branding/store/README.md`](apps/branding/store/README.md).

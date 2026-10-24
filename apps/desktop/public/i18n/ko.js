@@ -12,6 +12,7 @@ export default {
   "app.themeLight": "라이트",
   "app.themeDark": "다크",
   "app.pairingQrTip": "페어링 QR — 연결을 열고 코드 표시",
+  "app.setupGuideTip": "설정 가이드 — 모델, 로컬 엔진, 휴대폰 페어링",
   "app.loading": "로딩 중…",
   "app.waitingDaemon": "데몬 연결 대기 중…",
   "app.unknownView": "알 수 없는 보기",
@@ -154,6 +155,30 @@ export default {
   "profile.displayName": "표시 이름",
   "profile.displayNamePlaceholder": "예: Alice",
   "profile.continue": "계속",
+  "setupGuide.title": "EnvoyHome 설정",
+  "setupGuide.introFirst":
+    "채팅에는 모델이 필요합니다. 클라우드 제공자를 추가하거나 이 컴퓨터에서 로컬 모델을 켠 다음, 원하면 휴대폰을 페어링하세요.",
+  "setupGuide.intro":
+    "모델 설정과 휴대폰 페어링 방법. 시스템 → 이 기기에서 언제든 다시 열 수 있습니다.",
+  "setupGuide.stepCloudTitle": "클라우드 제공자 추가",
+  "setupGuide.stepCloudBody":
+    "OpenAI 호환, Anthropic, DeepSeek 등 프리셋. API 키를 붙여넣고 모델을 고르세요.",
+  "setupGuide.stepCloudCta": "모델 열기",
+  "setupGuide.stepLocalTitle": "또는 로컬 모델",
+  "setupGuide.stepLocalBody":
+    "GGUF를 다운로드하거나 이 기기의 Ollama에 연결 — 클라우드 키 불필요.",
+  "setupGuide.stepLocalCta": "로컬 모델 열기",
+  "setupGuide.stepPhoneTitle": "휴대폰 페어링(선택)",
+  "setupGuide.stepPhoneBody":
+    "페어링 QR을 보여 휴대폰의 EnvoyHome이 LAN 또는 mesh/릴레이로 이 데스크톱에 연결되게 합니다.",
+  "setupGuide.stepPhoneCta": "페어링 열기",
+  "setupGuide.note":
+    "채팅은 클라우드 또는 로컬 중 하나만 있으면 됩니다. 휴대폰 페어링은 나중에 해도 됩니다.",
+  "setupGuide.skipCta": "먼저 둘러보기",
+  "setupGuide.doneCta": "알겠습니다",
+  "setupGuide.openCta": "설정 가이드 보기",
+  "setupGuide.settingsHint":
+    "첫 실행 시 모델·휴대폰 페어링 체크리스트 — 필요할 때 다시 열 수 있습니다.",
   "profile.title": "프로필",
   "profile.intro": "이 기기의 각 사람에게 표시 이름을 둡니다. 기억·모델·채팅은 프로필별로 분리됩니다.",
   "profile.empty": "프로필이 없습니다.",
@@ -339,8 +364,9 @@ export default {
   "pairing.qrTitle": "QR 코드 스캔",
   "pairing.qrPrimary": "권장",
   "pairing.qrDetail": "휴대폰에서 EnvoyHome을 열고 QR 스캔을 선택한 뒤 이 코드에 카메라를 맞추세요.",
-  "pairing.qrMeshHosting": "휴대폰이 네트워크로 이 기기에 도달할 수 있으면 이 코드에 직접 mesh 경로가 포함됩니다.",
-  "pairing.qrMeshUnavailable": "mesh 피어가 호스팅하지 않습니다 — 이 코드는 네트워크 주소와 SSH로 계속 동작합니다.",
+  "pairing.qrMeshHosting": "이 코드에는 mesh + 커뮤니티 릴레이 경로가 포함됩니다(EnvoyDev / EnvoyMesh와 동일).",
+  "pairing.qrMeshUnavailable": "mesh 피어가 아직 호스팅하지 않습니다 — 호스팅이 준비되면 새 코드를 표시하세요. LAN 전용 QR은 Wi‑Fi 밖에서 다시 연결할 수 없습니다.",
+  "pairing.qrMeshRequired": "mesh 호스팅(homeNodePeerId + 릴레이 bootstrap) 없이는 휴대폰 QR을 발급할 수 없습니다. 고급 → mesh 호스팅을 확인한 뒤 다시 시도하세요.",
   "pairing.qrBusy": "페어링 코드 준비 중…",
   "pairing.qrAction": "새 코드 표시",
   "pairing.qrAlt": "페어링 코드",

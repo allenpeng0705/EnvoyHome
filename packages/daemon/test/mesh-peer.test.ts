@@ -73,6 +73,11 @@ test("createHomeMeshPeer: fake node → hosting + mint fields", async () => {
     const fields = meshMintFields(peer);
     assert.equal(fields.homeNodePeerId, "12D3KooWTestPeer");
     assert.ok((fields.bootstrapPeers?.length ?? 0) >= 2);
+    // EnvoyCoder shape: bare community relay + circuit through this home peer.
+    assert.ok(
+      (fields.bootstrapPeers ?? []).some((a) => a.includes("/p2p-circuit/p2p/12D3KooWTestPeer")),
+      `expected circuit bootstrapPeers, got ${JSON.stringify(fields.bootstrapPeers)}`,
+    );
 
     // Idempotent second start.
     const again = await peer.start();

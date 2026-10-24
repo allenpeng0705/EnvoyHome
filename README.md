@@ -28,11 +28,15 @@ Product order: **desktop → EnvoyMesh mobile → demo IM last**. Smart home (HA
 
 ## Status
 
-v1 is **B0–B14**. Desktop + mobile thin clients are the active product path. Design gate **G1** and plan gate **G6** are accepted.
+Spine **B0–B14** is on `main`. Design gate **G1** and plan gate **G6** are accepted. **`v1.0.0` is not tagged yet** — see Plan release bar (§8) and the early-adopter claim sheet:
+
+[`design_doc/reviews/2026-10-22-early-adopter-claims.md`](design_doc/reviews/2026-10-22-early-adopter-claims.md)
+
+Preview posture: desktop + EnvoyMesh phone + HA/MQTT **demo/fixture**. Do **not** claim Privacy Mode as a product toggle, a production IM zoo, or agentskills.io conformance until those bars close. Mobile live verify: [`docs/mobile-live-verify.md`](docs/mobile-live-verify.md).
 
 ⚠️ Actuation (`ha_call_service`, `mqtt_publish`) is **`admin`** tier; unattended actuation needs a grant. The safety class (unlock, garage, valve, gate, disarm, …) is never grant-covered (Design §5.7.2, conventions R13).
 
-**Smart home guides:** [`docs/smart-home.md`](docs/smart-home.md) · [`docs/homeassistant-setup.md`](docs/homeassistant-setup.md) · [`docs/mqtt-setup.md`](docs/mqtt-setup.md)
+**Smart home guides:** [`docs/smart-home.md`](docs/smart-home.md) · [`docs/homeassistant-setup.md`](docs/homeassistant-setup.md) · [`docs/mqtt-setup.md`](docs/mqtt-setup.md) · [`docs/smart-home-live-checklist.md`](docs/smart-home-live-checklist.md)
 
 ## Quick commands
 
@@ -42,6 +46,8 @@ v1 is **B0–B14**. Desktop + mobile thin clients are the active product path. D
 env -u CI pnpm install            # never install with CI=true (R9)
 ./scripts/ci.sh                   # docs-lint → peers → install → build → test → lint
 pnpm desktop:dev                  # one-shot desktop (build daemon if needed → Tauri)
+pnpm version:desktop -- 0.1.0     # bump desktop VERSION (see scripts/README.md)
+./scripts/build-desktop.sh macos  # DMG → release/ (Linux: linux; Windows: .\scripts\build-desktop.ps1)
 ```
 
 Ports (Design §2.4): WebSocket `4780` at `/ws`, HTTP `4781` (`GET /health`).

@@ -126,3 +126,49 @@ ideas — not always ask the main chat model to pick among dozens of tools.
 Huge surface (channels, voice, meetings, screen, autocomplete); backend-brokered OAuth trust; GPL3
 /product model; a Memory Tree that is heavy to reimplement faithfully; FTS5 episodic index
 mid-migration; skills/plugins not drop-in compatible with the OpenClaw/AgentSkills ecosystem.
+
+---
+
+## Contrast vs EnvoyHome (re-check 2026-10-22 — `../openhuman` still v0.57.52)
+
+| Axis | OpenHuman | EnvoyHome |
+|------|-----------|-----------|
+| North star | Personal AI harness (desktop / TUI / headless) | Shared-home household control plane |
+| Core | Rust `openhuman-core` + Tauri; one `AgentHarness` | TS daemon + **harness slot** (default envoy-harness) |
+| Consent | `ApprovalGate` durable SQLite + 10m TTL + fail-closed origin | **Adopt** durability/TTL/fail-closed + **invent** grants (§4.4) |
+| Autonomy default | Policy **off** until `[autonomy] enabled`; when on → Supervised / workspace_only | Sandbox **on**; unattended deny without grant |
+| Memory | Markdown vault **SoT** + Memory Tree + vectors | L0–L7; PendingLearn; **Reject** tree-in-core (§19.7) |
+| Skills | `SKILL.md` + catalogue → `run_skill` worker; project needs trust marker | ClawHub/path + verify; `skills_list` / `skill_view` / `skill_propose` → PendingLearn |
+| Smart home | **Not** a product surface (no HA/MQTT actuation pillar) | **Core** §5.7 (admin actuation, safety class, journal) |
+| Multi-seat | Personal / agent profiles | Family multi-account + Owner seat |
+| Pairing | `PairingGuard` (LAN bind token + lockout) | Device→account bind; `account_not_bound` |
+| Orchestration | Phase-DAG workflows + agent teams | Static DAG workflows + `task` / `spawn_helper` (Q10) |
+| Channels | Large IM zoo + voice/meetings | Capped plugin set; event-source read-only |
+| Backend | Default TinyHumans managed OAuth / routing / Composio | Self-hosted; no Social product in Home |
+
+### Gap review (OpenHuman → EnvoyHome fitness)
+
+| OpenHuman idea | Verdict | EnvoyHome status / note |
+|----------------|---------|-------------------------|
+| Durable ApprovalGate + fail-closed origin | **Adopted** | Design §4.4; grants are the EnvoyHome add |
+| PairingGuard hash + lockout | **Adapted** | Device credential hashes; Owner mint rate limits |
+| Markdown SoT + SQLite index | **Adapted** | Standing files + FTS; no tree workers in core |
+| Memory Tree / seal cascade | **Reject** (ops cost) | Backend slot only if ever |
+| Auto-fetch integrations | **Defer** | Needs Privacy Mode + budgets |
+| `run_skill` isolated worker | **Defer / Adapt light** | v1 = prompt pack `skill:<id>`; no second runtime |
+| Project skill trust marker | **Align** | Design already opt-in project paths (Hermes-like) |
+| Progressive skill catalogue | **Ship** | `skills_list` / `skill_view` (Hermes Adapt); OH steers to `run_skill` |
+| Agent-authored skill write | **Stricter** | `skill_propose` → PendingLearn → verify (no silent OH-style install) |
+| Phase-DAG + agent teams | **Partial Adapt** | Workflows DAG yes; teams/swarm **Reject** (Q10) |
+| Chat-channel approval replies (e.g. Telegram) | **Investigate** | Approvals via thin client / Settings today |
+| Action/hour + cost/day caps | **Investigate** | Usage exists; hard autonomy budgets not Normative |
+| Jev/Laya typed triage | **Park** | Mix router Normative; triage plugin default off |
+| Voice / computer-use / meetings | **Reject / Defer** | Nodes Defer (2026-10-22); not home product |
+| tiny.place orchestration pairing | **Reject** for Home | Mesh Social out of scope (§14) |
+| Smart-home actuation | **EnvoyHome invent** | OpenHuman has no peer here |
+
+### Suggested next (if any)
+
+1. **No urgent OpenHuman skill slice** — progressive disclosure + PendingLearn propose already closed the Hermes gap; OH’s `run_skill` worker is a different runtime model.
+2. **Worth a short Design look (not code):** chat-surface approval replies (OH Telegram approval_surface) vs desktop-only Approvals UX.
+3. **Keep Reject:** Memory Tree, fleets-as-OH-teams, tiny.place pairing, sandbox-off / autonomy-off defaults.

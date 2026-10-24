@@ -41,11 +41,11 @@ Maintenance: flip checkboxes when shipping; refresh **Current Milestone**; keep 
 
 EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0–B14** is implemented on `main` against Design **`2026-10-08f`** (**G1/G6 Accepted 2026-10-09**).
 
-**Active epic:** **Desktop + mobile product depth** `[~]` — Settings completeness (V-UX-2/6, Models presets, §10.1) + Flutter thin-client chat/artifacts  
-**Next (after mobile solid):** **First-party IM set** `[ ]` — Telegram live → Discord, Slack, Feishu/Lark, DingTalk, WeCom (Design §5.0 `2026-10-16c`); WhatsApp / WeChat personal deferred  
-**Optional:** Live HA C.4 `[>]` — fixture green; needs `ENVOYHOME_HA_*` on an operator machine
+**Active epic:** **Early-adopter claim freeze** — [`reviews/2026-10-22-early-adopter-claims.md`](reviews/2026-10-22-early-adopter-claims.md); desktop + Mesh phone + HA/MQTT demo/fixture; **not** `v1.0.0`  
+**Next (after early-adopter ops):** Live HA checklist ([`docs/smart-home-live-checklist.md`](../docs/smart-home-live-checklist.md)); then **First-party IM live** (Telegram first) when Mesh phone path is solid  
+**Deferred from early-adopter claims:** Production IM zoo; Privacy Mode product toggle (`home.setPrivacyMode` stays Phase 2); agentskills.io conformance  
 
-**Last shipped (docs):** Owner lock first-party IM catalog (2026-10-16c); Channels UI already merged
+**Last shipped (docs):** Early-adopter claim sheet + live HA checklist (`2026-10-22d`); Channels UI already merged
 
 ## Key Decisions
 
@@ -59,38 +59,40 @@ EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0
 - `[x]` G1/G6 for Design/`Plan` through **`2026-10-08f`** — Accepted 2026-10-09.
 - `[x]` Owner product order: **desktop → EnvoyMesh mobile → first-party IM set**.
 - `[x]` First-party chat plugins (Design §5.0): **Telegram**, **Discord**, **Slack**, **Feishu/Lark**, **DingTalk**, **WeCom**; **WhatsApp** + **WeChat personal** deferred.
-- `[ ]` Tag `v1.0.0` — when [release bar](#release-bar-8--design-21) items (1)–(8) all `[x]` with honest evidence.
-- `[ ]` First-party IM epic — Telegram live first, then the five additional bots; Channels UI becomes a chat-plugin catalog.
-- `[ ]` Phase 2 Privacy Mode RPC / automation authoring UX — after mobile path is clear.
+- `[ ]` Tag `v1.0.0` — when [release bar](#release-bar-8--design-21) items (1)–(8) all `[x]` with honest evidence. **Do not tag** on early-adopter alone.
+- `[ ]` First-party IM epic — plugins+Channels catalog shipped; **live Telegram→five bots deferred** from early-adopter marketing (Mesh phone is primary).
+- `[ ]` Phase 2 Privacy Mode RPC / Settings — `privacy-mode.json` stub may exist; **never advertise** until `home.setPrivacyMode` + V-P2-PRIV-*.
+- `[x]` Early-adopter claim sheet — [`reviews/2026-10-22-early-adopter-claims.md`](reviews/2026-10-22-early-adopter-claims.md) (`2026-10-22d`).
 - `[x]` Phase 2 agent capabilities P2-A…E — Design **Accepted 2026-10-20**; **A–E + D2 `[x]`** (`2026-10-20o`/`p` Design-max Adapt).
 
 ## Current Milestone
 
-**Milestone:** Spine shipped; **deepen desktop Settings + mobile thin client**; then **first-party IM set** (Design §5.0). Phase 2 agent capabilities (P2-A…E) are **Design-ready** — no code until Accept.
+**Milestone:** Spine on `main`; **early-adopter claims frozen**; deepen desktop/mobile ops; live HA sign-off optional for narrow claims; IM live + Privacy RPC remain post-early-adopter / Phase 2.
 
 | Track | Status | Notes |
 |-------|--------|-------|
 | Design `2026-10-08f` G1 | `[x]` | Accepted 2026-10-09 |
 | Plan G6 (08f text) | `[x]` | Accepted 2026-10-09 |
 | B0–B14 code on `main` | `[x]` | Every-ID e2e not claimed for all V-HA/V-UX |
-| Desktop product shell | `[~]` | V-UX-2/6 + §10.1 nav; Channels tab merged; live HA inventory still operator |
+| Early-adopter claims | `[x]` | `reviews/2026-10-22-early-adopter-claims.md` |
+| Desktop product shell | `[~]` | V-UX Playwright green after Connections/`artifacts.hint` hygiene (`2026-10-22d`) |
 | Tauri supervise | `[x]` | Spawn/reap; OS service install/uninstall/restart RPCs + Advanced controls |
 | Inbound → turns + product events | `[x]` | Daemon + Settings subscribe/`on` |
 | policy.json / forceLocalForEventSource | `[x]` | PolicyStore |
-| Privacy Mode preview file | `[~]` | `privacy-mode.json` stub; RPC = Phase 2 |
-| Live HA C.4 | `[>]` | Fixture `[x]` (`pnpm ha:c4-diff`); live needs hub creds — unset here |
-| EnvoyMesh mobile thin client | `[~]` | Pair + push + chat stream + artifacts open; Store polish operator-side |
-| First-party IM set | `[~]` | Telegram+Discord+Slack+Feishu+DingTalk+WeCom plugins+Channels catalog; live operator verify remaining |
+| Privacy Mode | `[~]` | Stub file only — **silence in marketing** until Phase 2 RPC |
+| Live HA C.4 | `[>]` | Fixture `[x]`; checklist [`docs/smart-home-live-checklist.md`](../docs/smart-home-live-checklist.md); sign-off pending |
+| EnvoyMesh mobile thin client | `[~]` | Pair + push + chat + artifacts + This machine; live verify + Store polish — [`docs/mobile-live-verify.md`](../docs/mobile-live-verify.md) |
+| First-party IM set | `[~]` | Plugins+catalog `[x]`; **live verify deferred** (not in early-adopter claims) |
 | Phase 2 P2-A…E | `[x]` | Design Accepted 2026-10-20; **A–E + D2 `[x]`** (`2026-10-20o`/`p`) |
+| Tag `v1.0.0` | `[ ]` | Blocked on release bar honesty |
 
 ### Next planning pulls
 
-0. **Desktop depth** `[~]` — V-UX-2/6 + Models presets `[x]`; live HA inventory / V-UX-7 deny e2e when hub present.  
-1. **Mobile thin client** `[~]` — accountIds + chat + artifacts `[x]`; Store/TestFlight polish.  
-2. **Optional live HA C.4** `[>]` — when hub creds available.  
-3. **First-party IM set** `[ ]` — Telegram live + five bots (Design §5.0); catalog UI.  
-4. **Tag `v1.0.0`** `[ ]` — when release bar holds.  
-5. **P2-D2 generate** `[x]` — OpenAI Images API + Owner enable + Privacy Mode + daily cap + async job (`2026-10-20o`/`p`).
+0. **Operator live HA** `[>]` — fill `docs/smart-home-live-checklist.md` when hub creds available (or keep narrow claim).  
+1. **Mobile thin client** `[~]` — Store/TestFlight polish when phone is a launch surface.  
+2. **First-party IM live** `[ ]` — Telegram first, then five bots; only then widen claims.  
+3. **Privacy Mode RPC** `[ ]` — `home.setPrivacyMode` + Settings + V-P2-PRIV-* (or stay silent).  
+4. **Tag `v1.0.0`** `[ ]` — when release bar (1)–(8) honestly `[x]`.
 
 ## Build stage board (B0–B14)
 
@@ -105,7 +107,7 @@ Honest: `[x]` = stage acceptance met for **scaffold + CI-owned IDs**; `[~]` = co
 | **B4** Pairing + mesh hosting | `[x]` | hosting status; dual-mode notes |
 | **B5** Memory L1–L3 | `[x]` | StandingStore + facade |
 | **B6** Providers / harness / approvals | `[x]` | TurnService; durable approvals |
-| **B7** Channel SDK + Telegram demo | `[~]` | SDK `[x]`; Settings path `[x]`; live Telegram + five first-party IMs = post-mobile epic |
+| **B7** Channel SDK + Telegram demo | `[~]` | SDK + six plugins + Channels UI `[x]`; **live bot verify deferred** from early-adopter claims |
 | **B8** Memory depth | `[x]` | LearnQueue, flush, L4 FTS, compact |
 | **B9** Static workflows | `[x]` | matcher/executor; V-DAG-4 real model `[ ]` optional |
 | **B9.1** ScheduleService | `[x]` | clock + NL propose/confirm + workflow sync; V-CRON-1..6 |
@@ -113,7 +115,7 @@ Honest: `[x]` = stage acceptance met for **scaffold + CI-owned IDs**; `[~]` = co
 | **B11** Artifacts + signing | `[x]` | HMAC URLs |
 | **B12** Settings UI (Tauri) | `[x]` | Thin Settings + QR + Memory/Advanced + V-UX Playwright smoke |
 | **B13** Doctor + HomeClaw migrate | `[x]` | fresh + fixture dry-run green |
-| **B14** Smart home | `[~]` | Library + C.4 + RPC `[x]`; live HA/MQTT + Settings depth `[~]` |
+| **B14** Smart home | `[~]` | Library + C.4 + RPC `[x]`; live sign-off via [`docs/smart-home-live-checklist.md`](../docs/smart-home-live-checklist.md) `[>]` |
 
 Detail for each stage: [§3](#3-build-stages-b0b14).
 
@@ -140,7 +142,7 @@ Tag `v1.0.0` when (1)–(8) are honestly `[x]` including bar 1’s e2e bar you c
 | EnvoyMesh mobile thin client | `[~]` | §19.2 — chat/approvals/artifacts + push |
 | Profile workspace folders (host mounts outside sandbox) | `[~]` | Design §4.2.1 — up to 16 named mounts; Owner sets (incl. `/`); `workspace/<id>/…` jail; V-SEC-13/14/20 |
 | Household Owner account | `[x]` | Design §4.1.1 — exclusive Owner bind; R1/R4 deferred; seat-or-Owner grants; V-SEC-15…21 |
-| Privacy Mode RPC (+ smart-home egress) | `[ ]` | §19.4, V-P2-PRIV-* |
+| Privacy Mode RPC (+ smart-home egress) | `[ ]` | §19.4, V-P2-PRIV-*; stub silent until RPC — early-adopter claim sheet |
 | Automation authoring UX | `[ ]` | §19.8 |
 | First-party IM set (Telegram + Discord + Slack + Feishu + DingTalk + WeCom) | `[ ]` | Design §5.0 `2026-10-16c` — after mobile solid |
 | **P2-A…E agent capabilities** | `[x]` | Accepted 2026-10-20; A–E + D2 shipped (`2026-10-20o`) |
@@ -445,15 +447,15 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-SEC-6 | **B12** | Settings creates account + binding with no raw config edit |
 | V-SEC-11 | **B14** | an account-scoped caller cannot read another account's object names (`home.listSources`, `getChannelStatus.unboundSources`) |
 | V-SEC-12 | **B2** | the HTTP hatch resolves the account from a binding; a client-supplied `accountId` cannot open a turn for an unbound account |
-| V-SEC-13 | **post-v1** | workspace path jail (Design §4.2.1): no escape from `hostPath`; raw absolutes refused; unset ⇒ `workspace/…` fails |
-| V-SEC-14 | **post-v1** | workspace set/clear refused for non-Owner devices; household Owner (or loopback) may set any profile |
-| V-SEC-15 | **post-v1** | exactly one `ownerAccountId`; first account = Owner; delete Owner without transfer fails; transfer leaves one Owner |
-| V-SEC-16 | **post-v1** | non-Owner device cannot Owner-scope; Owner-bound device can over mesh; `ownerTrusted` alone insufficient |
-| V-SEC-17 | **post-v1** | member list/revoke own grants only; Owner may revoke any seat’s grant |
-| V-SEC-18 | **post-v1** | member `updateAccount` own displayName/locale OK; `toolPolicy` Owner-only |
-| V-SEC-19 | **post-v1** | Owner dual-bind refused (`owner_bind_exclusive`) |
-| V-SEC-20 | **post-v1** | filesystem-root workspace only for Owner seat |
-| V-SEC-21 | **post-v1** | member paired memory `untrusted`; Owner-seat paired `owner` |
+| V-SEC-13 | **B12** (workspace; Design §4.2.1) | workspace path jail: no escape from `hostPath`; raw absolutes refused; unset ⇒ `workspace/…` fails |
+| V-SEC-14 | **B12** (workspace) | workspace set/clear refused for non-Owner devices; household Owner (or loopback) may set any profile |
+| V-SEC-15 | **B4** (Household Owner §4.1.1) | exactly one `ownerAccountId`; first account = Owner; delete Owner without transfer fails; transfer leaves one Owner |
+| V-SEC-16 | **B4** | non-Owner device cannot Owner-scope; Owner-bound device can over mesh; `ownerTrusted` alone insufficient |
+| V-SEC-17 | **B4** | member list/revoke own grants only; Owner may revoke any seat’s grant |
+| V-SEC-18 | **B4** | member `updateAccount` own displayName/locale OK; `toolPolicy` Owner-only |
+| V-SEC-19 | **B4** | Owner dual-bind refused (`owner_bind_exclusive`) |
+| V-SEC-20 | **B12** | filesystem-root workspace only for Owner seat |
+| V-SEC-21 | **B4** / **B5** | member paired memory `untrusted`; Owner-seat paired `owner` |
 | V-CH-1 | **B7** | Telegram demo + HTTP hatch share one inbound/outbound contract |
 | V-CH-2 | **B7** | unknown sender denied/paired |
 | V-CH-3 | **B7** | outbound cannot target another account's thread via `rawRef` spoofing |
@@ -780,6 +782,12 @@ If you need to change the answer to "in what order we build," edit this doc and 
 
 | Date | Change |
 |------|--------|
+| 2026-10-22e | **Mobile gap close:** live verify + privacy/store docs; CI mobile job; release signing pattern; System This machine; workflow Diagram↔YAML; §11.3/Q12 sync. Aligns Design `2026-10-22e`. |
+| 2026-10-22d | **Early-adopter freeze:** claim sheet; live HA checklist; IM live + Privacy Mode **out of marketing**; V-SEC-13…21 stage owners synced (no longer “post-v1”); desktop V-UX hygiene. Tag `v1.0.0` still `[ ]`. Aligns Design `2026-10-22d`. |
+| 2026-10-22c | **Watch-item close:** household L7 Normative; flat-skill migrate; media-generate catalogue; V-SEC-7 / V-MEM-22 test fixes. Aligns Design `2026-10-22c`. |
+| 2026-10-22b | **Skills propose gate:** `skill_propose` → PendingLearn; accept → SkillService pack unverified until `verifySkill`. Aligns Design `2026-10-22b`. No new verify IDs (V-LEARN-* / V-SKILL-*). |
+| 2026-10-22a | **Skills progressive disclosure:** `skills_list` + `skill_view` builtins (Hermes Adapt §9.2). Aligns Design `2026-10-22a`. No new verify IDs (covered by V-SKILL-*). |
+| 2026-10-22 | **Defer reaffirm:** OpenClaw device nodes not a Phase 2 epic; mesh-first investigate only. Aligns Design `2026-10-22`. No new verify IDs. |
 | 2026-10-20t | **P2-E3 shipped:** parent harness turn = envoy-harness `Agent.run`; V-P2-AGENT-4; `runTurn` fallback. Aligns Design `2026-10-20t`. |
 | 2026-10-20s | **P2-E2 full mesh:** task children = LocalMeshSubmitter+Agent; parent stays runTurn. Aligns Design `2026-10-20s`. |
 | 2026-10-20r | **P2-E2 shipped:** `task` tool + harness `mapBoundedParallel`; spawn_helper via task; V-P2-AGENT-3. Aligns Design `2026-10-20r`. |

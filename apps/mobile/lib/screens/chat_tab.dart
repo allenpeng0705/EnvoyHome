@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:envoyhome_mobile_client/envoyhome_mobile_client.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -110,9 +111,10 @@ class ChatTab extends StatefulWidget {
   State<ChatTab> createState() => _ChatTabState();
 }
 
-class _ChatTabState extends State<ChatTab> {
+class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
   final _textCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
+  final _inputFocus = FocusNode();
   final _bubbles = <_ChatBubble>[];
   final _unsubs = <void Function()>[];
   final _pendingFiles = <_PendingAttach>[];
@@ -128,7 +130,17 @@ class _ChatTabState extends State<ChatTab> {
   String? _draftArtifactUrl;
   String? _trackedAccountId;
   bool _wasConnected = false;
+  /// The [EnvoyHomeSession] whose transport we last bound in [_ensureSubscribed].
+  /// Network redial replaces the session while [SessionController.isConnected]
+  /// stays true — track identity so we rebind handlers (not only false→true).
+  EnvoyHomeSession? _boundSession;
+  /// Brief lock while upload + `home.sendMessage` RPC runs (not the whole turn).
   bool _sending = false;
+  /// Turn ids cancelled/superseded — ignore late delta/finished events.
+  final Set<String> _staleTurnIds = {};
+  /// Bumped on optimistic send / cancel so in-flight transcript reloads cannot
+  /// wipe a newer local bubble (turn-finished reload vs follow-up send race).
+  int _transcriptEpoch = 0;
   bool _subscribed = false;
   bool _listening = false;
   bool _speechAvailable = false;
@@ -168,8 +180,11 @@ class _ChatTabState extends State<ChatTab> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _inputFocus.addListener(_onInputFocusChange);
     _trackedAccountId = widget.session.accountId;
     _wasConnected = widget.session.isConnected;
+    _boundSession = widget.session.session;
     widget.session.addListener(_onSessionChanged);
     _ensureSubscribed();
     unawaited(_initSpeech());
@@ -189,6 +204,21 @@ class _ChatTabState extends State<ChatTab> {
   }
 
   @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    // Soft keyboard open/close changes viewInsets after the first paint —
+    // re-pin the latest bubble above the composer.
+    if (!mounted) return;
+    if (_inputFocus.hasFocus || _sending || (_assistantDraft?.isNotEmpty ?? false)) {
+      _scrollToEnd();
+    }
+  }
+
+  void _onInputFocusChange() {
+    if (_inputFocus.hasFocus) _scrollToEnd();
+  }
+
+  @override
   void didUpdateWidget(covariant ChatTab oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.session != widget.session) {
@@ -200,6 +230,7 @@ class _ChatTabState extends State<ChatTab> {
       _sessionId = null;
       _pendingNewChatTitle = '';
       _subscribed = false;
+      _boundSession = widget.session.session;
       _bubbles.clear();
       _pendingFiles.clear();
       _ensureSubscribed();
@@ -212,6 +243,9 @@ class _ChatTabState extends State<ChatTab> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _inputFocus.removeListener(_onInputFocusChange);
+    _inputFocus.dispose();
     widget.session.removeListener(_onSessionChanged);
     _teardownSubs();
     unawaited(_speech.stop());
@@ -227,6 +261,15 @@ class _ChatTabState extends State<ChatTab> {
   void _onSessionChanged() {
     final connected = widget.session.isConnected;
     final accountId = widget.session.accountId;
+    final home = widget.session.session;
+    // Redial disposes the old client and installs a new one without clearing
+    // isConnected — rebind subscribe/onEvent or turn deltas go nowhere.
+    if (!identical(home, _boundSession)) {
+      _teardownSubs();
+      _subscribed = false;
+      _boundSession = home;
+      if (home != null) unawaited(_ensureSubscribed());
+    }
     if (accountId != _trackedAccountId) {
       _trackedAccountId = accountId;
       _sessionId = null;
@@ -401,6 +444,8 @@ class _ChatTabState extends State<ChatTab> {
         'home:choice-needed',
         'home:choice-resolved',
       ]);
+      // Redial may have replaced the session while subscribe awaited.
+      if (!mounted || !identical(widget.session.session, home)) return;
       _unsubs.add(home.onEvent('home:turn-delta', _onTurnDelta));
       _unsubs.add(home.onEvent('home:turn-finished', _onTurnFinished));
       _unsubs.add(home.onEvent('home:approval-needed', _onApprovalEvent));
@@ -409,16 +454,24 @@ class _ChatTabState extends State<ChatTab> {
       _unsubs.add(home.onEvent('home:choice-resolved', _onChoiceEvent));
       _subscribed = true;
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _bubbles.add(
-            _ChatBubble(
-              role: 'system',
-              text: AppLocalizations.of(context).chatSubscribeFailed('$e'),
-            ),
-          );
-        });
+      if (!mounted || !identical(widget.session.session, home)) return;
+      // Transport upgrade / brief drop retires the socket under this call —
+      // do not flash `homeRemote.disconnected` as a subscribe failure.
+      if (isTransientHomeRemoteDrop(e)) {
+        unawaited(Future<void>.delayed(const Duration(milliseconds: 400), () {
+          if (!mounted) return;
+          unawaited(_ensureSubscribed());
+        }));
+        return;
       }
+      setState(() {
+        _bubbles.add(
+          _ChatBubble(
+            role: 'system',
+            text: AppLocalizations.of(context).chatSubscribeFailed('$e'),
+          ),
+        );
+      });
     }
   }
 
@@ -609,14 +662,33 @@ class _ChatTabState extends State<ChatTab> {
   }
 
   void _scrollToEnd() {
+    void pin() {
+      if (!mounted || !_scrollCtrl.hasClients) return;
+      final max = _scrollCtrl.position.maxScrollExtent;
+      if ((_scrollCtrl.offset - max).abs() < 1) return;
+      _scrollCtrl.jumpTo(max);
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_scrollCtrl.hasClients) return;
+      if (!mounted || !_scrollCtrl.hasClients) return;
+      final max = _scrollCtrl.position.maxScrollExtent;
       _scrollCtrl.animateTo(
-        _scrollCtrl.position.maxScrollExtent,
+        max,
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOut,
-      );
+      ).whenComplete(() {
+        // Keyboard inset often lands one frame later — snap if we undershot.
+        WidgetsBinding.instance.addPostFrameCallback((_) => pin());
+      });
     });
+  }
+
+  void _markTurnStale(String turnId) {
+    _staleTurnIds.add(turnId);
+    // Bound growth if the daemon never emits finished for a cancelled turn.
+    while (_staleTurnIds.length > 32) {
+      _staleTurnIds.remove(_staleTurnIds.first);
+    }
   }
 
   void _onTurnDelta(dynamic data) {
@@ -625,13 +697,18 @@ class _ChatTabState extends State<ChatTab> {
     // Ignore turns for other sessions (Home + Chats both stay mounted).
     final sid = map['sessionId']?.toString();
     if (sid == null || sid.isEmpty || sid != _sessionId) return;
+    final tid = map['turnId']?.toString();
+    if (tid == null || tid.isEmpty) return;
+    if (_staleTurnIds.contains(tid)) return;
+    // After cancel, `_turnId` is null — do not adopt a non-matching live turn
+    // unless we have no expected id yet (first chunk of the turn we just started).
+    if (_turnId != null && tid != _turnId) return;
     if (map['kind']?.toString() != 'text') return;
     final text = map['text']?.toString();
     if (text == null || text.isEmpty) return;
     if (!mounted) return;
     setState(() {
-      final tid = map['turnId']?.toString();
-      if (tid != null && tid.isNotEmpty) _turnId = tid;
+      _turnId = tid;
       final fmt = normalizeChatFormat(map['format']);
       if (fmt != null) _draftFormat = fmt;
       final path = map['artifactPath']?.toString();
@@ -650,10 +727,16 @@ class _ChatTabState extends State<ChatTab> {
 
   void _onTurnFinished(dynamic data) {
     if (!mounted) return;
-    if (data is Map) {
-      final sid = data['sessionId']?.toString();
-      if (sid == null || sid.isEmpty || sid != _sessionId) return;
-    }
+    if (data is! Map) return;
+    final sid = data['sessionId']?.toString();
+    if (sid == null || sid.isEmpty || sid != _sessionId) return;
+    final tid = data['turnId']?.toString();
+    if (tid == null || tid.isEmpty) return;
+    if (_staleTurnIds.remove(tid)) return;
+    // Superseded by a newer send — ignore (do not clear the new turn's draft).
+    if (_turnId != null && tid != _turnId) return;
+    // Follow-up send in RPC flight — leave optimistic UI alone.
+    if (_sending) return;
     setState(() {
       final draft = _assistantDraft?.trim();
       if (draft != null && draft.isNotEmpty) {
@@ -688,6 +771,7 @@ class _ChatTabState extends State<ChatTab> {
     if (home == null || accountId == null) {
       throw StateError('not connected');
     }
+    final epoch = _transcriptEpoch;
     final body = await home.getTranscript(
       accountId: accountId,
       sessionId: sessionId,
@@ -697,7 +781,9 @@ class _ChatTabState extends State<ChatTab> {
     if (messages is! List) {
       throw StateError('bad transcript');
     }
-    if (!mounted) return;
+    // Discard if a newer send/cancel happened while we awaited.
+    if (!mounted || epoch != _transcriptEpoch || _sending) return;
+    if (_sessionId != null && sessionId != _sessionId) return;
     final next = <_ChatBubble>[];
     for (final m in messages) {
       if (m is! Map) continue;
@@ -1199,20 +1285,23 @@ class _ChatTabState extends State<ChatTab> {
                     value: 'archive',
                     enabled: _sessionId != null,
                   ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Divider(
-                    height: 1,
-                    color: scheme.onSurface.withValues(alpha: 0.08),
+                // Home / Schedules: no whole-chat delete — remove messages one-by-one.
+                if (!_singleThread) ...[
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: Divider(
+                      height: 1,
+                      color: scheme.onSurface.withValues(alpha: 0.08),
+                    ),
                   ),
-                ),
-                tile(
-                  icon: Icons.delete_outline,
-                  label: l10n.chatRemoveAction,
-                  value: 'remove',
-                  enabled: canAct,
-                  danger: true,
-                ),
+                  tile(
+                    icon: Icons.delete_outline,
+                    label: l10n.chatRemoveAction,
+                    value: 'remove',
+                    enabled: canAct,
+                    danger: true,
+                  ),
+                ],
               ],
             ),
           ),
@@ -1571,6 +1660,8 @@ class _ChatTabState extends State<ChatTab> {
     final home = widget.session.session;
     final turnId = _turnId;
     if (home == null || turnId == null) return;
+    _markTurnStale(turnId);
+    _transcriptEpoch++;
     try {
       await home.cancelTurn(turnId: turnId);
     } catch (_) {}
@@ -1579,10 +1670,16 @@ class _ChatTabState extends State<ChatTab> {
         _sending = false;
         _turnId = null;
         _assistantDraft = null;
+        _draftFormat = null;
+        _draftArtifactPath = null;
+        _draftArtifactUrl = null;
       });
     }
   }
 
+  /// Send is non-blocking: show the user bubble immediately, return the composer
+  /// as soon as `home.sendMessage` acknowledges start, and stream the reply via
+  /// events. A new send while a turn is active cancels the prior turn first.
   Future<void> _send() async {
     final home = widget.session.session;
     final accountId = widget.session.accountId;
@@ -1604,15 +1701,54 @@ class _ChatTabState extends State<ChatTab> {
       });
       return;
     }
-    await _ensureSubscribed();
-    if (!mounted) return;
+    if (_sending) return; // brief RPC lock only — not the whole turn
     if (_listening) {
       await _speech.stop();
-      setState(() => _listening = false);
+      if (mounted) setState(() => _listening = false);
     }
-    setState(() => _sending = true);
+
+    // Cancel in-flight turn so a follow-up message can start immediately.
+    if (_turnId != null) {
+      final prev = _turnId!;
+      _markTurnStale(prev);
+      _transcriptEpoch++;
+      setState(() {
+        _turnId = null;
+        _assistantDraft = null;
+        _draftFormat = null;
+        _draftArtifactPath = null;
+        _draftArtifactUrl = null;
+      });
+      try {
+        await home.cancelTurn(turnId: prev);
+      } catch (_) {}
+      if (!mounted) return;
+    }
+
     final localFiles = List<_PendingAttach>.from(_pendingFiles);
+    final displayText = text.isEmpty ? l10n.chatAttachedOnly : text;
+    // Optimistic UI before any network — never wait on the model for this paint.
+    _transcriptEpoch++;
+    setState(() {
+      _bubbles.add(_ChatBubble(role: 'user', text: displayText, media: [
+        for (final f in localFiles)
+          {
+            'kind': 'file',
+            'fileName': f.name,
+            if (f.mimeType != null) 'mimeType': f.mimeType,
+            'bytes': f.size,
+          },
+      ]));
+      _assistantDraft = '';
+      _textCtrl.clear();
+      _pendingFiles.clear();
+      _sending = true;
+    });
+    _scrollToEnd();
+
     try {
+      await _ensureSubscribed();
+      if (!mounted) return;
       final media = <Map<String, dynamic>>[];
       for (final item in localFiles) {
         final up = await home.uploadChatMedia(
@@ -1629,17 +1765,26 @@ class _ChatTabState extends State<ChatTab> {
           if (up['bytes'] != null) 'bytes': up['bytes'],
         });
       }
+      if (media.isNotEmpty && mounted) {
+        // Swap optimistic attach chips for server uris once upload finishes.
+        setState(() {
+          for (var i = _bubbles.length - 1; i >= 0; i--) {
+            if (_bubbles[i].role == 'user' &&
+                _bubbles[i].text == displayText) {
+              _bubbles[i] = _ChatBubble(
+                role: 'user',
+                text: displayText,
+                media: media,
+                messageId: _bubbles[i].messageId,
+              );
+              break;
+            }
+          }
+        });
+      }
       final sessionId = await _ensureSessionId();
       if (sessionId == null) throw StateError('no sessionId');
       if (!mounted) return;
-      final displayText = text.isEmpty ? l10n.chatAttachedOnly : text;
-      setState(() {
-        _bubbles.add(_ChatBubble(role: 'user', text: displayText, media: media));
-        _assistantDraft = '';
-        _textCtrl.clear();
-        _pendingFiles.clear();
-      });
-      _scrollToEnd();
       final clientContext = await buildClientContext(context);
       final sent = await home.sendMessage(
         accountId: accountId,
@@ -1648,22 +1793,28 @@ class _ChatTabState extends State<ChatTab> {
         media: media.isEmpty ? null : media,
         clientContext: clientContext,
       );
-      _turnId = sent['turnId']?.toString();
+      if (!mounted) return;
+      final turnId = sent['turnId']?.toString();
       final status = sent['status']?.toString();
       if (status != null && status != 'started' && status != 'ok') {
-        if (!mounted) return;
         setState(() {
           _bubbles.add(_ChatBubble(role: 'system', text: l10n.chatStatus(status)));
+          _assistantDraft = null;
+          _turnId = null;
           _sending = false;
         });
-      } else {
-        // Pick up durable messageIds so Delete works before the assistant finishes.
-        try {
-          await _reloadTranscript(sessionId);
-        } catch (_) {
-          /* keep optimistic bubbles */
-        }
+        return;
       }
+      // Unlock composer immediately — reply streams via home:turn-delta / finished.
+      // Do NOT reload transcript here: the user line is written in the background
+      // turn and a premature getTranscript would wipe the optimistic bubble.
+      setState(() {
+        if (turnId != null && turnId.isNotEmpty) {
+          // Keep an early delta's turn id if it already matched; otherwise adopt.
+          _turnId = turnId;
+        }
+        _sending = false;
+      });
       if (!_singleThread) unawaited(_loadSessionList());
       unawaited(_refreshApprovals());
       unawaited(_refreshChoices());
@@ -1672,6 +1823,7 @@ class _ChatTabState extends State<ChatTab> {
       setState(() {
         _bubbles.add(_ChatBubble(role: 'system', text: l10n.chatError('$e')));
         _assistantDraft = null;
+        _turnId = null;
         _sending = false;
       });
     }
@@ -1937,17 +2089,24 @@ class _ChatTabState extends State<ChatTab> {
     );
   }
 
-  Widget _schedulesPaneTabs(AppLocalizations l10n, ThemeData theme) {
+  /// Shared underline tabs (Chat list + Schedules). Optional [trailing] sits
+  /// after the tabs (e.g. + for new chat, ⋮ for thread actions).
+  Widget _underlineTabs({
+    required ThemeData theme,
+    required List<({String id, String label})> tabs,
+    required String selectedId,
+    required ValueChanged<String> onSelect,
+    Widget? trailing,
+  }) {
     Widget tab(String id, String label) {
-      final selected = _schedulesPane == id;
+      final selected = selectedId == id;
       return Expanded(
         child: InkWell(
           onTap: _sending
               ? null
               : () {
-                  if (id == _schedulesPane) return;
-                  setState(() => _schedulesPane = id);
-                  if (id == 'histories') unawaited(_refreshScheduleHistories());
+                  if (id == selectedId) return;
+                  onSelect(id);
                 },
           child: Container(
             alignment: Alignment.center,
@@ -1984,66 +2143,316 @@ class _ChatTabState extends State<ChatTab> {
         ),
         child: Row(
           children: [
-            tab('chat', l10n.schedulesChatTabChat),
-            tab('histories', l10n.schedulesChatTabHistories),
+            for (final t in tabs) tab(t.id, t.label),
+            if (trailing != null) trailing,
           ],
         ),
       ),
     );
   }
 
-  Widget _chatChrome(AppLocalizations l10n, ThemeData theme) {
-    final inList = !_singleThread && _showSessionList;
+  Widget _chatListTabs(AppLocalizations l10n, ThemeData theme) {
+    return _underlineTabs(
+      theme: theme,
+      tabs: [
+        (id: 'active', label: l10n.chatTabActive),
+        (id: 'archived', label: l10n.chatTabArchived),
+      ],
+      selectedId: _showArchived ? 'archived' : 'active',
+      onSelect: (id) {
+        if (id == 'archived') {
+          unawaited(_openArchivedList());
+        } else {
+          unawaited(_openSessionList());
+        }
+      },
+    );
+  }
+
+  Widget _schedulesPaneTabs(AppLocalizations l10n, ThemeData theme) {
+    // Schedules is a single durable thread — no whole-chat remove/empty menu.
+    // Users delete messages one-by-one via the bubble delete control.
+    return _underlineTabs(
+      theme: theme,
+      tabs: [
+        (id: 'chat', label: l10n.schedulesChatTabChat),
+        (id: 'histories', label: l10n.schedulesChatTabHistories),
+      ],
+      selectedId: _schedulesPane,
+      onSelect: (id) {
+        setState(() => _schedulesPane = id);
+        if (id == 'histories') unawaited(_refreshScheduleHistories());
+      },
+    );
+  }
+
+  String _relativeSessionTime(String? iso) {
+    if (iso == null || iso.isEmpty) return '';
+    final t = DateTime.tryParse(iso)?.toLocal();
+    if (t == null) return '';
+    final now = DateTime.now();
+    final diff = now.difference(t);
+    if (diff.inMinutes < 1) return 'now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) return '${diff.inHours}h';
+    if (diff.inDays < 7) return '${diff.inDays}d';
+    final sameYear = t.year == now.year;
+    final m = t.month.toString().padLeft(2, '0');
+    final d = t.day.toString().padLeft(2, '0');
+    return sameYear ? '$m/$d' : '${t.year}/$m/$d';
+  }
+
+  /// Multi-session thread: back + tappable title + ⋮ (no trash icon).
+  Widget _threadChrome(AppLocalizations l10n, ThemeData theme) {
     return Material(
       color: theme.scaffoldBackgroundColor,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(4, 4, 4, 0),
+        padding: const EdgeInsets.fromLTRB(4, 0, 4, 0),
         child: Row(
           children: [
-            if (!_singleThread && !inList)
-              IconButton(
-                tooltip: l10n.navChat,
-                onPressed: _sending ? null : () => unawaited(_openSessionList()),
-                icon: const Icon(Icons.arrow_back, size: 20),
-              ),
-            Expanded(
-              child: (!_singleThread && !inList)
-                  ? InkWell(
-                      onTap: _sending
-                          ? null
-                          : () {
-                              unawaited(
-                                _renamePendingOrSession(
-                                  sessionId: _sessionId,
-                                  currentTitle: _threadTitle(l10n),
-                                ),
-                              );
-                            },
-                      child: Text(
-                        _threadTitle(l10n),
-                        style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    )
-                  : Text(
-                      inList ? l10n.navChat : _threadTitle(l10n),
-                      style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+            IconButton(
+              tooltip: l10n.navChat,
+              onPressed: _sending ? null : () => unawaited(_openSessionList()),
+              icon: const Icon(Icons.arrow_back, size: 20),
             ),
-            if (!_singleThread && inList && !_showArchived)
-              IconButton(
-                tooltip: l10n.chatNew,
-                onPressed: _sending ? null : _startNewChat,
-                icon: const Icon(Icons.add, size: 22),
+            Expanded(
+              child: InkWell(
+                onTap: _sending
+                    ? null
+                    : () {
+                        unawaited(
+                          _renamePendingOrSession(
+                            sessionId: _sessionId,
+                            currentTitle: _threadTitle(l10n),
+                          ),
+                        );
+                      },
+                child: Text(
+                  _threadTitle(l10n),
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-            if (!inList)
-              IconButton(
-                tooltip: l10n.chatTrashMenu,
-                onPressed: _sending ? null : _showTrashMenu,
-                icon: const Icon(Icons.delete_outline, size: 20),
-              ),
+            ),
+            IconButton(
+              tooltip: l10n.chatTrashMenu,
+              onPressed: _sending ? null : _showTrashMenu,
+              icon: const Icon(Icons.more_horiz, size: 20),
+            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _newChatListItem(AppLocalizations l10n, ThemeData theme) {
+    final scheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+      child: Material(
+        color: scheme.primaryContainer.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: _sending ? null : _startNewChat,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: scheme.primary.withValues(alpha: 0.14),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.add, size: 22, color: scheme.primary),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    l10n.chatNew,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: scheme.primary,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.chevron_right,
+                  size: 20,
+                  color: scheme.primary.withValues(alpha: 0.55),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _sessionListItem({
+    required AppLocalizations l10n,
+    required ThemeData theme,
+    required Map<String, dynamic> session,
+  }) {
+    final scheme = theme.colorScheme;
+    final sid = session['sessionId']?.toString() ?? '';
+    final title = (session['title']?.toString().trim().isNotEmpty == true)
+        ? session['title'].toString()
+        : l10n.chatUntitled;
+    final current = sid == _sessionId;
+    final when = _relativeSessionTime(session['updatedAt']?.toString());
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+      child: Material(
+        color: current
+            ? scheme.primary.withValues(alpha: 0.08)
+            : scheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => unawaited(_selectSession(sid, fromArchive: _showArchived)),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 4, 10),
+            child: Row(
+              children: [
+                Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: current
+                        ? scheme.primary.withValues(alpha: 0.16)
+                        : scheme.surfaceContainerHighest,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    _showArchived ? Icons.archive_outlined : Icons.chat_bubble_outline,
+                    size: 18,
+                    color: current
+                        ? scheme.primary
+                        : scheme.onSurface.withValues(alpha: 0.55),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyLarge?.copyWith(
+                          fontWeight: current ? FontWeight.w700 : FontWeight.w600,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      if (when.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          when,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: scheme.onSurface.withValues(alpha: 0.45),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  tooltip: l10n.chatTrashMenu,
+                  icon: Icon(
+                    Icons.more_horiz,
+                    size: 20,
+                    color: scheme.onSurface.withValues(alpha: 0.4),
+                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onSelected: (action) {
+                    // Defer until the popup route has popped — otherwise iOS drops the confirm dialog.
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (!mounted) return;
+                      if (action == 'rename') {
+                        unawaited(_renameSession(sid, currentTitle: title));
+                      } else if (action == 'archive') {
+                        unawaited(_archiveSession(sid));
+                      } else if (action == 'unarchive') {
+                        unawaited(_unarchiveSession(sid));
+                      } else if (action == 'remove') {
+                        unawaited(_removeSession(sid));
+                      }
+                    });
+                  },
+                  itemBuilder: (ctx) {
+                    final popScheme = Theme.of(ctx).colorScheme;
+                    PopupMenuItem<String> item({
+                      required String value,
+                      required IconData icon,
+                      required String label,
+                      bool danger = false,
+                    }) {
+                      final color = danger ? popScheme.error : popScheme.onSurface;
+                      return PopupMenuItem(
+                        value: value,
+                        child: Row(
+                          children: [
+                            Icon(icon, size: 20, color: color),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                label,
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: color,
+                                  fontWeight: danger ? FontWeight.w600 : FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    if (_showArchived) {
+                      return [
+                        item(
+                          value: 'unarchive',
+                          icon: Icons.unarchive_outlined,
+                          label: l10n.chatUnarchiveAction,
+                        ),
+                        const PopupMenuDivider(),
+                        item(
+                          value: 'remove',
+                          icon: Icons.delete_outline,
+                          label: l10n.chatRemoveAction,
+                          danger: true,
+                        ),
+                      ];
+                    }
+                    return [
+                      item(
+                        value: 'rename',
+                        icon: Icons.drive_file_rename_outline,
+                        label: l10n.chatRenameAction,
+                      ),
+                      item(
+                        value: 'archive',
+                        icon: Icons.archive_outlined,
+                        label: l10n.chatArchiveAction,
+                      ),
+                      const PopupMenuDivider(),
+                      item(
+                        value: 'remove',
+                        icon: Icons.delete_outline,
+                        label: l10n.chatRemoveAction,
+                        danger: true,
+                      ),
+                    ];
+                  },
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -2053,145 +2462,41 @@ class _ChatTabState extends State<ChatTab> {
     if (_sessionsLoading && _sessionRows.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    if (_sessionRows.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                _showArchived ? l10n.chatArchivedEmpty : l10n.chatSessionsEmpty,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                ),
-              ),
-              if (!_showArchived) ...[
-                const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: _sending ? null : _startNewChat,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: Text(l10n.chatNew),
-                ),
-              ],
-            ],
-          ),
-        ),
-      );
-    }
+
+    final showNew = !_showArchived;
+    final sessions = _sessionRows;
+    // Active: pinned New chat + sessions. Archived: sessions or empty hint.
+    final itemCount = showNew
+        ? 1 + (sessions.isEmpty ? 1 : sessions.length)
+        : (sessions.isEmpty ? 1 : sessions.length);
+
     return RefreshIndicator(
       onRefresh: _loadSessionList,
       child: ListView.builder(
-        itemCount: _sessionRows.length,
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 16),
+        itemCount: itemCount,
         itemBuilder: (_, i) {
-          final s = _sessionRows[i];
-          final sid = s['sessionId']?.toString() ?? '';
-          final title = (s['title']?.toString().trim().isNotEmpty == true)
-              ? s['title'].toString()
-              : l10n.chatUntitled;
-          final current = sid == _sessionId;
-          return ListTile(
-            selected: current,
-            selectedTileColor: theme.colorScheme.onSurface.withValues(alpha: 0.08),
-            title: Text(
-              title,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                fontWeight: current ? FontWeight.w600 : FontWeight.w500,
+          if (showNew && i == 0) {
+            return _newChatListItem(l10n, theme);
+          }
+          final sessionIndex = showNew ? i - 1 : i;
+          if (sessions.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(24, 28, 24, 12),
+              child: Text(
+                _showArchived ? l10n.chatArchivedEmpty : l10n.chatSessionsEmpty,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                ),
               ),
-            ),
-            trailing: PopupMenuButton<String>(
-              tooltip: l10n.chatTrashMenu,
-              icon: Icon(
-                Icons.more_horiz,
-                size: 20,
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.45),
-              ),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              onSelected: (action) {
-                // Defer until the popup route has popped — otherwise iOS drops the confirm dialog.
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (!mounted) return;
-                  if (action == 'rename') {
-                    unawaited(_renameSession(sid, currentTitle: title));
-                  } else if (action == 'archive') {
-                    unawaited(_archiveSession(sid));
-                  } else if (action == 'unarchive') {
-                    unawaited(_unarchiveSession(sid));
-                  } else if (action == 'remove') {
-                    unawaited(_removeSession(sid));
-                  }
-                });
-              },
-              itemBuilder: (ctx) {
-                final scheme = Theme.of(ctx).colorScheme;
-                PopupMenuItem<String> item({
-                  required String value,
-                  required IconData icon,
-                  required String label,
-                  bool danger = false,
-                }) {
-                  final color = danger ? scheme.error : scheme.onSurface;
-                  return PopupMenuItem(
-                    value: value,
-                    child: Row(
-                      children: [
-                        Icon(icon, size: 20, color: color),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            label,
-                            style: theme.textTheme.bodyMedium?.copyWith(
-                              color: color,
-                              fontWeight: danger ? FontWeight.w600 : FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                if (_showArchived) {
-                  return [
-                    item(
-                      value: 'unarchive',
-                      icon: Icons.unarchive_outlined,
-                      label: l10n.chatUnarchiveAction,
-                    ),
-                    const PopupMenuDivider(),
-                    item(
-                      value: 'remove',
-                      icon: Icons.delete_outline,
-                      label: l10n.chatRemoveAction,
-                      danger: true,
-                    ),
-                  ];
-                }
-                return [
-                  item(
-                    value: 'rename',
-                    icon: Icons.drive_file_rename_outline,
-                    label: l10n.chatRenameAction,
-                  ),
-                  item(
-                    value: 'archive',
-                    icon: Icons.archive_outlined,
-                    label: l10n.chatArchiveAction,
-                  ),
-                  const PopupMenuDivider(),
-                  item(
-                    value: 'remove',
-                    icon: Icons.delete_outline,
-                    label: l10n.chatRemoveAction,
-                    danger: true,
-                  ),
-                ];
-              },
-            ),
-            onTap: () => unawaited(_selectSession(sid, fromArchive: _showArchived)),
+            );
+          }
+          return _sessionListItem(
+            l10n: l10n,
+            theme: theme,
+            session: sessions[sessionIndex],
           );
         },
       ),
@@ -2722,6 +3027,7 @@ class _ChatTabState extends State<ChatTab> {
       return _ConnectGuide(
         hasSavedPairing: widget.session.hasSavedPairing,
         busy: widget.session.busy,
+        error: widget.session.error,
         onConnect: widget.onRequestConnect,
         onPairAgain: widget.onRequestPairAgain,
       );
@@ -2730,35 +3036,7 @@ class _ChatTabState extends State<ChatTab> {
     if (!_singleThread && _showSessionList) {
       return Column(
         children: [
-          _chatChrome(l10n, theme),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-            child: SegmentedButton<bool>(
-              segments: [
-                ButtonSegment<bool>(
-                  value: false,
-                  label: Text(l10n.chatTabActive),
-                  icon: const Icon(Icons.chat_bubble_outline, size: 16),
-                ),
-                ButtonSegment<bool>(
-                  value: true,
-                  label: Text(l10n.chatTabArchived),
-                  icon: const Icon(Icons.archive_outlined, size: 16),
-                ),
-              ],
-              selected: {_showArchived},
-              onSelectionChanged: _sending
-                  ? null
-                  : (s) {
-                      final archived = s.first;
-                      if (archived) {
-                        unawaited(_openArchivedList());
-                      } else {
-                        unawaited(_openSessionList());
-                      }
-                    },
-            ),
-          ),
+          _chatListTabs(l10n, theme),
           Expanded(child: _sessionList(l10n, theme)),
         ],
       );
@@ -2768,7 +3046,7 @@ class _ChatTabState extends State<ChatTab> {
 
     return Column(
       children: [
-        _chatChrome(l10n, theme),
+        if (!_singleThread) _threadChrome(l10n, theme),
         if (_isSchedules) _schedulesPaneTabs(l10n, theme),
         if (showSchedulesHistories)
           Expanded(child: _schedulesHistoriesBody(l10n, theme))
@@ -2888,7 +3166,9 @@ class _ChatTabState extends State<ChatTab> {
                   },
                   child: ListView.builder(
                     controller: _scrollCtrl,
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                    keyboardDismissBehavior:
+                        ScrollViewKeyboardDismissBehavior.onDrag,
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                     itemCount: _bubbles.length +
                         (draft != null && draft.isNotEmpty ? 1 : 0),
                     itemBuilder: (_, i) {
@@ -2904,7 +3184,7 @@ class _ChatTabState extends State<ChatTab> {
                   ),
                 ),
         ),
-        if (_pendingFiles.isNotEmpty)
+        if (!_isSchedules && _pendingFiles.isNotEmpty)
           SizedBox(
             height: 40,
             child: ListView(
@@ -2926,19 +3206,24 @@ class _ChatTabState extends State<ChatTab> {
           ),
         Material(
           color: theme.scaffoldBackgroundColor,
+          // Scaffold already shrinks for the keyboard — only keep home-indicator
+          // SafeArea padding when the keyboard is closed.
           child: SafeArea(
             top: false,
+            bottom: MediaQuery.viewInsetsOf(context).bottom == 0,
             child: Padding(
               padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  IconButton(
-                    tooltip: l10n.chatAttach,
-                    onPressed: _sending ? null : _pickFiles,
-                    icon: const Icon(Icons.attach_file_outlined, size: 22),
-                    visualDensity: VisualDensity.compact,
-                  ),
+                  // Schedules is text-only (reminders / standing orders) — no attachments.
+                  if (!_isSchedules)
+                    IconButton(
+                      tooltip: l10n.chatAttach,
+                      onPressed: _sending ? null : _pickFiles,
+                      icon: const Icon(Icons.attach_file_outlined, size: 22),
+                      visualDensity: VisualDensity.compact,
+                    ),
                   IconButton(
                     tooltip: _listening ? l10n.chatVoiceStop : l10n.chatVoiceStart,
                     onPressed: _sending ? null : _toggleVoice,
@@ -2952,10 +3237,17 @@ class _ChatTabState extends State<ChatTab> {
                   Expanded(
                     child: TextField(
                       controller: _textCtrl,
+                      focusNode: _inputFocus,
                       minLines: 1,
-                      maxLines: 5,
+                      maxLines: 4,
                       textInputAction: TextInputAction.send,
+                      style: theme.textTheme.bodyMedium,
                       decoration: InputDecoration(
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
                         hintText: _isHome
                             ? l10n.homeChatHint
                             : _isSchedules
@@ -2963,25 +3255,27 @@ class _ChatTabState extends State<ChatTab> {
                                 : l10n.chatHint,
                       ),
                       onSubmitted: (_) => _send(),
+                      onTap: _scrollToEnd,
                     ),
                   ),
                   const SizedBox(width: 4),
-                  if (_sending && _turnId != null)
+                  // Stop cancels the streaming turn; Send stays usable and will
+                  // cancel+restart if a turn is already active.
+                  if (_turnId != null && !_sending)
                     IconButton.filledTonal(
                       onPressed: _cancelTurn,
                       icon: const Icon(Icons.stop_rounded),
-                    )
-                  else
-                    IconButton.filled(
-                      onPressed: _sending ? null : _send,
-                      icon: _sending
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.send_rounded),
                     ),
+                  IconButton.filled(
+                    onPressed: _sending ? null : _send,
+                    icon: _sending
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send_rounded),
+                  ),
                 ],
               ),
             ),
@@ -2998,12 +3292,14 @@ class _ConnectGuide extends StatelessWidget {
   const _ConnectGuide({
     this.hasSavedPairing = false,
     this.busy = false,
+    this.error,
     this.onConnect,
     this.onPairAgain,
   });
 
   final bool hasSavedPairing;
   final bool busy;
+  final String? error;
   final VoidCallback? onConnect;
   final VoidCallback? onPairAgain;
 
@@ -3046,6 +3342,17 @@ class _ConnectGuide extends StatelessWidget {
                 height: 1.4,
               ),
             ),
+            if (error != null && error!.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(
+                error!,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.error,
+                  height: 1.35,
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             FilledButton.icon(
               onPressed: busy ? null : onConnect,

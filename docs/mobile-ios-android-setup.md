@@ -17,8 +17,9 @@ One checklist for the phone app (`com.envoymesh.envoyhome`) and home-daemon push
 1. Build & run the daemon (`pnpm --filter @envoyhome/daemon build && pnpm --filter @envoyhome/daemon dev`).
 2. Open desktop Settings, create an account, **Mint pairing** (QR shown).
 3. On the phone: `cd apps/mobile && flutter pub get && flutter run`.
-4. Scan the QR (or paste the URI) → set **accountId** → confirm Chat/Approvals work over WS.
+4. Scan the QR (or paste the URI) → set **accountId** → confirm **Chat** works over WS (approvals appear **inline in Chat**, not a separate tab).
    - **iOS:** allow **Local Network** when prompted (pair screen probes early; required for LAN `ws://192.168.…`). Settings → EnvoyHome → Local Network if you denied it once.
+5. Optional live checklist: [`mobile-live-verify.md`](mobile-live-verify.md). Store / privacy: [`store-listing.md`](store-listing.md), [`privacy-policy.md`](privacy-policy.md).
 
 Push alerts only matter after step 4 succeeds and credentials below are configured on the **daemon host**.
 
@@ -50,10 +51,12 @@ Push alerts only matter after step 4 succeeds and credentials below are configur
 
 | Build | Daemon setting |
 |-------|----------------|
-| Xcode debug / local device | `APNS_SANDBOX=1` (or `"sandbox": true` in `push-config.json`) |
-| TestFlight / App Store | unset `APNS_SANDBOX` / `"sandbox": false` |
+| Xcode debug / `flutter run` / **local `flutter build ios` + `flutter install`** | `APNS_SANDBOX=1` (or `"sandbox": true` in `push-config.json`) |
+| TestFlight / App Store **Archive** only | unset `APNS_SANDBOX` / `"sandbox": false` |
 
-Mismatch → APNs 400 and a useless token; re-install the app and re-pair after fixing.
+Local device installs use a **development** provisioning profile even when the Xcode configuration is Release — `codesign -d --entitlements - Runner.app` shows `aps-environment=development` and usually `get-task-allow=true`. That is sandbox APNs. Only a distribution Archive embeds production APS.
+
+Mismatch → APNs 400 (`BadDeviceToken`) and the daemon prunes the token; re-install and open the app so `home.registerPushToken` runs again after fixing.
 
 ### 1.4 Daemon env (iOS send)
 
@@ -65,7 +68,13 @@ export APNS_TOPIC="com.envoymesh.envoyhome"
 export APNS_SANDBOX=1   # debug builds only
 ```
 
-Or copy `docs/push-config.example.json` → `<stateDir>/push-config.json` (or repo-root `push-config.json`) and edit paths.
+**Where the daemon looks (first hit wins):**
+
+1. `ENVOYHOME_PUSH_CONFIG` (absolute path)
+2. `<stateDir>/push-config.json` — **this is what Tauri / installed daemons use** (default stateDir `~/.envoyhome`)
+3. `./push-config.json` relative to the daemon process cwd (dev only)
+
+Copy `docs/push-config.example.json` → **`~/.envoyhome/push-config.json`** (or your `ENVOYHOME_STATE_DIR`) and edit paths. A repo-root `push-config.json` alone is invisible to the desktop app unless cwd happens to be the repo.
 
 ---
 
@@ -112,10 +121,16 @@ Same `push-config.json` can hold both `apns` and `fcm` blocks.
 2. On the home machine (with APNs/FCM creds loaded), either:
    - Desktop Settings → **Advanced** → **home.sendTestPush**, or
    - RPC: `home.sendTestPush` `{ "title": "EnvoyHome", "body": "hello" }`
-3. Expect a banner on the phone; tap opens **Approvals** (`data.type=approval|test`).
+3. Expect a banner on the phone; tap opens **Chat** (`data.type=approval|test` — Design `2026-10-09r`).
 4. Trigger a real approval (e.g. tool ask) → daemon emits `home:approval-needed` → push to devices registered for that account.
 
+**Local vs TestFlight:** Debug *and* local `flutter build ios` + install stay on development APS → `"sandbox": true`. Only App Store / TestFlight Archive embeds production APS (`RunnerRelease.entitlements`) → `"sandbox": false`. Confirm with `codesign -d --entitlements - path/to/Runner.app`. Mismatch → APNs 400 and a pruned token until reinstall + open app.
+
+Turn-finished wakes use a **generic** lock-screen body (“Your reply is ready”); assistant text is not put in the banner. Prefer the originating phone when `deviceId` is known.
+
 Tokens live in `<stateDir>/paired-devices/push-tokens.json`. Dead tokens (APNs/FCM 400/403/404/410) are removed automatically.
+
+**Peer checkout:** Live-presence clear on WS disconnect needs EnvoyMesh `onAuthenticatedClose` (host-connect / reuse-host). Keep linked peers on the branch `ENVOYHOME_PEER_BRANCH` expects (`./scripts/peers-check.sh`).
 
 ---
 

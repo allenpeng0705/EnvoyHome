@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:envoyhome_mobile_client/envoyhome_mobile_client.dart';
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
@@ -95,12 +96,23 @@ class _ArtifactsTabState extends State<ArtifactsTab> {
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (!mounted) return;
+      // Transport upgrade / brief drop — keep entries already shown.
+      if (isTransientHomeRemoteDrop(e)) {
         setState(() {
-          _error = e.toString();
           _loading = false;
+          if (_entries.isNotEmpty || _roots.isNotEmpty) _error = null;
         });
+        unawaited(Future<void>.delayed(const Duration(milliseconds: 400), () {
+          if (!mounted) return;
+          unawaited(_loadPath(_path));
+        }));
+        return;
       }
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
     }
   }
 

@@ -1405,6 +1405,21 @@ let schedulesChatSessionId = "";
 /** Session ids with an in-flight turn — block empty/delete/archive/remove/switch. */
 /** @type {Set<string>} */
 const chatTurnsInFlight = new Set();
+/** Cancelled/superseded turn ids — ignore late delta/finished. */
+const chatStaleTurnIds = new Set();
+/** sessionId → turnId we currently expect (follow-up send / finish races). */
+const chatExpectedTurnBySession = new Map();
+/** Bumped on optimistic send so in-flight hydrates cannot wipe newer bubbles. */
+let chatTranscriptEpoch = 0;
+
+function markChatTurnStale(turnId) {
+  if (!turnId) return;
+  chatStaleTurnIds.add(turnId);
+  while (chatStaleTurnIds.size > 32) {
+    const first = chatStaleTurnIds.values().next().value;
+    chatStaleTurnIds.delete(first);
+  }
+}
 /**
  * Pending local files for the next send (Chat / Home chat).
  * @type {Array<{ id: string, file: File, name: string, mimeType: string, size: number }>}
@@ -1546,9 +1561,17 @@ function chatUnarchiveIconSvg(size = 16) {
 }
 
 /** Menu row with leading icon (chrome trash + rail ⋯ menus). */
-function chatMenuItemHtml({ actionAttr, actionValue, label, iconHtml, danger = false }) {
+function chatMenuItemHtml({
+  actionAttr,
+  actionValue,
+  label,
+  iconHtml,
+  danger = false,
+  extraAttrs = "",
+}) {
   const cls = danger ? "chat-menu-item danger" : "chat-menu-item";
-  return `<button type="button" class="${cls}" ${actionAttr}="${escapeHtml(actionValue)}"><span class="chat-menu-item-icon" aria-hidden="true">${iconHtml}</span><span class="chat-menu-item-label">${escapeHtml(label)}</span></button>`;
+  const extra = extraAttrs ? ` ${extraAttrs}` : "";
+  return `<button type="button" class="${cls}" ${actionAttr}="${escapeHtml(actionValue)}"${extra}><span class="chat-menu-item-icon" aria-hidden="true">${iconHtml}</span><span class="chat-menu-item-label">${escapeHtml(label)}</span></button>`;
 }
 
 function chatMenuSepHtml() {
@@ -1824,6 +1847,16 @@ function clearThinkingPlaceholders(log) {
   }
 }
 
+/** Drop the optimistic user bubble when upload/send fails (no turnId yet). */
+function removeFailedOptimisticUser(log) {
+  for (let i = log.length - 1; i >= 0; i--) {
+    if (log[i].role === "user" && !log[i].turnId) {
+      log.splice(i, 1);
+      break;
+    }
+  }
+}
+
 function chatBubbleHtml(m) {
   const role = escapeHtml(m.role);
   const media = Array.isArray(m.media) ? m.media : [];
@@ -1930,9 +1963,15 @@ function chatChromeHtml(isHome, currentTitle, sessionsCollapsed) {
     !isHome && sessionsCollapsed
       ? `<button type="button" class="chat-sessions-open" id="chat-sessions-open" title="${escapeHtml(t("chat.showSessions"))}" aria-label="${escapeHtml(t("chat.showSessions"))}">${chatPanelIconSvg(15)}</button>`
       : "";
-  const titleEl = isHome
-    ? `<strong class="chat-chrome-title">${title}</strong>`
-    : `<button type="button" class="chat-chrome-title chat-chrome-title-edit" id="chat-rename" title="${escapeHtml(t("chat.renameAction"))}" aria-label="${escapeHtml(t("chat.renameAction"))}">${title}</button>
+  // Home / Schedules: title only — delete messages one-by-one; no ⋯ / Remove chat.
+  if (isHome) {
+    return `<div class="chat-chrome">
+    <div class="chat-chrome-left">
+      <strong class="chat-chrome-title">${title}</strong>
+    </div>
+  </div>`;
+  }
+  const titleEl = `<button type="button" class="chat-chrome-title chat-chrome-title-edit" id="chat-rename" title="${escapeHtml(t("chat.renameAction"))}" aria-label="${escapeHtml(t("chat.renameAction"))}">${title}</button>
       <button type="button" class="secondary chat-chrome-btn chat-chrome-icon" id="chat-rename-icon" title="${escapeHtml(t("chat.renameAction"))}" aria-label="${escapeHtml(t("chat.renameAction"))}">${chatRenameIconSvg(15)}</button>`;
   return `<div class="chat-chrome">
     <div class="chat-chrome-left">
@@ -1943,32 +1982,25 @@ function chatChromeHtml(isHome, currentTitle, sessionsCollapsed) {
       <div class="chat-trash-wrap">
         <button type="button" class="secondary chat-chrome-btn chat-chrome-icon" id="chat-trash" title="${escapeHtml(t("chat.trashMenu"))}" aria-label="${escapeHtml(t("chat.trashMenu"))}" aria-haspopup="true" aria-expanded="false">${chatMoreIconSvg(16)}</button>
         <div class="chat-menu chat-trash-menu" id="chat-trash-menu" hidden role="menu">
-          ${
-            isHome
-              ? ""
-              : `${chatMenuItemHtml({
-                  actionAttr: "data-trash-action",
-                  actionValue: "rename",
-                  label: t("chat.renameAction"),
-                  iconHtml: chatRenameIconSvg(15),
-                })}${chatMenuSepHtml()}`
-          }
+          ${chatMenuItemHtml({
+            actionAttr: "data-trash-action",
+            actionValue: "rename",
+            label: t("chat.renameAction"),
+            iconHtml: chatRenameIconSvg(15),
+          })}
+          ${chatMenuSepHtml()}
           ${chatMenuItemHtml({
             actionAttr: "data-trash-action",
             actionValue: "empty",
             label: t("chat.emptyAction"),
             iconHtml: chatEmptyIconSvg(15),
           })}
-          ${
-            isHome
-              ? ""
-              : chatMenuItemHtml({
-                  actionAttr: "data-trash-action",
-                  actionValue: "archive",
-                  label: t("chat.archiveAction"),
-                  iconHtml: chatArchiveIconSvg(15),
-                })
-          }
+          ${chatMenuItemHtml({
+            actionAttr: "data-trash-action",
+            actionValue: "archive",
+            label: t("chat.archiveAction"),
+            iconHtml: chatArchiveIconSvg(15),
+          })}
           ${chatMenuSepHtml()}
           ${chatMenuItemHtml({
             actionAttr: "data-trash-action",
@@ -1981,6 +2013,26 @@ function chatChromeHtml(isHome, currentTitle, sessionsCollapsed) {
       </div>
     </div>
   </div>`;
+}
+
+/** Compact relative time for session list rows. */
+function chatSessionRelativeTime(iso) {
+  if (!iso) return "";
+  const t0 = Date.parse(iso);
+  if (!Number.isFinite(t0)) return "";
+  const diffMs = Date.now() - t0;
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  const d = new Date(t0);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return sameYear ? `${m}/${day}` : `${d.getFullYear()}/${m}/${day}`;
 }
 
 function applyChatSessionsCollapsed(collapsed) {
@@ -2010,26 +2062,31 @@ async function refreshChatSessionsRail(aid) {
         const title = escapeHtml(rawTitle);
         const sid = escapeHtml(s.sessionId);
         const cur = s.sessionId === chatSessionId ? " is-current" : "";
+        const when = chatSessionRelativeTime(s.updatedAt);
+        const whenHtml = when
+          ? `<span class="chat-session-item-meta">${escapeHtml(when)}</span>`
+          : "";
         if (archived) {
           return `<div class="chat-session-row${cur}">
             <button type="button" class="chat-session-item" data-session-id="${sid}" data-archived="1" title="${title}">
               <span class="chat-session-item-title">${title}</span>
+              ${whenHtml}
             </button>
             <div class="chat-session-more-wrap">
-              <button type="button" class="chat-session-more" data-more-toggle="${sid}" title="${escapeHtml(t("chat.sessionMore"))}" aria-label="${escapeHtml(t("chat.sessionMore"))}" aria-haspopup="true" aria-expanded="false">${chatMoreIconSvg(13)}</button>
+              <button type="button" class="chat-session-more" data-more-toggle="${sid}" title="${escapeHtml(t("chat.sessionMore"))}" aria-label="${escapeHtml(t("chat.sessionMore"))}" aria-haspopup="true" aria-expanded="false">${chatMoreIconSvg(16)}</button>
               <div class="chat-menu chat-session-more-menu" data-more-menu="${sid}" hidden role="menu">
                 ${chatMenuItemHtml({
                   actionAttr: "data-unarchive-id",
                   actionValue: s.sessionId,
                   label: t("chat.unarchiveAction"),
-                  iconHtml: chatUnarchiveIconSvg(14),
+                  iconHtml: chatUnarchiveIconSvg(16),
                 })}
                 ${chatMenuSepHtml()}
                 ${chatMenuItemHtml({
                   actionAttr: "data-remove-id",
                   actionValue: s.sessionId,
                   label: t("chat.removeAction"),
-                  iconHtml: chatTrashIconSvg(14),
+                  iconHtml: chatTrashIconSvg(16),
                   danger: true,
                 })}
               </div>
@@ -2039,23 +2096,30 @@ async function refreshChatSessionsRail(aid) {
         return `<div class="chat-session-row${cur}">
           <button type="button" class="chat-session-item" data-session-id="${sid}" title="${title}">
             <span class="chat-session-item-title">${title}</span>
+            ${whenHtml}
           </button>
-          <button type="button" class="chat-session-rename" data-rename-id="${sid}" data-rename-title="${escapeHtml(rawTitle)}" title="${escapeHtml(t("chat.renameAction"))}" aria-label="${escapeHtml(t("chat.renameAction"))}">${chatRenameIconSvg(13)}</button>
           <div class="chat-session-more-wrap">
-            <button type="button" class="chat-session-more" data-more-toggle="${sid}" title="${escapeHtml(t("chat.sessionMore"))}" aria-label="${escapeHtml(t("chat.sessionMore"))}" aria-haspopup="true" aria-expanded="false">${chatMoreIconSvg(13)}</button>
+            <button type="button" class="chat-session-more" data-more-toggle="${sid}" title="${escapeHtml(t("chat.sessionMore"))}" aria-label="${escapeHtml(t("chat.sessionMore"))}" aria-haspopup="true" aria-expanded="false">${chatMoreIconSvg(16)}</button>
             <div class="chat-menu chat-session-more-menu" data-more-menu="${sid}" hidden role="menu">
+              ${chatMenuItemHtml({
+                actionAttr: "data-rename-id",
+                actionValue: s.sessionId,
+                label: t("chat.renameAction"),
+                iconHtml: chatRenameIconSvg(16),
+                extraAttrs: `data-rename-title="${escapeHtml(rawTitle)}"`,
+              })}
               ${chatMenuItemHtml({
                 actionAttr: "data-archive-id",
                 actionValue: s.sessionId,
                 label: t("chat.archiveAction"),
-                iconHtml: chatArchiveIconSvg(14),
+                iconHtml: chatArchiveIconSvg(16),
               })}
               ${chatMenuSepHtml()}
               ${chatMenuItemHtml({
                 actionAttr: "data-remove-id",
                 actionValue: s.sessionId,
                 label: t("chat.removeAction"),
-                iconHtml: chatTrashIconSvg(14),
+                iconHtml: chatTrashIconSvg(16),
                 danger: true,
               })}
             </div>
@@ -2225,12 +2289,33 @@ function bindChatSessionsRail(aid) {
   }
 }
 
+/** Pin the chat log to the latest bubble (layout often settles one frame later). */
+function scrollChatLogToEnd(logEl) {
+  if (!logEl) return;
+  const pin = () => {
+    logEl.scrollTop = logEl.scrollHeight;
+    const last = logEl.lastElementChild;
+    if (last && typeof last.scrollIntoView === "function") {
+      try {
+        last.scrollIntoView({ block: "end", behavior: "instant" });
+      } catch {
+        last.scrollIntoView(false);
+      }
+    }
+  };
+  pin();
+  requestAnimationFrame(() => {
+    pin();
+    requestAnimationFrame(pin);
+  });
+}
+
 /** Update #chat-log in place — avoid full showView (nested rebuild races wipe the thread). */
 function renderChatLogDom(log, emptyKey) {
   const logEl = document.getElementById("chat-log");
   if (!logEl) return false;
   logEl.innerHTML = chatThreadHtml(log, chatPendingApprovals, emptyKey);
-  logEl.scrollTop = logEl.scrollHeight;
+  scrollChatLogToEnd(logEl);
   if (chatPendingApprovals.length) {
     bindApprovalActions(logEl, chatPendingApprovals, () => showView(activeView));
   }
@@ -2305,7 +2390,7 @@ function displayUserTranscript(text, rawMedia) {
 }
 
 /** Merge daemon transcript into the in-memory log (source of truth after a turn). */
-async function hydrateChatLogFromTranscript(accountIdVal, sessionId, log) {
+async function hydrateChatLogFromTranscript(accountIdVal, sessionId, log, epoch) {
   if (!accountIdVal || !sessionId) return false;
   try {
     const ans = await rpc("home.getTranscript", {
@@ -2316,6 +2401,8 @@ async function hydrateChatLogFromTranscript(accountIdVal, sessionId, log) {
       console.warn("getTranscript failed", ans.error);
       return false;
     }
+    // A newer optimistic send happened while we awaited — do not wipe it.
+    if (epoch !== undefined && epoch !== chatTranscriptEpoch) return false;
     const messages = ans.result?.messages;
     if (!Array.isArray(messages) || messages.length === 0) return false;
     const next = [];
@@ -2351,6 +2438,7 @@ async function hydrateChatLogFromTranscript(accountIdVal, sessionId, log) {
       next.push(row);
     }
     if (next.length === 0) return false;
+    if (epoch !== undefined && epoch !== chatTranscriptEpoch) return false;
     log.length = 0;
     log.push(...next);
     return true;
@@ -2570,6 +2658,22 @@ function pairingInviteAccountId() {
   return inviteAccountId || accountId() || "";
 }
 
+/** Primary QR must carry mesh peer id + bootstrap (relay/circuit) fields. */
+function pairingUriHasMeshBootstrap(uri) {
+  try {
+    const u = new URL(uri);
+    // Compressed `pairing=` blob already embeds homeNodePeerId + bootstrapPeers.
+    if (u.searchParams.get("pairing")) return true;
+    const peer = u.searchParams.get("homeNodePeerId");
+    const boot = u.searchParams.get("bootstrapPeers");
+    // Peer id alone is not enough off-LAN — need at least one bootstrap multiaddr.
+    return Boolean(peer && boot && String(boot).trim().length > 0);
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
 async function mintPairingCode(input = {}) {
   const params = {
     deviceLabel: input.deviceLabel || "Phone",
@@ -2582,14 +2686,32 @@ async function mintPairingCode(input = {}) {
       ? input.accountId
       : pairingInviteAccountId();
   if (bindId) params.accountIds = [bindId];
+  // Scan QR path (no typed token) requires mesh hosting — LAN-only URIs cause
+  // "pairing has no dial target" off-LAN on the phone.
+  const requireMesh = !params.token;
+  if (requireMesh) {
+    try {
+      const mesh = await rpc("home.meshStatus").catch(() => null);
+      const kind = mesh?.result?.mesh?.kind ?? mesh?.result?.kind;
+      if (kind !== "hosting") {
+        return { ok: false, message: t("pairing.qrMeshRequired") };
+      }
+    } catch {
+      return { ok: false, message: t("pairing.qrMeshRequired") };
+    }
+  }
   try {
     const ans = await rpc("home.mintPairing", params);
     if (ans.error || !ans.result?.uri) {
       return { ok: false, message: errMsg(ans) || t("pairing.mintFailed") };
     }
+    const uri = String(ans.result.uri);
+    if (requireMesh && !pairingUriHasMeshBootstrap(uri)) {
+      return { ok: false, message: t("pairing.qrMeshRequired") };
+    }
     return {
       ok: true,
-      uri: String(ans.result.uri),
+      uri,
       deviceId: ans.result.device?.deviceId ? String(ans.result.device.deviceId) : undefined,
       accountId: bindId || undefined,
     };
@@ -2704,13 +2826,22 @@ function connect() {
       if (name === "home:turn-delta" && data?.kind === "text" && data?.text) {
         const raw = String(data.text);
         const log = chatLogForSession(data.sessionId);
-        if (!log) {
+        const turnId = typeof data.turnId === "string" && data.turnId ? data.turnId : undefined;
+        if (turnId && chatStaleTurnIds.has(turnId)) {
+          /* Cancelled/superseded — ignore. */
+        } else if (
+          turnId &&
+          data.sessionId &&
+          chatExpectedTurnBySession.has(String(data.sessionId)) &&
+          chatExpectedTurnBySession.get(String(data.sessionId)) !== turnId
+        ) {
+          /* Delta for an older turn while a newer one is expected. */
+        } else if (!log) {
           /* Event for a session that is not open — ignore (no cross-thread bleed). */
         } else {
           clearThinkingPlaceholders(log);
           // Avoid duplicate bubbles if hydrate already loaded this text.
           const last = log[log.length - 1];
-          const turnId = typeof data.turnId === "string" && data.turnId ? data.turnId : undefined;
           const fmt =
             data.format === "plain" || data.format === "markdown" || data.format === "link"
               ? data.format
@@ -2795,40 +2926,68 @@ function connect() {
       }
       if (name === "home:turn-finished") {
         const sid = typeof data?.sessionId === "string" ? data.sessionId : "";
-        const log = chatLogForSession(sid);
-        if (!log) {
-          /* Finished for a session that is not open — still clear busy if set. */
-          if (sid) markChatTurnInFlight(sid, false);
+        const finishedTurn =
+          typeof data?.turnId === "string" && data.turnId ? data.turnId : "";
+        if (finishedTurn && chatStaleTurnIds.has(finishedTurn)) {
+          chatStaleTurnIds.delete(finishedTurn);
+          // Do not clear busy — a newer turn may be in flight for this session.
+        } else if (
+          finishedTurn &&
+          sid &&
+          chatExpectedTurnBySession.has(sid) &&
+          chatExpectedTurnBySession.get(sid) !== finishedTurn
+        ) {
+          /* Superseded finish — ignore. */
         } else {
-          clearThinkingPlaceholders(log);
-          const aid = accountId();
-          // Hydrate before clearing busy so New chat / session switch cannot race
-          // waitForAssistantReply's shared chatLog mutations.
-          void (async () => {
-            try {
-              await hydrateChatLogFromTranscript(aid, sid, log);
-              if (data?.status === "error") {
-                log.push({ role: "system", text: t("chat.turnFailed") });
-                showToast(t("chat.turnFailed"), "err");
-              }
-              if (isChatSurface(activeView) && sid === readChatSessionId(purposeForView(activeView))) {
-                await refreshChatPendingSchedule(sid);
-                await refreshChatPendingChoices(sid);
-              }
-              refreshOpenChatView();
-              if (activeView === "chat" && aid && sid === chatSessionId) {
-                void refreshChatSessionsRail(aid);
-                const titleEl = document.querySelector(".chat-chrome-title");
-                if (titleEl) {
-                  void currentGeneralChatTitle(aid).then((title) => {
-                    if (titleEl.isConnected) titleEl.textContent = title;
-                  });
+          const log = chatLogForSession(sid);
+          if (!log) {
+            /* Finished for a session that is not open — still clear busy if set. */
+            if (sid) {
+              markChatTurnInFlight(sid, false);
+              chatExpectedTurnBySession.delete(sid);
+            }
+          } else {
+            clearThinkingPlaceholders(log);
+            const aid = accountId();
+            const epoch = chatTranscriptEpoch;
+            void (async () => {
+              try {
+                await hydrateChatLogFromTranscript(aid, sid, log, epoch);
+                if (data?.status === "error") {
+                  log.push({ role: "system", text: t("chat.turnFailed") });
+                  showToast(t("chat.turnFailed"), "err");
+                }
+                if (
+                  isChatSurface(activeView) &&
+                  sid === readChatSessionId(purposeForView(activeView))
+                ) {
+                  await refreshChatPendingSchedule(sid);
+                  await refreshChatPendingChoices(sid);
+                }
+                refreshOpenChatView();
+                if (activeView === "chat" && aid && sid === chatSessionId) {
+                  void refreshChatSessionsRail(aid);
+                  const titleEl = document.querySelector(".chat-chrome-title");
+                  if (titleEl) {
+                    void currentGeneralChatTitle(aid).then((title) => {
+                      if (titleEl.isConnected) titleEl.textContent = title;
+                    });
+                  }
+                }
+              } finally {
+                // Only clear busy if this finish is still the expected turn.
+                if (
+                  sid &&
+                  (!finishedTurn ||
+                    !chatExpectedTurnBySession.has(sid) ||
+                    chatExpectedTurnBySession.get(sid) === finishedTurn)
+                ) {
+                  markChatTurnInFlight(sid, false);
+                  if (finishedTurn) chatExpectedTurnBySession.delete(sid);
                 }
               }
-            } finally {
-              if (sid) markChatTurnInFlight(sid, false);
-            }
-          })();
+            })();
+          }
         }
       }
       if (name === "home:approval-needed" || name === "home:approval-resolved") {
@@ -2944,6 +3103,9 @@ function currentProfileLabel() {
 
 const LANGUAGE_ICON_SVG = `<svg class="locale-switcher__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
 
+/** Lucide-style info — reopen setup guide / how to use the app. */
+const SETUP_GUIDE_ICON_SVG = `<svg class="topbar-icon-btn__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>`;
+
 /** Lucide-style qr-code — shortcut into Connections → Pair devices. */
 const PAIRING_QR_ICON_SVG = `<svg class="topbar-icon-btn__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>`;
 
@@ -3015,6 +3177,13 @@ function pairingQrShortcutHtml() {
   )}" aria-label="${escapeHtml(tip)}">${PAIRING_QR_ICON_SVG}</button>`;
 }
 
+function setupGuideShortcutHtml() {
+  const tip = t("app.setupGuideTip");
+  return `<button type="button" id="topbar-setup-guide" class="topbar-icon-btn" title="${escapeHtml(
+    tip,
+  )}" aria-label="${escapeHtml(tip)}">${SETUP_GUIDE_ICON_SVG}</button>`;
+}
+
 function localeSwitcherHtml() {
   const label = currentLocaleLabel();
   const tip = t("app.languageTip", { language: label });
@@ -3069,6 +3238,15 @@ function bindPairingQrShortcut() {
   btn.addEventListener("click", () => {
     closeTopbarMenus();
     void showView("pairing");
+  });
+}
+
+function bindSetupGuideShortcut() {
+  const btn = document.getElementById("topbar-setup-guide");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    closeTopbarMenus();
+    void openSetupGuide({ firstLaunch: false });
   });
 }
 
@@ -3173,12 +3351,13 @@ function bindThemeSwitcher() {
 function renderTopbarTools() {
   const tools = document.getElementById("topbar-tools");
   if (!tools) return;
-  // Profile · pairing QR · theme · language.
-  tools.innerHTML = `${navProfileHtml()}${pairingQrShortcutHtml()}${themeSwitcherHtml()}${localeSwitcherHtml()}`;
+  // Profile · pairing QR · theme · language · setup guide (info).
+  tools.innerHTML = `${navProfileHtml()}${pairingQrShortcutHtml()}${themeSwitcherHtml()}${localeSwitcherHtml()}${setupGuideShortcutHtml()}`;
   bindNavProfile();
   bindPairingQrShortcut();
   bindThemeSwitcher();
   bindLocaleSwitcher();
+  bindSetupGuideShortcut();
 }
 
 function renderNav(active) {
@@ -3281,6 +3460,153 @@ async function ensureProfileGate() {
   }
   hideProfileGate();
   return true;
+}
+
+/** First-launch LLM checklist + re-openable from System → This machine. */
+const SETUP_GUIDE_DONE_KEY = "envoyhome.onboarding.guide_completed";
+const SETUP_GUIDE_INTRO_KEY = "envoyhome.onboarding.introduced";
+
+function isSetupGuideCompleted() {
+  return localStorage.getItem(SETUP_GUIDE_DONE_KEY) === "1";
+}
+
+function markSetupGuideCompleted() {
+  localStorage.setItem(SETUP_GUIDE_DONE_KEY, "1");
+  localStorage.setItem(SETUP_GUIDE_INTRO_KEY, "1");
+}
+
+/** True when at least one cloud/local provider can run turns. */
+async function hasLlmConfigured(aid) {
+  try {
+    const body = await listProvidersRpc(aid || "");
+    const providers = Array.isArray(body.result?.providers) ? body.result.providers : [];
+    if (providers.some((p) => p && p.enabled !== false)) return true;
+  } catch {
+    /* ignore */
+  }
+  try {
+    const st = await rpc(
+      "home.getLocalEngineStatus",
+      aid ? { accountId: aid } : {},
+    );
+    const mode = st.result?.mode;
+    return st.result?.enabled === true && mode && mode !== "off";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * One-shot: upgrades that already have an LLM skip the new first-run checklist.
+ * Fresh installs (no providers yet) still see it after the profile gate.
+ */
+async function migrateSetupGuideIfNeeded(aid) {
+  if (localStorage.getItem(SETUP_GUIDE_INTRO_KEY)) return;
+  if (localStorage.getItem(SETUP_GUIDE_DONE_KEY)) {
+    localStorage.setItem(SETUP_GUIDE_INTRO_KEY, "1");
+    return;
+  }
+  if (await hasLlmConfigured(aid)) {
+    localStorage.setItem(SETUP_GUIDE_DONE_KEY, "1");
+  }
+  localStorage.setItem(SETUP_GUIDE_INTRO_KEY, "1");
+}
+
+function hideSetupGuide() {
+  const guide = document.getElementById("setup-guide");
+  if (guide) guide.hidden = true;
+  const otherOpen = [...document.querySelectorAll(".modal-backdrop")].some(
+    (el) => !el.hidden,
+  );
+  if (!otherOpen) document.body.classList.remove("modal-open");
+}
+
+/**
+ * Desktop setup checklist (LLM cloud or Local Model; optional phone pair).
+ * @param {{ firstLaunch?: boolean }} [opts]
+ */
+async function openSetupGuide(opts = {}) {
+  const firstLaunch = opts.firstLaunch === true;
+  const guide = document.getElementById("setup-guide");
+  const body = document.getElementById("setup-guide-body");
+  if (!guide || !body) return;
+
+  const step = (n, title, lede, cta, go, primary = false) =>
+    `<div class="setup-guide-step">
+      <div class="setup-guide-step-num" aria-hidden="true">${n}</div>
+      <div class="setup-guide-step-body">
+        <strong>${escapeHtml(title)}</strong>
+        <p class="muted">${escapeHtml(lede)}</p>
+        <button type="button" class="setup-guide-cta${
+          primary ? " setup-guide-cta--primary" : ""
+        }" data-setup-go="${escapeHtml(go)}">${escapeHtml(cta)}</button>
+      </div>
+    </div>`;
+
+  body.innerHTML = `
+    <img class="profile-gate-mark" src="/logo.png" width="48" height="48" alt="" />
+    <h2 id="setup-guide-title">${escapeHtml(t("setupGuide.title"))}</h2>
+    <p class="muted profile-gate-lede">${escapeHtml(
+      firstLaunch ? t("setupGuide.introFirst") : t("setupGuide.intro"),
+    )}</p>
+    <div class="setup-guide-steps">
+      ${step(
+        1,
+        t("setupGuide.stepCloudTitle"),
+        t("setupGuide.stepCloudBody"),
+        t("setupGuide.stepCloudCta"),
+        "models",
+        true,
+      )}
+      ${step(
+        2,
+        t("setupGuide.stepLocalTitle"),
+        t("setupGuide.stepLocalBody"),
+        t("setupGuide.stepLocalCta"),
+        "local",
+      )}
+      ${step(
+        3,
+        t("setupGuide.stepPhoneTitle"),
+        t("setupGuide.stepPhoneBody"),
+        t("setupGuide.stepPhoneCta"),
+        "pairing",
+      )}
+    </div>
+    <p class="muted setup-guide-note">${escapeHtml(t("setupGuide.note"))}</p>
+    <div class="setup-guide-actions">
+      <button type="button" class="setup-guide-dismiss" data-setup-dismiss="1">${escapeHtml(
+        firstLaunch ? t("setupGuide.skipCta") : t("setupGuide.doneCta"),
+      )}</button>
+    </div>`;
+
+  const finish = async (nextView) => {
+    if (firstLaunch) markSetupGuideCompleted();
+    hideSetupGuide();
+    if (nextView) await showView(nextView);
+  };
+
+  body.querySelectorAll("[data-setup-go]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const go = btn.getAttribute("data-setup-go");
+      void finish(go || null);
+    });
+  });
+  body.querySelector("[data-setup-dismiss]")?.addEventListener("click", () => {
+    void finish(null);
+  });
+
+  guide.hidden = false;
+  document.body.classList.add("modal-open");
+}
+
+/** After profile exists: show checklist once until completed or skipped. */
+async function maybeShowFirstLaunchSetupGuide(aid) {
+  await migrateSetupGuideIfNeeded(aid);
+  if (isSetupGuideCompleted()) return;
+  const guide = document.getElementById("setup-guide");
+  if (guide && !guide.hidden) return;
+  await openSetupGuide({ firstLaunch: true });
 }
 
 function pre(obj) {
@@ -4536,6 +4862,8 @@ async function showView(id) {
         </div>`;
       return;
     }
+    // First-run LLM checklist (once). Re-open anytime from System → This machine.
+    void maybeShowFirstLaunchSetupGuide(accountId());
     await refreshHaHomeChatReady();
     if (id === "homeChat" && !haHomeChatReady) {
       id = "chat";
@@ -4607,7 +4935,10 @@ async function showView(id) {
       const banner = bannerKey
         ? `<p class="muted chat-home-banner">${escapeHtml(t(bannerKey))}</p>`
         : "";
-      const pendingFiles = pendingFilesForView(purpose);
+      // Schedules is text-only (reminders / standing orders) — no file attachments.
+      const allowAttach = purpose !== "schedules";
+      if (!allowAttach) setPendingFilesForView(purpose, []);
+      const pendingFiles = allowAttach ? pendingFilesForView(purpose) : [];
       stopChatSpeech();
       const voiceTitle = chatVoiceSupported() ? t("chat.voiceHintOs") : chatOsDictationHint();
       const threadTitle = isHome
@@ -4621,6 +4952,20 @@ async function showView(id) {
       const historiesBody = showSchedulesHistories
         ? await schedulesHistoriesPanelHtml(aid)
         : "";
+      const attachControls = allowAttach
+        ? `${chatAttachChipsHtml(pendingFiles)}
+                <div class="chat-composer-row">
+                  <input type="file" id="chat-file" multiple hidden />
+                  <button type="button" class="secondary chat-attach-btn" id="chat-attach" title="${escapeHtml(t("chat.attachHint"))}" aria-label="${escapeHtml(t("chat.attach"))}">${chatAttachIconSvg()}</button>
+                  <button type="button" class="secondary chat-voice-btn" id="chat-voice" title="${escapeHtml(voiceTitle)}" aria-label="${escapeHtml(t("chat.voice"))}" aria-pressed="false">${chatMicIconSvg()}</button>
+                  <input name="text" id="chat-input" placeholder="${escapeHtml(t(placeholderKey))}" autocomplete="off" />
+                  <button type="submit" id="chat-send">${escapeHtml(t("app.send"))}</button>
+                </div>`
+        : `<div class="chat-composer-row">
+                  <button type="button" class="secondary chat-voice-btn" id="chat-voice" title="${escapeHtml(voiceTitle)}" aria-label="${escapeHtml(t("chat.voice"))}" aria-pressed="false">${chatMicIconSvg()}</button>
+                  <input name="text" id="chat-input" placeholder="${escapeHtml(t(placeholderKey))}" autocomplete="off" />
+                  <button type="submit" id="chat-send">${escapeHtml(t("app.send"))}</button>
+                </div>`;
       el.innerHTML = `<div class="chat-page${isHome ? "" : ` chat-page-split${sessionsOpen ? "" : " is-sessions-collapsed"}`}">
         ${sessionsRail}
         <div class="chat-main">
@@ -4634,14 +4979,7 @@ async function showView(id) {
             <div class="chat-log" id="chat-log">${chatThreadHtml(log, chatPendingApprovals, emptyKey)}</div>
             <form id="chat-form" class="chat-composer">
               <div class="chat-composer-main">
-                ${chatAttachChipsHtml(pendingFiles)}
-                <div class="chat-composer-row">
-                  <input type="file" id="chat-file" multiple hidden />
-                  <button type="button" class="secondary chat-attach-btn" id="chat-attach" title="${escapeHtml(t("chat.attachHint"))}" aria-label="${escapeHtml(t("chat.attach"))}">${chatAttachIconSvg()}</button>
-                  <button type="button" class="secondary chat-voice-btn" id="chat-voice" title="${escapeHtml(voiceTitle)}" aria-label="${escapeHtml(t("chat.voice"))}" aria-pressed="false">${chatMicIconSvg()}</button>
-                  <input name="text" id="chat-input" placeholder="${escapeHtml(t(placeholderKey))}" autocomplete="off" />
-                  <button type="submit" id="chat-send">${escapeHtml(t("app.send"))}</button>
-                </div>
+                ${attachControls}
               </div>
             </form>
           </div>`
@@ -4709,7 +5047,7 @@ async function showView(id) {
           bindChoiceCardActions(logEl, () => showView(id));
           scrollChoiceCardIntoView(logEl);
         }
-        logEl.scrollTop = logEl.scrollHeight;
+        scrollChatLogToEnd(logEl);
         logEl.addEventListener("click", async (ev) => {
           const raw = /** @type {EventTarget | null} */ (ev.target);
           const el = raw instanceof Element ? raw : raw?.parentElement;
@@ -4989,14 +5327,51 @@ async function showView(id) {
         }
         if (sendBtn?.disabled) return;
         if (sendBtn) sendBtn.disabled = true;
-        if (input) input.disabled = true;
-        const attachBtn = document.getElementById("chat-attach");
-        if (attachBtn) attachBtn.disabled = true;
-        const voiceBtn = document.getElementById("chat-voice");
-        if (voiceBtn) voiceBtn.disabled = true;
+        // Optimistic bubble immediately — composer stays usable; reply is event-driven.
+        chatTranscriptEpoch += 1;
+        const optimisticMedia = localFiles.map((item) => ({
+          kind: "file",
+          fileName: item.name,
+          ...(item.mimeType ? { mimeType: item.mimeType } : {}),
+          bytes: item.size,
+        }));
+        clearThinkingPlaceholders(log);
+        log.push({
+          role: "user",
+          text: text || t("chat.attachedOnly"),
+          ...(optimisticMedia.length ? { media: optimisticMedia } : {}),
+        });
+        log.push({ role: "system", text: t("chat.thinking") });
+        if (input) input.value = "";
+        setPendingFilesForView(purpose, []);
+        refreshAttachUi();
+        renderChatLogDom(log, emptyKey);
         /** @type {Array<{ kind: string, uri: string, fileName?: string, mimeType?: string, bytes?: number }>} */
         let media = [];
+        /** @type {string} */
+        let sessionIdForTurn = "";
+        /** Session kept busy across supersede upload (cancel → send). */
+        let busyHoldSid = "";
         try {
+          // Follow-up send while a turn streams: cancel the prior turn first.
+          // Keep busy through upload/send so archive/clear cannot race mid-supersede.
+          const prevSid = readChatSessionId(purpose);
+          if (prevSid && chatSessionBusy(prevSid)) {
+            let prevTurn = "";
+            for (let i = log.length - 1; i >= 0; i--) {
+              if (log[i].turnId) {
+                prevTurn = String(log[i].turnId);
+                break;
+              }
+            }
+            if (prevTurn) {
+              markChatTurnStale(prevTurn);
+              await rpc("home.cancelTurn", { turnId: prevTurn }).catch(() => null);
+            }
+            chatExpectedTurnBySession.delete(prevSid);
+            busyHoldSid = prevSid;
+            // Do not clear chatTurnsInFlight here — mark true again after ensureChatSession.
+          }
           for (const item of localFiles) {
             const contentBase64 = await fileToBase64(item.file);
             const up = await rpc(
@@ -5018,31 +5393,19 @@ async function showView(id) {
               ...(typeof up.result.bytes === "number" ? { bytes: up.result.bytes } : {}),
             });
           }
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          showToast(msg, "err");
-          if (sendBtn) sendBtn.disabled = false;
-          if (input) input.disabled = false;
-          if (attachBtn) attachBtn.disabled = false;
-          if (voiceBtn) voiceBtn.disabled = false;
-          return;
-        }
-        setPendingFilesForView(purpose, []);
-        refreshAttachUi();
-        log.push({
-          role: "user",
-          text: text || t("chat.attachedOnly"),
-          ...(media.length ? { media } : {}),
-        });
-        log.push({ role: "system", text: t("chat.thinking") });
-        if (input) input.value = "";
-        renderChatLogDom(log, emptyKey);
-        /** @type {string} */
-        let sessionIdForTurn = "";
-        try {
+          if (media.length) {
+            for (let i = log.length - 1; i >= 0; i--) {
+              if (log[i].role === "user") {
+                log[i].media = media;
+                break;
+              }
+            }
+            if (activeView === id) renderChatLogDom(log, emptyKey);
+          }
           const sessionId = await ensureChatSession(aid, purpose);
           sessionIdForTurn = sessionId;
           markChatTurnInFlight(sessionId, true);
+          busyHoldSid = "";
           /** Design §7.4 / 2026-10-19m — browser local now/TZ/locale (no GPS). */
           const clientContext = {
             clientNow: new Date().toISOString(),
@@ -5069,6 +5432,7 @@ async function showView(id) {
           if (sent.error) {
             markChatTurnInFlight(sessionId, false);
             clearThinkingPlaceholders(log);
+            removeFailedOptimisticUser(log);
             log.push({ role: "system", text: errMsg(sent) });
             showToast(errMsg(sent) || t("chat.sendFailed"), "err");
             renderChatLogDom(log, emptyKey);
@@ -5077,6 +5441,7 @@ async function showView(id) {
           const turnId =
             sent.result && typeof sent.result.turnId === "string" ? sent.result.turnId : "";
           if (turnId) {
+            chatExpectedTurnBySession.set(sessionId, turnId);
             for (let i = log.length - 1; i >= 0; i--) {
               if (log[i].role === "user" && !log[i].turnId) {
                 log[i].turnId = turnId;
@@ -5084,18 +5449,13 @@ async function showView(id) {
               }
             }
           }
-          // Pick up durable messageIds for the user line so Delete works before the reply.
-          await hydrateChatLogFromTranscript(aid, sessionId, log);
+          // Do NOT hydrate yet — user line is written in the background turn;
+          // a premature getTranscript would wipe the optimistic bubble.
+          // home:turn-delta / home:turn-finished own the reply (async, non-blocking).
           const thinking = t("chat.thinking");
           if (!log.some((m) => m.role === "system" && m.text === thinking)) {
             log.push({ role: "system", text: thinking });
           }
-          if (activeView === id) renderChatLogDom(log, emptyKey);
-          // Block until transcript has the assistant reply (events are best-effort).
-          await waitForAssistantReply(aid, sessionId, log, 90_000);
-          // Refresh inline approvals for this turn (after the matching bubbles).
-          const ap = await rpc("home.listApprovals", { accountId: aid }).catch(() => null);
-          chatPendingApprovals = ap?.result?.approvals || [];
           if (activeView === id) renderChatLogDom(log, emptyKey);
           if (!isHome && activeView === "chat") {
             void refreshChatSessionsRail(aid);
@@ -5108,7 +5468,9 @@ async function showView(id) {
           }
         } catch (e) {
           if (sessionIdForTurn) markChatTurnInFlight(sessionIdForTurn, false);
+          else if (busyHoldSid) markChatTurnInFlight(busyHoldSid, false);
           clearThinkingPlaceholders(log);
+          removeFailedOptimisticUser(log);
           const msg = e instanceof Error ? e.message : String(e);
           log.push({ role: "system", text: msg });
           showToast(
@@ -5117,15 +5479,10 @@ async function showView(id) {
           );
           renderChatLogDom(log, emptyKey);
         } finally {
-          // Do not clear chatTurnsInFlight here — first assistant chunk arrives
-          // before tools/finish; home:turn-finished owns the busy flag.
+          // Do not clear chatTurnsInFlight here — home:turn-finished owns the busy flag.
+          // Composer stays interactive while the reply streams.
           if (sendBtn) sendBtn.disabled = false;
-          if (attachBtn) attachBtn.disabled = false;
-          if (voiceBtn) voiceBtn.disabled = false;
-          if (input) {
-            input.disabled = false;
-            input.focus();
-          }
+          if (input) input.focus();
         }
       });
       return;
@@ -7683,6 +8040,7 @@ async function showView(id) {
 
         const emptyHtml = `
           <p class="muted">${escapeHtml(t("models.emptyLead"))}</p>
+          <p class="row"><button type="button" class="secondary" id="models-open-setup">${escapeHtml(t("setupGuide.openCta"))}</button></p>
           <form id="prov-save" class="card">
             <h3>${escapeHtml(t("models.addProvider"))}</h3>
             ${addProviderFormHtml}
@@ -7715,6 +8073,9 @@ async function showView(id) {
           ${listErr ? `<p class="le-error">${escapeHtml(listErr)}</p>` : ""}
           ${aid ? (hasProviders ? listHtml : emptyHtml) : ""}`);
         wireTabs();
+        document.getElementById("models-open-setup")?.addEventListener("click", () => {
+          void openSetupGuide({ firstLaunch: false });
+        });
 
         if (aid) {
           const applyPreset = () => {
@@ -11297,6 +11658,12 @@ async function showView(id) {
           <p class="muted">${escapeHtml(t("advanced.hint"))}</p>
 
           <section class="sys-section">
+            <h4>${escapeHtml(t("setupGuide.title"))}</h4>
+            <p class="muted">${escapeHtml(t("setupGuide.settingsHint"))}</p>
+            <button type="button" class="secondary" id="open-setup-guide">${escapeHtml(t("setupGuide.openCta"))}</button>
+          </section>
+
+          <section class="sys-section">
             <h4>${escapeHtml(t("advanced.connectionTitle"))}</h4>
             <p class="muted">${escapeHtml(t("advanced.connectionHint"))}</p>
             <label class="sys-field">${escapeHtml(t("advanced.wsUrl"))}
@@ -11379,6 +11746,9 @@ async function showView(id) {
             ${eventRows}
           </section>`);
         wireTabs();
+        document.getElementById("open-setup-guide")?.addEventListener("click", () => {
+          void openSetupGuide({ firstLaunch: false });
+        });
         el.querySelectorAll("[data-revoke-grant]").forEach((btn) => {
           btn.addEventListener("click", async () => {
             const grantId = btn.getAttribute("data-revoke-grant");

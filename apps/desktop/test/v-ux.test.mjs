@@ -22,6 +22,22 @@ test("V-UX-6 bundle: bind panel on HA/MQTT; Skills tabs omit smarthome", async (
   assert.doesNotMatch(appJs, /data-automation-tab=["']smarthome["']/);
 });
 
+test("desktop setup guide: first-launch + re-open hooks", async () => {
+  const appJs = await readFile(join(root, "public", "app.js"), "utf8");
+  const indexHtml = await readFile(join(root, "index.html"), "utf8");
+  const en = await readFile(join(root, "public", "i18n", "en.js"), "utf8");
+  assert.match(indexHtml, /id="setup-guide"/);
+  assert.match(appJs, /SETUP_GUIDE_DONE_KEY/);
+  assert.match(appJs, /openSetupGuide/);
+  assert.match(appJs, /maybeShowFirstLaunchSetupGuide/);
+  assert.match(appJs, /open-setup-guide/);
+  assert.match(appJs, /topbar-setup-guide/);
+  assert.match(appJs, /SETUP_GUIDE_ICON_SVG/);
+  assert.match(en, /"setupGuide\.title"/);
+  assert.match(en, /"setupGuide\.openCta"/);
+  assert.match(en, /"app\.setupGuideTip"/);
+});
+
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
@@ -96,6 +112,10 @@ test("V-UX-1..5 smoke: nav + account + memory + advanced + pairing QR", async (t
     const page = await browser.newPage();
     await page.addInitScript((url) => {
       localStorage.setItem("envoyhome.wsUrl", url);
+      // Smoke is not the first-run LLM checklist — that modal would block #app clicks.
+      // Re-open path is asserted below on System → This machine.
+      localStorage.setItem("envoyhome.onboarding.guide_completed", "1");
+      localStorage.setItem("envoyhome.onboarding.introduced", "1");
     }, wsUrl);
     await page.goto(staticSrv.url, { waitUntil: "networkidle" });
     await page.waitForFunction(() => {
@@ -118,15 +138,19 @@ test("V-UX-1..5 smoke: nav + account + memory + advanced + pairing QR", async (t
       timeout: 10000,
     });
 
-    // V-UX-2: Mesh-first Pair devices (Connections tab)
-    await page.getByRole("button", { name: "Connections" }).click();
+    // V-UX-2: Mesh-first Pair devices (Connections tab).
+    // Test daemon defaults meshHostingEnabled:false — QR mint must refuse (no LAN-only
+    // phone QR). Assert the blocked path, not #pairing-qr.
+    await page.getByRole("button", { name: "Connections", exact: true }).click();
     await page.getByRole("tab", { name: "Pair devices" }).click();
     await page.waitForSelector("#pairing-invite-profile", { timeout: 10000 });
-    await page.waitForSelector("#pairing-qr", { timeout: 10000 });
-    const qrSrc = await page.getAttribute("#pairing-qr", "src");
-    assert.ok(qrSrc?.startsWith("data:image/"));
-    assert.ok(await page.locator("#pairing-uri").inputValue());
-    assert.ok(await page.locator("#pairing-copy").isVisible());
+    await page.waitForSelector('#pairing-qr-panel [role="alert"]', { timeout: 10000 });
+    const qrBlock = await page.locator('#pairing-qr-panel [role="alert"]').textContent();
+    assert.ok(
+      /mesh hosting|Cannot mint/i.test(String(qrBlock || "")),
+      `expected mesh-required QR block, got: ${qrBlock}`,
+    );
+    assert.equal(await page.locator("#pairing-qr").count(), 0);
     assert.ok(await page.getByRole("heading", { name: "Scan a QR code" }).isVisible());
     assert.ok(await page.getByRole("heading", { name: "Connect with hostname" }).isVisible());
     assert.ok(await page.getByRole("heading", { name: "Reach it through an SSH hop" }).isVisible());
@@ -135,7 +159,7 @@ test("V-UX-1..5 smoke: nav + account + memory + advanced + pairing QR", async (t
     await page.getByRole("button", { name: "Chat" }).click();
     await page.waitForSelector("#chat-form", { timeout: 10000 });
 
-    await page.getByRole("button", { name: "Connections" }).click();
+    await page.getByRole("button", { name: "Connections", exact: true }).click();
     await page.getByRole("tab", { name: "Pair devices" }).click();
     await page.waitForSelector("#pairing-qr-fresh");
     assert.ok(await page.getByRole("heading", { name: "Phones" }).isVisible());
@@ -257,7 +281,7 @@ test("V-UX-1..5 smoke: nav + account + memory + advanced + pairing QR", async (t
     assert.equal(await page.locator('button.nav-item[data-view="homeChat"]').count(), 0);
 
     // V-UX-6: bind form + journal on Connections → Home Assistant (and MQTT)
-    await page.getByRole("button", { name: "Connections" }).click();
+    await page.getByRole("button", { name: "Connections", exact: true }).click();
     await page.getByRole("tab", { name: "Home Assistant" }).click();
     await page.waitForSelector("#bind-form");
     assert.equal(await page.locator("#sh-shared").count(), 0);
@@ -288,7 +312,7 @@ test("V-UX-1..5 smoke: nav + account + memory + advanced + pairing QR", async (t
     assert.ok(await page.locator('[data-automation-tab="jobs"]').isVisible());
 
     // §10.1 nav slices — Channels combines former IM + Channel links
-    await page.getByRole("button", { name: "Connections" }).click();
+    await page.getByRole("button", { name: "Connections", exact: true }).click();
     await page.getByRole("tab", { name: "Channels" }).click();
     await page.waitForSelector("#tg-bind");
     await page.locator('button.nav-item[data-view="automation"]').click();
@@ -314,7 +338,8 @@ test("V-UX-1..5 smoke: nav + account + memory + advanced + pairing QR", async (t
     await page.waitForSelector("#reload-wf");
     await page.getByRole("button", { name: "System" }).click();
     await page.getByRole("tab", { name: "Shared files" }).click();
-    await page.waitForSelector("text=short-lived secure link");
+    // Copy tracks i18n artifacts.hint (mesh open; no public URL required).
+    await page.waitForSelector("text=Opens in-app over your home connection");
     // Shared files should be a human list, not a raw RPC dump.
     assert.equal(await page.locator("#view pre").count(), 0);
     assert.ok(await page.getByText("No shared files yet.").isVisible());
@@ -338,6 +363,14 @@ test("V-UX-1..5 smoke: nav + account + memory + advanced + pairing QR", async (t
     assert.ok(await page.getByText("Start in the background").isVisible());
     assert.ok(await page.locator("#svc-install").isVisible());
     assert.equal(await page.locator("#view pre").count(), 0);
+    // Setup guide can be re-opened after first launch (System → This machine).
+    assert.ok(await page.locator("#open-setup-guide").isVisible());
+    await page.locator("#open-setup-guide").click();
+    await page.waitForSelector("#setup-guide:not([hidden])", { timeout: 5000 });
+    // Scope to the modal — System → This machine also has an h4 with the same title.
+    assert.ok(await page.locator("#setup-guide-title").isVisible());
+    await page.locator("#setup-guide").getByRole("button", { name: "Got it" }).click();
+    await page.waitForSelector("#setup-guide[hidden]", { state: "attached", timeout: 5000 });
   } finally {
     await browser?.close();
     await daemon.stop();

@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../state/session_controller.dart';
 import 'connections_screen.dart';
 import 'llm_screen.dart';
+import 'onboarding/setup_guide_screen.dart';
+import 'pair_screen.dart';
 import 'skills_screen.dart';
 import 'system_screen.dart';
 
@@ -20,6 +24,13 @@ class SettingsHub extends StatelessWidget {
   final SessionController session;
   final VoidCallback? onRequestConnect;
   final VoidCallback? onRequestPairAgain;
+
+  Future<bool> _pairFromGuide(BuildContext context) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(builder: (_) => PairScreen(session: session)),
+    );
+    return session.isConnected;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +66,16 @@ class SettingsHub extends StatelessWidget {
                       height: 1.35,
                     ),
                   ),
+                  if (session.error != null && session.error!.isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      session.error!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.error,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   FilledButton.icon(
                     onPressed: session.busy ? null : onRequestConnect,
@@ -69,6 +90,21 @@ class SettingsHub extends StatelessWidget {
                     ),
                   ],
                 ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: Text(l10n.setupGuideTitle),
+              subtitle: Text(l10n.settingsSetupGuideSubtitle),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => unawaited(
+                showSetupGuide(
+                  context,
+                  onPairNow: () => _pairFromGuide(context),
+                ),
               ),
             ),
           ),
@@ -110,6 +146,16 @@ class SettingsHub extends StatelessWidget {
           title: l10n.navSystem,
           subtitle: l10n.settingsSystemSubtitle,
           builder: (_) => SystemScreen(session: session),
+        ),
+        Card(
+          margin: const EdgeInsets.only(bottom: 10),
+          child: ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: Text(l10n.setupGuideTitle),
+            subtitle: Text(l10n.settingsSetupGuideSubtitle),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => unawaited(showSetupGuide(context)),
+          ),
         ),
       ],
     );

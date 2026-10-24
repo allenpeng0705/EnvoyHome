@@ -99,9 +99,10 @@ Not verified yet.
     for (const d of MQTT_TOOLS) {
       assert.ok(names.has(d.name), `missing MQTT tool ${d.name}`);
     }
-    // Scheduler / Jobs are triggers — not workflow tool names.
+    // Legacy proposeSchedule is not a tool name; chat `schedule` is a builtin (V-CRON-9).
     assert.equal(names.has("proposeSchedule"), false);
-    assert.equal(names.has("schedule"), false);
+    assert.equal(names.has("schedule"), true);
+    assert.equal(names.has("skill_propose"), true);
     assert.equal(names.has(`skill:${installed.id}`), false);
 
     const ha = tools.find((t) => t.name === "ha_get_state");

@@ -97,3 +97,119 @@ test("home.registerPushToken persists for paired device", async () => {
     await rm(stateDir, { recursive: true, force: true });
   }
 });
+
+test("home.registerPushToken stores ios hex vs android FCM token + accountId", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "eh-push-plat-reg-"));
+  try {
+    const daemon = await startDaemon({
+      config: { stateDir, wsPort: 0, httpPort: 0, hatchApiKey: "k" },
+      packageVersion: "0.0.0-test",
+    });
+    const deps = {
+      config: daemon.config,
+      startedAt: daemon.startedAt,
+      logger: daemon.logger,
+      subscriptions: daemon.subscriptions,
+      connections: () => 0,
+      activeTurns: () => 0,
+      onShutdown: () => undefined,
+      packageVersion: "0.0.0-test",
+      accounts: daemon.accounts,
+      household: daemon.household,
+      bindings: daemon.bindings,
+      pairing: daemon.pairing,
+      memory: daemon.memory,
+      channels: daemon.channels,
+      turns: daemon.turns,
+      providers: daemon.providers,
+      harnesses: daemon.harnesses,
+      workflows: daemon.workflows,
+      workflowStepTemplates: daemon.workflowStepTemplates,
+      schedules: daemon.schedules,
+      standingOrders: daemon.standingOrders,
+      skills: daemon.skills,
+      artifacts: daemon.artifacts,
+      webSearch: daemon.webSearch,
+      browserControl: daemon.browserControl,
+      actuations: daemon.actuations,
+      pushTokens: daemon.pushTokens,
+      push: daemon.push,
+      liveDevices: daemon.liveDevices,
+      localEngine: daemon.localEngine,
+      meshStatus: () => ({ kind: "no-node" as const }),
+    };
+
+    await dispatchForTest(
+      deps,
+      "home.createAccount",
+      { displayName: "Owner", accountId: "alice" },
+      loopbackSession(),
+    );
+    const ownerId = daemon.household.getOwnerAccountId() ?? "alice";
+
+    daemon.pairing.__resetMintRateForTests();
+    const minted = await dispatchForTest(
+      deps,
+      "home.mintPairing",
+      {
+        deviceLabel: "phone",
+        host: "127.0.0.1",
+        lanHost: "127.0.0.1",
+        accountIds: [ownerId],
+      },
+      loopbackSession(),
+    );
+    assert.ok("result" in minted);
+    const deviceId = (minted.result as { device: { deviceId: string } }).device.deviceId;
+
+    const deviceSession: HomeSession = {
+      scopeKey: deviceId,
+      ownerId: deviceId,
+      isOwnerScope: false,
+      deviceId,
+      caller: {
+        kind: "device",
+        deviceId,
+        accountIds: [ownerId],
+        ownerTrusted: false,
+      },
+    };
+
+    const ios = await dispatchForTest(
+      deps,
+      "home.registerPushToken",
+      {
+        platform: "ios",
+        token: "0123456789abcdef",
+        tokenType: "alert",
+        accountId: ownerId,
+      },
+      deviceSession,
+    );
+    assert.ok("result" in ios, JSON.stringify(ios));
+    let stored = await daemon.pushTokens.get(deviceId);
+    assert.equal(stored?.platform, "ios");
+    assert.equal(stored?.token, "0123456789abcdef");
+    assert.deepEqual(stored?.accountIds, [ownerId]);
+
+    const android = await dispatchForTest(
+      deps,
+      "home.registerPushToken",
+      {
+        platform: "android",
+        token: "fcm:long-registration-token",
+        tokenType: "alert",
+        accountId: ownerId,
+      },
+      deviceSession,
+    );
+    assert.ok("result" in android, JSON.stringify(android));
+    stored = await daemon.pushTokens.get(deviceId);
+    assert.equal(stored?.platform, "android");
+    assert.equal(stored?.token, "fcm:long-registration-token");
+
+    await daemon.stop();
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});

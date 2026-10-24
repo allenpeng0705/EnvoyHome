@@ -94,7 +94,13 @@ test("soft-only flush writes durable L3 without rewriting transcript", async () 
     assert.equal(meta.compactionCount ?? 0, 0);
     assert.equal(meta.memoryFlushCompactionCount, 0);
 
-    const day = new Date().toISOString().slice(0, 10);
+    // Local calendar day — flush / StandingStore.appendDaily (not UTC ISO).
+    const now = new Date();
+    const day = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0"),
+    ].join("-");
     const l3 = await readFile(
       join(stateDir, "accounts", "alice", "memory", `${day}.md`),
       "utf8",

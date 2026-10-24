@@ -120,7 +120,7 @@ test("V-UX-8 e2e: Home chat hidden until HA ready; then opens purpose=home sessi
 
     // Before HA: Home chat nav is hidden; HA Devices panel has no Talk-to-home shortcut.
     assert.equal(await page.locator('button.nav-item[data-view="homeChat"]').count(), 0);
-    await page.getByRole("button", { name: "Connections" }).click();
+    await page.getByRole("button", { name: "Connections", exact: true }).click();
     await page.getByRole("tab", { name: "Home Assistant" }).click();
     await page.waitForSelector("#bind-form");
     assert.equal(await page.locator("#talk-to-home").count(), 0);
@@ -155,7 +155,7 @@ test("V-UX-8 e2e: Home chat hidden until HA ready; then opens purpose=home sessi
     assert.ok(opened.sessionId);
 
     // Devices panel still has no Talk-to-home; Home chat stays in the sidebar.
-    await page.getByRole("button", { name: "Connections" }).click();
+    await page.getByRole("button", { name: "Connections", exact: true }).click();
     await page.getByRole("tab", { name: "Home Assistant" }).click();
     await page.waitForSelector("#bind-form", { timeout: 10000 });
     assert.equal(await page.locator("#talk-to-home").count(), 0);

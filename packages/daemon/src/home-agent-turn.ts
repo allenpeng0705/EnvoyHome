@@ -30,7 +30,10 @@ import {
   HOME_PARENT_MAX_ITERATIONS,
   type HomeModelAdapterOptions,
 } from "./home-harness-bridge.js";
-import { HomeAgentSession } from "./home-agent-session.js";
+import {
+  HomeAgentSession,
+  isHarnessAgentSystemPromptLeak,
+} from "./home-agent-session.js";
 import {
   TASK_DEFAULT_ALLOW,
   TASK_MAX_PARALLEL,
@@ -110,7 +113,14 @@ class LiveTurnTracer implements Tracer {
         const args = event.call.args;
         if (args && typeof args === "object" && !Array.isArray(args)) {
           const action = String((args as Record<string, unknown>).action ?? "").toLowerCase();
-          if (action === "propose" || action === "" || action === "create") {
+          // reschedule also surfaces ambiguous candidates — suppress intent-offer
+          // so we do not emit a second schedule_candidates choice card.
+          if (
+            action === "propose" ||
+            action === "reschedule" ||
+            action === "" ||
+            action === "create"
+          ) {
             this.queue.hadSchedulePropose = true;
           }
         }
@@ -288,16 +298,24 @@ export async function* runAgentTurn(
     return result.output;
   });
 
+  // Seed user/assistant only. Harness Agent injects systemPrompt itself; a prior
+  // system row (error, or leaked prompt) would suppress that inject.
   const session = new HomeAgentSession({
     id: sessionId,
     sessionDir,
     cwd: deps.ctx.sandbox_root,
     turnId,
     userAlreadyPersisted: true,
-    history: history.map((h) => ({
-      role: h.role,
-      content: h.content,
-    })),
+    history: history
+      .filter(
+        (h) =>
+          (h.role === "user" || h.role === "assistant") &&
+          !isHarnessAgentSystemPromptLeak(h.content),
+      )
+      .map((h) => ({
+        role: h.role as "user" | "assistant",
+        content: h.content,
+      })),
   });
 
   const childAllow = filterChildAllowTools([...TASK_DEFAULT_ALLOW]);
@@ -377,7 +395,42 @@ export async function* runAgentTurn(
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      queue.push({ kind: "error", text: message });
+      // Prefer last assistant text when the loop hit the iteration cap — the
+      // model may already have a usable answer after many tool rounds.
+      if (/exceeded max iterations/i.test(message)) {
+        const last = [...session.messages].reverse().find((m) => m.role === "assistant");
+        const partial = last
+          ? last.content
+              .filter((b): b is { type: "text"; text: string } => b.type === "text")
+              .map((b) => b.text.trim())
+              .filter(Boolean)
+              .join("\n")
+              .trim()
+          : "";
+        let emittedPartial = false;
+        if (partial) {
+          try {
+            await finalizeHomeText({
+              raw: partial,
+              userText,
+              deps,
+              toolLoop,
+              queue,
+            });
+            emittedPartial = true;
+          } catch {
+            /* fall through to soft error */
+          }
+        }
+        if (!emittedPartial) {
+          queue.push({
+            kind: "error",
+            text: "This turn used too many steps. Try a shorter question, or ask again.",
+          });
+        }
+      } else {
+        queue.push({ kind: "error", text: message });
+      }
     } finally {
       queue.close();
     }

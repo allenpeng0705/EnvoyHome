@@ -6,6 +6,7 @@ Short index for operators. Normative rules: Design **§5.7**. Stage: Plan **B14*
 |-------|----------|
 | [`homeassistant-setup.md`](homeassistant-setup.md) | Connect Home Assistant, smoke-test REST tools / workflows |
 | [`mqtt-setup.md`](mqtt-setup.md) | Connect an MQTT broker, or **Start demo MQTT** (works with demo HA) |
+| [`smart-home-live-checklist.md`](smart-home-live-checklist.md) | Operator live HA/MQTT sign-off before B14/`v1.0.0` HA claims |
 | [`telegram-demo-setup.md`](telegram-demo-setup.md) | Chat demo IM (separate from smart home) |
 
 ## Mental model

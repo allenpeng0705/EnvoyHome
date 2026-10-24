@@ -28,7 +28,7 @@ import { SessionIndex, DEFAULT_SESSION_RETENTION_DAYS } from "./session-index.js
 import { CompactDiary, compactPaths } from "./compact-diary.js";
 import { makeCompactDiary, compactMemory } from "./consolidate.js";
 import { applyFlush, type FlushItem } from "./flush.js";
-import { SkillsStore } from "./skills-store.js";
+import { SkillsStore, type SkillL7Backend } from "./skills-store.js";
 import { deriveTrust, type TrustContext } from "./taint.js";
 import type { ProvenanceTrust } from "./provenance.js";
 import { stampProvenance, provenanceLine } from "./provenance.js";
@@ -60,6 +60,12 @@ export class MemoryError extends Error {
 
 export interface MemoryFacadeOptions {
   stateDir: string;
+  /**
+   * L7 skill body backend for proposeLearn / acceptLearn.
+   * Default: per-account flat `SkillsStore`. Daemon injects SkillService adapter
+   * so accept lands in household packs (Design `2026-10-22b`).
+   */
+  skillL7?: SkillL7Backend;
 }
 
 /**
@@ -86,7 +92,8 @@ export class MemoryFacade {
   readonly learnQueue: LearnQueue;
   readonly sessions: SessionIndex;
   readonly diary: CompactDiary;
-  readonly skills: SkillsStore;
+  /** Active L7 backend (SkillsStore by default; SkillService adapter in daemon). */
+  readonly skills: SkillL7Backend;
   /** Per-account generation bump listeners (acceptLearn refresh — V-MEM-16). */
   private refreshListeners = new Set<(accountId: string, generation: number) => void>();
   /** Local model busy flag for background review deferral (V-MEM-15). */
@@ -102,7 +109,8 @@ export class MemoryFacade {
     this.learnQueue = new LearnQueue((id) => this.store.accountRoot(id));
     this.sessions = new SessionIndex((id) => this.store.accountRoot(id));
     this.diary = makeCompactDiary(this.store);
-    this.skills = new SkillsStore((id) => this.store.accountRoot(id));
+    this.skills =
+      opts.skillL7 ?? new SkillsStore((id) => this.store.accountRoot(id));
   }
 
   get stateDir(): string {

@@ -1,6 +1,17 @@
 // Skill install + verify gate — Design §9.2 / Plan B10.
 
-import { copyFile, cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  cp,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { safeJoin } from "./fs-jail.js";
@@ -52,11 +63,13 @@ function mapRemoteErr(err: unknown): never {
 
 function parseFrontmatter(text: string): {
   name: string;
+  description: string;
   declaredExec: boolean;
   declaredNetwork: boolean;
   body: string;
 } {
   let name = "skill";
+  let description = "";
   let declaredExec = false;
   let declaredNetwork = false;
   let body = text;
@@ -66,6 +79,8 @@ function parseFrontmatter(text: string): {
     const fm = match[1] ?? "";
     const nameLine = fm.match(/^name:\s*(.+)$/m);
     if (nameLine?.[1]) name = nameLine[1].trim().replace(/^["']|["']$/g, "");
+    const descLine = fm.match(/^description:\s*(.+)$/m);
+    if (descLine?.[1]) description = descLine[1].trim().replace(/^["']|["']$/g, "");
     if (/capabilities:\s*\n[\s\S]*?\bexec:\s*true/m.test(fm) || /\bexec:\s*true\b/.test(fm)) {
       declaredExec = true;
     }
@@ -76,8 +91,24 @@ function parseFrontmatter(text: string): {
       declaredNetwork = true;
     }
   }
-  return { name, declaredExec, declaredNetwork, body };
+  // Fallback short blurb from first non-empty body line (capped).
+  if (!description) {
+    const first = body
+      .split("\n")
+      .map((l) => l.trim())
+      .find((l) => l.length > 0 && !l.startsWith("#"));
+    if (first) description = first.slice(0, 160);
+  }
+  return { name, description, declaredExec, declaredNetwork, body };
 }
+
+export type SkillCatalogEntry = {
+  id: string;
+  name: string;
+  description: string;
+  declaredExec: boolean;
+  declaredNetwork: boolean;
+};
 
 const EXEC_HINTS =
   /\b(child_process|exec\(|spawn\(|subprocess|shell\s*script|eval\s*\()/i;
@@ -138,6 +169,56 @@ export class SkillService {
   async listVerifiedSkillToolNames(): Promise<string[]> {
     const rows = await this.readIndex();
     return rows.filter((r) => r.enabled && r.verified).map((r) => `skill:${r.id}`);
+  }
+
+  /**
+   * Design §9.2 progressive disclosure — verified+enabled catalogue for `skills_list`.
+   * Does not include SKILL.md bodies.
+   */
+  async listVerifiedCatalog(): Promise<SkillCatalogEntry[]> {
+    const rows = await this.readIndex();
+    const out: SkillCatalogEntry[] = [];
+    for (const r of rows) {
+      if (!r.enabled || !r.verified) continue;
+      let description = "";
+      try {
+        const md = await readFile(join(this.skillRoot(r.id), "SKILL.md"), "utf8");
+        description = parseFrontmatter(md).description;
+      } catch {
+        /* index row still listed */
+      }
+      out.push({
+        id: r.id,
+        name: r.name,
+        description,
+        declaredExec: r.declaredExec,
+        declaredNetwork: r.declaredNetwork,
+      });
+    }
+    return out;
+  }
+
+  /**
+   * Design §9.2 `skill_view` — load SKILL.md or a relative file under the skill root.
+   * Path-jailed via safeJoin; only verified+enabled skills.
+   */
+  async readSkillResource(id: string, relPath?: string): Promise<string> {
+    const rows = await this.readIndex();
+    const row = rows.find((r) => r.id === id);
+    if (!row || !row.enabled || !row.verified) {
+      throw new SkillsError("not_found", `skill ${id} not verified/enabled`);
+    }
+    const rel = (relPath ?? "SKILL.md").trim() || "SKILL.md";
+    if (rel.startsWith("/") || rel.includes("\0")) {
+      throw new SkillsError("unsafe", "skill path must be relative under the skill root");
+    }
+    const root = this.skillRoot(id);
+    const abs = safeJoin(root, rel);
+    try {
+      return await readFile(abs, "utf8");
+    } catch {
+      throw new SkillsError("not_found", `skill file not found: ${rel}`);
+    }
   }
 
   private sanitizeId(raw: string): string {
@@ -310,4 +391,124 @@ export class SkillService {
     await this.writeIndex(next);
     await rm(this.skillRoot(id), { recursive: true, force: true });
   }
+
+  /**
+   * Read SKILL.md body for PendingLearn digests (Design `2026-10-22b`).
+   * Returns null when the pack is missing.
+   */
+  async readSkillMd(id: string): Promise<string | null> {
+    const safe = this.sanitizeId(id);
+    try {
+      return await readFile(join(this.skillRoot(safe), "SKILL.md"), "utf8");
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Materialize / replace a pack from an accepted skill learn.
+   * Always lands `verified: false` / `enabled: false` (V-SKILL-1 — operator must verify).
+   */
+  async upsertUnverifiedPack(id: string, content: string): Promise<{ id: string }> {
+    const safe = this.sanitizeId(id);
+    if (!safe) throw new SkillsError("bad_params", "skill id is required");
+    const body = content.trim().length > 0 ? content : "# skill\n";
+    const parsed = parseFrontmatter(body);
+    const dest = this.skillRoot(safe);
+    await mkdir(dest, { recursive: true });
+    await writeFile(join(dest, "SKILL.md"), body, "utf8");
+    const rows = await this.readIndex();
+    const entry: SkillIndexEntry = {
+      id: safe,
+      name: parsed.name,
+      enabled: false,
+      verified: false,
+      declaredExec: parsed.declaredExec,
+      declaredNetwork: parsed.declaredNetwork,
+    };
+    const idx = rows.findIndex((r) => r.id === entry.id);
+    if (idx >= 0) rows[idx] = entry;
+    else rows.push(entry);
+    await this.writeIndex(rows);
+    return { id: safe };
+  }
+
+  /**
+   * Design `2026-10-22c` — one-shot migrate leftover flat Memory SkillsStore files
+   * (`accounts/<id>/skills/*.md`) into household SkillService packs (unverified).
+   * Renames sources to `*.md.migrated` (never silent delete).
+   */
+  async migrateFlatAccountSkillFiles(stateDir: string): Promise<{ migrated: string[] }> {
+    const migrated: string[] = [];
+    const accountsRoot = join(stateDir, "accounts");
+    let accountIds: string[];
+    try {
+      accountIds = await readdir(accountsRoot);
+    } catch {
+      return { migrated };
+    }
+    for (const accountId of accountIds) {
+      const skillsDir = join(accountsRoot, accountId, "skills");
+      let entries: string[];
+      try {
+        entries = await readdir(skillsDir);
+      } catch {
+        continue;
+      }
+      for (const name of entries) {
+        if (!name.endsWith(".md") || name.endsWith(".md.migrated")) continue;
+        const src = join(skillsDir, name);
+        let st;
+        try {
+          st = await stat(src);
+        } catch {
+          continue;
+        }
+        if (!st.isFile()) continue;
+        const idHint = name.replace(/\.md$/i, "");
+        const safe = this.sanitizeId(idHint);
+        if (!safe) continue;
+        const existing = await this.readSkillMd(safe);
+        if (existing === null || !existing.trim()) {
+          const content = await readFile(src, "utf8");
+          await this.upsertUnverifiedPack(safe, content);
+        }
+        const dest = `${src}.migrated`;
+        await rename(src, dest).catch(async () => {
+          // Collision: append timestamp.
+          await rename(src, `${src}.${Date.now()}.migrated`);
+        });
+        migrated.push(`${accountId}/${name}`);
+      }
+    }
+    return { migrated };
+  }
+}
+
+/**
+ * MemoryFacade L7 adapter — **household** SkillService packs (Design `2026-10-22b`/`c`).
+ * `accountId` is intentionally ignored: acceptLearn from any seat materializes under
+ * `stateDir/skills/<id>/`, and every seat shares the verified catalogue after verifySkill.
+ */
+export function createSkillServiceL7Adapter(skills: SkillService): {
+  read(accountId: string, name: string): Promise<string | null>;
+  write(accountId: string, name: string, content: string): Promise<void>;
+  remove(accountId: string, name: string): Promise<void>;
+} {
+  return {
+    async read(_accountId, name) {
+      return skills.readSkillMd(name);
+    },
+    async write(_accountId, name, content) {
+      await skills.upsertUnverifiedPack(name, content);
+    },
+    async remove(_accountId, name) {
+      try {
+        await skills.removeSkill(name);
+      } catch (err) {
+        if (err instanceof SkillsError && err.kind === "not_found") return;
+        throw err;
+      }
+    },
+  };
 }

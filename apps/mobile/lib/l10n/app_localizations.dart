@@ -1980,6 +1980,84 @@ abstract class AppLocalizations {
   /// **'Grants'**
   String get sysTabGrants;
 
+  /// No description provided for @sysTabMachine.
+  ///
+  /// In en, this message translates to:
+  /// **'This machine'**
+  String get sysTabMachine;
+
+  /// No description provided for @sysMachineHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Daemon listen status from home.health. OS service install/restart is loopback-only on the home desktop — not available over mesh.'**
+  String get sysMachineHint;
+
+  /// No description provided for @sysMachineDaemonOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Daemon reachable'**
+  String get sysMachineDaemonOk;
+
+  /// No description provided for @sysMachineDaemonBad.
+  ///
+  /// In en, this message translates to:
+  /// **'Daemon health failed'**
+  String get sysMachineDaemonBad;
+
+  /// No description provided for @sysMachineWsPort.
+  ///
+  /// In en, this message translates to:
+  /// **'WebSocket port'**
+  String get sysMachineWsPort;
+
+  /// No description provided for @sysMachineHttpPort.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP hatch port'**
+  String get sysMachineHttpPort;
+
+  /// No description provided for @sysMachinePublicUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'Public base URL'**
+  String get sysMachinePublicUrl;
+
+  /// No description provided for @sysMachinePublicUrlEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get sysMachinePublicUrlEmpty;
+
+  /// No description provided for @sysMachineUptime.
+  ///
+  /// In en, this message translates to:
+  /// **'Uptime'**
+  String get sysMachineUptime;
+
+  /// No description provided for @sysMachineConnections.
+  ///
+  /// In en, this message translates to:
+  /// **'Clients / active turns'**
+  String get sysMachineConnections;
+
+  /// No description provided for @sysMachineMesh.
+  ///
+  /// In en, this message translates to:
+  /// **'Mesh'**
+  String get sysMachineMesh;
+
+  /// No description provided for @sysMachineOsServiceNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Install or restart the OS service from desktop Settings → System → This machine (loopback-owner).'**
+  String get sysMachineOsServiceNote;
+
+  /// No description provided for @sysMachineRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get sysMachineRefresh;
+
   /// No description provided for @sysTestPush.
   ///
   /// In en, this message translates to:
@@ -1991,6 +2069,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Test push requested'**
   String get sysTestPushSent;
+
+  /// No description provided for @wfModeYaml.
+  ///
+  /// In en, this message translates to:
+  /// **'YAML'**
+  String get wfModeYaml;
+
+  /// No description provided for @wfModeDiagram.
+  ///
+  /// In en, this message translates to:
+  /// **'Diagram'**
+  String get wfModeDiagram;
+
+  /// No description provided for @wfDiagramEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No steps yet — draft or edit YAML.'**
+  String get wfDiagramEmpty;
+
+  /// No description provided for @wfDiagramEdge.
+  ///
+  /// In en, this message translates to:
+  /// **'↓'**
+  String get wfDiagramEdge;
 
   /// No description provided for @sysDoctorFix.
   ///
@@ -2897,6 +2999,204 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Ran {when}'**
   String schedulesChatRanAt(String when);
+
+  /// No description provided for @welcomeSkip.
+  ///
+  /// In en, this message translates to:
+  /// **'Skip'**
+  String get welcomeSkip;
+
+  /// No description provided for @welcomeNext.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get welcomeNext;
+
+  /// No description provided for @commonContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get commonContinue;
+
+  /// No description provided for @welcomeSlide1Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome to EnvoyHome'**
+  String get welcomeSlide1Title;
+
+  /// No description provided for @welcomeSlide1Body.
+  ///
+  /// In en, this message translates to:
+  /// **'Your phone is a window into a self-hosted home agent — chat, approvals, and smart-home control stay on your desktop.'**
+  String get welcomeSlide1Body;
+
+  /// No description provided for @welcomeSlide2Title.
+  ///
+  /// In en, this message translates to:
+  /// **'The work runs on your computer'**
+  String get welcomeSlide2Title;
+
+  /// No description provided for @welcomeSlide2Body.
+  ///
+  /// In en, this message translates to:
+  /// **'Install EnvoyHome on a Mac or PC at home. The daemon, models, and household memory stay on that machine — the phone is a remote window.'**
+  String get welcomeSlide2Body;
+
+  /// No description provided for @welcomeSlide3Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair with a QR code'**
+  String get welcomeSlide3Title;
+
+  /// No description provided for @welcomeSlide3Body.
+  ///
+  /// In en, this message translates to:
+  /// **'On the computer, open EnvoyHome and show the pairing QR. On this phone, tap Pair now and scan it. You can also paste a pairing link.'**
+  String get welcomeSlide3Body;
+
+  /// No description provided for @welcomeSlideRequiredTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair to get started'**
+  String get welcomeSlideRequiredTitle;
+
+  /// No description provided for @welcomeSlideRequiredBody.
+  ///
+  /// In en, this message translates to:
+  /// **'EnvoyHome needs a computer running the desktop app. Agents and home control run there — pair this phone with that computer to continue.'**
+  String get welcomeSlideRequiredBody;
+
+  /// No description provided for @setupGuideTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'How EnvoyHome works'**
+  String get setupGuideTitle;
+
+  /// No description provided for @setupGuideIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'EnvoyHome on your phone talks to EnvoyHome on your home computer. Install the desktop app, pair once, then chat and approve from anywhere.'**
+  String get setupGuideIntro;
+
+  /// No description provided for @setupGuidePairRequiredTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair to continue'**
+  String get setupGuidePairRequiredTitle;
+
+  /// No description provided for @setupGuidePairRequiredBody.
+  ///
+  /// In en, this message translates to:
+  /// **'EnvoyHome is the phone companion for your home desktop. Without a paired computer there is nothing to show here yet.'**
+  String get setupGuidePairRequiredBody;
+
+  /// No description provided for @setupGuideStep1Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Get a computer ready'**
+  String get setupGuideStep1Title;
+
+  /// No description provided for @setupGuideStep1Body.
+  ///
+  /// In en, this message translates to:
+  /// **'You need a Mac or Windows/Linux PC at home. That machine becomes your EnvoyHome host — where the daemon and agents run.'**
+  String get setupGuideStep1Body;
+
+  /// No description provided for @setupGuideStep2Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Download and install EnvoyHome'**
+  String get setupGuideStep2Title;
+
+  /// No description provided for @setupGuideStep2Body.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the QuickStart and install the daemon plus desktop app on that computer. Launch them and keep them running.'**
+  String get setupGuideStep2Body;
+
+  /// No description provided for @setupGuideDownloadCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Open EnvoyHome QuickStart'**
+  String get setupGuideDownloadCta;
+
+  /// No description provided for @setupGuideStep3Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Show the pairing QR'**
+  String get setupGuideStep3Title;
+
+  /// No description provided for @setupGuideStep3Body.
+  ///
+  /// In en, this message translates to:
+  /// **'In desktop EnvoyHome, open Settings → Pair devices. Keep the QR on screen (it should include mesh/relays, not LAN-only).'**
+  String get setupGuideStep3Body;
+
+  /// No description provided for @setupGuideStep4Title.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan with this phone'**
+  String get setupGuideStep4Title;
+
+  /// No description provided for @setupGuideStep4Body.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap Pair now below. Allow camera access, then scan the QR. You can also paste an envoy:// pair link, or use host:port / SSH.'**
+  String get setupGuideStep4Body;
+
+  /// No description provided for @setupGuideStep5Title.
+  ///
+  /// In en, this message translates to:
+  /// **'You’re connected'**
+  String get setupGuideStep5Title;
+
+  /// No description provided for @setupGuideStep5Body.
+  ///
+  /// In en, this message translates to:
+  /// **'When pairing finishes, this phone shows chats, approvals, and Settings for that home. The desktop keeps running whether or not the phone is connected.'**
+  String get setupGuideStep5Body;
+
+  /// No description provided for @setupGuideNoHomeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing later is fine'**
+  String get setupGuideNoHomeTitle;
+
+  /// No description provided for @setupGuideNoHomeBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You can continue now and pair any time from Connect. Without a paired computer, there is nothing to show here yet.'**
+  String get setupGuideNoHomeBody;
+
+  /// No description provided for @setupGuidePairCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair now'**
+  String get setupGuidePairCta;
+
+  /// No description provided for @setupGuidePairLaterCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair later'**
+  String get setupGuidePairLaterCta;
+
+  /// No description provided for @setupGuideSkipCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Explore first'**
+  String get setupGuideSkipCta;
+
+  /// No description provided for @setupGuideDoneCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it'**
+  String get setupGuideDoneCta;
+
+  /// No description provided for @settingsSetupGuideSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'How to install the desktop app and pair this phone.'**
+  String get settingsSetupGuideSubtitle;
 }
 
 class _AppLocalizationsDelegate

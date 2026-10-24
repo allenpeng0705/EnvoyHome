@@ -12,6 +12,7 @@ import {
   deriveTrust,
   compactPaths,
   COMPACT_MAX_ENTRIES,
+  todayIsoDate,
   type DeepBackendHandle,
 } from "../dist/index.js";
 
@@ -268,13 +269,15 @@ describe("B8 memory depth", () => {
   test("V-LEARN-3: provenance on flush/consolidate/learn writes", async () => {
     const { mem } = await fresh();
     const a = "alice";
-    await mem.flush(a, [{ target: "l3", text: "flushed detail" }], {
-      trust: "owner",
-      turnId: "t1",
-    });
-    const day = new Date().toISOString().slice(0, 10);
-    const daily = (await mem.store.load(a)).dailies.get(day) ?? "";
-    assert.ok(daily.includes("source=flush"));
+    await mem.store.ensureAccountLayout(a);
+    const now = new Date();
+    await mem.flush(
+      a,
+      [{ target: "l3", text: "flushed detail" }],
+      { trust: "owner", turnId: "t1", now },
+    );
+    const daily = (await mem.store.load(a)).dailies.get(todayIsoDate(now)) ?? "";
+    assert.ok(daily.includes("source=flush"), `daily missing flush provenance: ${daily.slice(0, 200)}`);
     assert.ok(daily.includes("trust=owner"));
   });
 

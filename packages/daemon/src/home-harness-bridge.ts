@@ -28,7 +28,22 @@ import type { ChatMessage } from "@envoyhome/providers";
 const HOME_CHILD_COST_USD = 1;
 const HOME_CHILD_DEADLINE_MS = 120_000;
 const HOME_CHILD_MAX_ITERATIONS = 4;
-const HOME_PARENT_MAX_ITERATIONS = 12;
+/**
+ * Parent Agent.run bound (Design §19.13 P2-E3).
+ * Harness default is 50; home chat often needs multi-step tool rounds
+ * (list → get_state → actuate / schedule / memory). 12 was too tight and
+ * surfaced as "agent loop exceeded max iterations (12)" on ordinary turns.
+ * Override with ENVOYHOME_PARENT_MAX_ITERATIONS (clamped 8…80).
+ */
+function resolveParentMaxIterations(): number {
+  const raw = (process.env.ENVOYHOME_PARENT_MAX_ITERATIONS ?? "").trim();
+  if (raw) {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 8 && n <= 80) return Math.floor(n);
+  }
+  return 32;
+}
+const HOME_PARENT_MAX_ITERATIONS = resolveParentMaxIterations();
 
 /** Flexible args — Home tools validate further inside dispatch. */
 const FlexibleArgs = z.record(z.string(), z.unknown()).default({});

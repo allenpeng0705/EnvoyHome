@@ -5,6 +5,7 @@ import 'package:envoy_thin_client/services/platform_web_socket.dart';
 
 import 'dial_policy.dart';
 import 'join_channel.dart';
+import 'lan_reachability.dart';
 import 'libp2p_transport.dart';
 import 'pairing.dart';
 import 'product.dart';
@@ -31,11 +32,20 @@ class EnvoyHomeSession {
   ///
   /// For [JoinChannel.ssh], opens a local forward first so candidates dial
   /// loopback (Adapt EnvoyCoder).
+  ///
+  /// [isOnWifi] / [sameLan] gate private LAN rungs (EnvoyDev `09697b0`). When
+  /// omitted, [sameLan] is derived from Wi‑Fi + [phoneSharesLanWith] against
+  /// the pairing LAN target. [isOnWifiProvider] / [sameLanProvider] re-read on
+  /// every resolve (reconnect / upgrade sweep).
   static Future<EnvoyHomeSession> connect(
     AcceptedPairing pairing, {
     FutureOr<WebSocketLike> Function(HomeRemoteCandidate candidate)? createTransport,
     SshTunnel? tunnel,
     Libp2pDialer? libp2pDialer,
+    bool? isOnWifi,
+    bool? sameLan,
+    bool Function()? isOnWifiProvider,
+    FutureOr<bool> Function()? sameLanProvider,
   }) async {
     SshTunnel? ownedTunnel;
     var effective = pairing;
@@ -78,27 +88,47 @@ class EnvoyHomeSession {
       );
     }
 
-    // SSH loopback stays on the thin hostingCandidates list; otherwise walk
-    // the EnvoyDev family ladder (CandidateResolver).
-    final candidates = effective.joinChannel == JoinChannel.ssh
-        ? hostingCandidatesFor(effective)
-        : candidatesFor(effective);
+    Future<List<HomeRemoteCandidate>> resolvePlan() async {
+      if (effective.joinChannel == JoinChannel.ssh) {
+        return hostingCandidatesFor(effective);
+      }
+      final wifi = isOnWifiProvider?.call() ?? isOnWifi ?? false;
+      bool onSameLan;
+      if (sameLanProvider != null) {
+        onSameLan = await sameLanProvider();
+      } else if (sameLan != null) {
+        onSameLan = sameLan;
+      } else {
+        final lanTarget = (effective.lanWsUrl ?? effective.wsUrl).trim();
+        onSameLan = wifi && await phoneSharesLanWith(lanTarget);
+      }
+      return candidatesFor(effective, isOnWifi: wifi, sameLan: onSameLan);
+    }
+
+    var candidates = await resolvePlan();
+    if (candidates.isEmpty) {
+      // Last resort: pairing WS URLs (LAN-only QR after off-LAN filter).
+      candidates = hostingCandidatesFor(effective);
+    }
     if (candidates.isEmpty) {
       await ownedTunnel?.close();
-      throw StateError('pairing has no dial target');
+      throw StateError(
+        'pairing has no dial target '
+        '(need wsUrl / lanWsUrl, or mesh bootstrap on the QR)',
+      );
     }
     // Assigned before [onReconnect] can fire so resubscribe has a target.
     late final EnvoyHomeSession session;
     final dialer = libp2pDialer ?? _defaultLibp2p.dial;
+    // When off-LAN, private rungs are stripped so the active circuit sits at
+    // index 0 and the sweep is a no-op. When on the home LAN, the sweep can
+    // move circuit → LAN (EnvoyDev host_client).
     final client = HomeRemoteClient(
       HomeRemoteClientOptions(
-        resolveCandidates: () async =>
-            effective.joinChannel == JoinChannel.ssh
-                ? hostingCandidatesFor(effective)
-                : candidatesFor(effective),
+        resolveCandidates: resolvePlan,
         createTransport: createTransport ??
             (candidate) => _createTransportFor(candidate, dialer),
-        upgradeSweepMs: 0,
+        upgradeSweepMs: 30000,
         onReconnect: () {
           unawaited(session._resubscribeAfterReconnect());
         },

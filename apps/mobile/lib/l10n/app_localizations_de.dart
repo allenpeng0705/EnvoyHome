@@ -773,7 +773,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get connPairingHint =>
-      'Mint and revoke phones from desktop Settings → Pair devices. This list is read-only on mobile.';
+      'Household Owner devices can mint and revoke pairing here. Members see status only.';
 
   @override
   String get connNoDevices => 'No paired devices listed.';
@@ -1028,10 +1028,63 @@ class AppLocalizationsDe extends AppLocalizations {
   String get sysTabGrants => 'Grants';
 
   @override
+  String get sysTabMachine => 'This machine';
+
+  @override
+  String get sysMachineHint =>
+      'Daemon listen status from home.health. OS service install/restart is loopback-only on the home desktop — not available over mesh.';
+
+  @override
+  String get sysMachineDaemonOk => 'Daemon reachable';
+
+  @override
+  String get sysMachineDaemonBad => 'Daemon health failed';
+
+  @override
+  String get sysMachineWsPort => 'WebSocket port';
+
+  @override
+  String get sysMachineHttpPort => 'HTTP hatch port';
+
+  @override
+  String get sysMachinePublicUrl => 'Public base URL';
+
+  @override
+  String get sysMachinePublicUrlEmpty => 'Not set';
+
+  @override
+  String get sysMachineUptime => 'Uptime';
+
+  @override
+  String get sysMachineConnections => 'Clients / active turns';
+
+  @override
+  String get sysMachineMesh => 'Mesh';
+
+  @override
+  String get sysMachineOsServiceNote =>
+      'Install or restart the OS service from desktop Settings → System → This machine (loopback-owner).';
+
+  @override
+  String get sysMachineRefresh => 'Refresh';
+
+  @override
   String get sysTestPush => 'Send test push';
 
   @override
   String get sysTestPushSent => 'Test push requested';
+
+  @override
+  String get wfModeYaml => 'YAML';
+
+  @override
+  String get wfModeDiagram => 'Diagram';
+
+  @override
+  String get wfDiagramEmpty => 'No steps yet — draft or edit YAML.';
+
+  @override
+  String get wfDiagramEdge => '↓';
 
   @override
   String get sysDoctorFix => 'Fix';
@@ -1542,4 +1595,116 @@ class AppLocalizationsDe extends AppLocalizations {
   String schedulesChatRanAt(String when) {
     return 'Gelaufen $when';
   }
+
+  @override
+  String get welcomeSkip => 'Überspringen';
+
+  @override
+  String get welcomeNext => 'Weiter';
+
+  @override
+  String get commonContinue => 'Fortfahren';
+
+  @override
+  String get welcomeSlide1Title => 'Willkommen bei EnvoyHome';
+
+  @override
+  String get welcomeSlide1Body =>
+      'Dein Telefon ist ein Fenster zu einem selbst gehosteten Home-Agenten — Chat, Freigaben und Smart-Home bleiben auf dem Desktop.';
+
+  @override
+  String get welcomeSlide2Title => 'Die Arbeit läuft auf dem Computer';
+
+  @override
+  String get welcomeSlide2Body =>
+      'Installiere EnvoyHome auf einem Mac oder PC zu Hause. Daemon, Modelle und Haushaltsspeicher bleiben dort — das Telefon ist ein Remote-Fenster.';
+
+  @override
+  String get welcomeSlide3Title => 'Mit QR-Code koppeln';
+
+  @override
+  String get welcomeSlide3Body =>
+      'Öffne EnvoyHome auf dem Computer und zeige den Pairing-QR. Tippe hier auf Jetzt koppeln und scanne ihn. Du kannst auch einen Pairing-Link einfügen.';
+
+  @override
+  String get welcomeSlideRequiredTitle => 'Zum Start koppeln';
+
+  @override
+  String get welcomeSlideRequiredBody =>
+      'EnvoyHome braucht einen Computer mit der Desktop-App. Agenten und Home-Steuerung laufen dort — koppeln Sie dieses Telefon damit.';
+
+  @override
+  String get setupGuideTitle => 'So funktioniert EnvoyHome';
+
+  @override
+  String get setupGuideIntro =>
+      'EnvoyHome auf dem Telefon spricht mit EnvoyHome auf dem Heimcomputer. Desktop installieren, einmal koppeln, dann von überall chatten und freigeben.';
+
+  @override
+  String get setupGuidePairRequiredTitle => 'Zum Fortfahren koppeln';
+
+  @override
+  String get setupGuidePairRequiredBody =>
+      'EnvoyHome ist die Telefon-Begleit-App für Ihren Heim-Desktop. Ohne gekoppelten Computer gibt es hier noch nichts zu zeigen.';
+
+  @override
+  String get setupGuideStep1Title => 'Computer bereithalten';
+
+  @override
+  String get setupGuideStep1Body =>
+      'Sie brauchen einen Mac oder Windows/Linux-PC zu Hause. Dort laufen Daemon und Agenten.';
+
+  @override
+  String get setupGuideStep2Title => 'EnvoyHome herunterladen und installieren';
+
+  @override
+  String get setupGuideStep2Body =>
+      'Öffnen Sie den QuickStart und installieren Sie Daemon sowie Desktop-App. Starten und laufen lassen.';
+
+  @override
+  String get setupGuideDownloadCta => 'EnvoyHome-QuickStart öffnen';
+
+  @override
+  String get setupGuideStep3Title => 'Pairing-QR anzeigen';
+
+  @override
+  String get setupGuideStep3Body =>
+      'In der Desktop-App: Einstellungen → Geräte koppeln. QR auf dem Bildschirm lassen (mit Mesh/Relays, nicht nur LAN).';
+
+  @override
+  String get setupGuideStep4Title => 'Mit diesem Telefon scannen';
+
+  @override
+  String get setupGuideStep4Body =>
+      'Tippen Sie unten auf Jetzt koppeln. Kamera erlauben, QR scannen. Oder envoy://-Link / Host:Port / SSH.';
+
+  @override
+  String get setupGuideStep5Title => 'Verbunden';
+
+  @override
+  String get setupGuideStep5Body =>
+      'Nach dem Pairing zeigt dieses Telefon Chats, Freigaben und Einstellungen. Der Desktop läuft weiter, auch ohne Telefon.';
+
+  @override
+  String get setupGuideNoHomeTitle => 'Später koppeln ist in Ordnung';
+
+  @override
+  String get setupGuideNoHomeBody =>
+      'Sie können jetzt weitergehen und jederzeit unter Verbinden koppeln. Ohne Computer gibt es hier noch nichts zu zeigen.';
+
+  @override
+  String get setupGuidePairCta => 'Jetzt koppeln';
+
+  @override
+  String get setupGuidePairLaterCta => 'Später koppeln';
+
+  @override
+  String get setupGuideSkipCta => 'Erst erkunden';
+
+  @override
+  String get setupGuideDoneCta => 'Verstanden';
+
+  @override
+  String get settingsSetupGuideSubtitle =>
+      'Desktop-App installieren und dieses Telefon koppeln.';
 }

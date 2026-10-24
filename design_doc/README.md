@@ -27,7 +27,7 @@ Extract good ideas from peers → **fitness-check for EnvoyHome** (adopt / adapt
 |------|------|
 | [EnvoyHome-Implementation-Plan.md](EnvoyHome-Implementation-Plan.md) | **Build plan** — Build Stages **B0–B14**, verification-ID ownership, soft-risk mitigations, first-day onboarding, v1 release bar (subordinate) |
 | [agreed/](agreed/) | Short topic snapshots (subordinate to Design doc) |
-| [reviews/](reviews/) | Owner acceptance packets — one per large Normative batch |
+| [reviews/](reviews/) | Owner acceptance packets — one per large Normative batch; early-adopter claims [`reviews/2026-10-22-early-adopter-claims.md`](reviews/2026-10-22-early-adopter-claims.md) |
 | [analysis/](analysis/) | Peer research — non-normative |
 | [analysis/synthesis.md](analysis/synthesis.md) | Cross-peer fitness (in progress) |
 
