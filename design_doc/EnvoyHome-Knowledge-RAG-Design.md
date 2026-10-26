@@ -4,7 +4,7 @@
 |-------|--------|
 | **Document** | Normative design for **Doc KB (L6)**, **KnowYou episodic (L4′)**, **local hybrid RAG**, and the **Home embed engine** |
 | **Status** | Living draft — Owner direction 2026-10-25 |
-| **Last updated** | 2026-10-26 |
+| **Last updated** | 2026-10-27 |
 | **Parent** | [`EnvoyHome-Design.md`](EnvoyHome-Design.md) — product-wide ground truth (§2.4 ports, §8.5 Local, §9 Memory summary) |
 | **Sibling** | [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Design.md) — L0–L7 standing, flush, LearnQueue |
 | **Peer research** | [`analysis/peer-memory-systems.md`](analysis/peer-memory-systems.md); OSS survey notes in §14 |
@@ -20,6 +20,7 @@
 
 | Date | Change |
 |------|--------|
+| 2026-10-27 | **Ship defaults → `auto`:** `knowledgeInject` / `episodicInject` default **`auto`** after live eval gates (`pnpm agent:eval:kb`, incl. auto-inject + standing-filter cases). Owner may set `tool`/`off` in Settings. |
 | 2026-10-26 | **Ship defaults + hardening:** `knowledgeInject` / `episodicInject` default **`tool`** until eval gates green; KnowYou extract **user-turn only**; standing contradiction widened (allergy / quiet-hours / drink / food) and applied on tool retrieve; Doc KB section soft cap 2000 + KnowYou active soft cap 5000; index writes under account lock + atomic rename; Home embed `prefer=attach` refused at router; embed HTTP retry-once. |
 | 2026-10-25b | **Day-one persistence:** indexes MAY live as rebuildable JSON under `memory-backend/knowledge-index/` and `memory-backend/episodic-index/` (pure-JS trigram + float vectors). Conceptual `*.sqlite` paths remain the long-term target; hit shape unchanged on FTS5/`sqlite-vec` swap. |
 | 2026-10-25 | **Initial Normative.** Doc KB tiers A–C; per-account SQLite indexes; section FTS; optional local embed (Adapt Mesh Phase 57E — Home `:18793`); KnowYou L4′ extract ADD\|SUPERSEDE\|SKIP + summarize/TTL + budgeted auto-inject; authority + Settings + V-KB / V-KY / V-EMB IDs. Rejects mem0/Cognee-as-core; revises Memory Design “no auto-inject” for **bounded** L4′/L6 only. |
@@ -185,7 +186,7 @@ Heavy plugins (Cognee, Graphiti) = **Tier D optional MemoryBackend** — out of 
 
 | Knob | Default | Behavior |
 |------|---------|----------|
-| `knowledgeInject` | **`tool`** \| `auto` \| `off` | Ship default **`tool`** until eval gates green; `auto` = pre-turn retrieve into labeled block |
+| `knowledgeInject` | **`auto`** \| `tool` \| `off` | Ship default **`auto`** (eval gates green 2026-10-27); `tool` = retrieve only via `knowledge_search` |
 | `knowledgeInjectBudget` | model-aware sibling of L1–L3 (fixed small default e.g. **4000** chars) | Exact serialized block size |
 | Trigger | User message (+ optional “knowledge/” cue boost) | Skip for workflow turns / restricted as policy says |
 
@@ -281,7 +282,7 @@ Privacy Mode / `reviewInCloud: false` → local-or-skip (no silent cloud summari
 
 | Knob | Default |
 |------|---------|
-| `episodicInject` | **`tool`** (flip to `auto` behind eval when P5 gates green) |
+| `episodicInject` | **`auto`** (ship default after P5 live eval; Owner may set `tool`/`off`) |
 | `episodicInjectBudget` | small fixed / model-aware (e.g. **3000–6000** chars) |
 
 Label:
@@ -521,7 +522,7 @@ Cite Mesh peers when adapting:
 
 | Item | Lean |
 |------|------|
-| Ship `episodicInject` default `tool` until P5 eval green? | Yes — flip to `auto` behind flag/eval |
+| Ship `episodicInject` default `tool` until P5 eval green? | **Resolved 2026-10-27** — default `auto`; Settings override remains |
 | One SQLite file vs two per account | Two files for blast-radius; or one with prefixed tables |
 | sqlite-vec vs float blob + JS cosine | Prefer sqlite-vec when native OK; pure JS OK for P3 |
 | Exact default budgets | Tune with agent-eval knowledge + live KnowYou packs |

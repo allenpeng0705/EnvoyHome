@@ -28,8 +28,9 @@ export type KnowledgePolicy = {
 };
 
 const DEFAULT_POLICY: KnowledgePolicy = {
-  knowledgeInject: "tool",
-  episodicInject: "tool",
+  /** Ship default after live KB/KnowYou eval gates (V-KB-6 / V-KY-5). Owner may set tool|off in Settings. */
+  knowledgeInject: "auto",
+  episodicInject: "auto",
   knowledgeInjectBudget: 4000,
   episodicInjectBudget: 4000,
 };

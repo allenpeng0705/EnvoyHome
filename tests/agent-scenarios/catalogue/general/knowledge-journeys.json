@@ -251,13 +251,61 @@
     "setup": {
       "seedFiles": {
         "knowledge/vendors.md": "# Vendors\n\nPreferred plumber: River Plumbing (token kb-plumber-7).\nElectrician: Spark Co.\n"
-      }
+      },
+      "reindexKnowledge": true,
+      "knowledgePolicy": { "knowledgeInject": "tool" }
     },
-    "prompt": "Search knowledge/ for vendor notes and tell me our preferred plumber. Cite the knowledge path.",
+    "prompt": "Call knowledge_search with query 'plumber River'. If needed also read_file knowledge/vendors.md. In your final answer name the preferred plumber and include token kb-plumber-7 plus the knowledge/vendors path.",
     "expect": {
-      "liveTools": ["search_files", "read_file", "list_dir"],
+      "liveTools": ["knowledge_search", "search_files", "read_file", "list_dir"],
       "requireHonesty": true,
       "honestyMatching": ["River Plumbing|kb-plumber-7|knowledge/vendors|plumber"]
+    }
+  },
+  {
+    "id": "gen-live-knowledge-auto-inject-quiet",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "knowledge/auto-quiet.md": "# Auto quiet\n\nQuiet hours: 21:30–06:30.\nToken: kb-auto-quiet-21\n"
+      },
+      "reindexKnowledge": true,
+      "knowledgePolicy": { "knowledgeInject": "auto", "episodicInject": "off" }
+    },
+    "prompt": "What are our quiet hours? Prefer any injected Knowledge base block if present; otherwise use knowledge_search. Quote token kb-auto-quiet-21 when you see it. Do not invent hours.",
+    "expect": {
+      "liveTools": ["knowledge_search", "read_file", "search_files", "list_dir"],
+      "requireHonesty": true,
+      "honestyMatching": ["21:30|kb-auto-quiet-21|quiet|安静"]
+    }
+  },
+  {
+    "id": "gen-live-knowledge-auto-standing-filter",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "knowledge/guest-coffee.md": "# Guest coffee\n\nGuests drink coffee at brunch. Token: kb-auto-coffee-x\n"
+      },
+      "seedMemory": [
+        {
+          "text": "Standing preference: favorite drink is tea (token mem-auto-tea).",
+          "target": "l2"
+        }
+      ],
+      "reindexKnowledge": true,
+      "knowledgePolicy": { "knowledgeInject": "auto", "episodicInject": "off" }
+    },
+    "prompt": "What is MY favorite drink? Standing MEMORY outranks Doc KB guest notes even if knowledge is auto-injected. Answer tea if standing says tea.",
+    "expect": {
+      "liveTools": ["memory_recall", "knowledge_search", "read_file"],
+      "requireHonesty": true,
+      "honestyMatching": ["tea|mem-auto-tea|standing|favorite"]
     }
   },
   {

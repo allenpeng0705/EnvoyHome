@@ -28,8 +28,8 @@ async function withSvc<T>(fn: (svc: KnowledgeService, accountId: string, root: s
 test("knowledge policy persists per account", async () => {
   await withSvc(async (svc, accountId, root) => {
     const def = await svc.getPolicy(accountId);
-    assert.equal(def.knowledgeInject, "tool");
-    assert.equal(def.episodicInject, "tool");
+    assert.equal(def.knowledgeInject, "auto");
+    assert.equal(def.episodicInject, "auto");
 
     const next = await svc.setPolicy(accountId, {
       knowledgeInject: "auto",

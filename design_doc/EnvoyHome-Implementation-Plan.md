@@ -163,7 +163,21 @@ Ground truth: [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Desi
 | **KB-P4** KnowYou engine | `[x]` | ADD\|SUPERSEDE\|SKIP; summarize/TTL on consolidate | V-KY-1…4, V-KY-6, V-KY-7 |
 | **KB-P5** Auto episodic inject | `[x]` | `episodicInject=auto` + L1/L2 filter; duty line + `knowledge_search` | V-KY-5 |
 
-**Defaults:** `knowledgeInject` / `episodicInject` = `tool` until Settings flips to `auto`. Embed off until Owner enables.
+**Defaults:** `knowledgeInject` / `episodicInject` = **`auto`** (live `pnpm agent:eval:kb` green 2026-10-27). Settings may set `tool`/`off`. Embed off until Owner enables.
+
+### V-KB / V-KY / V-EMB checklist (ship)
+
+| ID | Gate | Status |
+|----|------|--------|
+| V-KB-1…4, V-KB-7 | Unit + artifact | `[x]` |
+| V-KB-5 | Hybrid / FTS degrade | `[x]` |
+| V-KB-6 | Auto-inject + L2 filter | `[x]` unit + live `gen-live-knowledge-auto-*` |
+| V-KY-1…4, V-KY-6 | Unit | `[x]` |
+| V-KY-5 | Budgeted episodic auto-inject | `[x]` + live `gen-live-knowyou-auto-inject-drink` |
+| V-KY-7 | PendingLearn on L1/L2 conflict | `[x]` |
+| V-EMB-1…7 | Embed engine / Doctor stale | `[x]` |
+| Settings Memory/Knowledge | Desktop LLM → Memory card | `[x]` |
+| Live eval | `pnpm agent:eval:kb` | `[x]` 15/15 (2026-10-27) |
 
 ## Phase 2 agent capabilities (P2-A…E)
 
@@ -801,6 +815,7 @@ If you need to change the answer to "in what order we build," edit this doc and 
 
 | Date | Change |
 |------|--------|
+| 2026-10-27 | **KB item 5 close:** live `agent:eval:kb` green (auto-inject + standing filter); ship `knowledgeInject`/`episodicInject` default **`auto`**; V-KB/V-KY/V-EMB checklist in Plan. |
 | 2026-10-25d | **Settings Knowledge & embed UI:** LLM → Memory card — curated embed download/progress, enable spawn/Ollama/disable, inject defaults `tool`, reindex; `home:embed-model-download` + cancel/resume RPCs. |
 | 2026-10-25c | **KB hardening:** session→episodic purge; V-KY-7 PendingLearn on L1/L2 conflict; real `downloadEmbedModel` + TOFU sha256; Doctor embed/stale; V-KB-7 artifact open; Settings Memory stub; KnowYou journeys; JSON day-one paths Normative note. |
 | 2026-10-25b | **KB-P1…P5 shipped:** section FTS + `knowledge_search`; Home embed `:18793` (+ mock); hybrid RRF; KnowYou ADD\|SUPERSEDE\|SKIP + summarize on consolidate; optional auto-inject + standing filter. Board checkboxes `[x]`; V-KB/V-KY/V-EMB tests. |

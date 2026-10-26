@@ -134,5 +134,27 @@
       "requireHonesty": true,
       "honestyMatching": ["oat|remember|KnowYou|memory|pending|saved|记下|记住|preference"]
     }
+  },
+  {
+    "id": "gen-live-knowyou-auto-inject-drink",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedKnowYou": [
+        {
+          "key": "pref.drink",
+          "text": "I prefer genmaicha in the afternoon. Token: ky-auto-genmai-3"
+        }
+      ],
+      "knowledgePolicy": { "episodicInject": "auto", "knowledgeInject": "off" }
+    },
+    "prompt": "What drink do I prefer in the afternoon? Prefer any injected Related past context / KnowYou block if present; otherwise knowyou_search. Quote ky-auto-genmai-3 when present.",
+    "expect": {
+      "liveTools": ["knowyou_search", "memory_recall"],
+      "requireHonesty": true,
+      "honestyMatching": ["genmaicha|ky-auto-genmai-3|tea|prefer|drink"]
+    }
   }
 ]

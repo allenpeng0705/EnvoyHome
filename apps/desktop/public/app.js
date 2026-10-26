@@ -8670,8 +8670,8 @@ async function showView(id) {
         const embedSt = embedAns.error ? {} : embedAns.result || {};
         const kbSt = kbStatusAns.error ? {} : kbStatusAns.result || {};
         const kbPol = kbPolicyAns.error
-          ? { knowledgeInject: "tool", episodicInject: "tool" }
-          : kbPolicyAns.result || { knowledgeInject: "tool", episodicInject: "tool" };
+          ? { knowledgeInject: "auto", episodicInject: "auto" }
+          : kbPolicyAns.result || { knowledgeInject: "auto", episodicInject: "auto" };
         const identityAns = await rpc("home.getIdentity", { accountId: aid }).catch(() => null);
         const identityFromRpc =
           typeof identityAns?.result?.markdown === "string" ? identityAns.result.markdown : "";
@@ -8844,10 +8844,10 @@ async function showView(id) {
         };
         const kbInject = ["off", "tool", "auto"].includes(kbPol.knowledgeInject)
           ? kbPol.knowledgeInject
-          : "tool";
+          : "auto";
         const kyInject = ["off", "tool", "auto"].includes(kbPol.episodicInject)
           ? kbPol.episodicInject
-          : "tool";
+          : "auto";
         const ragOpt = (cur, value, labelKey) =>
           `<option value="${value}"${cur === value ? " selected" : ""}>${escapeHtml(t(labelKey))}</option>`;
         for (const job of Array.isArray(embedSt.downloads) ? embedSt.downloads : []) {
@@ -9037,8 +9037,8 @@ async function showView(id) {
           const status = document.getElementById("kb-policy-status");
           const ans = await rpc("home.setKnowledgePolicy", {
             accountId: aid,
-            knowledgeInject: String(fd.get("knowledgeInject") || "tool"),
-            episodicInject: String(fd.get("episodicInject") || "tool"),
+            knowledgeInject: String(fd.get("knowledgeInject") || "auto"),
+            episodicInject: String(fd.get("episodicInject") || "auto"),
             knowledgeInjectBudget: Number(fd.get("knowledgeInjectBudget") || 4000),
             episodicInjectBudget: Number(fd.get("episodicInjectBudget") || 4000),
           });
