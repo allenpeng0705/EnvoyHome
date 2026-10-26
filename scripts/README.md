@@ -72,8 +72,20 @@ without push. No config → packages without push.
 Copy `scripts/sign-macos-release.env.example` → `scripts/sign-macos-release.env`
 (gitignored) and fill Apple Developer ID fields. Without it, the DMG is unsigned.
 
+## Agent scenario tests
+
+Prompt catalogue under [`tests/agent-scenarios/`](../tests/agent-scenarios/) (Schedule + General packs).
+
+| Gate | Command |
+|------|---------|
+| **V-AGENT-SCENARIO-1** (CI) | `pnpm agent:scenarios` |
+| **V-AGENT-SCENARIO-2** (optional live LLM) | `pnpm agent:eval` — real model via **`~/.envoyhome`** (starts daemon if needed; reuses desktop if up) |
+
+Live eval is **not** part of `./scripts/ci.sh`. New LLM-direct pack: `pnpm agent:eval:live-direct` (filter `live-llm`). Against an already-running WS only: `pnpm agent:eval:ws`. Related: `scripts/schedule-chat-corpus.mjs`.
+
 ## Related docs
 
+- Agent scenarios: [`tests/agent-scenarios/README.md`](../tests/agent-scenarios/README.md)
 - Desktop app notes: [`apps/desktop/README.md`](../apps/desktop/README.md)
 - Quick start: [`QuickStart.md`](../QuickStart.md)
 - Peer layout: [`AGENTS.md`](../AGENTS.md)

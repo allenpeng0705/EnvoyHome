@@ -1,0 +1,398 @@
+[
+  {
+    "id": "gen-tool-knowledge-search-index",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Search the knowledge index for quiet hours.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "knowledge/handbook.md": "# Handbook\n\nQuiet hours start at 22:00. Token: kb-quiet-22\n"
+      },
+      "reindexKnowledge": true
+    },
+    "tool": {
+      "name": "knowledge_search",
+      "args": { "query": "quiet hours" }
+    },
+    "expect": {
+      "toolOk": true,
+      "bodyMatching": "kb-quiet-22|22:00|knowledge/handbook"
+    }
+  },
+  {
+    "id": "gen-seq-knowledge-write-search-read",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Save a policy into knowledge/, find it, then read it.",
+    "setup": { "sandboxFiles": true },
+    "toolSequence": [
+      {
+        "name": "write_file",
+        "args": {
+          "path": "knowledge/wifi-policy.md",
+          "content": "# Guest WiFi\n\nSSID: EnvoyGuest\nHint token: kb-wifi-orchid-42\nNever store the real password in chat.\n"
+        }
+      },
+      {
+        "name": "search_files",
+        "args": { "pattern": "*wifi*", "path": "knowledge" }
+      },
+      {
+        "name": "read_file",
+        "args": { "path": "knowledge/wifi-policy.md" }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step1": { "bodyMatching": "wifi-policy|knowledge/" },
+      "step2": { "bodyMatching": "kb-wifi-orchid-42|EnvoyGuest" }
+    }
+  },
+  {
+    "id": "gen-seq-knowledge-list-then-read",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "List knowledge/ then open the handbook.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "knowledge/handbook.md": "# Handbook\n\nQuiet hours start at 22:00. Token: kb-quiet-22\n"
+      }
+    },
+    "toolSequence": [
+      {
+        "name": "list_dir",
+        "args": { "path": "knowledge" }
+      },
+      {
+        "name": "read_file",
+        "args": { "path": "knowledge/handbook.md" }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "bodyMatching": "handbook\\.md|knowledge" },
+      "step1": { "bodyMatching": "kb-quiet-22|22:00" }
+    }
+  },
+  {
+    "id": "gen-tool-knowledge-search-seeded",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Search knowledge for allergy notes.",
+    "setup": {
+      "seedFiles": {
+        "knowledge/allergies.md": "# Allergies\n\nPeanut allergy — keep epinephrine nearby. Token: kb-peanut-9\n"
+      }
+    },
+    "tool": {
+      "name": "search_files",
+      "args": { "pattern": "*allerg*", "path": "knowledge" }
+    },
+    "expect": {
+      "toolOk": true,
+      "bodyMatching": "allergies\\.md|knowledge/"
+    }
+  },
+  {
+    "id": "gen-compose-knowledge-answer-from-doc",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "What are quiet hours? Check the knowledge handbook.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "knowledge/handbook.md": "# Handbook\n\nQuiet hours start at 22:00. Token: kb-quiet-22\n"
+      }
+    },
+    "allowTools": ["search_files", "list_dir", "read_file"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"search_files\",\"args\":{\"pattern\":\"*handbook*\",\"path\":\"knowledge\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"read_file\",\"args\":{\"path\":\"knowledge/handbook.md\"}}]\n```"
+      },
+      {
+        "reply": "Quiet hours start at 22:00 (from knowledge/handbook.md)."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["search_files", "read_file"],
+      "finalMatching": "22:00|quiet|handbook"
+    }
+  },
+  {
+    "id": "gen-compose-knowledge-save-clip-after-research",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Look up EnvoyMesh briefly, then save a short clip under knowledge/envoymesh-clip.md and tell me the path.",
+    "setup": {
+      "sandboxFiles": true,
+      "mockWebSearch": {
+        "provider": "brave",
+        "results": [
+          {
+            "title": "EnvoyMesh overview",
+            "url": "https://example.com/envoymesh-kb",
+            "description": "P2P mesh hosting for household agents."
+          }
+        ]
+      }
+    },
+    "allowTools": ["web_search", "write_file"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"web_search\",\"args\":{\"query\":\"EnvoyMesh\",\"count\":3}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"write_file\",\"args\":{\"path\":\"knowledge/envoymesh-clip.md\",\"content\":\"# EnvoyMesh clip\\n\\nSource: https://example.com/envoymesh-kb\\nP2P mesh hosting for household agents.\\nToken: kb-mesh-clip-3\\n\"}}]\n```"
+      },
+      {
+        "reply": "Saved knowledge/envoymesh-clip.md with a citation."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["web_search", "write_file"],
+      "finalMatching": "knowledge/envoymesh-clip|Saved|citation"
+    }
+  },
+  {
+    "id": "gen-compose-knowledge-vs-documents-steer",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Store this durable appliance manual tip in the knowledge base (not under documents/): Fridge filter lasts 6 months. Token kb-fridge-6.",
+    "setup": { "sandboxFiles": true },
+    "allowTools": ["write_file", "list_dir"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"write_file\",\"args\":{\"path\":\"knowledge/fridge-filter.md\",\"content\":\"# Fridge filter\\n\\nReplace every 6 months. Token: kb-fridge-6\\n\"}}]\n```"
+      },
+      {
+        "reply": "Stored under knowledge/fridge-filter.md so Shared files / Open chips can find it."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["write_file"],
+      "finalMatching": "knowledge/fridge-filter|kb-fridge-6|Shared|Open"
+    }
+  },
+  {
+    "id": "gen-compose-knowledge-export-pdf",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Export knowledge/handbook.md as a PDF and tell me the export path.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "knowledge/handbook.md": "# Handbook\n\nQuiet hours 22:00. Token: kb-export-quiet\n"
+      }
+    },
+    "allowTools": ["export_document", "read_file"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"export_document\",\"args\":{\"format\":\"pdf\",\"sourcePath\":\"knowledge/handbook.md\",\"title\":\"Handbook\"}}]\n```"
+      },
+      {
+        "reply": "Exported the handbook PDF under output/exports/."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["export_document"],
+      "finalMatching": "output/exports|PDF|Exported|handbook"
+    }
+  },
+  {
+    "id": "gen-live-knowledge-answer-quiet-hours",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "knowledge/house-rules.md": "# House rules\n\nQuiet hours: 22:00–07:00.\nRecycling: blue bin Fridays.\nToken: kb-live-quiet-22\n"
+      }
+    },
+    "prompt": "Using files under knowledge/, what are our quiet hours? Quote the token if you see it. Do not invent rules that are not in the knowledge base.",
+    "expect": {
+      "liveTools": ["search_files", "read_file", "list_dir"],
+      "requireHonesty": true,
+      "honestyMatching": ["22:00|quiet|kb-live-quiet-22|knowledge|不知道|not found|没有"]
+    }
+  },
+  {
+    "id": "gen-live-knowledge-save-note",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Save a short durable note at knowledge/agent-eval-clip.md saying 'kb live save ok' using write_file, then confirm the knowledge/ path (not documents/).",
+    "expect": {
+      "liveTools": ["write_file"],
+      "requireHonesty": true,
+      "honestyMatching": ["knowledge/agent-eval-clip|kb live save|write_file|已写|保存"]
+    }
+  },
+  {
+    "id": "gen-live-knowledge-search-then-cite",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "knowledge/vendors.md": "# Vendors\n\nPreferred plumber: River Plumbing (token kb-plumber-7).\nElectrician: Spark Co.\n"
+      }
+    },
+    "prompt": "Search knowledge/ for vendor notes and tell me our preferred plumber. Cite the knowledge path.",
+    "expect": {
+      "liveTools": ["search_files", "read_file", "list_dir"],
+      "requireHonesty": true,
+      "honestyMatching": ["River Plumbing|kb-plumber-7|knowledge/vendors|plumber"]
+    }
+  },
+  {
+    "id": "gen-live-knowledge-vs-memory-honesty",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "knowledge/tea-guide.md": "# Tea guide\n\nBrew jasmine green at 80C. Token: kb-tea-80\n"
+      },
+      "seedMemory": [
+        {
+          "text": "Standing preference: favorite tea is jasmine green (token mem-tea-stand).",
+          "target": "l2"
+        }
+      ]
+    },
+    "prompt": "I asked about brewing temperature for jasmine tea. Prefer the knowledge/ guide for procedure; standing memory may only say which tea I like. Answer with the temperature if the knowledge file has it.",
+    "expect": {
+      "liveTools": ["read_file", "search_files", "list_dir", "memory_recall", "knowledge_search"],
+      "requireHonesty": true,
+      "honestyMatching": ["80|kb-tea-80|jasmine|knowledge|brew"]
+    }
+  },
+  {
+    "id": "gen-live-knowledge-index-search-tool",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "knowledge/evacuation.md": "# Evacuation meet point\n\nMeet at the oak tree by the driveway.\nToken: kb-evac-oak-3\n"
+      },
+      "reindexKnowledge": true,
+      "knowledgePolicy": { "knowledgeInject": "tool" }
+    },
+    "prompt": "Call knowledge_search with query 'evacuation oak'. If the hit is thin, also read_file knowledge/evacuation.md. In your final answer, name the meet point and include the Token line (kb-evac-oak-3).",
+    "expect": {
+      "liveTools": ["knowledge_search", "search_files", "read_file", "list_dir"],
+      "requireHonesty": true,
+      "honestyMatching": ["kb-evac-oak-3|oak tree|oak|evac|driveway|knowledge/evacuation"]
+    }
+  },
+  {
+    "id": "gen-live-knowledge-allergy-cite",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "knowledge/allergies.md": "# Allergies\n\nHousehold: peanut allergy — keep epinephrine nearby. Token: kb-live-peanut-11\n"
+      },
+      "reindexKnowledge": true
+    },
+    "prompt": "What allergy notes are in our Doc KB under knowledge/? Prefer knowledge_search or reading knowledge/allergies.md. Quote the token; do not invent allergens.",
+    "expect": {
+      "liveTools": ["knowledge_search", "read_file", "search_files", "list_dir"],
+      "requireHonesty": true,
+      "honestyMatching": ["peanut|kb-live-peanut-11|epinephrine|allerg|knowledge/"]
+    }
+  },
+  {
+    "id": "gen-live-knowledge-standing-drink-wins",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "knowledge/guest-drinks.md": "# Guest drinks\n\nGuests often drink coffee at brunch. Token: kb-guest-coffee-x\n"
+      },
+      "seedMemory": [
+        {
+          "text": "Standing preference: favorite drink is tea (token mem-drink-tea).",
+          "target": "l2"
+        }
+      ],
+      "reindexKnowledge": true
+    },
+    "prompt": "What is MY favorite drink? Standing MEMORY outranks guest notes in knowledge/. If standing says tea, answer tea — do not treat guest coffee notes as my preference.",
+    "expect": {
+      "liveTools": ["memory_recall", "knowledge_search", "read_file", "search_files"],
+      "requireHonesty": true,
+      "honestyMatching": ["tea|mem-drink-tea|standing|favorite"]
+    }
+  },
+  {
+    "id": "gen-live-knowledge-zh-quiet-hours",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "locale": "zh",
+    "setup": {
+      "seedFiles": {
+        "knowledge/house-rules-zh.md": "# 家规\n\n安静时间：22:00–07:00。标记：kb-zh-quiet-22\n"
+      },
+      "reindexKnowledge": true
+    },
+    "prompt": "请用 knowledge/ 或 knowledge_search 查一下家里的安静时间，并引用标记 token。不要编造。",
+    "expect": {
+      "liveTools": ["knowledge_search", "read_file", "search_files", "list_dir"],
+      "requireHonesty": true,
+      "honestyMatching": ["22:00|kb-zh-quiet-22|安静|quiet|knowledge"]
+    }
+  },
+  {
+    "id": "gen-compose-knowledge-search-tool-then-answer",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "What are quiet hours? Use knowledge_search.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "knowledge/handbook.md": "# Handbook\n\nQuiet hours start at 22:00. Token: kb-quiet-22\n"
+      },
+      "reindexKnowledge": true
+    },
+    "allowTools": ["knowledge_search"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"knowledge_search\",\"args\":{\"query\":\"quiet hours\"}}]\n```"
+      },
+      {
+        "reply": "Quiet hours start at 22:00 (knowledge/handbook.md, kb-quiet-22)."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["knowledge_search"],
+      "finalMatching": "22:00|kb-quiet-22|quiet"
+    }
+  }
+]

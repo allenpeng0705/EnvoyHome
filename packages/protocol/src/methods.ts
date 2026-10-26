@@ -3292,6 +3292,247 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
       ["hits"],
     ),
   },
+  "home.searchKnowledge": {
+    group: "memory",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Search Doc KB (knowledge/) section index",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        query: str({ minLength: 1 }),
+        limit: int({ minimum: 1, maximum: 50 }),
+      },
+      ["accountId", "query"],
+    ),
+    result: obj(
+      {
+        hits: arr(
+          obj(
+            {
+              path: str({ minLength: 1 }),
+              heading: str(),
+              startLine: int({ minimum: 1 }),
+              endLine: int({ minimum: 1 }),
+              snippet: str(),
+              score: num(),
+              engine: enumOf("fts", "scan", "vec", "hybrid"),
+              sectionId: str(),
+            },
+            ["path", "heading", "startLine", "endLine", "snippet", "score", "engine"],
+          ),
+        ),
+      },
+      ["hits"],
+    ),
+  },
+  "home.reindexKnowledge": {
+    group: "memory",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Rebuild knowledge/ derived index",
+    params: obj({ accountId: str({ minLength: 1 }) }, ["accountId"]),
+    result: obj(
+      { sectionCount: int({ minimum: 0 }), paths: int({ minimum: 0 }) },
+      ["sectionCount", "paths"],
+    ),
+  },
+  "home.getKnowledgeStatus": {
+    group: "memory",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Doc KB index + embed readiness",
+    params: obj({ accountId: str({ minLength: 1 }) }, ["accountId"]),
+    result: obj(
+      {
+        sectionCount: int({ minimum: 0 }),
+        lastReindexAt: str(),
+        embedStale: bool(),
+        embedModelId: str(),
+        knowYouRows: int({ minimum: 0 }),
+        knowYouEmbedStale: bool(),
+        embedReady: bool(),
+        embedMode: str(),
+      },
+      ["sectionCount", "embedStale"],
+    ),
+  },
+  "home.searchKnowYou": {
+    group: "memory",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Search KnowYou episodic index",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        query: str({ minLength: 1 }),
+        limit: int({ minimum: 1, maximum: 50 }),
+      },
+      ["accountId", "query"],
+    ),
+    result: obj(
+      {
+        hits: arr(
+          obj(
+            {
+              id: str({ minLength: 1 }),
+              key: str(),
+              text: str(),
+              score: num(),
+              engine: enumOf("fts", "scan", "vec", "hybrid"),
+              isSummary: bool(),
+            },
+            ["id", "key", "text", "score", "engine"],
+          ),
+        ),
+      },
+      ["hits"],
+    ),
+  },
+  "home.updateKnowYou": {
+    group: "memory",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Forget or supersede a KnowYou episodic row (operator correction)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        action: enumOf("forget", "supersede"),
+        id: str({ minLength: 1 }),
+        key: str({ minLength: 1 }),
+        text: str({ minLength: 1 }),
+      },
+      ["accountId", "action"],
+    ),
+    result: obj(
+      { ok: bool(), id: str(), removed: int({ minimum: 0 }) },
+      ["ok", "removed"],
+    ),
+  },
+  "home.getKnowledgePolicy": {
+    group: "memory",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Knowledge / KnowYou inject policy",
+    params: obj({ accountId: str({ minLength: 1 }) }, ["accountId"]),
+    result: obj(
+      {
+        knowledgeInject: enumOf("off", "tool", "auto"),
+        episodicInject: enumOf("off", "tool", "auto"),
+        knowledgeInjectBudget: int({ minimum: 0 }),
+        episodicInjectBudget: int({ minimum: 0 }),
+      },
+      ["knowledgeInject", "episodicInject", "knowledgeInjectBudget", "episodicInjectBudget"],
+    ),
+  },
+  "home.setKnowledgePolicy": {
+    group: "memory",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary: "Set Knowledge / KnowYou inject policy",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        knowledgeInject: enumOf("off", "tool", "auto"),
+        episodicInject: enumOf("off", "tool", "auto"),
+        knowledgeInjectBudget: int({ minimum: 0 }),
+        episodicInjectBudget: int({ minimum: 0 }),
+      },
+      ["accountId"],
+    ),
+    result: obj(
+      {
+        knowledgeInject: enumOf("off", "tool", "auto"),
+        episodicInject: enumOf("off", "tool", "auto"),
+        knowledgeInjectBudget: int({ minimum: 0 }),
+        episodicInjectBudget: int({ minimum: 0 }),
+      },
+      ["knowledgeInject", "episodicInject", "knowledgeInjectBudget", "episodicInjectBudget"],
+    ),
+  },
+  "home.getEmbedEngineStatus": {
+    group: "memory",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary: "Home embed engine status (:18793)",
+    params: obj({}, []),
+    result: obj(
+      {
+        enabled: bool(),
+        mode: enumOf("off", "spawn", "ollama", "auto"),
+        ready: bool(),
+        modelId: str(),
+        port: int(),
+        baseUrl: str(),
+      },
+      ["enabled", "mode", "ready", "modelId", "port"],
+    ),
+  },
+  "home.enableEmbedEngine": {
+    group: "memory",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Enable Home embed (spawn/ollama/auto; never Mesh attach)",
+    params: obj(
+      {
+        prefer: enumOf("auto", "spawn", "ollama"),
+        modelId: str({ minLength: 1 }),
+        ollamaModel: str({ minLength: 1 }),
+        ollamaBaseUrl: str({ minLength: 1 }),
+      },
+      [],
+    ),
+    result: obj(
+      {
+        enabled: bool(),
+        mode: enumOf("off", "spawn", "ollama", "auto"),
+        ready: bool(),
+        modelId: str(),
+        port: int(),
+      },
+      ["enabled", "mode", "ready", "modelId", "port"],
+    ),
+  },
+  "home.disableEmbedEngine": {
+    group: "memory",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary: "Disable Home embed engine",
+    params: obj({}, []),
+    result: obj({ enabled: bool(), mode: enumOf("off", "spawn", "ollama", "auto") }, ["enabled", "mode"]),
+  },
+  "home.downloadEmbedModel": {
+    group: "memory",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Download curated Home embed GGUF into local-engine/embed-models/",
+    params: obj({ modelId: str({ minLength: 1 }) }, []),
+    result: obj(
+      {
+        ok: bool(),
+        modelId: str(),
+        fileName: str(),
+        status: str(),
+      },
+      ["ok", "modelId", "fileName", "status"],
+    ),
+  },
+  "home.cancelEmbedModelDownload": {
+    group: "memory",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Pause an in-flight Home embed GGUF download",
+    params: obj({ fileName: str({ minLength: 1 }) }, ["fileName"]),
+    result: obj({}, []),
+  },
+  "home.resumeEmbedModelDownload": {
+    group: "memory",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Resume a paused Home embed GGUF download",
+    params: obj({ fileName: str({ minLength: 1 }) }, ["fileName"]),
+    result: obj({}, []),
+  },
   "home.forget": {
     group: "memory",
     scope: "account-scoped",

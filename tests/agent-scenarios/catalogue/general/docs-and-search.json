@@ -1,0 +1,155 @@
+[
+  {
+    "id": "gen-seq-search-then-read",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Find markdown notes then read one.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/alpha.md": "# Alpha\nfind-me-token\n",
+        "documents/beta.txt": "other"
+      }
+    },
+    "toolSequence": [
+      {
+        "name": "search_files",
+        "args": { "pattern": "*.md", "path": "documents" }
+      },
+      {
+        "name": "read_file",
+        "args": { "path": "documents/alpha.md" }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "bodyMatching": "alpha\\.md|documents/alpha" },
+      "step1": { "bodyMatching": "find-me-token" }
+    }
+  },
+  {
+    "id": "gen-seq-write-export-docx",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Write a memo then export it as docx.",
+    "setup": { "sandboxFiles": true },
+    "toolSequence": [
+      {
+        "name": "write_file",
+        "args": {
+          "path": "documents/memo-export.md",
+          "content": "# Memo\n\nExport this body.\n"
+        }
+      },
+      {
+        "name": "export_document",
+        "args": {
+          "format": "docx",
+          "sourcePath": "documents/memo-export.md",
+          "title": "Memo"
+        }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step1": { "jsonFields": ["uri", "format", "bytes"] }
+    }
+  },
+  {
+    "id": "gen-tool-export-markdown-inline",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Export this markdown as pdf.",
+    "tool": {
+      "name": "export_document",
+      "args": {
+        "format": "pdf",
+        "markdown": "# Title\n\nHello export.\n",
+        "title": "Hello"
+      }
+    },
+    "expect": {
+      "toolOk": true,
+      "jsonFields": ["uri", "format", "bytes"]
+    }
+  },
+  {
+    "id": "gen-tool-search-files-md",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Search for markdown under documents.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": { "documents/z.md": "z-content" }
+    },
+    "tool": {
+      "name": "search_files",
+      "args": { "pattern": "*.md", "path": "documents" }
+    },
+    "expect": {
+      "toolOk": true,
+      "bodyMatching": "z\\.md|documents/z"
+    }
+  },
+  {
+    "id": "gen-compose-search-read-summarize",
+    "pack": "general",
+    "mode": "compose",
+    "live": true,
+    "prompt": "Search documents for *.md, read the first hit, and give a one-line summary.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/briefing.md": "# Briefing\nShip the agent eval pack today.\n"
+      }
+    },
+    "allowTools": ["search_files", "read_file", "list_dir"],
+    "rounds": [
+      {
+        "reply": "Searching.\n```envoyhome-tools\n[{\"tool\":\"search_files\",\"args\":{\"pattern\":\"*.md\",\"path\":\"documents\"}}]\n```"
+      },
+      {
+        "reply": "Reading.\n```envoyhome-tools\n[{\"tool\":\"read_file\",\"args\":{\"path\":\"documents/briefing.md\"}}]\n```"
+      },
+      {
+        "reply": "Summary: Ship the agent eval pack today."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["search_files", "read_file"],
+      "minToolRounds": 2,
+      "finalMatching": "Ship|eval|briefing|Summary",
+      "liveTools": ["search_files", "read_file", "list_dir"],
+      "honestyMatching": ["briefing|Ship|document|summary|搜索|文件"]
+    }
+  },
+  {
+    "id": "gen-compose-write-export-rounds",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Create documents/report.md then export it to pdf.",
+    "setup": { "sandboxFiles": true },
+    "allowTools": ["write_file", "export_document"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"write_file\",\"args\":{\"path\":\"documents/report.md\",\"content\":\"# Report\\nStatus green.\\n\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"export_document\",\"args\":{\"format\":\"pdf\",\"sourcePath\":\"documents/report.md\",\"title\":\"Report\"}}]\n```"
+      },
+      {
+        "reply": "Exported the report as PDF."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["write_file", "export_document"],
+      "minToolRounds": 2,
+      "finalMatching": "Exported|PDF|report"
+    }
+  }
+]

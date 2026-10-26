@@ -357,7 +357,7 @@ function listLiveDownloadJobs() {
   return [...byFile.values()];
 }
 
-function downloadProgressHtml(job) {
+function downloadProgressHtml(job, scope = "local") {
   if (!job || (job.status !== "downloading" && job.status !== "paused" && job.status !== "failed")) {
     return "";
   }
@@ -380,7 +380,7 @@ function downloadProgressHtml(job) {
       ? `<button type="button" class="secondary" data-dl-stop="${escapeHtml(job.fileName)}">${escapeHtml(t("models.dlStop"))}</button>`
       : `<button type="button" class="secondary" data-dl-resume="${escapeHtml(job.fileName)}">${escapeHtml(t("models.dlContinue"))}</button>`;
   const fillClass = pct == null ? "le-dl-bar-fill indeterminate" : "le-dl-bar-fill";
-  return `<div class="le-dl" data-dl-file="${escapeHtml(job.fileName)}">
+  return `<div class="le-dl" data-dl-scope="${escapeHtml(scope)}" data-dl-file="${escapeHtml(job.fileName)}">
     <div class="le-dl-meta muted">${escapeHtml(label)} · ${escapeHtml(sizeLine)}${pct != null ? ` · ${pct}%` : ""}</div>
     <div class="le-dl-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"${pct != null ? ` aria-valuenow="${pct}"` : ""}>
       <div class="${fillClass}" style="width:${pct != null ? pct : 30}%"></div>
@@ -424,7 +424,7 @@ function syncHfActiveDownloads() {
   wireDownloadControls(host);
 }
 
-function patchDownloadProgressDom(job) {
+function patchDownloadProgressDom(job, scope = "local") {
   rememberDownloadJob(job);
   if (job.status === "completed") {
     liveDownloads.delete(job.fileName);
@@ -433,14 +433,20 @@ function patchDownloadProgressDom(job) {
       el.remove();
     });
     syncHfActiveDownloads();
-    const leMsg = document.getElementById("le-msg-spawn");
+    const leMsg = document.getElementById(
+      scope === "embed" ? "kb-embed-msg" : "le-msg-spawn",
+    );
     if (leMsg) {
       leMsg.innerHTML = `<p class="muted">${escapeHtml(
-        t("models.downloaded", { file: job.fileName }),
+        t(scope === "embed" ? "memory.embedDownloaded" : "models.downloaded", {
+          file: job.fileName,
+        }),
       )}</p>`;
     }
     // Full refresh shows installed GGUF; skip when on HuggingFace so search/URL UI stays put.
-    if (llmTab === "local" && localModelSubTab !== "huggingface") {
+    if (scope === "embed" && llmTab === "memory") {
+      void showView("llm");
+    } else if (llmTab === "local" && localModelSubTab !== "huggingface") {
       void showView("local");
     }
     return;
@@ -449,13 +455,20 @@ function patchDownloadProgressDom(job) {
   if (nodes.length === 0) {
     syncHfActiveDownloads();
     wireDownloadControls(document.getElementById("local-engine-card"));
+    wireDownloadControls(document.getElementById("kb-embed-card"));
     return;
   }
   nodes.forEach((el) => {
-    el.outerHTML = downloadProgressHtml(job);
+    const sc = el.getAttribute("data-dl-scope") || scope;
+    el.outerHTML = downloadProgressHtml(job, sc);
   });
   wireDownloadControls(document.getElementById("local-engine-card"));
+  wireDownloadControls(document.getElementById("kb-embed-card"));
   syncHfActiveDownloads();
+}
+
+function downloadErrorMsgEl(scope) {
+  return document.getElementById(scope === "embed" ? "kb-embed-msg" : "le-msg");
 }
 
 function wireDownloadControls(root) {
@@ -466,10 +479,17 @@ function wireDownloadControls(root) {
     btn.addEventListener("click", async () => {
       const fileName = btn.getAttribute("data-dl-stop");
       if (!fileName) return;
-      const ans = await rpc("home.cancelLocalModelDownload", { fileName });
-      if (!ans.error && ans.result) patchDownloadProgressDom(ans.result);
-      else if (ans.error && document.getElementById("le-msg")) {
-        document.getElementById("le-msg").innerHTML = `<p class="le-error">${escapeHtml(errMsg(ans))}</p>`;
+      const scope =
+        btn.closest("[data-dl-scope]")?.getAttribute("data-dl-scope") || "local";
+      const method =
+        scope === "embed"
+          ? "home.cancelEmbedModelDownload"
+          : "home.cancelLocalModelDownload";
+      const ans = await rpc(method, { fileName });
+      if (!ans.error && ans.result) patchDownloadProgressDom(ans.result, scope);
+      else if (ans.error) {
+        const msg = downloadErrorMsgEl(scope);
+        if (msg) msg.innerHTML = `<p class="le-error">${escapeHtml(errMsg(ans))}</p>`;
       }
     });
   });
@@ -479,10 +499,17 @@ function wireDownloadControls(root) {
     btn.addEventListener("click", async () => {
       const fileName = btn.getAttribute("data-dl-resume");
       if (!fileName) return;
-      const ans = await rpc("home.resumeLocalModelDownload", { fileName });
-      if (!ans.error && ans.result) patchDownloadProgressDom(ans.result);
-      else if (ans.error && document.getElementById("le-msg")) {
-        document.getElementById("le-msg").innerHTML = `<p class="le-error">${escapeHtml(errMsg(ans))}</p>`;
+      const scope =
+        btn.closest("[data-dl-scope]")?.getAttribute("data-dl-scope") || "local";
+      const method =
+        scope === "embed"
+          ? "home.resumeEmbedModelDownload"
+          : "home.resumeLocalModelDownload";
+      const ans = await rpc(method, { fileName });
+      if (!ans.error && ans.result) patchDownloadProgressDom(ans.result, scope);
+      else if (ans.error) {
+        const msg = downloadErrorMsgEl(scope);
+        if (msg) msg.innerHTML = `<p class="le-error">${escapeHtml(errMsg(ans))}</p>`;
       }
     });
   });
@@ -2750,6 +2777,7 @@ function connect() {
           "home:approval-resolved",
           "home:learn-proposed",
           "home:local-model-download",
+          "home:embed-model-download",
           "home:workflow-step",
           "home:workflow-finished",
           "home:schedule-proposed",
@@ -2765,6 +2793,7 @@ function connect() {
         "home:approval-resolved",
         "home:learn-proposed",
         "home:local-model-download",
+        "home:embed-model-download",
         "home:workflow-step",
         "home:workflow-finished",
         "home:schedule-proposed",
@@ -3043,8 +3072,11 @@ function connect() {
           refreshOpenChatView();
         }
       }
-      if (name === "home:local-model-download" && data?.fileName) {
-        patchDownloadProgressDom(data);
+      if (
+        (name === "home:local-model-download" || name === "home:embed-model-download") &&
+        data?.fileName
+      ) {
+        patchDownloadProgressDom(data, name === "home:embed-model-download" ? "embed" : "local");
       }
     }
   };
@@ -8630,6 +8662,16 @@ async function showView(id) {
         }
         const listed = await rpc("home.listMemory", { accountId: aid });
         const mem = listed.result || {};
+        const [embedAns, kbStatusAns, kbPolicyAns] = await Promise.all([
+          rpc("home.getEmbedEngineStatus", {}),
+          rpc("home.getKnowledgeStatus", { accountId: aid }),
+          rpc("home.getKnowledgePolicy", { accountId: aid }),
+        ]);
+        const embedSt = embedAns.error ? {} : embedAns.result || {};
+        const kbSt = kbStatusAns.error ? {} : kbStatusAns.result || {};
+        const kbPol = kbPolicyAns.error
+          ? { knowledgeInject: "tool", episodicInject: "tool" }
+          : kbPolicyAns.result || { knowledgeInject: "tool", episodicInject: "tool" };
         const identityAns = await rpc("home.getIdentity", { accountId: aid }).catch(() => null);
         const identityFromRpc =
           typeof identityAns?.result?.markdown === "string" ? identityAns.result.markdown : "";
@@ -8791,6 +8833,144 @@ async function showView(id) {
             </ul>
           </div>`
           : "";
+
+        // Knowledge + Home embed (defaults: inject=tool, embed off, Qwen3-Embedding 0.6B).
+        const formatApproxKb = (bytes) => {
+          const n = Number(bytes);
+          if (!Number.isFinite(n) || n <= 0) return "";
+          const gb = n / (1024 * 1024 * 1024);
+          if (gb >= 1) return `${Math.round(gb * 10) / 10} GB`;
+          return `${Math.round(n / (1024 * 1024))} MB`;
+        };
+        const kbInject = ["off", "tool", "auto"].includes(kbPol.knowledgeInject)
+          ? kbPol.knowledgeInject
+          : "tool";
+        const kyInject = ["off", "tool", "auto"].includes(kbPol.episodicInject)
+          ? kbPol.episodicInject
+          : "tool";
+        const ragOpt = (cur, value, labelKey) =>
+          `<option value="${value}"${cur === value ? " selected" : ""}>${escapeHtml(t(labelKey))}</option>`;
+        for (const job of Array.isArray(embedSt.downloads) ? embedSt.downloads : []) {
+          rememberDownloadJob(job);
+        }
+        const embedMode = embedSt.mode || "off";
+        const embedOn = embedSt.enabled === true && embedMode !== "off";
+        const embedReady = embedSt.ready === true;
+        const embedStatusLabel = !embedOn
+          ? t("memory.embedStatusOff")
+          : embedReady
+            ? t("memory.embedStatusReady", { mode: embedMode })
+            : t("memory.embedStatusNotReady", { mode: embedMode });
+        const embedCatalog = Array.isArray(embedSt.catalog) ? embedSt.catalog : [];
+        const activeEmbedFile =
+          typeof embedSt.activeModelFile === "string" ? embedSt.activeModelFile : "";
+        const embedRows = embedCatalog
+          .map((m) => {
+            if (!m?.id) return "";
+            const fileName = typeof m.fileName === "string" ? m.fileName : "";
+            const installed = m.installed === true;
+            const job = downloadJobFor(fileName, m.id);
+            const inFlight =
+              job &&
+              (job.status === "downloading" ||
+                job.status === "paused" ||
+                job.status === "failed");
+            const size = formatApproxKb(m.approxBytes);
+            const isActive = activeEmbedFile && activeEmbedFile === fileName;
+            const useBtn = installed
+              ? isActive
+                ? `<span class="status-pill ok">${escapeHtml(t("memory.embedActive"))}</span>`
+                : `<button type="button" class="secondary" data-embed-use="${escapeHtml(m.id)}">${escapeHtml(t("memory.embedUseModel"))}</button>`
+              : inFlight
+                ? ""
+                : `<button type="button" data-embed-dl="${escapeHtml(m.id)}">${escapeHtml(t("memory.embedDownload"))}</button>`;
+            return `<div class="le-rec-row${m.id === "qwen3-embedding-0.6b-q8_0" ? " primary" : ""}" data-model-id="${escapeHtml(m.id)}">
+              <div class="le-rec-info">
+                <div class="le-rec-title">
+                  <strong>${escapeHtml(m.label || m.id)}</strong>
+                  ${
+                    m.id === "qwen3-embedding-0.6b-q8_0"
+                      ? ` <span class="status-pill ok">${escapeHtml(t("models.recommended"))}</span>`
+                      : ""
+                  }
+                  ${installed ? ` <span class="muted">${escapeHtml(t("memory.embedInstalled"))}</span>` : ""}
+                </div>
+                <div class="le-rec-meta muted">${size ? `<span>${escapeHtml(size)}</span>` : ""}</div>
+                ${m.description ? `<div class="muted le-rec-desc">${escapeHtml(m.description)}</div>` : ""}
+                ${inFlight ? downloadProgressHtml(job, "embed") : ""}
+              </div>
+              <div class="le-rec-actions">${useBtn}</div>
+            </div>`;
+          })
+          .join("");
+        const kbWhen = kbSt.lastReindexAt
+          ? String(kbSt.lastReindexAt).slice(0, 19).replace("T", " ")
+          : t("memory.knowledgeNever");
+        const knowledgeEmbedHtml = `<div class="card" id="kb-embed-card">
+            <h3>${escapeHtml(t("memory.knowledgeTitle"))}</h3>
+            <p class="muted mem-caps-hint">${escapeHtml(t("memory.knowledgeHint"))}</p>
+            <p class="muted">${escapeHtml(
+              t("memory.knowledgeStatus", {
+                count: String(kbSt.sectionCount ?? 0),
+                when: kbWhen,
+              }),
+            )}${
+              kbSt.embedStale
+                ? ` · <span class="status-pill warn">${escapeHtml(t("memory.knowledgeStale"))}</span>`
+                : ""
+            }</p>
+            <div class="row" style="gap:0.5rem;flex-wrap:wrap;margin:0.5rem 0">
+              <button type="button" id="kb-reindex">${escapeHtml(t("memory.reindexKnowledge"))}</button>
+            </div>
+            <form id="kb-inject-policy" class="mem-inject-form" style="margin-top:0.75rem">
+              <label>${escapeHtml(t("memory.injectKb"))}
+                <select name="knowledgeInject">
+                  ${ragOpt(kbInject, "off", "memory.ragInjectOff")}
+                  ${ragOpt(kbInject, "tool", "memory.ragInjectTool")}
+                  ${ragOpt(kbInject, "auto", "memory.ragInjectAuto")}
+                </select>
+              </label>
+              <label>${escapeHtml(t("memory.injectKy"))}
+                <select name="episodicInject">
+                  ${ragOpt(kyInject, "off", "memory.ragInjectOff")}
+                  ${ragOpt(kyInject, "tool", "memory.ragInjectTool")}
+                  ${ragOpt(kyInject, "auto", "memory.ragInjectAuto")}
+                </select>
+              </label>
+              <label>${escapeHtml(t("memory.injectKbBudget"))}
+                <input name="knowledgeInjectBudget" type="number" min="0" max="32000" value="${escapeHtml(String(kbPol.knowledgeInjectBudget ?? 4000))}" />
+              </label>
+              <label>${escapeHtml(t("memory.injectKyBudget"))}
+                <input name="episodicInjectBudget" type="number" min="0" max="32000" value="${escapeHtml(String(kbPol.episodicInjectBudget ?? 4000))}" />
+              </label>
+              <button type="submit">${escapeHtml(t("memory.saveKbPolicy"))}</button>
+              <p id="kb-policy-status" class="muted" hidden></p>
+            </form>
+            <hr style="margin:1rem 0;border:none;border-top:1px solid var(--border, #333)" />
+            <h4>${escapeHtml(t("memory.embedTitle"))}</h4>
+            <p class="muted mem-caps-hint">${escapeHtml(t("memory.embedHint"))}</p>
+            <p>
+              <span class="status-pill ${embedReady ? "ok" : embedOn ? "warn" : ""}">${escapeHtml(embedStatusLabel)}</span>
+              · ${escapeHtml(t("memory.embedDefaultModel", { id: embedSt.modelId || "qwen3-embedding-0.6b-q8_0" }))}
+              · :${escapeHtml(String(embedSt.port || 18793))}
+            </p>
+            <div class="le-rec" style="margin-top:0.75rem">
+              <h4>${escapeHtml(t("memory.embedCatalog"))}</h4>
+              <div class="le-rec-list">${
+                embedRows || `<p class="muted">${escapeHtml(t("memory.embedNoCatalog"))}</p>`
+              }</div>
+            </div>
+            <label style="display:block;margin-top:0.75rem">${escapeHtml(t("memory.embedOllamaModel"))}
+              <input id="kb-ollama-model" type="text" value="${escapeHtml(embedSt.ollamaModel || "nomic-embed-text")}" />
+            </label>
+            <div class="row" style="gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem">
+              <button type="button" id="kb-embed-enable-spawn">${escapeHtml(t("memory.embedEnableSpawn"))}</button>
+              <button type="button" class="secondary" id="kb-embed-enable-ollama">${escapeHtml(t("memory.embedEnableOllama"))}</button>
+              <button type="button" class="secondary" id="kb-embed-disable" ${embedOn ? "" : "disabled"}>${escapeHtml(t("memory.embedDisable"))}</button>
+            </div>
+            <div id="kb-embed-msg"></div>
+          </div>`;
+
         el.innerHTML = shell(`
           <p class="muted">${escapeHtml(t("memory.hint"))} · backend <code>${escapeHtml(mem.backendId || "?")}</code>
             · ${escapeHtml(t("memory.pendingCount", {
@@ -8820,6 +9000,7 @@ async function showView(id) {
             <label>${escapeHtml(t("memory.sessionRetention"))} <input name="sessionRetentionDays" type="number" min="0" value="${retention}" /></label>
             <button type="submit">${escapeHtml(t("memory.saveSettings"))}</button>
           </form>
+          ${knowledgeEmbedHtml}
           <div class="card">
             <h3>${escapeHtml(t("memory.caps"))}</h3>
             <p class="muted mem-caps-hint">${escapeHtml(t("memory.capsHint"))}</p>
@@ -8834,6 +9015,113 @@ async function showView(id) {
             ${cards || `<p class="muted">${escapeHtml(t("memory.queueEmpty"))}</p>`}
           </div>`);
         wireTabs();
+        wireDownloadControls(document.getElementById("kb-embed-card"));
+        document.getElementById("kb-reindex")?.addEventListener("click", async () => {
+          const msg = document.getElementById("kb-embed-msg");
+          const ans = await rpc("home.reindexKnowledge", { accountId: aid });
+          if (msg) {
+            msg.innerHTML = ans.error
+              ? `<p class="le-error">${escapeHtml(errMsg(ans))}</p>`
+              : `<p class="muted">${escapeHtml(
+                  t("memory.reindexDone", {
+                    count: String(ans.result?.sectionCount ?? 0),
+                  }),
+                )}</p>`;
+          }
+        });
+        document.getElementById("kb-inject-policy")?.addEventListener("submit", async (ev) => {
+          ev.preventDefault();
+          const form = ev.target;
+          if (!(form instanceof HTMLFormElement)) return;
+          const fd = new FormData(form);
+          const status = document.getElementById("kb-policy-status");
+          const ans = await rpc("home.setKnowledgePolicy", {
+            accountId: aid,
+            knowledgeInject: String(fd.get("knowledgeInject") || "tool"),
+            episodicInject: String(fd.get("episodicInject") || "tool"),
+            knowledgeInjectBudget: Number(fd.get("knowledgeInjectBudget") || 4000),
+            episodicInjectBudget: Number(fd.get("episodicInjectBudget") || 4000),
+          });
+          if (status) {
+            status.hidden = false;
+            if (ans.error) {
+              status.textContent = errMsg(ans);
+              status.className = "le-error";
+            } else {
+              status.textContent = t("memory.kbPolicySaved");
+              status.className = "muted";
+            }
+          }
+        });
+        document.querySelectorAll("[data-embed-dl]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const modelId = btn.getAttribute("data-embed-dl");
+            if (!modelId) return;
+            const ans = await rpc("home.downloadEmbedModel", { modelId });
+            const msg = document.getElementById("kb-embed-msg");
+            if (ans.error) {
+              if (msg) msg.innerHTML = `<p class="le-error">${escapeHtml(errMsg(ans))}</p>`;
+              return;
+            }
+            if (ans.result) patchDownloadProgressDom(ans.result, "embed");
+            void showView("llm");
+          });
+        });
+        document.querySelectorAll("[data-embed-use]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const modelId = btn.getAttribute("data-embed-use");
+            if (!modelId) return;
+            const ans = await rpc("home.enableEmbedEngine", {
+              prefer: "spawn",
+              modelId,
+            });
+            const msg = document.getElementById("kb-embed-msg");
+            if (msg) {
+              msg.innerHTML = ans.error
+                ? `<p class="le-error">${escapeHtml(errMsg(ans))}</p>`
+                : `<p class="muted">${escapeHtml(t("memory.embedEnabledToast"))}</p>`;
+            }
+            if (!ans.error) void showView("llm");
+          });
+        });
+        document.getElementById("kb-embed-enable-spawn")?.addEventListener("click", async () => {
+          const ans = await rpc("home.enableEmbedEngine", { prefer: "spawn" });
+          const msg = document.getElementById("kb-embed-msg");
+          if (msg) {
+            msg.innerHTML = ans.error
+              ? `<p class="le-error">${escapeHtml(errMsg(ans))}</p>`
+              : `<p class="muted">${escapeHtml(t("memory.embedEnabledToast"))}</p>`;
+          }
+          if (!ans.error) void showView("llm");
+        });
+        document.getElementById("kb-embed-enable-ollama")?.addEventListener("click", async () => {
+          const input = document.getElementById("kb-ollama-model");
+          const ollamaModel =
+            input instanceof HTMLInputElement && input.value.trim()
+              ? input.value.trim()
+              : "nomic-embed-text";
+          const ans = await rpc("home.enableEmbedEngine", {
+            prefer: "ollama",
+            ollamaModel,
+          });
+          const msg = document.getElementById("kb-embed-msg");
+          if (msg) {
+            msg.innerHTML = ans.error
+              ? `<p class="le-error">${escapeHtml(errMsg(ans))}</p>`
+              : `<p class="muted">${escapeHtml(t("memory.embedEnabledToast"))}</p>`;
+          }
+          if (!ans.error) void showView("llm");
+        });
+        document.getElementById("kb-embed-disable")?.addEventListener("click", async () => {
+          const ans = await rpc("home.disableEmbedEngine", {});
+          const msg = document.getElementById("kb-embed-msg");
+          if (msg) {
+            msg.innerHTML = ans.error
+              ? `<p class="le-error">${escapeHtml(errMsg(ans))}</p>`
+              : `<p class="muted">${escapeHtml(t("memory.embedDisabledToast"))}</p>`;
+          }
+          if (!ans.error) void showView("llm");
+        });
         document.getElementById("mem-identity")?.addEventListener("submit", async (ev) => {
           ev.preventDefault();
           const ta = document.getElementById("mem-identity-md");

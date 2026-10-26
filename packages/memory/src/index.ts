@@ -121,6 +121,41 @@ export {
 } from "./learn-queue.js";
 
 export { SessionIndex, DEFAULT_SESSION_RETENTION_DAYS } from "./session-index.js";
+export {
+  KnowledgeIndex,
+  DEFAULT_KNOWLEDGE_SECTION_CAP,
+  type KnowledgeHit,
+  type KnowledgeEngine,
+  type EmbedFn,
+} from "./knowledge-index.js";
+export {
+  splitKnowledgeMarkdown,
+  buildKnowledgeIndexMd,
+  type KnowledgeSection,
+} from "./knowledge-sections.js";
+export {
+  EpisodicIndex,
+  DEFAULT_KNOWYOU_ACTIVE_CAP,
+  filterEpisodicAgainstStanding,
+  filterKnowledgeAgainstStanding,
+  candidateConflictsWithStanding,
+  standingValueForKey,
+  extractStandingPatchValue,
+  textContradictsStandingValue,
+  type EpisodicHit,
+  type EpisodicRow,
+  type IngestCandidate,
+  type KnowYouAction,
+} from "./episodic-index.js";
+export { atomicWriteFile } from "./atomic-write.js";
+export {
+  KNOWLEDGE_INJECT_LABEL,
+  EPISODIC_INJECT_LABEL,
+  buildKnowledgeInjectBlock,
+  buildEpisodicInjectBlock,
+  appendRagToStanding,
+  type RagInjectMode,
+} from "./rag-inject.js";
 export { CompactDiary, compactPaths, COMPACT_MAX_ENTRIES, COMPACT_MAX_CHARS } from "./compact-diary.js";
 export { applyFlush, type FlushItem, type FlushResult } from "./flush.js";
 export { compactMemory, makeCompactDiary } from "./consolidate.js";

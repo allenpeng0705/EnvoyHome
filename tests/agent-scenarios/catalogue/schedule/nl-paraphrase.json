@@ -1,0 +1,81 @@
+[
+  {
+    "id": "sched-nl-tomorrow-8am-en-cluster",
+    "pack": "schedule",
+    "mode": "nl",
+    "live": true,
+    "locale": "en",
+    "prompt": "Remind me tomorrow at 8:00 to take out trash",
+    "expect": {
+      "scheduleNl": { "ok": true, "kind": "at", "hour": 8, "minute": 0, "dayOffset": 1 },
+      "cluster": [
+        "please remind me tomorrow at 8am to take out trash",
+        "Could you remind me tomorrow at 08:00 to take out trash?"
+      ],
+      "liveTools": ["schedule"],
+      "honestyMatching": ["schedule propose|Proposed|reminder|remind"]
+    }
+  },
+  {
+    "id": "sched-nl-tomorrow-8am-zh-cluster",
+    "pack": "schedule",
+    "mode": "nl",
+    "live": true,
+    "locale": "zh",
+    "prompt": "提醒我明天早上八点倒垃圾",
+    "expect": {
+      "scheduleNl": { "ok": true, "kind": "at", "hour": 8, "minute": 0, "dayOffset": 1 },
+      "cluster": ["请提醒我明天早上8点倒垃圾", "帮我提醒一下明天早上八点倒垃圾"],
+      "matchInstantFromId": "sched-nl-tomorrow-8am-en-cluster",
+      "liveTools": ["schedule"],
+      "honestyMatching": ["提醒|日程|schedule"]
+    }
+  },
+  {
+    "id": "sched-nl-in-20-minutes",
+    "pack": "schedule",
+    "mode": "nl",
+    "live": true,
+    "locale": "en",
+    "prompt": "Remind me in 20 minutes to check the oven",
+    "expect": {
+      "scheduleNl": { "ok": true, "kind": "at", "relativeMs": 1200000 },
+      "cluster": ["remind me in 20 mins to check the oven"],
+      "liveTools": ["schedule"]
+    }
+  },
+  {
+    "id": "sched-nl-half-hour-zh",
+    "pack": "schedule",
+    "mode": "nl",
+    "live": false,
+    "locale": "zh",
+    "prompt": "半小时后提醒我",
+    "expect": {
+      "scheduleNl": { "ok": true, "kind": "at", "relativeMs": 1800000 }
+    }
+  },
+  {
+    "id": "sched-nl-weekly-monday-9am",
+    "pack": "schedule",
+    "mode": "nl",
+    "live": true,
+    "locale": "en",
+    "prompt": "Remind me every Monday at 9am to stretch",
+    "expect": {
+      "scheduleNl": { "ok": true, "kind": "cron" },
+      "liveTools": ["schedule"]
+    }
+  },
+  {
+    "id": "sched-nl-monthly-with-day",
+    "pack": "schedule",
+    "mode": "nl",
+    "live": false,
+    "locale": "en",
+    "prompt": "Remind me on the 15th of every month at 10:00 to pay rent",
+    "expect": {
+      "scheduleNl": { "ok": true, "kind": "cron" }
+    }
+  }
+]

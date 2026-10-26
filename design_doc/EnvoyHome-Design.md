@@ -22,6 +22,8 @@
 
 | Date | Change |
 |------|--------|
+| 2026-10-25e | **Additive:** Knowledge/KnowYou/embed RPCs in §3.2 / §3.5 / §4.3.1 / Appendix A; `home:embed-model-download`. No `protocolApiVersion` bump.
+| 2026-10-25 | **Normative (Knowledge + RAG / KnowYou):** Dedicated [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md) — Doc KB over `knowledge/` (section FTS → hybrid local embed), KnowYou L4′ (ADD\|SUPERSEDE\|SKIP + summarize/TTL + budgeted auto-inject), Home embed engine Adapt Mesh Phase 57E on **`:18793`** (never Mesh `:18790`/`:18791`; embed ≠ chat `:18792`). Ports §2.4; §8.5.1; §9 summary. Rejects mem0/Cognee-as-core. No `protocolApiVersion` bump (additive RPCs/tools). |
 | 2026-10-24b | **Normative (push wake):** Turn-finished APNs/FCM body is **generic** (localized “reply ready” from account `locale`; never assistant `preview` on the lock screen). Prefer fan-out to the originating `deviceId` when present (else account fan-out). Live touch skips `home.subscribe` / `home.hello` / `home.health`. Soft/fuzzy DE `vor` / FR `avant` require a nearby clock; FR bare `Nh` only with a soft cue. Ambiguous schedule propose surfaces `schedule_candidates` choice + structured tool JSON. §11.3 / A.4. No wire bump. |
 | 2026-10-24 | **Adapt (§7.4 NL packs):** Soft/fuzzy WHEN (`before`/`by`/`around`/`about`/`after`+clock / `between`, + ZH `点前`/`左右` + DE/FR/IT/JA/KO packs) → **`ambiguous`** with self-resolving today/tomorrow candidates (15/30/60 min offsets) — never invent lead time. Exact `at 9am` still resolves. Duration `after 2 hours` unchanged. No wire bump. |
 | 2026-10-24 | **Adapt (§7.4 NL packs):** Relative **durations** (seconds / minutes / hours) across all product UI locales — `in a minute`, `after 2 hours`, `过半分钟`, `dans une heure`, `tra un'ora`, `nach 2 Stunden`, `5分後`, `2시간 후`, half-minute/half-hour idioms, Arabic + word/CJK amounts. Calendar `in N days` / `after N days` (incl. light `dyas` typo) still needs a clock. No wire bump. |
@@ -391,8 +393,9 @@ Match EnvoyCoder/`host-bridge` intent: the daemon **is** the peer the phone dial
 |---------|---------|--------|
 | Daemon WebSocket (reuse-host) | **4780**, path **`/ws`** | Near EnvoyDev `4770` / `/ws` (`../EnvoyCoder/packages/protocol/src/domain.ts:66-71`); changeable in Settings / `daemon.json` |
 | HTTP API (inbound hatch, artifacts, health) | **4781** | Same bind host as WS; health at `GET /health`; artifacts at `/artifacts/{accountId}/{token}` (§4.1b); TLS via reverse proxy in production |
-| EnvoyHome Local spawn (`llama-server`) | **18792** `/v1` | Home-owned OpenAI-compat sidecar (§8.5); never Mesh `:18790` |
-| Ollama (BYO) | **11434** `/v1` | `home.enableOllama`; not installed by Home (§8.5) |
+| EnvoyHome Local spawn (`llama-server`) | **18792** `/v1` | Home-owned OpenAI-compat **chat** sidecar (§8.5); never Mesh `:18790` |
+| EnvoyHome Local **embed** spawn (`llama-server`) | **18793** `/v1` | Home-owned embeddings sidecar (§8.5.1 / Knowledge-RAG Design); never Mesh `:18791`; never share process with `:18792` |
+| Ollama (BYO) | **11434** `/v1` | `home.enableOllama`; embeddings optional via same host (§8.5 / §8.5.1); not installed by Home |
 
 Public base URL: `daemon.publicBaseUrl` (LAN, Tailscale, or tunnel) — **optional** for signed HTTP artifact URLs (§4.1b). Primary thin-client open is mesh/paired: `home.getArtifactContent` (§9.5). Most home desktops have **no public IP**; do not require HTTPS reachability for EnvoyHome mobile or for IM channel replies.
 
@@ -477,7 +480,8 @@ Three transports carry `home.*`: the local/LAN WebSocket host (reuse-host), the 
 | **Static workflows** | `home.listWorkflows`, `home.getWorkflow`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.runWorkflow`, `home.listWorkflowTools`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.listWorkflowStepTemplates`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate` | DAG procedures (linear `steps[]` = single path); §7 |
 | **Schedules** | `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.cancelScheduleProposal`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts`, `home.getHeartbeatConfig`, `home.setHeartbeatConfig`, `home.listStandingOrders`, `home.putStandingOrder`, `home.removeStandingOrder`, `home.setStandingOrderEnabled` | Daemon clock jobs (§7.4); NL propose→confirm + structured put; run history; §19.10 heartbeat + standing orders |
 | **Skills** | `home.listSkills`, `home.searchClawHubSkills`, `home.installSkill`, `home.removeSkill`, `home.verifySkill` | AgentSkills / ClawHub path |
-| **Profile / memory** | `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.recall`, `home.forget`, `home.listMemory`, `home.setMemorySettings`, `home.compactMemory` | Account-scoped |
+| **Profile / memory** | `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.recall`, `home.forget`, `home.listMemory`, `home.setMemorySettings`, `home.compactMemory`, `home.searchKnowledge`, `home.reindexKnowledge`, `home.getKnowledgeStatus`, `home.searchKnowYou`, `home.updateKnowYou`, `home.getKnowledgePolicy`, `home.setKnowledgePolicy` | Account-scoped |
+| **Home embed** | `home.getEmbedEngineStatus`, `home.enableEmbedEngine`, `home.disableEmbedEngine`, `home.downloadEmbedModel`, `home.cancelEmbedModelDownload`, `home.resumeEmbedModelDownload` | Owner-scope (:18793; Knowledge-RAG) |
 | **Learning** | `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn` | Gated skill/memory patches (§9.3) |
 | **Artifacts** | `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getMediaGenerateConfig`, `home.setMediaGenerateConfig` | Mesh-first bytes + folder browse + optional signed HTTP (§9.5 / §4.1b); image_generate Owner config (§19.12 D2) |
 | **Doctor** | `home.doctor`, `home.doctorFix` | Config migrations |
@@ -499,6 +503,7 @@ Three transports carry `home.*`: the local/LAN WebSocket host (reuse-host), the 
 | `home:schedule-proposed` / `home:schedule-proposal-closed` | unarmed proposal card + confirm/cancel/expire (§7.4 / V-UX-12) |
 | `home:workflow-step` / `home:workflow-finished` | attended workflow test-run progress (`runId`, `workflowId`, node phase) (§7) |
 | `home:local-model-download` | GGUF download progress (`fileName`, `status`, `bytesReceived`, `bytesTotal?`, …) (§8.5) |
+| `home:embed-model-download` | Home embed GGUF download progress (`fileName`, `status`, …) (§8.5.1) |
 
 ### 3.6 Verification
 
@@ -791,8 +796,8 @@ Verification: V-SEC-13, V-SEC-14, V-SEC-20; Settings on `account.detail` (§10.1
 | Scope | Methods | Rule |
 |-------|---------|------|
 | **loopback-owner** | `home.getDaemonLog`, `home.shutdown`, `home.getServiceStatus`, `home.installService`, `home.uninstallService`, `home.restartService` | Only from the home machine Settings window — never over mesh, never from a paired device. Host OS / process lifecycle. |
-| **owner-scope** | `home.mintPairing`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts`, `home.listPairedDevices`, `home.sendTestPush`, `home.transferHouseholdOwner`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig`, `home.setBinding`, `home.removeBinding`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations`, `home.createAccount`, `home.deleteAccount`, `home.enableChannel`, `home.disableChannel`, `home.setChannelConfig`, `home.stopDemoHa`, `home.stopDemoMqtt`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.searchClawHubSkills`, `home.installSkill`, `home.verifySkill`, `home.removeSkill`, `home.setHarness`, `home.doctorFix`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate` | **`isHouseholdOwner(caller)`** (§4.1.1): loopback **or** device with `accountIds = [ownerAccountId]`. Mobile OK. `setWorkspace` filesystem root only for Owner seat (R3). |
-| **account-scoped** | bootstrap/negotiation: `home.hello`, `home.health`, `home.subscribe`, `home.meshStatus`, `home.registerPushToken`, `home.unregisterPushToken`. Reads of shared catalogs: `home.listAccounts`, `home.listChannels`, `home.getChannelStatus`, `home.listHarnesses`, `home.listProviders`, `home.listWorkflows`, `home.getWorkflow`, `home.listSkills`, `home.doctor`, `home.listWorkflowStepTemplates`, `home.getDemoHaStatus`, `home.getDemoMqttStatus`, `home.listSources` (household object registry — Design `2026-10-16l`), `home.getHouseholdOwner`. Seat-or-Owner (§4.1.1 `mayActForSeat`): `home.listGrants`, `home.revokeGrant`, `home.listBindings`, `home.updateAccount` (field rules: `toolPolicy` still Owner-only), `home.getWorkspace`. Own-account data: `home.getUsage`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getMediaGenerateConfig`, `home.setMediaGenerateConfig`, `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.listMemory`, `home.setMemorySettings`, `home.recall`, `home.forget`, `home.compactMemory`, `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.clearTranscript`, `home.deleteTranscriptMessages`, `home.archiveSession`, `home.unarchiveSession`, `home.removeSession`, `home.renameSession`, `home.listChoices`, `home.answerChoice`, `home.listSessions`, `home.listApprovals`, `home.answerApproval`, `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.cancelScheduleProposal`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts`, `home.getHeartbeatConfig`, `home.setHeartbeatConfig`, `home.listStandingOrders`, `home.putStandingOrder`, `home.removeStandingOrder`, `home.setStandingOrderEnabled`, `home.runWorkflow`, `home.listWorkflowTools`, `home.startDemoHa`, `home.startDemoMqtt` | Default: device bound to that account (§4.1). **Seat-or-Owner** as §4.1.1. Zero-binding devices may still call bootstrap methods including push register/unregister. A method that appears in **none** of the three rows is a spec bug — `scripts/docs-lint.mjs` fails the build if a catalogued method is missing here. |
+| **owner-scope** | `home.mintPairing`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts`, `home.listPairedDevices`, `home.sendTestPush`, `home.transferHouseholdOwner`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig`, `home.setBinding`, `home.removeBinding`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations`, `home.createAccount`, `home.deleteAccount`, `home.enableChannel`, `home.disableChannel`, `home.setChannelConfig`, `home.stopDemoHa`, `home.stopDemoMqtt`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.getEmbedEngineStatus`, `home.enableEmbedEngine`, `home.disableEmbedEngine`, `home.downloadEmbedModel`, `home.cancelEmbedModelDownload`, `home.resumeEmbedModelDownload`, `home.searchClawHubSkills`, `home.installSkill`, `home.verifySkill`, `home.removeSkill`, `home.setHarness`, `home.doctorFix`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate` | **`isHouseholdOwner(caller)`** (§4.1.1): loopback **or** device with `accountIds = [ownerAccountId]`. Mobile OK. `setWorkspace` filesystem root only for Owner seat (R3). |
+| **account-scoped** | bootstrap/negotiation: `home.hello`, `home.health`, `home.subscribe`, `home.meshStatus`, `home.registerPushToken`, `home.unregisterPushToken`. Reads of shared catalogs: `home.listAccounts`, `home.listChannels`, `home.getChannelStatus`, `home.listHarnesses`, `home.listProviders`, `home.listWorkflows`, `home.getWorkflow`, `home.listSkills`, `home.doctor`, `home.listWorkflowStepTemplates`, `home.getDemoHaStatus`, `home.getDemoMqttStatus`, `home.listSources` (household object registry — Design `2026-10-16l`), `home.getHouseholdOwner`. Seat-or-Owner (§4.1.1 `mayActForSeat`): `home.listGrants`, `home.revokeGrant`, `home.listBindings`, `home.updateAccount` (field rules: `toolPolicy` still Owner-only), `home.getWorkspace`. Own-account data: `home.getUsage`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getMediaGenerateConfig`, `home.setMediaGenerateConfig`, `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.listMemory`, `home.setMemorySettings`, `home.recall`, `home.forget`, `home.compactMemory`, `home.searchKnowledge`, `home.reindexKnowledge`, `home.getKnowledgeStatus`, `home.searchKnowYou`, `home.updateKnowYou`, `home.getKnowledgePolicy`, `home.setKnowledgePolicy`, `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.clearTranscript`, `home.deleteTranscriptMessages`, `home.archiveSession`, `home.unarchiveSession`, `home.removeSession`, `home.renameSession`, `home.listChoices`, `home.answerChoice`, `home.listSessions`, `home.listApprovals`, `home.answerApproval`, `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.cancelScheduleProposal`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts`, `home.getHeartbeatConfig`, `home.setHeartbeatConfig`, `home.listStandingOrders`, `home.putStandingOrder`, `home.removeStandingOrder`, `home.setStandingOrderEnabled`, `home.runWorkflow`, `home.listWorkflowTools`, `home.startDemoHa`, `home.startDemoMqtt` | Default: device bound to that account (§4.1). **Seat-or-Owner** as §4.1.1. Zero-binding devices may still call bootstrap methods including push register/unregister. A method that appears in **none** of the three rows is a spec bug — `scripts/docs-lint.mjs` fails the build if a catalogued method is missing here. |
 
 A method's scope is **transport-independent** (§3.3.1), except loopback-owner methods which are refused on both remote transports. Owner-scope over mesh requires an **exclusive** Owner-bound device.
 
@@ -1922,7 +1927,7 @@ EnvoyHome does **not** embed llama.cpp as a native addon. It **adapts the patter
 
 Manual `home.setProvider` for an arbitrary OpenAI-compat URL remains valid; §8.5 is the **one-click** path Settings Models uses.
 
-**Ports:** Home spawn uses **18792**. Ollama stays on **11434**. Mesh Envoy Local `:18790` is **out of scope** for Home Local.
+**Ports:** Home chat spawn uses **18792**. Home **embed** spawn uses **18793** (§8.5.1). Ollama stays on **11434**. Mesh Envoy Local `:18790` / embed `:18791` are **out of scope** for Home Local.
 
 **Hardening (Normative):**
 
@@ -1933,11 +1938,23 @@ Manual `home.setProvider` for an arbitrary OpenAI-compat URL remains valid; §8.
 - `accountId` on enable goes through `requireBoundAccount` (V-SEC-7). It is not persisted as the owner of the local model. Setting default skips (does not rewrite) when `placementFilter` excludes local.  
 - Enable/disable RPCs return the A.6 slim result shape; status is `getLocalEngineStatus`.
 
+### 8.5.1 Home embed engine (Normative — Adapt EnvoyMesh Phase 57E)
+
+**Dedicated depth:** [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md) §5. Product need: local vectors for Doc KB (L6) and KnowYou (L4′) hybrid RAG — **not** a second chat model.
+
+| Mode | Port / URL | Notes |
+|------|------------|--------|
+| **spawn** | `http://127.0.0.1:18793/v1` | Second Home-owned `llama-server` loading a curated **embedding** GGUF under `local-engine/embed-models/`; OpenAI-compat `/v1/embeddings` |
+| **ollama** | `:11434` embeddings API | BYO; fail-closed if down |
+| **off** / **auto** | — | FTS-only when off; auto prefers healthy spawn then Ollama |
+
+**Hard rules:** never Mesh `:18791`; never load embed GGUF into chat `:18792`; loopback only; Owner-enable before first large download; idle-unload allowed; model change ⇒ re-embed (Doctor stale). Default catalog starts at **Qwen3-Embedding-0.6B** (optional 4B). RPCs: `home.getEmbedEngineStatus` / `home.enableEmbedEngine` / `home.disableEmbedEngine` / `home.downloadEmbedModel` (additive; catalogue discovery). Verification: **V-EMB-1…7**.
+
 ---
 
 ## 9. Memory, learning, skills, output (Normative v1)
 
-**Dedicated depth:** [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Design.md) — layers L0–L7, flush-before-compact, session_search, COMPACT diary, MemoryBackend slot, learn gate. Peer comparative: [`analysis/peer-memory-systems.md`](analysis/peer-memory-systems.md). This §9 is the product summary.
+**Dedicated depth:** [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Design.md) — layers L0–L7, flush-before-compact, session_search, COMPACT diary, MemoryBackend slot, learn gate. Peer comparative: [`analysis/peer-memory-systems.md`](analysis/peer-memory-systems.md). **Doc KB + KnowYou + local hybrid RAG + embed engine:** [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md). This §9 is the product summary.
 
 ### 9.0 Agent requirement (Normative)
 
@@ -1949,14 +1966,16 @@ A home agent **must remember** and **must be able to learn**. Both are **v1 Norm
 | **Standing facts** | Per-account profile (USER-like), scarce bootstrap |
 | **Standing notes** | `MEMORY.md` + daily files, capped, Settings-visible; **refresh after write** |
 | **Episodic search** | `session_search` (FTS) — separate from standing |
+| **KnowYou (L4′)** | Derived episodic facts/chunks; ADD\|SUPERSEDE\|SKIP; summarize/TTL; **budgeted** related-chat inject — Knowledge-RAG Design (phased) |
+| **Doc KB (L6)** | `knowledge/` files as truth; SQLite section FTS → optional local hybrid embed; cite paths — Knowledge-RAG Design (phased) |
 | **Consolidation** | Dreaming-lite + **COMPACT.md** diary; gated profile/skill promotes |
 | **Gated learning loop** | Pending review; facts vs skills; no silent skill overwrite |
-| **Tools** | `profile_*`, `remember`/`recall`/`forget`, `session_search`, learn-accept |
+| **Tools** | `profile_*`, `remember`/`recall`/`forget`, `session_search`, `knowledge_search` (when shipped), learn-accept |
 | **Isolation** | All keyed by `account_id` |
 
-**Honesty:** if the model never calls write tools and background review is off, facts are missed (same Hermes/HomeClaw). Defaults: tools on; background review **on** with proposals to Approvals/Pending learns (not auto-apply skills).
+**Honesty:** if the model never calls write tools and background review is off, facts are missed (same Hermes/HomeClaw). Defaults: tools on; background review **on** with proposals to Approvals/Pending learns (not auto-apply skills). KnowYou/Doc KB auto-inject is **budgeted** and labeled below L1–L3 authority (Knowledge-RAG §6).
 
-**Still reject day-one:** full OpenHuman Memory Tree, auto-fetch fleets, TokenJuice, silent Hermes-style skill overwrite.
+**Still reject day-one:** full OpenHuman Memory Tree, mem0/Cognee **as required core**, auto-fetch fleets, TokenJuice, silent Hermes-style skill overwrite, attaching Mesh embed/chat Local.
 
 ### 9.1 Memory layers (Normative)
 
@@ -1966,7 +1985,8 @@ A home agent **must remember** and **must be able to learn**. Both are **v1 Norm
 | **Working memory** | Session transcript | Compaction before context overflow |
 | **Standing notes** | `MEMORY.md` + `memory/YYYY-MM-DD.md`; size caps | Inject summary (cloud vs local packages — Memory Design §4.2.1); full via `recall` |
 | **Consolidation (“dreaming-lite”)** | Per-account job: idle/nightly + Settings “Compact now” | Promote durable facts from session → notes/profile **proposals** or direct note append under policy |
-| **Deep store (MemoryBackend)** | Slot Normative; default = files | Optional Tree/RAG **plugin** later — see Memory Design §5; not core tree engine |
+| **Doc KB / KnowYou indexes** | Normative in Knowledge-RAG Design | Per-account SQLite under `memory-backend/`; files remain truth |
+| **Deep store (MemoryBackend)** | Slot Normative; default = files | Optional Tree/heavy RAG **plugin** later — Memory Design §5; not core tree/Cognee |
 
 **Consolidation rules**
 
@@ -3654,6 +3674,9 @@ Profile document (`accounts/<id>/profile.json`) — **supersede-by-key**:
   "caps": {}
 }
 ```
+
+**`home.searchKnowledge`** / **`home.reindexKnowledge`** / **`home.getKnowledgeStatus`** / **`home.searchKnowYou`** / **`home.updateKnowYou`** / **`home.getKnowledgePolicy`** / **`home.setKnowledgePolicy`** — account-scoped; Doc KB + KnowYou (Knowledge-RAG Design).  
+**`home.getEmbedEngineStatus`** / **`home.enableEmbedEngine`** / **`home.disableEmbedEngine`** / **`home.downloadEmbedModel`** / **`home.cancelEmbedModelDownload`** / **`home.resumeEmbedModelDownload`** — owner-scope; Home embed `:18793` (never Mesh `:18791`).
 
 `injectBudgetMode` / `caps` are **additive** (Memory Design §4.2.1). Omitting them leaves existing policy values. Under `custom`, missing asset keys fall back to baseline for that asset; Settings SHOULD seed Custom from the cloud derived package.
 

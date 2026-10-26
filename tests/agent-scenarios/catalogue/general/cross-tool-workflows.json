@@ -1,0 +1,155 @@
+[
+  {
+    "id": "gen-compose-web-clip-schedule-tell",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Search the web for EnvoyHome, save a short clip under knowledge/, then propose a reminder tomorrow at 9:00 to re-read it, and tell me the knowledge path.",
+    "setup": {
+      "sandboxFiles": true,
+      "mockWebSearch": {
+        "provider": "brave",
+        "results": [
+          {
+            "title": "EnvoyHome",
+            "url": "https://example.com/envoyhome",
+            "description": "Household agent for home + schedules."
+          }
+        ]
+      }
+    },
+    "allowTools": ["web_search", "write_file", "schedule"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"web_search\",\"args\":{\"query\":\"EnvoyHome\",\"count\":3}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"write_file\",\"args\":{\"path\":\"knowledge/envoyhome-clip.md\",\"content\":\"# EnvoyHome\\n\\nSource: https://example.com/envoyhome\\nHousehold agent. Token: wf-clip-77\\n\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"schedule\",\"args\":{\"action\":\"propose\",\"text\":\"tomorrow at 9:00 re-read knowledge/envoyhome-clip.md\"}}]\n```"
+      },
+      {
+        "reply": "Saved knowledge/envoyhome-clip.md (wf-clip-77) and proposed a 9:00 reminder — confirm when ready."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["web_search", "write_file", "schedule"],
+      "finalMatching": "knowledge/envoyhome-clip|wf-clip-77|propos|9:00|confirm"
+    }
+  },
+  {
+    "id": "gen-compose-notes-extract-decide-export",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Read the two quote notes, pick the cheaper vendor, write a decision under documents/, export that decision as PDF, and tell me the export path.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/quote-a.md": "# Quote A\n\nVendor: Acme\nTotal: 120\n",
+        "documents/quote-b.md": "# Quote B\n\nVendor: Beta Co\nTotal: 95\nToken: wf-cheap-95\n"
+      }
+    },
+    "allowTools": ["read_file", "write_file", "export_document"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"read_file\",\"args\":{\"path\":\"documents/quote-a.md\"}},{\"tool\":\"read_file\",\"args\":{\"path\":\"documents/quote-b.md\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"write_file\",\"args\":{\"path\":\"documents/decision.md\",\"content\":\"# Decision\\n\\nChoose Beta Co at 95. Token: wf-cheap-95\\n\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"export_document\",\"args\":{\"format\":\"pdf\",\"sourcePath\":\"documents/decision.md\",\"title\":\"Decision\"}}]\n```"
+      },
+      {
+        "reply": "Chose Beta Co (95). Exported PDF under output/exports/."
+      }
+    ],
+    "expect": {
+      "minToolRounds": 3,
+      "finalMatching": "Beta|95|wf-cheap-95|export|PDF|output/"
+    }
+  },
+  {
+    "id": "gen-compose-remember-then-knowledge-cite",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Remember my favorite mug color is teal, then answer from knowledge/mug-guide.md what temperature to use.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "knowledge/mug-guide.md": "# Mug guide\n\nWarm tea mugs to 60C. Token: wf-mug-60\n"
+      },
+      "reindexKnowledge": true
+    },
+    "allowTools": ["memory_remember", "knowledge_search", "read_file"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"memory_remember\",\"args\":{\"text\":\"Favorite mug color is teal\",\"target\":\"l2\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"knowledge_search\",\"args\":{\"query\":\"mug temperature\"}}]\n```"
+      },
+      {
+        "reply": "Noted teal mug preference. Guide says warm to 60C (wf-mug-60)."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["memory_remember", "knowledge_search"],
+      "finalMatching": "teal|60|wf-mug-60|mug"
+    }
+  },
+  {
+    "id": "gen-live-workflow-web-save-remind",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Search the web briefly for 'EnvoyHome household agent', save a 2–3 sentence clip under knowledge/live-workflow-clip.md citing a URL, then propose a reminder tomorrow at 10:00 to re-read that clip. Tell me the knowledge path.",
+    "expect": {
+      "liveTools": ["web_search", "write_file", "schedule"],
+      "requireHonesty": true,
+      "honestyMatching": ["knowledge/live-workflow-clip|write_file|web_search|schedule|propos|10:00|tomorrow|保存"]
+    }
+  },
+  {
+    "id": "gen-live-workflow-quotes-decide",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/wf-quote-a.md": "# A\nVendor Red\nTotal USD 200\n",
+        "documents/wf-quote-b.md": "# B\nVendor Blue\nTotal USD 150\nToken: wf-live-blue-150\n"
+      }
+    },
+    "prompt": "Compare documents/wf-quote-a.md and documents/wf-quote-b.md. Pick the cheaper vendor, write documents/wf-decision.md with that choice and the token, and tell me which vendor won.",
+    "expect": {
+      "liveTools": ["read_file", "write_file", "search_files"],
+      "requireHonesty": true,
+      "honestyMatching": ["Blue|150|wf-live-blue-150|cheaper|decision"]
+    }
+  },
+  {
+    "id": "gen-live-workflow-kb-then-schedule",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "knowledge/filter-change.md": "# Filters\n\nReplace HVAC filter every 90 days. Token: wf-hvac-90\n"
+      },
+      "reindexKnowledge": true
+    },
+    "prompt": "Using knowledge_search or knowledge/ files, find how often we replace the HVAC filter. Then propose a reminder in 7 days at 9:00 about that filter. Quote the token.",
+    "expect": {
+      "liveTools": ["knowledge_search", "read_file", "search_files", "schedule"],
+      "requireHonesty": true,
+      "honestyMatching": ["90|wf-hvac-90|filter|schedule|propos|9:00|7 day|一周"]
+    }
+  }
+]

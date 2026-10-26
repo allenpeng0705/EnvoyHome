@@ -1,0 +1,94 @@
+[
+  {
+    "id": "gen-compose-ask-user-then-schedule",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Remind me to stretch sometime — ask which clock time I want, then propose with my answer.",
+    "setup": {
+      "autoAnswerAskUser": {
+        "labels": ["8:00"],
+        "optionIds": ["a"],
+        "text": "8:00"
+      }
+    },
+    "allowTools": ["ask_user", "schedule"],
+    "rounds": [
+      {
+        "reply": "What time works?\n```envoyhome-tools\n[{\"tool\":\"ask_user\",\"args\":{\"question\":\"What time should I remind you to stretch?\",\"selection\":\"one\",\"options\":[{\"id\":\"a\",\"label\":\"8:00\"},{\"id\":\"b\",\"label\":\"9:00\"}]}}]\n```"
+      },
+      {
+        "reply": "Got it — proposing 8:00.\n```envoyhome-tools\n[{\"tool\":\"schedule\",\"args\":{\"action\":\"propose\",\"text\":\"Remind me tomorrow at 8:00 to stretch\"}}]\n```"
+      },
+      {
+        "reply": "Proposed a stretch reminder for tomorrow at 8:00 — confirm when ready."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["ask_user", "schedule"],
+      "minToolRounds": 2,
+      "finalMatching": "8:00|Proposed|confirm|stretch"
+    }
+  },
+  {
+    "id": "gen-compose-ask-user-text-selection",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Ask me which vendor to pick (free text), then write documents/pick.md with my answer.",
+    "setup": {
+      "sandboxFiles": true,
+      "autoAnswerAskUser": { "text": "BetaCo" }
+    },
+    "allowTools": ["ask_user", "write_file"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"ask_user\",\"args\":{\"question\":\"Which vendor?\",\"selection\":\"text\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"write_file\",\"args\":{\"path\":\"documents/pick.md\",\"content\":\"# Pick\\nBetaCo\\n\"}}]\n```"
+      },
+      {
+        "reply": "Saved documents/pick.md with BetaCo."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["ask_user", "write_file"],
+      "finalMatching": "BetaCo|pick\\.md"
+    }
+  },
+  {
+    "id": "gen-live-ask-user-vague-reminder",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "liveAnswer": {
+      "preferOptionIndex": 0,
+      "textFallback": "tomorrow at 9:00"
+    },
+    "prompt": "Remind me to call the dentist sometime. Ask me for a specific time with ask_user (offer a couple of options if you can). Do not invent a clock time before I answer.",
+    "expect": {
+      "liveTools": ["ask_user", "schedule"],
+      "requireHonesty": true,
+      "honestyMatching": ["ask_user|when|time|option|9:00|schedule|Proposed|几点|选择"]
+    }
+  },
+  {
+    "id": "gen-live-ask-user-monthly-day",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "schedules",
+    "liveAnswer": {
+      "preferOptionIndex": 0,
+      "textFallback": "on the 1st"
+    },
+    "prompt": "Remind me every month at 10:00 to pay rent — you will need to ask which day of the month.",
+    "expect": {
+      "liveTools": ["ask_user", "schedule"],
+      "requireHonesty": true,
+      "honestyMatching": ["ask|day|1st|15|schedule|Proposed|几号|选择|month"]
+    }
+  }
+]

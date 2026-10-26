@@ -272,6 +272,9 @@ export async function* runAgentTurn(
     allowSandbox: !schedulesSurface,
     allowSmartHome: toolLoop && homeSurface && !schedulesSurface,
     schedulesOnly: schedulesSurface,
+    // Parent general/home: fence may propose exec; ApprovalSink asks / grants.
+    allowExec: !schedulesSurface,
+    allowHttpFetch: !schedulesSurface,
     normalizeTaskArgs: true,
   };
 

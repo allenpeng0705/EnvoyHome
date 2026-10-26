@@ -50,6 +50,8 @@ import { ProductEventBus, homeEventDispositions } from "./product-events.js";
 import { ScheduleService } from "./schedule/service.js";
 import { StandingOrderStore } from "./standing-orders.js";
 import { LocalEngineService } from "./local-engine/service.js";
+import { EmbedEngineService } from "./local-engine/embed-engine.js";
+import { KnowledgeService } from "./knowledge-service.js";
 import { ensureSmarthomeToolSpecsRegistered } from "./workflow-tools.js";
 import { DemoHaService } from "./demo-ha.js";
 import { DemoMqttService } from "./demo-mqtt.js";
@@ -80,6 +82,8 @@ export interface RunningDaemon {
   push: PushDispatcher;
   liveDevices: LiveDevicePresence;
   localEngine: LocalEngineService;
+  embedEngine: import("./local-engine/embed-engine.js").EmbedEngineService;
+  knowledge: KnowledgeService;
   mesh: MeshHostHandle;
   /** Live hosting peer when meshHostingEnabled (null when stub-only). */
   meshPeer: HomeMeshPeer | null;
@@ -136,6 +140,9 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   await providers.load();
   const localEngine = new LocalEngineService(paths, providers, logger);
   await localEngine.load();
+  const embedEngine = new EmbedEngineService(paths, logger);
+  await embedEngine.load();
+  const knowledge = new KnowledgeService(paths, embedEngine);
   const harnesses = new HarnessStore(paths);
   await harnesses.load();
   const workflows = new WorkflowStore(paths);
@@ -190,8 +197,26 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   turns.setOwnerAccountIdLookup(() => household.getOwnerAccountId());
   turns.setWebSearch(webSearch);
   turns.setBrowserControl(browserControl);
+  turns.setKnowledge(knowledge);
   const events = new ProductEventBus();
   localEngine.setEmit((event, data) => events.emit(event, data));
+  embedEngine.setEmit((event, data) => events.emit(event, data));
+  // V-EMB-6: embed space change → mark stale; when ready, backfill re-embed.
+  embedEngine.setOnModelChange(() => {
+    void (async () => {
+      try {
+        const ids = (await accounts.list()).map((a) => a.accountId);
+        await knowledge.markAllEmbedStale(ids);
+        if (await embedEngine.isReady()) {
+          await knowledge.backfillEmbeddings(ids);
+        }
+      } catch (err) {
+        logger.warn(
+          `embed model-change stale/backfill failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    })();
+  });
   const schedules = new ScheduleService({
     paths,
     defaultTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -259,6 +284,23 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       const sys = job.payload.systemJob ?? "consolidate";
       if (sys === "consolidate") {
         await memory.compactMemory(job.accountId, { trust: "agent" });
+        // KnowYou summarize + TTL (Knowledge-RAG §4) — piggyback on consolidate.
+        try {
+          // Privacy Mode → skip summarize (Knowledge-RAG §4.4). Else local truncate (no silent cloud).
+          const privacy = await turns.privacyMode.get(job.accountId);
+          if (privacy.enabled) {
+            logger.info(`knowyou summarize skipped (privacy) account=${job.accountId}`);
+          } else {
+            await knowledge.episodic.summarizeBatch(
+              job.accountId,
+              async (texts) =>
+                texts.map((t) => t.slice(0, 120)).join("; ").slice(0, 800),
+            );
+            await knowledge.episodic.purgeExpiredOriginals(job.accountId);
+          }
+        } catch {
+          /* non-fatal */
+        }
       } else if (sys === "review") {
         await turns.runScheduledMemoryReview(job.accountId);
       } else if (sys === "flush") {
@@ -484,6 +526,8 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       push,
       liveDevices,
       localEngine,
+      embedEngine,
+      knowledge,
       demoHa,
       demoMqtt,
       activeTurns: () => turns.activeTurnCount(),
@@ -619,6 +663,8 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     push,
     liveDevices,
     localEngine,
+    embedEngine,
+    knowledge,
     mesh,
     meshPeer,
     subscriptions,

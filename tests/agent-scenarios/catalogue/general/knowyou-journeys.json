@@ -1,0 +1,138 @@
+[
+  {
+    "id": "gen-tool-knowyou-search-after-pref",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Search what you know about my drink preference.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedKnowYou": [
+        {
+          "key": "pref.drink",
+          "text": "I prefer tea in the morning. Token: ky-tea-seed-1"
+        }
+      ]
+    },
+    "tool": {
+      "name": "knowyou_search",
+      "args": { "query": "drink preference tea" }
+    },
+    "expect": {
+      "toolOk": true,
+      "bodyMatching": "tea|ky-tea-seed-1|prefer"
+    }
+  },
+  {
+    "id": "gen-compose-knowyou-search-then-answer",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "What do you know about my drink preference? Search KnowYou first.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedKnowYou": [
+        {
+          "key": "pref.drink",
+          "text": "I prefer tea. Token: ky-tea-compose-2"
+        }
+      ]
+    },
+    "allowTools": ["knowyou_search"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"knowyou_search\",\"args\":{\"query\":\"drink preference tea\"}}]\n```"
+      },
+      {
+        "reply": "KnowYou says you prefer tea (ky-tea-compose-2)."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["knowyou_search"],
+      "finalMatching": "KnowYou|tea|ky-tea-compose-2|prefer"
+    }
+  },
+  {
+    "id": "gen-live-knowyou-search-drink",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedKnowYou": [
+        {
+          "key": "pref.drink",
+          "text": "I prefer jasmine tea in the morning. Token: ky-live-tea-44"
+        }
+      ],
+      "knowledgePolicy": { "episodicInject": "tool" }
+    },
+    "prompt": "Use knowyou_search to look up my drink preference. Quote the token if present. Do not invent a drink I never stored.",
+    "expect": {
+      "liveTools": ["knowyou_search", "memory_recall"],
+      "requireHonesty": true,
+      "honestyMatching": ["tea|ky-live-tea-44|jasmine|knowyou|prefer|不知道|not found|没有"]
+    }
+  },
+  {
+    "id": "gen-live-knowyou-allergy-note",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedKnowYou": [
+        {
+          "key": "allergy.shellfish",
+          "text": "Allergic to shellfish — avoid shrimp. Token: ky-live-shell-8"
+        }
+      ]
+    },
+    "prompt": "Search KnowYou (knowyou_search) for my food allergies and tell me what to avoid. Quote the token.",
+    "expect": {
+      "liveTools": ["knowyou_search", "memory_recall", "knowledge_search"],
+      "requireHonesty": true,
+      "honestyMatching": ["shellfish|shrimp|ky-live-shell-8|allerg"]
+    }
+  },
+  {
+    "id": "gen-live-knowyou-standing-outranks-episodic",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedMemory": [
+        {
+          "text": "Standing preference: favorite drink is tea (token mem-ky-tea).",
+          "target": "l2"
+        }
+      ],
+      "seedKnowYou": [
+        {
+          "key": "pref.drink",
+          "text": "Someone once said coffee is best. Token: ky-stale-coffee-9"
+        }
+      ]
+    },
+    "prompt": "What is my favorite drink? Standing MEMORY outranks KnowYou/episodic guesses. Prefer tea if standing says tea — do not promote the coffee KnowYou note over standing.",
+    "expect": {
+      "liveTools": ["memory_recall", "knowyou_search"],
+      "requireHonesty": true,
+      "honestyMatching": ["tea|mem-ky-tea|standing|favorite"]
+    }
+  },
+  {
+    "id": "gen-live-knowyou-remember-cue-soft",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Please remember: I prefer oat milk in coffee (token ky-user-oat-1). Acknowledge that you will keep this preference (KnowYou/PendingLearn/MEMORY is fine) — do not claim smart-home actuation.",
+    "expect": {
+      "liveTools": ["memory_remember", "skill_propose", "knowyou_search", "ask_user"],
+      "requireHonesty": true,
+      "honestyMatching": ["oat|remember|KnowYou|memory|pending|saved|记下|记住|preference"]
+    }
+  }
+]

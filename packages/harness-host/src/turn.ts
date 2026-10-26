@@ -106,9 +106,22 @@ function isSandboxToolName(tool: string): boolean {
     tool === "apply_patch" ||
     tool === "list_dir" ||
     tool === "search_files" ||
+    tool === "knowledge_search" ||
+    tool === "knowyou_search" ||
     tool === "export_document" ||
     tool === "extract_document" ||
     tool === "view_image"
+  );
+}
+
+/** Design Memory §7 — remember / recall / session_search (facade-backed; fence-parseable). */
+function isMemoryToolName(tool: string): boolean {
+  return (
+    tool === "memory_remember" ||
+    tool === "memory_recall" ||
+    tool === "session_search" ||
+    tool === "knowledge_search" ||
+    tool === "knowyou_search"
   );
 }
 
@@ -157,6 +170,12 @@ export type ParseToolCallsOptions = {
   allowSandbox?: boolean;
   /** Design §7.4 — Schedules chat accepts only the schedule tool. */
   schedulesOnly?: boolean;
+  /**
+   * Attended parent turns MAY propose `exec` / `http_fetch` via fence;
+   * ApprovalSink still asks / grants. Default false (children / schedules).
+   */
+  allowExec?: boolean;
+  allowHttpFetch?: boolean;
 };
 
 export async function dispatchTool(
@@ -567,6 +586,8 @@ export function parseAssistantToolCalls(
   const allowSmartHome = opts?.allowSmartHome !== false;
   const allowSandbox = opts?.allowSandbox === true;
   const schedulesOnly = opts?.schedulesOnly === true;
+  const allowExec = opts?.allowExec === true;
+  const allowHttpFetch = opts?.allowHttpFetch === true;
   const fence = extractEnvoyhomeToolsFence(text);
   if (!fence?.body) {
     const bare = bareScheduleSteps(text);
@@ -586,7 +607,7 @@ export function parseAssistantToolCalls(
     const o = item as Record<string, unknown>;
     if (typeof o.tool !== "string" || !o.tool.trim()) continue;
     const name = o.tool.trim();
-    // Never allow exec/http_fetch via fence — smart-home, sandbox, web_search, browser, schedule OK.
+    // exec/http_fetch only when explicitly opted in (parent attended); ApprovalSink still gates.
     const okSchedule = isScheduleToolName(name);
     const okAskUser = isAskUserToolName(name);
     if (schedulesOnly) {
@@ -598,6 +619,9 @@ export function parseAssistantToolCalls(
       const okPhase2 = isPhase2AgentToolName(name);
       // Skills discovery is read-tier; allow whenever sandbox tools are allowed (not schedules-only).
       const okSkill = allowSandbox && isSkillDiscoveryToolName(name);
+      const okMemory = allowSandbox && isMemoryToolName(name);
+      const okExec = allowExec && name === "exec";
+      const okHttp = allowHttpFetch && name === "http_fetch";
       if (
         !okHome &&
         !okSandbox &&
@@ -605,7 +629,10 @@ export function parseAssistantToolCalls(
         !okSchedule &&
         !okAskUser &&
         !okPhase2 &&
-        !okSkill
+        !okSkill &&
+        !okMemory &&
+        !okExec &&
+        !okHttp
       ) {
         continue;
       }

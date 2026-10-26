@@ -7,6 +7,7 @@ import { registerResetHook } from "@envoyhome/test-utils";
 import {
   PRODUCT_IDENTITY_MARKER,
   PRODUCT_IDENTITY_PROLOGUE,
+  extractStandingPatchValue,
 } from "@envoyhome/memory";
 import {
   ApprovalSink,
@@ -130,6 +131,8 @@ export interface TurnCompleteInfo {
   deviceId?: string;
   /** Thin-client UI locale for generic turn-push body (preferred over account). */
   locale?: string;
+  /** KnowYou write gate (V-KY-3) — owner/agent only; untrusted → no ADD. */
+  memoryTrust?: "owner" | "agent" | "untrusted";
 }
 
 interface ActiveTurn {
@@ -290,6 +293,7 @@ export class TurnService {
   private webSearch: WebSearchService | null = null;
   private browserControl: BrowserControlService | null = null;
   private schedules: ScheduleService | null = null;
+  private knowledge: import("./knowledge-service.js").KnowledgeService | null = null;
 
   constructor(
     private readonly paths: HomePaths,
@@ -343,6 +347,114 @@ export class TurnService {
 
   setOwnerAccountIdLookup(fn: () => string | null): void {
     this.getOwnerAccountId = fn;
+  }
+
+  setKnowledge(svc: import("./knowledge-service.js").KnowledgeService): void {
+    this.knowledge = svc;
+  }
+
+  /** Post-turn KnowYou extract + V-KY-7 PendingLearn on L1/L2 conflict. */
+  private async ingestKnowYouAfterTurn(
+    info: TurnCompleteInfo,
+    userText: string,
+    assistantText: string,
+    allowWrites: boolean,
+  ): Promise<void> {
+    if (!this.knowledge) return;
+    const { profile } = await this.memory.getProfile(info.accountId);
+    const profileFacts: Record<string, string> = {};
+    for (const [k, fact] of Object.entries(profile.facts ?? {})) {
+      const v = fact?.value;
+      if (typeof v === "string") profileFacts[k] = v;
+      else if (typeof v === "number" || typeof v === "boolean") profileFacts[k] = String(v);
+      else if (Array.isArray(v)) profileFacts[k] = v.join(", ");
+    }
+    let memoryMd = "";
+    try {
+      const listed = await this.memory.listMemory(info.accountId, {
+        includeContent: true,
+      });
+      const note = listed.notes.find((n) => n.path === "MEMORY.md");
+      memoryMd = typeof note?.content === "string" ? note.content : "";
+    } catch {
+      memoryMd = "";
+    }
+    const results = await this.knowledge.ingestTurn(
+      info.accountId,
+      userText,
+      assistantText,
+      {
+        allowWrites,
+        sourceTurnId: info.turnId,
+        sourceSessionId: info.sessionId,
+        profileFacts,
+        memoryMd,
+      },
+    );
+    for (const r of results) {
+      if (r.action !== "PENDING_LEARN" || !r.text?.trim()) continue;
+      try {
+        if (r.profileKey) {
+          const value = extractStandingPatchValue(r.text, r.profileKey);
+          await this.memory.proposeLearn(info.accountId, {
+            kind: "profile_patch",
+            targetPath: "profile.json",
+            profileKey: r.profileKey,
+            // acceptLearn writes payload as the fact value (plain short text).
+            payload: value,
+            summary: `KnowYou conflict: update ${r.profileKey} (was ${r.conflictStanding ?? "?"})`,
+            trust: allowWrites ? "agent" : "untrusted",
+            sourceTurnId: info.turnId,
+          });
+        } else {
+          await this.memory.proposeLearn(info.accountId, {
+            kind: "memory_append",
+            targetPath: "MEMORY.md",
+            payload: r.text,
+            summary: `KnowYou conflict with standing: ${r.conflictStanding ?? "L1/L2"}`,
+            trust: allowWrites ? "agent" : "untrusted",
+            sourceTurnId: info.turnId,
+          });
+        }
+      } catch {
+        /* queue full / learn errors must not fail turn */
+      }
+    }
+  }
+
+  /** Knowledge-RAG §6 — append budgeted KnowYou / Doc KB blocks when inject=auto. */
+  private async withRagInject(
+    accountId: string,
+    standingText: string,
+    userMessage?: string,
+  ): Promise<string> {
+    if (!this.knowledge || !userMessage?.trim()) return standingText;
+    try {
+      const { profile } = await this.memory.getProfile(accountId);
+      const profileFacts: Record<string, string> = {};
+      for (const [k, fact] of Object.entries(profile.facts ?? {})) {
+        const v = fact?.value;
+        if (typeof v === "string") profileFacts[k] = v;
+        else if (typeof v === "number" || typeof v === "boolean") profileFacts[k] = String(v);
+        else if (Array.isArray(v)) profileFacts[k] = v.join(", ");
+      }
+      let memoryMd = "";
+      try {
+        const listed = await this.memory.listMemory(accountId, { includeContent: true });
+        const note = listed.notes.find((n) => n.path === "MEMORY.md");
+        memoryMd = typeof note?.content === "string" ? note.content : "";
+      } catch {
+        memoryMd = "";
+      }
+      const rag = await this.knowledge.buildRagInject(accountId, userMessage, {
+        profileFacts,
+        memoryMd,
+      });
+      if (!rag.combined) return standingText;
+      return `${standingText.trim()}\n\n${rag.combined}`.trim();
+    } catch {
+      return standingText;
+    }
   }
 
   setWebSearch(svc: WebSearchService): void {
@@ -454,6 +566,19 @@ export class TurnService {
     }
     refuseIfTurnActive(sessionId);
     await this.sessions.remove(accountId, sessionId);
+    // KnowYou: purge episodic rows tagged to this session (Knowledge-RAG cross-cutting).
+    if (this.knowledge) {
+      try {
+        await this.knowledge.purgeSession(accountId, sessionId);
+      } catch {
+        /* non-fatal */
+      }
+    }
+    try {
+      await this.memory.deleteSession(accountId, sessionId);
+    } catch {
+      /* session FTS may already be absent */
+    }
     return { ok: true };
   }
 
@@ -1245,6 +1370,54 @@ export class TurnService {
     return normalizeWorkflowToolName(name);
   }
 
+  /**
+   * Shell for `exec` tool — cwd = account sandbox files root.
+   * ApprovalSink still gates; soft-refuse a few host-escape patterns.
+   */
+  private sandboxExecImpl(accountId: string): (cmd: string) => Promise<string> {
+    const cwd = this.paths.accountFiles(accountId);
+    return async (cmd: string) => {
+      const trimmed = cmd.trim();
+      if (!trimmed) throw new Error("envoyhome.bad_params: cmd required");
+      if (
+        /\brm\s+(-[^\s]*f[^\s]*\s+)?\/\b|fork\s*bomb|\/etc\/(?:passwd|shadow)\b/i.test(
+          trimmed,
+        )
+      ) {
+        throw new Error("envoyhome.exec_refused: unsafe command pattern");
+      }
+      const { exec: execCb } = await import("node:child_process");
+      const { promisify } = await import("node:util");
+      const execAsync = promisify(execCb);
+      try {
+        const { stdout, stderr } = await execAsync(trimmed, {
+          cwd,
+          timeout: 30_000,
+          maxBuffer: 1_000_000,
+          env: { ...process.env, PWD: cwd },
+        } as import("node:child_process").ExecOptions);
+        return JSON.stringify({
+          ok: true,
+          stdout: String(stdout ?? "").slice(0, 32_000),
+          stderr: String(stderr ?? "").slice(0, 8_000),
+        });
+      } catch (err) {
+        const e = err as {
+          stdout?: string;
+          stderr?: string;
+          message?: string;
+          code?: number | string;
+        };
+        return JSON.stringify({
+          ok: false,
+          code: e.code ?? 1,
+          stdout: String(e.stdout ?? "").slice(0, 32_000),
+          stderr: String(e.stderr ?? e.message ?? "").slice(0, 8_000),
+        });
+      }
+    };
+  }
+
   /** Shared TurnDeps hooks for workflow tool nodes (builtins + skill/HA/MQTT). */
   private workflowDispatchExtras(input: {
     accountId: string;
@@ -1256,11 +1429,16 @@ export class TurnService {
     memoryTrust?: "owner" | "agent" | "untrusted";
   }): Pick<
     TurnDeps,
-    "httpFetchImpl" | "extraToolImpl" | "browserDefaultProfile" | "peekScheduleProposal"
+    | "httpFetchImpl"
+    | "execImpl"
+    | "extraToolImpl"
+    | "browserDefaultProfile"
+    | "peekScheduleProposal"
   > {
     const origin: "attended" | "unattended" =
       input.origin === "unattended" ? "unattended" : "attended";
     return {
+      execImpl: this.sandboxExecImpl(input.accountId),
       httpFetchImpl: workflowHttpFetch as typeof fetch,
       browserDefaultProfile: (() => {
         let configured: string | undefined;
@@ -1314,6 +1492,7 @@ export class TurnService {
           schedules: this.schedules,
           workflows: this.workflows,
           sessions: this.sessions,
+          knowledge: this.knowledge,
           ...(input.ctx?.session_id ? { sessionId: input.ctx.session_id } : {}),
           ...(input.ctx?.session_id
             ? {
@@ -1810,6 +1989,23 @@ ${lines.join("\n")}
         userText,
         turnId: info.turnId,
       });
+      // KnowYou L4′ heuristic extract (Knowledge-RAG §4)
+      if (this.knowledge) {
+        let assistantText = "";
+        for (let i = lines.length - 1; i >= 0; i--) {
+          if (lines[i]?.role === "assistant") {
+            assistantText = String(lines[i]?.text ?? "");
+            break;
+          }
+        }
+        // V-KY-3: untrusted / missing trust / unattended → no durable KnowYou ADD.
+        const allowWrites =
+          info.origin !== "unattended" &&
+          (info.memoryTrust === "owner" || info.memoryTrust === "agent");
+        void this.ingestKnowYouAfterTurn(info, userText, assistantText, allowWrites).catch(
+          () => undefined,
+        );
+      }
     } catch {
       /* enrichment must never fail the turn */
     }
@@ -1917,6 +2113,7 @@ ${lines.join("\n")}
         forceLocal,
       }),
     );
+    // Knowledge-RAG §3.6 / §4.5 — skip Doc KB / KnowYou auto-inject for workflow turns.
     const standingWithCard = await this.standingInjectWithBoundCard(
       input.accountId,
       inject.text,
@@ -2076,6 +2273,7 @@ ${lines.join("\n")}
         ...(pickedWf !== undefined ? { pickedProviderId: pickedWf } : {}),
       }),
     );
+    // Knowledge-RAG §3.6 / §4.5 — skip RAG auto-inject for workflow turns.
     const standingBase = clientCtxInject
       ? inject.text
         ? `${inject.text}\n\n${clientCtxInject}`
@@ -2285,11 +2483,18 @@ ${lines.join("\n")}
       }),
     );
 
+    // Knowledge-RAG §4.5 — harness turns only (workflow paths skip withRagInject).
+    const standingWithRag = await this.withRagInject(
+      input.accountId,
+      inject.text,
+      input.text,
+    );
+
     const standingWithClient = clientCtxInject
-      ? inject.text
-        ? `${inject.text}\n\n${clientCtxInject}`
+      ? standingWithRag
+        ? `${standingWithRag}\n\n${clientCtxInject}`
         : clientCtxInject
-      : inject.text;
+      : standingWithRag;
 
     const home = await this.resolveHomeTurnSurface({
       accountId: input.accountId,
@@ -2789,6 +2994,7 @@ ${lines.join("\n")}
         ...(input.clientContext?.locale
           ? { locale: input.clientContext.locale }
           : {}),
+        ...(input.memoryTrust !== undefined ? { memoryTrust: input.memoryTrust } : {}),
       });
     }
   }
@@ -3500,6 +3706,10 @@ ${lines.join("\n")}
         const resolved = await resolvePath(rel, true);
         await mkdir(dirname(resolved.absolute), { recursive: true });
         await writeFile(resolved.absolute, content, "utf8");
+        const norm = rel.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\//, "");
+        if (this.knowledge && norm.startsWith("knowledge/") && norm.endsWith(".md")) {
+          void this.knowledge.onKnowledgeFileWrite(accountId, norm).catch(() => undefined);
+        }
       },
       readFile: async (rel: string) => {
         const resolved = await resolvePath(rel, false);

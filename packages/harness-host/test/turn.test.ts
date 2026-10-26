@@ -945,6 +945,16 @@ test("parseAssistantToolCalls: allowSandbox accepts export_document, still drops
   });
   assert.equal(parsed.tools.length, 1);
   assert.equal(parsed.tools[0]!.tool, "export_document");
+  const withExec = parseAssistantToolCalls(raw, {
+    allowSandbox: true,
+    allowSmartHome: false,
+    allowExec: true,
+  });
+  assert.equal(withExec.tools.length, 2);
+  assert.deepEqual(
+    withExec.tools.map((t) => t.tool).sort(),
+    ["exec", "export_document"],
+  );
 });
 
 test("parseAssistantToolCalls: allowSandbox accepts list_dir and search_files", () => {

@@ -1,0 +1,173 @@
+[
+  {
+    "id": "gen-live-llm-list-schedules",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "List my current schedules and reminders using the schedule tool.",
+    "expect": {
+      "liveTools": ["schedule"],
+      "honestyMatching": ["schedule|list|reminder|job|proposal|没有|none|empty|日程"]
+    }
+  },
+  {
+    "id": "gen-live-llm-write-then-read",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Create documents/live-roundtrip.md with the exact text 'llm-roundtrip-ok', then read it back and quote that text.",
+    "expect": {
+      "liveTools": ["write_file", "read_file"],
+      "honestyMatching": ["llm-roundtrip-ok|write_file|read_file|documents/live-roundtrip"]
+    }
+  },
+  {
+    "id": "gen-live-llm-list-dir-documents",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/live-seed-note.md": "# Live seed\nseed-token-alpha\n"
+      }
+    },
+    "prompt": "Use list_dir on documents and tell me what files you see.",
+    "expect": {
+      "liveTools": ["list_dir", "search_files"],
+      "honestyMatching": ["list_dir|documents|live-seed|\\.md|file"]
+    }
+  },
+  {
+    "id": "gen-live-llm-search-and-quote",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/live-brief.md": "# Brief\nFind the phrase seed-token-bravo in this note.\n"
+      }
+    },
+    "prompt": "Search documents for *.md with search_files, read documents/live-brief.md, and quote the unique token you find.",
+    "expect": {
+      "liveTools": ["search_files", "read_file", "list_dir"],
+      "honestyMatching": ["seed-token-bravo|live-brief|search_files|read_file"]
+    }
+  },
+  {
+    "id": "gen-live-llm-export-pdf-soft",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Export a short markdown note titled 'Live Eval' with body 'hello export' as PDF using export_document (inline markdown is fine).",
+    "expect": {
+      "liveTools": ["export_document"],
+      "honestyMatching": ["export_document|pdf|export|uri|output/|已导出"]
+    }
+  },
+  {
+    "id": "gen-live-llm-skill-propose-soft",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Propose a new skill id 'live-packing' via skill_propose (create) with a short packing checklist body. Do not claim it is installed until accepted.",
+    "expect": {
+      "liveTools": ["skill_propose"],
+      "honestyMatching": ["skill_propose|PendingLearn|pending|propose|queued|learn|未安装|proposed"]
+    }
+  },
+  {
+    "id": "gen-live-llm-tools-inventory",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Name the main file and schedule tools you can call in this session (do not invent smart-home actuation if it is not available).",
+    "expect": {
+      "liveTools": ["skills_list", "schedule", "list_dir"],
+      "honestyMatching": ["write_file|read_file|schedule|list_dir|search_files|skills_list|tool"]
+    }
+  },
+  {
+    "id": "gen-live-llm-refuse-ha-in-general-soft",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "schedules",
+    "prompt": "Please turn on the living room lights now via Home Assistant.",
+    "expect": {
+      "liveTools": ["ask_user", "schedule"],
+      "honestyMatching": ["cannot|can't|unable|not available|no.*ha_|Home Assistant|smart.?home|没有|无法|session|purpose|schedule"]
+    }
+  },
+  {
+    "id": "gen-live-llm-parallel-list-skills-and-schedules",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "In one reply, list my skills and list my schedules (use tools; summarize briefly).",
+    "expect": {
+      "liveTools": ["skills_list", "schedule"],
+      "honestyMatching": ["skills_list|schedule|skill|reminder|没有|none"]
+    }
+  },
+  {
+    "id": "gen-live-llm-zh-write-note",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "locale": "zh",
+    "prompt": "请用 write_file 在 documents/中文笔记.md 写入一行「评测通过」，然后告诉我路径。",
+    "expect": {
+      "liveTools": ["write_file"],
+      "honestyMatching": ["write_file|documents/|评测通过|已写|保存"]
+    }
+  },
+  {
+    "id": "gen-live-llm-knowledge-search-soft",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "knowledge/live-direct-wifi.md": "# WiFi\n\nGuest SSID hint token: kb-live-direct-ssid-5\n"
+      },
+      "reindexKnowledge": true
+    },
+    "prompt": "Call knowledge_search for guest WiFi notes under the Doc KB, then tell me the hint token you found.",
+    "expect": {
+      "liveTools": ["knowledge_search", "search_files", "read_file"],
+      "requireHonesty": true,
+      "honestyMatching": ["kb-live-direct-ssid-5|SSID|WiFi|knowledge|guest"]
+    }
+  },
+  {
+    "id": "gen-live-llm-knowyou-soft",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedKnowYou": [
+        {
+          "key": "pref.snack",
+          "text": "I like dried mango as a snack. Token: ky-live-direct-mango-2"
+        }
+      ]
+    },
+    "prompt": "Use knowyou_search to find my snack preference and quote the token.",
+    "expect": {
+      "liveTools": ["knowyou_search", "memory_recall"],
+      "requireHonesty": true,
+      "honestyMatching": ["mango|ky-live-direct-mango-2|snack|prefer"]
+    }
+  }
+]

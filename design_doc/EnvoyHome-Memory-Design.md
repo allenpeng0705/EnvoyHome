@@ -4,11 +4,12 @@
 |-------|--------|
 | **Document** | Dedicated Normative design for the **memory + learning** subsystem |
 | **Status** | Living draft |
-| **Last updated** | 2026-10-18 (Owner risk resolution — member paired `untrusted`) |
+| **Last updated** | 2026-10-25 (Knowledge + RAG / KnowYou — see sibling design) |
 | **Parent** | [`EnvoyHome-Design.md`](EnvoyHome-Design.md) — product-wide ground truth |
 | **Summary in parent** | Design §9 |
+| **Sibling** | [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md) — Doc KB (L6), KnowYou (L4′), local embed `:18793`, hybrid RAG |
 | **Peer research** | [`analysis/peer-memory-systems.md`](analysis/peer-memory-systems.md) |
-| **Conflict rule** | Product invariants (sandbox, Mesh, harness) → **Design.md wins**. Memory-layer detail → **this file wins** unless Design.md explicitly overrides. |
+| **Conflict rule** | Product invariants (sandbox, Mesh, harness) → **Design.md wins**. Doc KB index / KnowYou / embed engine → **Knowledge-RAG Design wins**. Standing L1–L3 + flush + LearnQueue detail → **this file wins** unless Design.md explicitly overrides. |
 
 **Intent:** Design memory **carefully from day one**, learning from OpenClaw, Hermes, OpenHuman, and HomeClaw — without cloning any one of them, and without stuffing a Memory Tree engine into core.
 
@@ -18,6 +19,7 @@
 
 | Date | Change |
 |------|--------|
+| 2026-10-25 | **Knowledge + KnowYou pointer:** Doc KB (L6), KnowYou episodic (L4′), local SQLite hybrid RAG, and Home embed sidecar (`:18793`) are Normative in [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md). §2.2: “eager every-turn deep recall” still rejects unbounded L5 Tree; **bounded** L4′/L6 auto-inject is allowed under that sibling. §4.5 “Not in v1” hybrid/auto-inject superseded for L6/L4′ by Knowledge-RAG phased delivery. §4.1 authority extended: L1>L2>L3>L4′>L6. §15/§16/§18 cross-links + V-KB/V-KY/V-EMB live in the sibling. |
 | 2026-10-18w | **§13 trust:** Member paired turns are `untrusted` (Design §4.1.1 R5 resolved). `owner` = loopback or exclusive-Owner device acting as `ownerAccountId`. `trustedChannel` IM remains `agent`. |
 | 2026-10-18v | **§13 trust derivation:** superseded by `2026-10-18w` for member paired trust. |
 | 2026-10-18i | **§4.2 / §4.2.1 identity reserve:** brand floor + editable persona sit **outside** the L1–L3 package; `IDENTITY_STANDING_RESERVE` is subtracted before scaling L1–L3 under `MAX_FRACTION` / `CEILING_TOTAL`. `home.listMemory` reports identity `injectChars` as the full composed block. Additive learn kind `identity_append`. Account `displayName` injects as L1 `name` when no name fact exists. |
@@ -75,10 +77,11 @@ Full matrix: [analysis/peer-memory-systems.md](analysis/peer-memory-systems.md).
 | Reject / defer | Why |
 |----------------|-----|
 | Full Memory Tree in core | P2-Q5; ops cost + multi-source scope + inspectability — **not** a claim that OpenHuman dropped theirs |
-| Eager every-turn deep recall | Latency; escalate later only |
+| Eager every-turn **unbounded L5 Tree / deep** recall | Latency; escalate later only |
+| **Unbounded** auto-inject of full corpora | Use **budgeted** L4′/L6 blocks only — [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md) §3.6 / §4.5 |
 | Silent auto-fetch into standing | Privacy; Channel/DAG jobs later |
 | TokenJuice as memory | Harness tool_result middleware |
-| Required Cognee/heavy graph | Optional backend |
+| Required Cognee/heavy graph / mem0 core | Optional MemoryBackend later; Home owns light SQLite+embed |
 | Opaque embedding-only standing memory | Violates inspectability |
 | One undifferentiated “memory blob” | Peer debt everywhere |
 
@@ -124,17 +127,19 @@ Peers that mix “everything is memory” become unmaintainable. EnvoyHome names
 | **L1 Profile** | `profile.json` (USER-like) | Stable prefs / identity facts | Yes, **capped** | OpenClaw USER.md, Hermes USER.md, HomeClaw profile |
 | **L2 Standing notes** | `MEMORY.md` | Durable non-profile facts/decisions | Yes, **capped** | OpenClaw/Hermes MEMORY.md |
 | **L3 Daily** | `memory/YYYY-MM-DD.md` | Working observations | Today+yesterday **capped** | OpenClaw/HomeClaw daily |
-| **L4 Episodic search** | Session FTS / chat index | “What did we say last week?” | No — **tool** | Hermes `session_search` |
-| **L5 Deep / RAG / Tree** | MemoryBackend | Semantic / hierarchical / multi-source | No — **recall tool** only | OpenClaw engines, HomeClaw RAG, OpenHuman tree |
-| **L6 Doc KB** | Optional KB backend | Saved docs/clips (**not** chat stream) | No — tool / gated inject | HomeClaw Knowledge base |
+| **L4 Episodic search** | Session FTS / chat index | “What did we say last week?” | No — **tool** (`session_search`) | Hermes `session_search` |
+| **L4′ KnowYou** | Episodic engine + SQLite (Knowledge-RAG Design) | Related past chats/facts; ADD\|SUPERSEDE\|SKIP | **Budgeted auto** or tool | Fix HomeClaw/mem0 update debt |
+| **L5 Deep / RAG / Tree** | MemoryBackend | Semantic / hierarchical / multi-source | No — **recall tool** only | OpenClaw engines; optional heavy plugins |
+| **L6 Doc KB** | `knowledge/` files + SQLite index | Saved docs/clips (**not** chat stream) | **Budgeted auto** or tool | HomeClaw KB outcome; light Home RAG |
 | **L7 Skills** | Skill packages | Procedural “how” | Progressive disclosure | Hermes skills |
 
 ### 4.1 Authority / conflict (Normative — Adapt HomeClaw + OpenClaw)
 
 1. This turn’s explicit user instruction wins for the reply.  
-2. **L1 Profile** > **L2 MEMORY** > **L3 daily** > **L5/L6** deep/KB.  
-3. L5/L6 never silently overwrite L1/L2.  
-4. System prompt labels each injected block so the model knows the hierarchy.
+2. **L1 Profile** > **L2 MEMORY** > **L3 daily** > **L4′ KnowYou episodic** > **L6 Doc KB** > other L5 deep.  
+3. L4′/L5/L6 never silently overwrite L1/L2.  
+4. System prompt labels each injected block so the model knows the hierarchy.  
+5. Budgeted L4′/L6 auto-inject and local hybrid RAG: **[`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md)** (not this file’s standing caps table).
 
 ### 4.2 Bootstrap budgets (Normative — Adapt OpenClaw)
 
@@ -149,7 +154,8 @@ Standing memory is **scarce by design**. Inject caps follow OpenClaw’s proven 
 | COMPACT.md | not injected | **20 000 chars or 20 entries** | Rotate to `memory/compact/` (§9 rule 6). |
 | PendingLearn | n/a | **50 entries / 30 days** | **Reject the new proposal** with event `home:learn-rejected-full`; never evict silently (§7.2). |
 | L4 session FTS | no inject | session retention (§4.6) | Purge with the session. |
-| L5/L6 | **off** (tool-only in v1) | backend-owned | — |
+| L4′ / L6 inject | Knowledge-RAG budgets (not this table) | derived indexes under `memory-backend/` | See Knowledge-RAG Design |
+| L5 deep plugin | **off** unless enabled | backend-owned | — |
 
 **Split of concerns (Normative).**
 
@@ -321,9 +327,9 @@ Wire: `home.getProfile` / `home.updateProfile` — Design Appendix **A.9**.
 | API | Tool `recall` + RPC `home.recall` → hits with `path`, line range, `snippet`, `score`, `engine: "fts"` \| `"scan"` |
 | Ranking | Within an engine: BM25 (fts) / term overlap (scan); `limit` default 8; merged order per the rule above |
 | Path bounds | `home.recall`'s optional `paths` narrows **within** the corpus; it is not an arbitrary path list and MUST be jail-checked (Design §4.5 V-SEC-2) |
-| Not in v1 | Hybrid embed, L5 Tree walk, cross-account, auto-inject of hits |
+| Not in standing `recall` | Hybrid embed over L2+L3, L5 Tree walk, cross-account, auto-inject of standing hits |
 
-Hybrid embed search → **v1.x** (still file-owned). L5 `MemoryBackend.recall` only when a deep backend is enabled.
+**Doc KB / KnowYou hybrid + budgeted auto-inject** are Normative in [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md) (phased P1–P5). Standing `recall` over L2+L3 remains FTS/scan as above until a later optional hybrid. L5 Tree/`MemoryBackend.recall` only when a deep backend is enabled.
 
 ### 4.6 Session FTS retention (Normative)
 
@@ -684,8 +690,8 @@ Deprecated: `ownerTrusted` on a device binding **MUST NOT** produce `trust: "own
 | Phase | Deliver |
 |-------|---------|
 | **v1** | Facade + L1–L3 files + L4 session_search + LearnQueue + flush + consolidate + COMPACT.md + tools/RPCs/Settings + refresh-after-write |
-| **v1.x** | Stronger note search (hybrid keyword+embed) still file-owned |
-| **Later** | MemoryBackend (light RAG / Tree); Channel ingest jobs; opt-in escalate recall; soft nudges |
+| **v1.x / Knowledge-RAG P1–P5** | Doc KB SQLite FTS → Home embed `:18793` → hybrid KB; KnowYou ADD\|SUPERSEDE\|SKIP + summarize; budgeted auto-inject — see Knowledge-RAG Design §9 |
+| **Later** | Optional Cognee/Graphiti MemoryBackend; Channel ingest jobs; soft nudges |
 | **Not memory** | TokenJuice; fleets |
 
 ---
@@ -696,7 +702,8 @@ Deprecated: `ownerTrusted` on a device binding **MUST NOT** produce `trust: "own
 |----|-----------|
 | V-MEM-1 | No cross-account recall / compact / session_search |
 | V-MEM-2 | Compact/flush cannot exec/network without grant |
-| V-MEM-3 | Prompt authority L1 > L2 > L3 > L5/L6 |
+| V-MEM-3 | Prompt authority L1 > L2 > L3 > L4′ > L6 / L5 (Knowledge-RAG §6) |
+| V-KB-* / V-KY-* / V-EMB-* | See [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md) §10 |
 | V-MEM-4 | Bootstrap caps enforced; Settings shows truncation |
 | V-MEM-5 | Default files backend works with zero plugins |
 | V-MEM-6 | Tree/RAG backend cannot bypass LearnQueue for skills |
@@ -737,12 +744,15 @@ Deprecated: `ownerTrusted` on a device binding **MUST NOT** produce `trust: "own
 | Pending learn / write approval | Hermes | **Adopt** | §10 |
 | session_search episodic | Hermes | **Adopt** | §4 L4, §11 |
 | Standing > RAG/KB authority | HomeClaw | **Adopt** | §4.1 |
-| Separate RAG vs doc KB | HomeClaw | **Adopt** | §4 L5/L6 |
+| Separate RAG vs doc KB | HomeClaw | **Adopt** | §4 L5/L6; Knowledge-RAG |
+| Budgeted episodic + KB auto-inject | HomeClaw outcome | **Adapt** | Knowledge-RAG §3.6 / §4.5 |
+| Keyed SUPERSEDE facts | Graphiti idea / fix mem0 | **Invent** | Knowledge-RAG §4.3 |
+| Home embed sidecar | EnvoyMesh | **Adapt** `:18793` | Knowledge-RAG §5 |
 | Memory plugin/engines | OpenClaw, Hermes | **Adapt** | §5 |
 | Memory Tree core | OpenHuman | **Reject** | §5.4 |
 | Auto-fetch default | OpenHuman | **Defer** jobs | Design §19.7 |
 | Active-memory always | OpenClaw | **Reject** default | Design §19.7 |
-| Cognee required | HomeClaw | **Reject** | §5 |
+| Cognee / mem0 required | HomeClaw / ecosystem | **Reject** | §5; Knowledge-RAG §1.4 |
 | Action-sensitive notes | OpenClaw | **Adapt** | §7.1 |
 
 ---
@@ -752,6 +762,7 @@ Deprecated: `ownerTrusted` on a device binding **MUST NOT** produce `trust: "own
 | Doc | Role |
 |-----|------|
 | [EnvoyHome-Design.md](EnvoyHome-Design.md) §9, §10, Design §19.7 | Parent |
+| [EnvoyHome-Knowledge-RAG-Design.md](EnvoyHome-Knowledge-RAG-Design.md) | Doc KB, KnowYou, embed engine, hybrid RAG |
 | [analysis/peer-memory-systems.md](analysis/peer-memory-systems.md) | Comparative research |
 | [agreed/advanced-memory-and-fleets.md](agreed/advanced-memory-and-fleets.md) | Tree / auto-fetch / TokenJuice / fleets |
 | [analysis/memory-tree-and-autofetch.md](analysis/memory-tree-and-autofetch.md) | Tree depth |

@@ -39,6 +39,10 @@ export const BUILTIN_TOOLS: Readonly<Record<string, ToolSpec>> = {
   list_dir: { name: "list_dir", risk: "read", grantable: false },
   /** Design §9.5e — basename glob/substring search under sandbox/workspace. */
   search_files: { name: "search_files", risk: "read", grantable: false },
+  /** Knowledge-RAG Doc KB search. */
+  knowledge_search: { name: "knowledge_search", risk: "read", grantable: false },
+  /** Knowledge-RAG KnowYou episodic search. */
+  knowyou_search: { name: "knowyou_search", risk: "read", grantable: false },
   /** Design §9.5b — Markdown → docx/xlsx/csv/pdf under output/exports/. */
   export_document: { name: "export_document", risk: "write", grantable: true },
   /** Design §9.5c — sandbox Office/PDF → GFM under output/extracts/. */

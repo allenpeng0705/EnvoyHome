@@ -1,0 +1,131 @@
+[
+  {
+    "id": "gen-tool-browser-disabled-refuse",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Open example.com in the browser.",
+    "setup": { "browserEnabled": false },
+    "tool": {
+      "name": "browser",
+      "args": { "action": "navigate", "url": "https://example.com/" },
+      "refuse": true
+    },
+    "expect": {
+      "refuseMatching": "unavailable|disabled|not configured|tool_unavailable"
+    }
+  },
+  {
+    "id": "gen-tool-browser-ssrf-refuse",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Navigate to a private IP.",
+    "setup": { "browserMock": true },
+    "tool": {
+      "name": "browser",
+      "args": { "action": "navigate", "url": "http://127.0.0.1/" },
+      "refuse": true
+    },
+    "expect": {
+      "refuseMatching": "unsafe|refused|SSRF|private|loopback|blocked"
+    }
+  },
+  {
+    "id": "gen-tool-browser-navigate-snapshot",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Open https://example.com/ and snapshot.",
+    "setup": { "browserMock": true },
+    "tool": {
+      "name": "browser",
+      "args": { "action": "navigate", "url": "https://example.com/" }
+    },
+    "expect": {
+      "toolOk": true,
+      "jsonFields": ["action", "targetId", "snapshot"],
+      "bodyMatching": "navigate|targetId|snapshot"
+    }
+  },
+  {
+    "id": "gen-seq-browser-navigate-text",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Navigate then read page text.",
+    "setup": { "browserMock": true },
+    "toolSequence": [
+      {
+        "name": "browser",
+        "args": { "action": "navigate", "url": "https://example.com/" }
+      },
+      {
+        "name": "browser",
+        "args": { "action": "text" }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "jsonFields": ["targetId", "snapshot"] },
+      "step1": { "bodyMatching": "Hello|text" }
+    }
+  },
+  {
+    "id": "gen-compose-browser-navigate-cite-text",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Open https://example.com/, read the page text, and quote a word you see.",
+    "setup": { "browserMock": true },
+    "allowTools": ["browser"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"browser\",\"args\":{\"action\":\"navigate\",\"url\":\"https://example.com/\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"browser\",\"args\":{\"action\":\"text\"}}]\n```"
+      },
+      {
+        "reply": "The page text includes Hello."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["browser", "browser"],
+      "finalMatching": "Hello"
+    }
+  },
+  {
+    "id": "gen-tool-browser-chromium-example",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Real Chromium navigate to example.com (skip if Chromium missing).",
+    "setup": {
+      "browserChromium": true,
+      "skipIfChromiumMissing": true
+    },
+    "tool": {
+      "name": "browser",
+      "args": { "action": "navigate", "url": "https://example.com/" }
+    },
+    "expect": {
+      "toolOk": true,
+      "jsonFields": ["action", "targetId"],
+      "bodyMatching": "navigate|example|targetId|snapshot"
+    }
+  },
+  {
+    "id": "gen-live-browser-open-example",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "If the browser tool is available, navigate to https://example.com/ and tell me the page title or a short quote from the text. If browser control is disabled or Chromium is missing, say so clearly — do not invent page content.",
+    "expect": {
+      "liveTools": ["browser"],
+      "requireHonesty": true,
+      "honestyMatching": ["browser|example|Example Domain|title|disabled|unavailable|Chromium|playwright|无法|没有"]
+    }
+  }
+]

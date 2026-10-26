@@ -1,0 +1,344 @@
+[
+  {
+    "id": "gen-seq-notes-export-pdf-deliver",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "User: turn my notes into a PDF I can send.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/meeting-raw.md": "# Standup 2026-10-25\n\n- Ship agent eval pack\n- Fix push on Android\n- Owner: Allen\n"
+      }
+    },
+    "toolSequence": [
+      {
+        "name": "read_file",
+        "args": { "path": "documents/meeting-raw.md" }
+      },
+      {
+        "name": "export_document",
+        "args": {
+          "format": "pdf",
+          "sourcePath": "documents/meeting-raw.md",
+          "title": "Standup notes"
+        }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "bodyMatching": "agent eval|Android|Allen" },
+      "step1": { "jsonFields": ["uri", "format", "bytes"] }
+    }
+  },
+  {
+    "id": "gen-seq-csv-extract-then-read",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "User uploaded a CSV quote sheet — extract and read it.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/vendor-quotes.csv": "vendor,item,price_usd\nAcme,Sensor,42\nBetaCo,Sensor,38\n"
+      }
+    },
+    "toolSequence": [
+      {
+        "name": "extract_document",
+        "args": { "sourcePath": "documents/vendor-quotes.csv" }
+      },
+      {
+        "name": "read_file",
+        "argsFromPrev": { "path": "uri" }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "jsonFields": ["uri", "text", "sourcePath"], "bodyMatching": "Acme|BetaCo|38" },
+      "step1": { "bodyMatching": "Acme|BetaCo|Sensor" }
+    }
+  },
+  {
+    "id": "gen-compose-summarize-meeting-return",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Read documents/standup.md and reply with 3 action items for me.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/standup.md": "# Standup\n\n1. Merge agent scenarios (Allen)\n2. Smoke-test mobile push (Xiaofeng)\n3. Draft release notes (Allen)\n"
+      }
+    },
+    "allowTools": ["read_file", "list_dir", "search_files"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"read_file\",\"args\":{\"path\":\"documents/standup.md\"}}]\n```"
+      },
+      {
+        "reply": "Here are your action items:\n1. Merge agent scenarios (Allen)\n2. Smoke-test mobile push (Xiaofeng)\n3. Draft release notes (Allen)"
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["read_file"],
+      "finalMatching": "Merge agent|mobile push|release notes"
+    }
+  },
+  {
+    "id": "gen-compose-reconcile-two-docs-write-summary",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Compare documents/quote-a.md and documents/quote-b.md. Write a short recommendation to documents/quote-decision.md and tell me which vendor wins.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/quote-a.md": "# Acme\nSensor kit: $420, lead time 14 days.\n",
+        "documents/quote-b.md": "# BetaCo\nSensor kit: $380, lead time 21 days.\n"
+      }
+    },
+    "allowTools": ["read_file", "write_file"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"read_file\",\"args\":{\"path\":\"documents/quote-a.md\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"read_file\",\"args\":{\"path\":\"documents/quote-b.md\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"write_file\",\"args\":{\"path\":\"documents/quote-decision.md\",\"content\":\"# Decision\\nPrefer BetaCo at $380 unless 14-day lead time is critical.\\n\"}}]\n```"
+      },
+      {
+        "reply": "I saved documents/quote-decision.md. Recommendation: BetaCo wins on price ($380 vs $420) unless you need Acme's faster 14-day lead time."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["read_file", "read_file", "write_file"],
+      "minToolRounds": 3,
+      "finalMatching": "BetaCo|\\$380|quote-decision"
+    }
+  },
+  {
+    "id": "gen-compose-export-pdf-tell-user-path",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Export documents/brief.md as a PDF and tell me where to find it.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/brief.md": "# Weekly brief\n\nStatus: green. Token: deliver-uri-ok\n"
+      }
+    },
+    "allowTools": ["export_document", "read_file"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"export_document\",\"args\":{\"format\":\"pdf\",\"sourcePath\":\"documents/brief.md\",\"title\":\"Weekly brief\"}}]\n```"
+      },
+      {
+        "reply": "Exported. Open the PDF at the returned uri under output/exports/ (deliver-uri-ok content is included)."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["export_document"],
+      "finalMatching": "output/exports|Exported|uri|PDF"
+    }
+  },
+  {
+    "id": "gen-compose-extract-csv-answer-cheapest",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Extract documents/vendor-quotes.csv and tell me the cheapest Sensor vendor.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/vendor-quotes.csv": "vendor,item,price_usd\nAcme,Sensor,42\nBetaCo,Sensor,38\n"
+      }
+    },
+    "allowTools": ["extract_document", "read_file"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"extract_document\",\"args\":{\"sourcePath\":\"documents/vendor-quotes.csv\"}}]\n```"
+      },
+      {
+        "reply": "Cheapest Sensor is BetaCo at 38 USD."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["extract_document"],
+      "finalMatching": "BetaCo|38"
+    }
+  },
+  {
+    "id": "gen-live-user-summarize-meeting",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/user-standup.md": "# Standup 25 Oct\n\nAttendees: Allen, Xiaofeng\n\nDecisions:\n- Ship agent eval tonight\n- Delay MQTT demo to Friday\n\nActions:\n- Allen: land live-llm pack\n- Xiaofeng: verify FCM on Pixel\n"
+      }
+    },
+    "prompt": "Please read documents/user-standup.md and reply with: (1) a one-sentence summary, (2) the two action owners. Do not invent extra attendees.",
+    "expect": {
+      "liveTools": ["read_file", "search_files", "list_dir"],
+      "requireHonesty": true,
+      "honestyMatching": ["Allen|Xiaofeng|agent eval|FCM|Pixel|MQTT|summary|行动|总结"]
+    }
+  },
+  {
+    "id": "gen-live-user-notes-to-pdf-path",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/user-brief.md": "# Client brief\n\nProduct: EnvoyHome agent\nAsk: send a PDF of this brief\nMarker: brief-pdf-marker-77\n"
+      }
+    },
+    "prompt": "Export documents/user-brief.md to PDF with export_document, then tell me the output path/uri so I can download it.",
+    "expect": {
+      "liveTools": ["export_document"],
+      "requireHonesty": true,
+      "honestyMatching": ["export_document|output/exports|\\.pdf|uri|path|导出"]
+    }
+  },
+  {
+    "id": "gen-live-user-find-deadline",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/project-alpha.md": "# Alpha\nKickoff done.\n",
+        "documents/project-beta.md": "# Beta\nHard deadline: 2026-11-03 for beta freeze. Token: deadline-token-03\n"
+      }
+    },
+    "prompt": "Search my documents for the beta freeze deadline and tell me the exact date. Quote the deadline token if you see it.",
+    "expect": {
+      "liveTools": ["search_files", "read_file", "list_dir"],
+      "requireHonesty": true,
+      "honestyMatching": ["2026-11-03|deadline-token-03|beta freeze|11.?03"]
+    }
+  },
+  {
+    "id": "gen-live-user-compare-quotes-decide",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/quote-acme.md": "# Acme quote\nWidget X: $520, warranty 12 months.\n",
+        "documents/quote-betaco.md": "# BetaCo quote\nWidget X: $465, warranty 18 months.\n"
+      }
+    },
+    "prompt": "Read both quote files under documents (quote-acme.md and quote-betaco.md). Recommend which vendor to pick for Widget X and why in 2-3 sentences. Optionally write documents/quote-pick.md with your decision.",
+    "expect": {
+      "liveTools": ["read_file", "write_file", "list_dir", "search_files"],
+      "requireHonesty": true,
+      "honestyMatching": ["BetaCo|465|Acme|520|warranty|recommend|建议"]
+    }
+  },
+  {
+    "id": "gen-live-user-extract-csv-cheapest",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/parts.csv": "part,vendor,usd\nBolt,Acme,1.20\nBolt,BetaCo,0.95\nBolt,Cedar,1.05\n"
+      }
+    },
+    "prompt": "Use extract_document on documents/parts.csv (or read it), then tell me the cheapest Bolt vendor and price.",
+    "expect": {
+      "liveTools": ["extract_document", "read_file"],
+      "requireHonesty": true,
+      "honestyMatching": ["BetaCo|0\\.95|cheapest|最低"]
+    }
+  },
+  {
+    "id": "gen-live-user-checklist-from-notes",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/travel-notes.md": "# Trip\nNeed: passport, charger, meds, hotel booking printout.\nFlight: CA123 on Nov 12.\n"
+      }
+    },
+    "prompt": "Read documents/travel-notes.md and reply with a short packing checklist I can glance at on my phone (bullet list). Include the flight number.",
+    "expect": {
+      "liveTools": ["read_file"],
+      "requireHonesty": true,
+      "honestyMatching": ["passport|charger|CA123|checklist|清单|\\-"]
+    }
+  },
+  {
+    "id": "gen-live-user-zh-summarize-doc",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "locale": "zh",
+    "setup": {
+      "seedFiles": {
+        "documents/周报.md": "# 周报\n本周完成：代理评测包、推送联调。\n风险：MQTT 演示延期到周五。\n标记：周报标记甲\n"
+      }
+    },
+    "prompt": "请阅读 documents/周报.md，用中文回复：完成事项两点 + 一个风险。不要编造文件里没有的内容。",
+    "expect": {
+      "liveTools": ["read_file", "list_dir", "search_files"],
+      "requireHonesty": true,
+      "honestyMatching": ["评测|推送|MQTT|周五|风险|周报"]
+    }
+  },
+  {
+    "id": "gen-live-user-write-reply-export-docx",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/inbound-ask.md": "# Email from client\nPlease confirm whether EnvoyHome can export meeting notes to Word.\nMarker: client-ask-word-export\n"
+      }
+    },
+    "prompt": "Read documents/inbound-ask.md, write a short polite reply into documents/outbound-reply.md confirming Word (docx) export is supported, then export that reply as docx and tell me the export uri.",
+    "expect": {
+      "liveTools": ["read_file", "write_file", "export_document"],
+      "requireHonesty": true,
+      "honestyMatching": ["docx|export|Word|outbound-reply|output/exports|uri|支持"]
+    }
+  },
+  {
+    "id": "gen-live-user-pdf-roundtrip-soft",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedExports": [
+        {
+          "path": "documents/seeded-memo.pdf",
+          "format": "pdf",
+          "title": "Seeded memo",
+          "markdown": "# Seeded memo\n\nUnique phrase: pdf-roundtrip-token-91\nNext step: confirm extract works.\n"
+        }
+      ]
+    },
+    "prompt": "Extract text from documents/seeded-memo.pdf with extract_document, then tell me the unique phrase you found.",
+    "expect": {
+      "liveTools": ["extract_document", "read_file"],
+      "requireHonesty": true,
+      "honestyMatching": ["pdf-roundtrip-token-91|extract|Seeded memo"]
+    }
+  }
+]

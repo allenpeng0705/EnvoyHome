@@ -5,14 +5,15 @@
 | **Document** | Project-local instructions consumed by OpenCode/Codex/Cursor/Aider/Devin/Gemini CLI |
 | **Owner** | Allen Peng |
 | **Status** | Living; bump when conventions change |
-| **Conflicts** | This file is subordinate to `design_doc/EnvoyHome-Design.md` and `design_doc/EnvoyHome-Implementation-Plan.md` |
+| **Conflicts** | This file is subordinate to `design_doc/EnvoyHome-Design.md`, `design_doc/EnvoyHome-Memory-Design.md`, `design_doc/EnvoyHome-Knowledge-RAG-Design.md`, and `design_doc/EnvoyHome-Implementation-Plan.md` |
 
 ## Ground truth (always read first)
 
 1. **`design_doc/EnvoyHome-Design.md`** — what we build, why, every Normative rule.
 2. **`design_doc/EnvoyHome-Memory-Design.md`** — how memory works (L0–L7, flush, LearnQueue).
-3. **`design_doc/EnvoyHome-Implementation-Plan.md`** — Build Stages **B0–B14**, Phase 2 epics **P2-A…E**, verification IDs, soft-risk mitigations.
-4. **`tests/min/conventions.md`** — 13 must-follow rules (R1–R13). **Read before editing any package code.**
+3. **`design_doc/EnvoyHome-Knowledge-RAG-Design.md`** — Doc KB (`knowledge/`), KnowYou (L4′), local SQLite hybrid RAG, Home embed `:18793` (Adapt Mesh; never Mesh Local).
+4. **`design_doc/EnvoyHome-Implementation-Plan.md`** — Build Stages **B0–B14**, Phase 2 epics **P2-A…E**, verification IDs, soft-risk mitigations.
+5. **`tests/min/conventions.md`** — 13 must-follow rules (R1–R13). **Read before editing any package code.**
 
 ## Don't
 
@@ -34,6 +35,8 @@
 - Don't mask `peers:check` or any merge gate with `|| echo ...` (Plan §5.7).
 - Don't rely on Ext-Agent-only as the long-term phone path (Design §14 item 9).
 - Don't put EnvoyMesh Social product inside EnvoyHome (Design §14 item 10).
+- Don't take mem0 / Cognee / Neo4j as **required** Doc KB or KnowYou core — files under `knowledge/` + per-account SQLite (+ optional Home embed `:18793`) per `EnvoyHome-Knowledge-RAG-Design.md`; heavy backends are optional plugins only.
+- Don't attach to or reuse Mesh Envoy Local chat `:18790` or embed `:18791`; Home chat is `:18792`, Home embed is `:18793` (Design §8.5 / §8.5.1). Don't load an embedding GGUF into the chat sidecar.
 - Don't ship OpenClaw-shaped **shared interactive terminal/PTY**, **swarm-as-default** / **`sessions_spawn`**, a **Lobster-style** second workflow engine, or **device nodes** (`nodes` / camera/screen/computer-use as core tools) — Phase 2 uses path-jailed `edit_file`/`apply_patch`, ScheduleService heartbeat + standing orders, `spawn_helper`, and **`task`** (P2-E2/E3: envoy-harness `LocalMeshSubmitter`+`Agent` children; **parent** harness turns use `Agent.run` — `runTurn` is fallback/tests only; `ENVOYHOME_PARENT_AGENT=0` rollback) under Q10. Nodes stay Defer / mesh-first (Design §19.3 `2026-10-22`; §19.9–§19.13; `2026-10-20t`).
 
 ## Do

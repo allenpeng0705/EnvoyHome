@@ -136,6 +136,10 @@ export interface RouterDeps {
   liveDevices?: import("./push-live.js").LiveDevicePresence;
   /** EnvoyHome Local / Ollama engine (Design §8.5). */
   localEngine: import("./local-engine/service.js").LocalEngineService;
+  /** Home embed engine :18793 (Design §8.5.1). */
+  embedEngine?: import("./local-engine/embed-engine.js").EmbedEngineService;
+  /** Doc KB + KnowYou (Knowledge-RAG). */
+  knowledge?: import("./knowledge-service.js").KnowledgeService;
   /** Local fake-ha demo (optional — tests may omit). */
   demoHa?: import("./demo-ha.js").DemoHaService;
   /** Local fake-mqtt demo (optional — tests may omit; can run alongside demoHa). */
@@ -311,7 +315,7 @@ function mapStoreError(err: unknown): never {
 function mapLocalEngineError(err: unknown): void {
   if (
     err instanceof Error &&
-    /envoyhome\.(local_engine_|ollama_)/.test(err.message)
+    /envoyhome\.(local_engine_|ollama_|embed_)/.test(err.message)
   ) {
     throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", err.message);
   }
@@ -1952,6 +1956,172 @@ export function createDispatcher(deps: RouterDeps) {
           mapStoreError(err);
         }
       }
+      case "home.getEmbedEngineStatus": {
+        if (!deps.embedEngine) throw new Error("envoyhome.unavailable: embedEngine");
+        return await deps.embedEngine.getStatus();
+      }
+      case "home.enableEmbedEngine": {
+        if (!deps.embedEngine) throw new Error("envoyhome.unavailable: embedEngine");
+        try {
+          const preferRaw = typeof params.prefer === "string" ? params.prefer : undefined;
+          if (preferRaw === "attach") {
+            throw Object.assign(
+              new Error(
+                "envoyhome.local_engine_independent: Home embed never attaches to Mesh :18791 — use spawn or ollama",
+              ),
+              { code: "local_engine_independent" },
+            );
+          }
+          const status = await deps.embedEngine.enable({
+            ...(preferRaw === "auto" || preferRaw === "spawn" || preferRaw === "ollama"
+              ? { prefer: preferRaw }
+              : {}),
+            ...(typeof params.modelId === "string" ? { modelId: params.modelId } : {}),
+            ...(typeof params.ollamaModel === "string"
+              ? { ollamaModel: params.ollamaModel }
+              : {}),
+            ...(typeof params.ollamaBaseUrl === "string"
+              ? { ollamaBaseUrl: params.ollamaBaseUrl }
+              : {}),
+          });
+          // setOnModelChange marks stale; when ready, backfill re-embed (V-EMB-6 §5.5).
+          if (deps.knowledge && status.ready) {
+            const ids = (await deps.accounts.list()).map((a) => a.accountId);
+            void deps.knowledge.backfillEmbeddings(ids).catch(() => undefined);
+          }
+          return status;
+        } catch (err) {
+          mapLocalEngineError(err);
+          mapStoreError(err);
+        }
+      }
+      case "home.disableEmbedEngine": {
+        if (!deps.embedEngine) throw new Error("envoyhome.unavailable: embedEngine");
+        return await deps.embedEngine.disable();
+      }
+      case "home.downloadEmbedModel": {
+        if (!deps.embedEngine) throw new Error("envoyhome.unavailable: embedEngine");
+        try {
+          const modelId =
+            typeof params.modelId === "string" && params.modelId.length > 0
+              ? params.modelId
+              : undefined;
+          return deps.embedEngine.downloadModel(modelId);
+        } catch (err) {
+          mapLocalEngineError(err);
+          mapStoreError(err);
+        }
+      }
+      case "home.cancelEmbedModelDownload": {
+        if (!deps.embedEngine) throw new Error("envoyhome.unavailable: embedEngine");
+        try {
+          const fileName = typeof params.fileName === "string" ? params.fileName : "";
+          return await deps.embedEngine.cancelModelDownload({ fileName });
+        } catch (err) {
+          mapLocalEngineError(err);
+          mapStoreError(err);
+        }
+      }
+      case "home.resumeEmbedModelDownload": {
+        if (!deps.embedEngine) throw new Error("envoyhome.unavailable: embedEngine");
+        try {
+          const fileName = typeof params.fileName === "string" ? params.fileName : "";
+          return deps.embedEngine.resumeModelDownload({ fileName });
+        } catch (err) {
+          mapLocalEngineError(err);
+          mapStoreError(err);
+        }
+      }
+      case "home.searchKnowledge": {
+        if (!deps.knowledge) throw new Error("envoyhome.unavailable: knowledge");
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          return await deps.knowledge.searchKnowledge(accountId, params.query as string, {
+            ...(typeof params.limit === "number" ? { limit: params.limit } : {}),
+          });
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.reindexKnowledge": {
+        if (!deps.knowledge) throw new Error("envoyhome.unavailable: knowledge");
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          return await deps.knowledge.reindexKnowledge(accountId);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.getKnowledgeStatus": {
+        if (!deps.knowledge) throw new Error("envoyhome.unavailable: knowledge");
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          return await deps.knowledge.knowledgeStatus(accountId);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.searchKnowYou": {
+        if (!deps.knowledge) throw new Error("envoyhome.unavailable: knowledge");
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          return await deps.knowledge.searchKnowYou(accountId, params.query as string, {
+            ...(typeof params.limit === "number" ? { limit: params.limit } : {}),
+          });
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.updateKnowYou": {
+        if (!deps.knowledge) throw new Error("envoyhome.unavailable: knowledge");
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          const action = params.action as "forget" | "supersede";
+          return await deps.knowledge.updateKnowYou(accountId, {
+            action,
+            ...(typeof params.id === "string" ? { id: params.id } : {}),
+            ...(typeof params.key === "string" ? { key: params.key } : {}),
+            ...(typeof params.text === "string" ? { text: params.text } : {}),
+          });
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.setKnowledgePolicy": {
+        if (!deps.knowledge) throw new Error("envoyhome.unavailable: knowledge");
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          return await deps.knowledge.setPolicy(accountId, {
+            ...(typeof params.knowledgeInject === "string"
+              ? {
+                  knowledgeInject: params.knowledgeInject as "off" | "tool" | "auto",
+                }
+              : {}),
+            ...(typeof params.episodicInject === "string"
+              ? {
+                  episodicInject: params.episodicInject as "off" | "tool" | "auto",
+                }
+              : {}),
+            ...(typeof params.knowledgeInjectBudget === "number"
+              ? { knowledgeInjectBudget: params.knowledgeInjectBudget }
+              : {}),
+            ...(typeof params.episodicInjectBudget === "number"
+              ? { episodicInjectBudget: params.episodicInjectBudget }
+              : {}),
+          });
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.getKnowledgePolicy": {
+        if (!deps.knowledge) throw new Error("envoyhome.unavailable: knowledge");
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          return await deps.knowledge.getPolicy(accountId);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
       case "home.listHarnesses": {
         return {
           harnesses: HARNESS_CATALOG.map((h) => ({
@@ -1998,6 +2168,8 @@ export function createDispatcher(deps: RouterDeps) {
             policy: deps.turns.policy,
             mediaGenerate: deps.turns.mediaGenerate,
             hasImageGenerateProvider: () => deps.providers.hasImageGenerateProvider(),
+            ...(deps.embedEngine ? { embedEngine: deps.embedEngine } : {}),
+            ...(deps.knowledge ? { knowledge: deps.knowledge } : {}),
           },
           {
             dualModeNotes: deps.meshDualModeNotes?.() ?? [],
@@ -2036,6 +2208,8 @@ export function createDispatcher(deps: RouterDeps) {
             policy: deps.turns.policy,
             mediaGenerate: deps.turns.mediaGenerate,
             hasImageGenerateProvider: () => deps.providers.hasImageGenerateProvider(),
+            ...(deps.embedEngine ? { embedEngine: deps.embedEngine } : {}),
+            ...(deps.knowledge ? { knowledge: deps.knowledge } : {}),
           },
           { meshStatus: deps.meshStatus(), ownerAccountId },
         );

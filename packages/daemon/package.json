@@ -22,7 +22,9 @@
     "build": "tsc -p tsconfig.json",
     "lint": "tsc -p tsconfig.json --noEmit",
     "dev": "node ./dist/bin/envoyhome-daemon.js",
-    "test": "tsc -p tsconfig.json && node --test test/*.test.ts"
+    "test": "tsc -p tsconfig.json && node --test test/*.test.ts",
+    "test:agent-scenarios": "tsc -p tsconfig.json && node --test test/agent-scenarios.test.ts",
+    "test:web-search-browser": "tsc -p tsconfig.json && node --test test/web-search-browser.test.ts test/web-search-browser-playwright.test.ts"
   },
   "dependencies": {
     "@envoyhome/channel-api": "workspace:*",

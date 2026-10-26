@@ -1,0 +1,115 @@
+[
+  {
+    "id": "gen-seq-skills-list-then-view",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "List skills, then open the morning brief skill body.",
+    "setup": { "installSampleSkill": true },
+    "toolSequence": [
+      { "name": "skills_list", "args": {} },
+      {
+        "name": "skill_view",
+        "args": { "path": "SKILL.md" },
+        "useInstalledSkillId": true
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "jsonFields": ["skills", "count"], "countMin": 1 },
+      "step1": { "bodyMatching": "Morning brief|weather|coffee" }
+    }
+  },
+  {
+    "id": "gen-seq-schedule-propose-list-confirm",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Propose a reminder, list, then confirm.",
+    "toolSequence": [
+      {
+        "name": "schedule",
+        "args": {
+          "action": "propose",
+          "text": "Remind me tomorrow at 7:00 to stretch"
+        }
+      },
+      { "name": "schedule", "args": { "action": "list" } },
+      {
+        "name": "schedule",
+        "args": { "action": "confirm" },
+        "usePriorProposalId": true
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "jsonFields": ["proposalId", "resolvedLocal"] },
+      "step2": { "confirmOk": true }
+    }
+  },
+  {
+    "id": "gen-seq-write-then-read-file",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Write a note then read it back.",
+    "setup": { "sandboxFiles": true },
+    "toolSequence": [
+      {
+        "name": "write_file",
+        "args": { "path": "documents/note.md", "content": "# Hello compose\nline2\n" }
+      },
+      {
+        "name": "read_file",
+        "args": { "path": "documents/note.md" }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step1": { "bodyMatching": "Hello compose" }
+    }
+  },
+  {
+    "id": "gen-seq-list-dir-then-read",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "List documents then read the note.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": { "documents/seed.txt": "seed-body-xyz" }
+    },
+    "toolSequence": [
+      { "name": "list_dir", "args": { "path": "documents" } },
+      { "name": "read_file", "args": { "path": "documents/seed.txt" } }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "bodyMatching": "seed" },
+      "step1": { "bodyMatching": "seed-body-xyz" }
+    }
+  },
+  {
+    "id": "gen-seq-skills-then-schedule",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Check skills catalogue then propose a reminder.",
+    "setup": { "installSampleSkill": true },
+    "toolSequence": [
+      { "name": "skills_list", "args": {} },
+      {
+        "name": "schedule",
+        "args": {
+          "action": "propose",
+          "text": "Remind me in 15 minutes to drink water"
+        }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "countMin": 1 },
+      "step1": { "jsonFields": ["proposalId"] }
+    }
+  }
+]

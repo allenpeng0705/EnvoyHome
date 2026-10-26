@@ -1,0 +1,87 @@
+[
+  {
+    "id": "sched-nl-missing-time-asks",
+    "pack": "schedule",
+    "mode": "nl",
+    "live": true,
+    "locale": "en",
+    "prompt": "Remind me to call mom",
+    "expect": {
+      "scheduleNl": { "ok": false },
+      "liveTools": ["schedule", "ask_user"],
+      "honestyMatching": ["when|time|clock|几点|何時|ask|need"]
+    }
+  },
+  {
+    "id": "sched-nl-every-day-8am",
+    "pack": "schedule",
+    "mode": "nl",
+    "live": true,
+    "locale": "en",
+    "prompt": "Remind me every day at 8:00 to drink water",
+    "expect": {
+      "scheduleNl": { "ok": true, "kind": "cron" },
+      "liveTools": ["schedule"]
+    }
+  },
+  {
+    "id": "sched-nl-next-monday-9am",
+    "pack": "schedule",
+    "mode": "nl",
+    "live": false,
+    "locale": "en",
+    "prompt": "Remind me next Monday at 9:00 to review inbox",
+    "expect": {
+      "scheduleNl": { "ok": true, "kind": "at", "hour": 9, "dayOffset": 3 }
+    }
+  },
+  {
+    "id": "sched-nl-de-tomorrow-9",
+    "pack": "schedule",
+    "mode": "nl",
+    "live": true,
+    "locale": "de",
+    "prompt": "Erinnere mich morgen um 9 Uhr Müll rauszubringen",
+    "expect": {
+      "scheduleNl": { "ok": true, "kind": "at", "hour": 9, "dayOffset": 1 },
+      "liveTools": ["schedule"],
+      "honestyMatching": ["schedule|Erinner|Proposed|9"]
+    }
+  },
+  {
+    "id": "sched-nl-fr-every-monday",
+    "pack": "schedule",
+    "mode": "nl",
+    "live": false,
+    "locale": "fr",
+    "prompt": "Rappelle-moi chaque lundi à 9h de me lever",
+    "expect": {
+      "scheduleNl": { "ok": true, "kind": "cron" }
+    }
+  },
+  {
+    "id": "sched-nl-zh-every-weekday-9",
+    "pack": "schedule",
+    "mode": "nl",
+    "live": true,
+    "locale": "zh",
+    "prompt": "每个工作日早上九点提醒我站起来活动",
+    "expect": {
+      "scheduleNl": { "ok": true, "kind": "cron" },
+      "liveTools": ["schedule"]
+    }
+  },
+  {
+    "id": "sched-nl-monthly-needs-day-ask",
+    "pack": "schedule",
+    "mode": "nl",
+    "live": true,
+    "locale": "en",
+    "prompt": "Remind me every month at 9am to pay rent",
+    "expect": {
+      "scheduleNl": { "ok": false },
+      "liveTools": ["schedule", "ask_user"],
+      "honestyMatching": ["day|几号|which day|month|ask"]
+    }
+  }
+]

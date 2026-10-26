@@ -1,0 +1,39 @@
+[
+  {
+    "id": "sched-turn-schedules-surface-tools",
+    "pack": "schedule",
+    "mode": "turn",
+    "live": false,
+    "purpose": "schedules",
+    "prompt": "What can you do here?",
+    "expect": {
+      "surfaceTools": ["schedule"],
+      "surfaceToolsExact": true,
+      "surfaceToolsForbidden": ["ha_call_service", "mqtt_publish", "web_search"]
+    }
+  },
+  {
+    "id": "sched-turn-general-has-schedule",
+    "pack": "schedule",
+    "mode": "turn",
+    "live": false,
+    "purpose": "general",
+    "prompt": "Remind me tomorrow at 8am",
+    "expect": {
+      "surfaceToolsIncludes": ["schedule"],
+      "surfaceToolsForbidden": []
+    }
+  },
+  {
+    "id": "sched-turn-live-reminder-soft",
+    "pack": "schedule",
+    "mode": "turn",
+    "live": true,
+    "purpose": "schedules",
+    "prompt": "Remind me tomorrow at 8:00 to take out trash",
+    "expect": {
+      "liveTools": ["schedule"],
+      "honestyMatching": ["schedule|Proposed|remind|reminder|提案|提醒"]
+    }
+  }
+]

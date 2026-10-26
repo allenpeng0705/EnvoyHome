@@ -1,0 +1,83 @@
+[
+  {
+    "id": "gen-tool-skills-list",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "What skills are available?",
+    "tool": {
+      "name": "skills_list",
+      "args": {},
+      "installSampleSkill": true
+    },
+    "expect": {
+      "toolOk": true,
+      "jsonFields": ["skills", "count"],
+      "countMin": 1
+    }
+  },
+  {
+    "id": "gen-tool-skill-view",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Show me the morning brief skill",
+    "tool": {
+      "name": "skill_view",
+      "args": {},
+      "installSampleSkill": true,
+      "useInstalledSkillId": true
+    },
+    "expect": {
+      "toolOk": true,
+      "bodyMatching": "Morning brief|weather|coffee"
+    }
+  },
+  {
+    "id": "gen-tool-skill-view-path-jail",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Read ../../etc/passwd from a skill",
+    "tool": {
+      "name": "skill_view",
+      "args": { "path": "../../etc/passwd" },
+      "installSampleSkill": true,
+      "useInstalledSkillId": true,
+      "refuse": true
+    },
+    "expect": {
+      "refuseMatching": "jail|escape|refus|invalid|path|outside"
+    }
+  },
+  {
+    "id": "gen-tool-web-search-disabled-policy",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Search the web for weather",
+    "tool": {
+      "name": "web_search",
+      "args": { "query": "weather Shanghai" },
+      "webSearchEnabled": false
+    },
+    "expect": {
+      "catalogueAvailable": false
+    }
+  },
+  {
+    "id": "gen-tool-web-search-enabled-catalogue",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Search the web for weather",
+    "tool": {
+      "name": "web_search",
+      "args": { "query": "weather Shanghai" },
+      "webSearchEnabled": true
+    },
+    "expect": {
+      "catalogueAvailable": true
+    }
+  }
+]

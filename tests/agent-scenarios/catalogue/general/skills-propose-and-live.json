@@ -1,0 +1,114 @@
+[
+  {
+    "id": "gen-tool-skill-propose-create",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Propose a new packing-list skill.",
+    "tool": {
+      "name": "skill_propose",
+      "args": {
+        "action": "create",
+        "id": "packing-list",
+        "content": "---\nname: Packing list\ndescription: Travel packing checklist\n---\n# Packing list\nRemember passport and charger.\n"
+      },
+      "needsMemory": true
+    },
+    "expect": {
+      "toolOk": true,
+      "bodyMatching": "propose|pending|learn|ok|skill|packing"
+    }
+  },
+  {
+    "id": "gen-compose-skills-list-propose-view",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "List skills; if packing-list is missing, propose it; then try to view morning brief.",
+    "setup": { "installSampleSkill": true },
+    "allowTools": ["skills_list", "skill_propose", "skill_view"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"skills_list\",\"args\":{}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"skill_view\",\"args\":{\"id\":\"$skillId\"}}]\n```"
+      },
+      {
+        "reply": "Morning brief is available for weather and coffee tips."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["skills_list", "skill_view"],
+      "minToolRounds": 2,
+      "finalMatching": "brief|weather|coffee|Morning"
+    }
+  },
+  {
+    "id": "gen-live-write-note",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Please create a short note at documents/agent-eval-note.md saying 'eval live ok' using the write_file tool, then confirm the path.",
+    "expect": {
+      "liveTools": ["write_file", "read_file"],
+      "honestyMatching": ["write_file|documents/|eval live|wrote|已写|保存"]
+    }
+  },
+  {
+    "id": "gen-live-search-docs",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Search my documents folder for markdown files (*.md) with the search_files tool and tell me what you found.",
+    "expect": {
+      "liveTools": ["search_files", "list_dir"],
+      "honestyMatching": ["search_files|documents|\\.md|found|没有|no files|list_dir"]
+    }
+  },
+  {
+    "id": "gen-live-web-search-soft",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "If web search is available, search for 'EnvoyMesh home agent' with web_search; otherwise say that web search is disabled.",
+    "expect": {
+      "liveTools": ["web_search"],
+      "honestyMatching": ["web_search|disabled|unavailable|search|结果|EnvoyMesh|不能"]
+    }
+  },
+  {
+    "id": "gen-live-multi-step-plan",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "I want a recurring stretch reminder every weekday at 10:00 and also a one-shot reminder tomorrow at 18:00 to buy milk. Propose both with the schedule tool (do not invent times).",
+    "expect": {
+      "liveTools": ["schedule"],
+      "honestyMatching": ["schedule|Proposed|weekday|tomorrow|18|10|提醒|提案"]
+    }
+  },
+  {
+    "id": "gen-turn-general-has-file-tools",
+    "pack": "general",
+    "mode": "turn",
+    "live": false,
+    "purpose": "general",
+    "prompt": "What file tools do you have?",
+    "expect": {
+      "surfaceToolsIncludes": [
+        "read_file",
+        "write_file",
+        "list_dir",
+        "search_files",
+        "export_document",
+        "skills_list",
+        "schedule"
+      ]
+    }
+  }
+]

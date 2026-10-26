@@ -22,6 +22,12 @@
 node scripts/smoke-v1.mjs          # self-contained temp daemon — preferred
 # or against a running daemon:
 pnpm smoke:rpc
+
+# Agent prompt catalogue (Schedule + General) — deterministic CI:
+pnpm agent:scenarios               # V-AGENT-SCENARIO-1
+# Optional live LLM soft-eval (uses ~/.envoyhome LLM settings):
+pnpm agent:eval                            # V-AGENT-SCENARIO-2 — starts daemon if needed
+# Catalogue docs: tests/agent-scenarios/README.md
 ```
 
 **Related harden gates**

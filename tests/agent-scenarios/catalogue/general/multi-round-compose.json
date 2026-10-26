@@ -1,0 +1,128 @@
+[
+  {
+    "id": "gen-compose-skills-list-then-view-rounds",
+    "pack": "general",
+    "mode": "compose",
+    "live": true,
+    "prompt": "List available skills, then open the morning brief skill and summarize it.",
+    "setup": { "installSampleSkill": true },
+    "allowTools": ["skills_list", "skill_view"],
+    "rounds": [
+      {
+        "reply": "I'll list skills first.\n```envoyhome-tools\n[{\"tool\":\"skills_list\",\"args\":{}}]\n```"
+      },
+      {
+        "reply": "Opening the brief.\n```envoyhome-tools\n[{\"tool\":\"skill_view\",\"args\":{\"id\":\"$skillId\",\"path\":\"SKILL.md\"}}]\n```"
+      },
+      {
+        "reply": "The morning brief skill covers weather and coffee tips."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["skills_list", "skill_view"],
+      "minToolRounds": 2,
+      "finalMatching": "weather|coffee|brief",
+      "liveTools": ["skills_list", "skill_view"],
+      "honestyMatching": ["skill|brief|weather"]
+    }
+  },
+  {
+    "id": "gen-compose-parallel-fence-list-and-schedule",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "List skills and list my schedules in one step, then finish.",
+    "setup": { "installSampleSkill": true },
+    "allowTools": ["skills_list", "schedule"],
+    "rounds": [
+      {
+        "reply": "Doing both.\n```envoyhome-tools\n[{\"tool\":\"skills_list\",\"args\":{}},{\"tool\":\"schedule\",\"args\":{\"action\":\"list\"}}]\n```"
+      },
+      {
+        "reply": "Here is what I found."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["skills_list", "schedule"],
+      "minToolRounds": 1,
+      "finalMatching": "found|Here"
+    }
+  },
+  {
+    "id": "gen-compose-read-after-write-rounds",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Write documents/memo.md then read it back.",
+    "setup": { "sandboxFiles": true },
+    "allowTools": ["write_file", "read_file"],
+    "rounds": [
+      {
+        "reply": "Writing.\n```envoyhome-tools\n[{\"tool\":\"write_file\",\"args\":{\"path\":\"documents/memo.md\",\"content\":\"# Memo\\nround-trip-ok\\n\"}}]\n```"
+      },
+      {
+        "reply": "Reading.\n```envoyhome-tools\n[{\"tool\":\"read_file\",\"args\":{\"path\":\"documents/memo.md\"}}]\n```"
+      },
+      {
+        "reply": "The file contains round-trip-ok."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["write_file", "read_file"],
+      "minToolRounds": 2,
+      "finalMatching": "round-trip-ok"
+    }
+  },
+  {
+    "id": "gen-compose-schedule-propose-then-confirm-rounds",
+    "pack": "general",
+    "mode": "compose",
+    "live": true,
+    "purpose": "schedules",
+    "prompt": "Propose a reminder for tomorrow at 8am to stretch, then confirm it after I agree.",
+    "allowTools": ["schedule"],
+    "rounds": [
+      {
+        "reply": "Proposing.\n```envoyhome-tools\n[{\"tool\":\"schedule\",\"args\":{\"action\":\"propose\",\"text\":\"Remind me tomorrow at 8:00 to stretch\"}}]\n```"
+      },
+      {
+        "reply": "Confirming.\n```envoyhome-tools\n[{\"tool\":\"schedule\",\"args\":{\"action\":\"confirm\",\"proposalId\":\"$proposalId\"}}]\n```"
+      },
+      {
+        "reply": "Reminder is armed for tomorrow morning."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["schedule", "schedule"],
+      "minToolRounds": 2,
+      "finalMatching": "armed|Reminder|tomorrow",
+      "liveTools": ["schedule"],
+      "honestyMatching": ["schedule|Proposed|armed|remind"]
+    }
+  },
+  {
+    "id": "gen-compose-skill-view-then-ask-user",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Open the skill then ask which tip I want.",
+    "setup": { "installSampleSkill": true },
+    "allowTools": ["skill_view", "ask_user"],
+    "rounds": [
+      {
+        "reply": "Loading skill.\n```envoyhome-tools\n[{\"tool\":\"skill_view\",\"args\":{\"id\":\"$skillId\"}}]\n```"
+      },
+      {
+        "reply": "Which tip?\n```envoyhome-tools\n[{\"tool\":\"ask_user\",\"args\":{\"question\":\"Which tip?\",\"options\":[\"weather\",\"coffee\"],\"selection\":\"one\"}}]\n```"
+      },
+      {
+        "reply": "Waiting for your pick."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["skill_view", "ask_user"],
+      "minToolRounds": 2,
+      "finalMatching": "Waiting|pick"
+    }
+  }
+]

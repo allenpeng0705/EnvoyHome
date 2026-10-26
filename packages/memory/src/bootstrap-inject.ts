@@ -39,10 +39,10 @@ export const RAW_SOFT_CAP = {
 
 /**
  * Fixed duty line when any standing inject is truncated (V-MEM-10).
- * Must mention recall and session_search.
+ * Must mention recall, session_search, and knowledge_search (V-MEM-10 / Knowledge-RAG).
  */
 export const STANDING_DUTY_LINE =
-  "Standing bootstrap may be partial — use recall / session_search for more.";
+  "Standing bootstrap may be partial — use recall / session_search / knowledge_search for more.";
 
 /** @deprecated Use PRODUCT_IDENTITY_FLOOR from agent-identity — kept for import stability. */
 export { PRODUCT_IDENTITY_FLOOR as PRODUCT_IDENTITY_PROLOGUE } from "./agent-identity.js";

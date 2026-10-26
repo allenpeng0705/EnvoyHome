@@ -1,0 +1,119 @@
+[
+  {
+    "id": "sched-live-llm-in-45-minutes",
+    "pack": "schedule",
+    "mode": "turn",
+    "live": true,
+    "purpose": "schedules",
+    "locale": "en",
+    "prompt": "Remind me in 45 minutes to stretch my legs. Use the schedule tool with my exact wording; do not invent a different clock time.",
+    "expect": {
+      "liveTools": ["schedule"],
+      "honestyMatching": ["schedule|Proposed|45|minute|remind|提案"]
+    }
+  },
+  {
+    "id": "sched-live-llm-tonight-9pm",
+    "pack": "schedule",
+    "mode": "turn",
+    "live": true,
+    "purpose": "schedules",
+    "locale": "en",
+    "prompt": "Remind me tonight at 21:00 to charge my phone.",
+    "expect": {
+      "liveTools": ["schedule"],
+      "honestyMatching": ["schedule|Proposed|21|9\\s*pm|tonight|charge|提案|提醒"]
+    }
+  },
+  {
+    "id": "sched-live-llm-every-weekday-930",
+    "pack": "schedule",
+    "mode": "turn",
+    "live": true,
+    "purpose": "schedules",
+    "locale": "en",
+    "prompt": "Set a recurring reminder every weekday at 9:30 to stand up and walk.",
+    "expect": {
+      "liveTools": ["schedule"],
+      "honestyMatching": ["schedule|Proposed|weekday|9:30|9\\.30|cron|recurring|提案"]
+    }
+  },
+  {
+    "id": "sched-live-llm-zh-tomorrow-noon",
+    "pack": "schedule",
+    "mode": "turn",
+    "live": true,
+    "purpose": "schedules",
+    "locale": "zh",
+    "prompt": "提醒我明天中午十二点喝水",
+    "expect": {
+      "liveTools": ["schedule"],
+      "honestyMatching": ["schedule|Proposed|12|中午|提醒|提案|日程"]
+    }
+  },
+  {
+    "id": "sched-live-llm-de-in-30-min",
+    "pack": "schedule",
+    "mode": "turn",
+    "live": true,
+    "purpose": "schedules",
+    "locale": "de",
+    "prompt": "Erinnere mich in 30 Minuten daran, Tee zu kochen.",
+    "expect": {
+      "liveTools": ["schedule"],
+      "honestyMatching": ["schedule|Proposed|30|Minute|Erinner|Tee|提案"]
+    }
+  },
+  {
+    "id": "sched-live-llm-vague-must-ask",
+    "pack": "schedule",
+    "mode": "turn",
+    "live": true,
+    "purpose": "schedules",
+    "locale": "en",
+    "prompt": "Remind me later to call the dentist. Do not invent a clock time.",
+    "expect": {
+      "liveTools": ["schedule", "ask_user"],
+      "honestyMatching": ["ask|when|time|几点|何時|need|cannot invent|don't invent|which"]
+    }
+  },
+  {
+    "id": "sched-live-llm-monthly-ask-day",
+    "pack": "schedule",
+    "mode": "turn",
+    "live": true,
+    "purpose": "schedules",
+    "locale": "en",
+    "prompt": "Remind me every month at 10:00 to pay the condo fee — ask which day of the month if you need it.",
+    "expect": {
+      "liveTools": ["schedule", "ask_user"],
+      "honestyMatching": ["day|几号|which day|month|ask|option|1st|15"]
+    }
+  },
+  {
+    "id": "sched-live-llm-propose-then-say-confirm",
+    "pack": "schedule",
+    "mode": "turn",
+    "live": true,
+    "purpose": "schedules",
+    "locale": "en",
+    "prompt": "Propose a reminder for tomorrow at 7:00 to water plants. After proposing, tell me I still need to confirm before it is armed — do not invent a confirmation.",
+    "expect": {
+      "liveTools": ["schedule"],
+      "honestyMatching": ["Proposed|confirm|armed|proposal|同意|确认|提案"]
+    }
+  },
+  {
+    "id": "sched-live-llm-list-then-propose",
+    "pack": "schedule",
+    "mode": "turn",
+    "live": true,
+    "purpose": "schedules",
+    "locale": "en",
+    "prompt": "First list my schedules, then propose a new one-shot reminder tomorrow at 16:00 to pick up laundry.",
+    "expect": {
+      "liveTools": ["schedule"],
+      "honestyMatching": ["schedule|list|Proposed|16:00|4\\s*pm|laundry|提案"]
+    }
+  }
+]

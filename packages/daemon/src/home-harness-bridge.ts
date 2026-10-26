@@ -141,6 +141,9 @@ export interface HomeModelAdapterOptions {
   allowSandbox?: boolean;
   allowSmartHome?: boolean;
   schedulesOnly?: boolean;
+  /** Parent attended turns — fence MAY propose exec (ApprovalSink still asks). */
+  allowExec?: boolean;
+  allowHttpFetch?: boolean;
   /** Rewrite Home-style task fences into harness TaskInput. */
   normalizeTaskArgs?: boolean;
 }
@@ -172,6 +175,8 @@ export class HomeModelAdapter implements ModelAdapter {
       allowSandbox: this.opts.allowSandbox !== false,
       allowSmartHome: this.opts.allowSmartHome === true,
       schedulesOnly: this.opts.schedulesOnly === true,
+      allowExec: this.opts.allowExec === true,
+      allowHttpFetch: this.opts.allowHttpFetch === true,
     });
     const calls = tools.filter((t) => allowed.has(t.tool));
     if (calls.length > 0) {

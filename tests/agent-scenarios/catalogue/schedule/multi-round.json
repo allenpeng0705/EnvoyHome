@@ -1,0 +1,57 @@
+[
+  {
+    "id": "sched-compose-propose-list-rounds",
+    "pack": "schedule",
+    "mode": "compose",
+    "live": false,
+    "purpose": "schedules",
+    "prompt": "Propose tomorrow 9am water plants, then list schedules.",
+    "allowTools": ["schedule"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"schedule\",\"args\":{\"action\":\"propose\",\"text\":\"Remind me tomorrow at 9:00 to water plants\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"schedule\",\"args\":{\"action\":\"list\"}}]\n```"
+      },
+      {
+        "reply": "Proposed and listed."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["schedule", "schedule"],
+      "minToolRounds": 2,
+      "finalMatching": "Proposed|listed"
+    }
+  },
+  {
+    "id": "sched-seq-refuse-then-honest-propose",
+    "pack": "schedule",
+    "mode": "tool",
+    "live": false,
+    "prompt": "First invent whenInstant (must refuse), then propose with NL only.",
+    "toolSequence": [
+      {
+        "name": "schedule",
+        "args": {
+          "action": "propose",
+          "text": "tomorrow at 8am",
+          "whenInstant": "2026-10-10T00:00:00.000Z"
+        },
+        "refuse": true
+      },
+      {
+        "name": "schedule",
+        "args": {
+          "action": "propose",
+          "text": "Remind me tomorrow at 8:00 to stretch"
+        }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "refuseMatching": "refuses whenInstant|whenInstant" },
+      "step1": { "jsonFields": ["proposalId", "resolvedLocal"] }
+    }
+  }
+]

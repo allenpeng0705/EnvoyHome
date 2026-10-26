@@ -59,6 +59,34 @@ export async function collectDoctorIssues(
     } | null;
     /** True when an OpenAI-compat provider with secret exists. */
     hasImageGenerateProvider?: () => boolean;
+    /** Knowledge-RAG — Home embed + Doc KB index health. */
+    embedEngine?: {
+      getStatus: () => Promise<{
+        enabled: boolean;
+        ready: boolean;
+        mode: string;
+        hint?: string;
+      }>;
+    } | null;
+    knowledge?: {
+      knowledge: {
+        status: (accountId: string) => Promise<{
+          embedStale: boolean;
+          sectionCount: number;
+          lastReindexAt: string | null;
+        }>;
+      };
+      episodic: {
+        status: (accountId: string) => Promise<{
+          activeCount: number;
+          embedStale: boolean;
+          lastSummarizeAt: string | null;
+        }>;
+      };
+      getPolicy?: (accountId: string) => Promise<{ knowledgeInject: string }>;
+    } | null;
+    /** When true, KnowYou summarize was skipped for Privacy Mode this boot (optional). */
+    knowYouSummarizeSkippedPrivacy?: string[];
   },
   options: CollectDoctorOptions = {},
 ): Promise<DoctorIssue[]> {
@@ -256,6 +284,81 @@ export async function collectDoctorIssues(
         fixable: false,
       });
     }
+  }
+
+  // Knowledge-RAG §5 / V-EMB-6 — embed sidecar + stale indexes.
+  if (deps.embedEngine) {
+    const emb = await deps.embedEngine.getStatus();
+    if (emb.enabled && !emb.ready) {
+      issues.push({
+        id: "embed.sidecar_down",
+        severity: "warn",
+        message:
+          emb.hint ??
+          `Home embed engine enabled (${emb.mode}) but not ready — check download / Ollama / :18793`,
+        fixable: false,
+      });
+    }
+  }
+  if (deps.knowledge) {
+    const KNOWYOU_SOFT_CAP = 5000; // align with DEFAULT_KNOWYOU_ACTIVE_CAP
+    const KB_SECTION_SOFT_CAP = 2000; // align with DEFAULT_KNOWLEDGE_SECTION_CAP
+    for (const a of accountRows) {
+      const st = await deps.knowledge.knowledge.status(a.accountId);
+      if (st.embedStale) {
+        issues.push({
+          id: "knowledge.embed_model_mismatch",
+          severity: "warn",
+          message: `Doc KB vectors stale for ${a.accountId} — run home.reindexKnowledge after embed model change`,
+          fixable: false,
+        });
+      }
+      if (st.sectionCount === 0 && !st.lastReindexAt) {
+        issues.push({
+          id: "knowledge.index_stale",
+          severity: "info",
+          message: `Doc KB index empty for ${a.accountId} — add knowledge/*.md and reindex if you use Doc KB`,
+          fixable: false,
+        });
+      }
+      if (st.sectionCount >= KB_SECTION_SOFT_CAP) {
+        issues.push({
+          id: "knowledge.index_stale",
+          severity: "warn",
+          message: `Doc KB has ${st.sectionCount} sections for ${a.accountId} (soft cap ${KB_SECTION_SOFT_CAP}) — archive or split knowledge/`,
+          fixable: false,
+        });
+      }
+      try {
+        const ky = await deps.knowledge.episodic.status(a.accountId);
+        if (ky.activeCount > KNOWYOU_SOFT_CAP) {
+          issues.push({
+            id: "knowyou.over_cap",
+            severity: "warn",
+            message: `KnowYou has ${ky.activeCount} active rows for ${a.accountId} (soft cap ${KNOWYOU_SOFT_CAP}) — compact / summarize`,
+            fixable: false,
+          });
+        }
+        if (ky.embedStale) {
+          issues.push({
+            id: "knowledge.embed_model_mismatch",
+            severity: "warn",
+            message: `KnowYou vectors stale for ${a.accountId} — re-enable embed or reindex`,
+            fixable: false,
+          });
+        }
+      } catch {
+        /* no episodic yet */
+      }
+    }
+  }
+  for (const accountId of deps.knowYouSummarizeSkippedPrivacy ?? []) {
+    issues.push({
+      id: "knowyou.summarize_skipped_privacy",
+      severity: "info",
+      message: `KnowYou summarize skipped (Privacy Mode) for ${accountId}`,
+      fixable: false,
+    });
   }
 
   return issues;

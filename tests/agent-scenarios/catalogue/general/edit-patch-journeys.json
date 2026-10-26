@@ -1,0 +1,172 @@
+[
+  {
+    "id": "gen-seq-edit-file-then-read",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Surgically replace a unique string then read the file.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/edit-me.md": "# Note\n\nalpha line\nbeta unique token\ngamma\n"
+      }
+    },
+    "toolSequence": [
+      {
+        "name": "edit_file",
+        "args": {
+          "path": "documents/edit-me.md",
+          "oldString": "beta unique token",
+          "newString": "beta EDITED-OK"
+        }
+      },
+      {
+        "name": "read_file",
+        "args": { "path": "documents/edit-me.md" }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "jsonFields": ["ok", "path"] },
+      "step1": { "bodyMatching": "EDITED-OK" }
+    }
+  },
+  {
+    "id": "gen-tool-edit-file-multi-match-refuse",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Refuse non-unique oldString.",
+    "setup": {
+      "seedFiles": {
+        "documents/dup.md": "same\nsame\n"
+      }
+    },
+    "tool": {
+      "name": "edit_file",
+      "args": {
+        "path": "documents/dup.md",
+        "oldString": "same",
+        "newString": "other"
+      },
+      "refuse": true
+    },
+    "expect": {
+      "refuseMatching": "more than once|refuse|matches"
+    }
+  },
+  {
+    "id": "gen-tool-edit-file-path-jail-refuse",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Refuse path escape on edit_file.",
+    "tool": {
+      "name": "edit_file",
+      "args": {
+        "path": "../../../etc/passwd",
+        "oldString": "x",
+        "newString": "y"
+      },
+      "refuse": true
+    },
+    "expect": {
+      "refuseMatching": "jail|escape|PathJail|outside|refused|\\.\\."
+    }
+  },
+  {
+    "id": "gen-seq-apply-patch-then-read",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Apply a single-file unified diff then read.",
+    "setup": {
+      "seedFiles": {
+        "documents/patch-me.txt": "hello\nworld\n"
+      }
+    },
+    "toolSequence": [
+      {
+        "name": "apply_patch",
+        "args": {
+          "path": "documents/patch-me.txt",
+          "patch": "--- a/documents/patch-me.txt\n+++ b/documents/patch-me.txt\n@@ -1,2 +1,2 @@\n-hello\n+HELLO\n world\n"
+        }
+      },
+      {
+        "name": "read_file",
+        "args": { "path": "documents/patch-me.txt" }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "jsonFields": ["ok", "path"] },
+      "step1": { "bodyMatching": "HELLO" }
+    }
+  },
+  {
+    "id": "gen-compose-edit-file-then-confirm",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Fix the typo in documents/typo.md (change teh → the) using edit_file, then confirm.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/typo.md": "Fix teh typo please.\n"
+      }
+    },
+    "allowTools": ["edit_file", "read_file"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"edit_file\",\"args\":{\"path\":\"documents/typo.md\",\"oldString\":\"teh\",\"newString\":\"the\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"read_file\",\"args\":{\"path\":\"documents/typo.md\"}}]\n```"
+      },
+      {
+        "reply": "Fixed: documents/typo.md now says 'the'."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["edit_file", "read_file"],
+      "finalMatching": "Fixed|the|typo"
+    }
+  },
+  {
+    "id": "gen-live-edit-file-soft",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/live-edit-target.md": "# Draft\n\nStatus: DRAFT-TOKEN-EDIT\nKeep this heading.\n"
+      }
+    },
+    "prompt": "Use edit_file to change DRAFT-TOKEN-EDIT into LIVE-EDIT-OK in documents/live-edit-target.md (unique string). Then quote the new token.",
+    "expect": {
+      "liveTools": ["edit_file", "read_file", "write_file"],
+      "requireHonesty": true,
+      "honestyMatching": ["LIVE-EDIT-OK|edit_file|updated|changed|已改"]
+    }
+  },
+  {
+    "id": "gen-live-apply-patch-soft",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/live-patch-target.txt": "line-one\nline-two\n"
+      }
+    },
+    "prompt": "Use apply_patch (or edit_file) so documents/live-patch-target.txt starts with PATCHED-ONE instead of line-one. Confirm the new first line.",
+    "expect": {
+      "liveTools": ["apply_patch", "edit_file", "read_file", "write_file"],
+      "requireHonesty": true,
+      "honestyMatching": ["PATCHED-ONE|apply_patch|edit_file|patched|updated"]
+    }
+  }
+]

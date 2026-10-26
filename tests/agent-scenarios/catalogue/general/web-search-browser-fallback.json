@@ -1,0 +1,139 @@
+[
+  {
+    "id": "gen-tool-web-search-browser-fallback-bing",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Primary search empty — browser fallback should return Bing-shaped hits.",
+    "setup": {
+      "webSearchBrowserFallback": {
+        "approve": true,
+        "primaryEmpty": true,
+        "fixture": "bing",
+        "useChromium": false
+      }
+    },
+    "tool": {
+      "name": "web_search",
+      "args": { "query": "EnvoyHome browser fallback", "count": 5 }
+    },
+    "expect": {
+      "toolOk": true,
+      "jsonFields": ["provider", "results", "fallback"],
+      "bodyMatching": "\"fallback\"\\s*:\\s*\"browser\"|EnvoyHome fixture|fixture\\.example/envoyhome"
+    }
+  },
+  {
+    "id": "gen-tool-web-search-browser-fallback-denied",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "User denies browser fallback ask.",
+    "setup": {
+      "webSearchBrowserFallback": {
+        "approve": false,
+        "primaryEmpty": true,
+        "fixture": "bing",
+        "useChromium": false
+      }
+    },
+    "tool": {
+      "name": "web_search",
+      "args": { "query": "something obscure" }
+    },
+    "expect": {
+      "toolOk": true,
+      "bodyMatching": "denied|fallback\"\\s*:\\s*\"none\"|results\"\\s*:\\s*\\[\\]"
+    }
+  },
+  {
+    "id": "gen-tool-web-search-browser-fallback-unattended-skip",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Unattended without unattendedBrowser must skip Chromium leg.",
+    "setup": {
+      "webSearchBrowserFallback": {
+        "approve": true,
+        "primaryEmpty": true,
+        "fixture": "bing",
+        "origin": "unattended",
+        "unattendedBrowser": false,
+        "useChromium": false
+      }
+    },
+    "tool": {
+      "name": "web_search",
+      "args": { "query": "nightly job search" }
+    },
+    "expect": {
+      "toolOk": true,
+      "bodyMatching": "unattendedBrowser|fallback\"\\s*:\\s*\"none\""
+    }
+  },
+  {
+    "id": "gen-tool-web-search-browser-chromium-fixture",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Empty primary → real Chromium loads local Bing fixture (skip if Chromium missing).",
+    "setup": {
+      "webSearchBrowserFallback": {
+        "approve": true,
+        "primaryEmpty": true,
+        "fixture": "bing",
+        "useChromium": true,
+        "skipIfChromiumMissing": true
+      }
+    },
+    "tool": {
+      "name": "web_search",
+      "args": { "query": "EnvoyHome chromium", "count": 5 }
+    },
+    "expect": {
+      "toolOk": true,
+      "bodyMatching": "\"fallback\"\\s*:\\s*\"browser\"|fixture\\.example/envoyhome|EnvoyHome fixture"
+    }
+  },
+  {
+    "id": "gen-compose-web-search-browser-fallback-cite",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Search for EnvoyHome. If the API is empty, approve browser fallback and cite the top URL.",
+    "setup": {
+      "webSearchBrowserFallback": {
+        "approve": true,
+        "primaryEmpty": true,
+        "fixture": "bing",
+        "useChromium": false
+      }
+    },
+    "allowTools": ["web_search"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"web_search\",\"args\":{\"query\":\"EnvoyHome\",\"count\":3}}]\n```"
+      },
+      {
+        "reply": "Top browser-fallback hit: EnvoyHome fixture hit — https://fixture.example/envoyhome"
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["web_search"],
+      "finalMatching": "fixture\\.example/envoyhome|EnvoyHome fixture"
+    }
+  },
+  {
+    "id": "gen-live-web-browser-fallback-soft",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Use web_search for 'Open Source Initiative'. If the household has browser SERP fallback enabled and Chromium available, it is OK to use that path. Cite a real https URL from results, or clearly say search/fallback failed — do not invent links.",
+    "expect": {
+      "liveTools": ["web_search"],
+      "requireHonesty": true,
+      "honestyMatching": ["https://|web_search|unavailable|disabled|no results|fallback|browser|没有|无法"]
+    }
+  }
+]

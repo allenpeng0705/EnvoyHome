@@ -17,6 +17,16 @@ export interface MemoryScreenData {
   flushEnabled: boolean;
   reviewEnabled: boolean;
   backendId: string;
+  /** Knowledge-RAG — Doc KB / KnowYou / embed (Settings Memory surface). */
+  knowledgeSectionCount?: number;
+  knowledgeLastReindexAt?: string | null;
+  knowledgeInject?: "off" | "tool" | "auto";
+  episodicInject?: "off" | "tool" | "auto";
+  embedEnabled?: boolean;
+  embedReady?: boolean;
+  embedMode?: string;
+  embedModelId?: string;
+  embedStale?: boolean;
 }
 
 export type SettingsViewId =

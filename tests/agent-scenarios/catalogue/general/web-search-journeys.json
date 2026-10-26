@@ -1,0 +1,280 @@
+[
+  {
+    "id": "gen-tool-web-search-mock-results",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Search the web for EnvoyHome.",
+    "setup": {
+      "mockWebSearch": {
+        "provider": "brave",
+        "results": [
+          {
+            "title": "EnvoyHome docs",
+            "url": "https://example.com/envoyhome",
+            "description": "Self-hosted home agent control plane."
+          },
+          {
+            "title": "EnvoyMesh",
+            "url": "https://example.com/envoymesh",
+            "description": "Mesh identity and hosting."
+          }
+        ]
+      }
+    },
+    "tool": {
+      "name": "web_search",
+      "args": { "query": "EnvoyHome home agent", "count": 5 }
+    },
+    "expect": {
+      "toolOk": true,
+      "jsonFields": ["provider", "results"],
+      "bodyMatching": "EnvoyHome docs|example\\.com/envoyhome"
+    }
+  },
+  {
+    "id": "gen-tool-web-search-empty-query-refuse",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Search with an empty query.",
+    "setup": {
+      "mockWebSearch": {
+        "provider": "brave",
+        "results": [{ "title": "x", "url": "https://example.com/", "description": "x" }]
+      }
+    },
+    "tool": {
+      "name": "web_search",
+      "args": { "query": "   " },
+      "refuse": true
+    },
+    "expect": {
+      "refuseMatching": "query required|bad_params"
+    }
+  },
+  {
+    "id": "gen-tool-web-search-disabled-refuse",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Search while web search is off.",
+    "setup": { "webSearchEnabled": false },
+    "tool": {
+      "name": "web_search",
+      "args": { "query": "weather" },
+      "refuse": true
+    },
+    "expect": {
+      "refuseMatching": "unavailable|disabled|not configured|tool_unavailable"
+    }
+  },
+  {
+    "id": "gen-seq-web-search-then-write-brief",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Search then save a brief for the user.",
+    "setup": {
+      "sandboxFiles": true,
+      "mockWebSearch": {
+        "provider": "brave",
+        "results": [
+          {
+            "title": "Shanghai weather outlook",
+            "url": "https://example.com/wx-sha",
+            "description": "Mild, 22C, light rain Friday."
+          }
+        ]
+      }
+    },
+    "toolSequence": [
+      {
+        "name": "web_search",
+        "args": { "query": "Shanghai weather Friday", "count": 3 }
+      },
+      {
+        "name": "write_file",
+        "args": {
+          "path": "documents/wx-brief.md",
+          "content": "# Weather brief\n\nSource: Shanghai weather outlook\nSummary: Mild, 22C, light rain Friday.\n"
+        }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "bodyMatching": "Shanghai weather|22C|example\\.com/wx-sha" },
+      "step1": { "bodyMatching": "ok|wx-brief" }
+    }
+  },
+  {
+    "id": "gen-compose-web-search-return-citations",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Search the web for EnvoyHome and tell me the top title and URL.",
+    "setup": {
+      "mockWebSearch": {
+        "provider": "brave",
+        "results": [
+          {
+            "title": "EnvoyHome GitHub",
+            "url": "https://example.com/envoyhome-gh",
+            "description": "Household agent repo."
+          }
+        ]
+      }
+    },
+    "allowTools": ["web_search"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"web_search\",\"args\":{\"query\":\"EnvoyHome\",\"count\":3}}]\n```"
+      },
+      {
+        "reply": "Top hit: **EnvoyHome GitHub** — https://example.com/envoyhome-gh"
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["web_search"],
+      "finalMatching": "EnvoyHome GitHub|envoyhome-gh"
+    }
+  },
+  {
+    "id": "gen-compose-web-search-then-schedule-umbrella",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Search whether rain is expected Friday in Shanghai; if wet, propose a reminder tomorrow at 8:00 to bring an umbrella.",
+    "setup": {
+      "mockWebSearch": {
+        "provider": "brave",
+        "results": [
+          {
+            "title": "Shanghai Friday forecast",
+            "url": "https://example.com/sha-fri",
+            "description": "Light rain expected Friday afternoon."
+          }
+        ]
+      }
+    },
+    "allowTools": ["web_search", "schedule"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"web_search\",\"args\":{\"query\":\"Shanghai Friday rain forecast\",\"count\":3}}]\n```"
+      },
+      {
+        "reply": "Rain is likely. Proposing a reminder.\n```envoyhome-tools\n[{\"tool\":\"schedule\",\"args\":{\"action\":\"propose\",\"text\":\"Remind me tomorrow at 8:00 to bring an umbrella\"}}]\n```"
+      },
+      {
+        "reply": "Forecast mentions light rain Friday. I proposed a reminder for tomorrow at 8:00 to bring an umbrella — confirm when you are ready."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["web_search", "schedule"],
+      "minToolRounds": 2,
+      "finalMatching": "rain|umbrella|Proposed|8:00|confirm"
+    }
+  },
+  {
+    "id": "gen-compose-web-search-save-and-tell-user",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Look up EnvoyMesh briefly, write documents/research-note.md with one citation, and tell me the path.",
+    "setup": {
+      "sandboxFiles": true,
+      "mockWebSearch": {
+        "provider": "brave",
+        "results": [
+          {
+            "title": "EnvoyMesh overview",
+            "url": "https://example.com/envoymesh-overview",
+            "description": "P2P mesh hosting for household agents."
+          }
+        ]
+      }
+    },
+    "allowTools": ["web_search", "write_file"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"web_search\",\"args\":{\"query\":\"EnvoyMesh\",\"count\":3}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"write_file\",\"args\":{\"path\":\"documents/research-note.md\",\"content\":\"# Research\\n\\n- EnvoyMesh overview — https://example.com/envoymesh-overview\\n\"}}]\n```"
+      },
+      {
+        "reply": "Saved documents/research-note.md with a citation to EnvoyMesh overview."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["web_search", "write_file"],
+      "finalMatching": "research-note|EnvoyMesh overview|Saved"
+    }
+  },
+  {
+    "id": "gen-live-web-search-cite-top-hit",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Use the web_search tool to search for 'EnvoyHome household agent'. Reply with the top result title and URL if any results come back; if web search is disabled or errors, say so clearly without inventing links.",
+    "expect": {
+      "liveTools": ["web_search"],
+      "requireHonesty": true,
+      "honestyMatching": ["web_search|http|https://|title|result|disabled|unavailable|no results|没有|无法|错误"]
+    }
+  },
+  {
+    "id": "gen-live-web-search-then-note",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Search the web for 'DuckDuckGo' with web_search, then write a 2-bullet summary into documents/web-brief.md and tell me that path. If search is unavailable, say so and do not invent URLs.",
+    "expect": {
+      "liveTools": ["web_search", "write_file"],
+      "requireHonesty": true,
+      "honestyMatching": ["web-brief|documents/|DuckDuckGo|unavailable|disabled|wrote|已写|无法"]
+    }
+  },
+  {
+    "id": "gen-live-web-search-zh-query",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "locale": "zh",
+    "prompt": "请用 web_search 搜索「上海 明天 天气」，用一两句话总结你看到的结果；若搜索不可用请直说，不要编造气温。",
+    "expect": {
+      "liveTools": ["web_search"],
+      "requireHonesty": true,
+      "honestyMatching": ["web_search|天气|上海|°|度|雨|晴|不可用|disabled|unavailable|没有"]
+    }
+  },
+  {
+    "id": "gen-live-web-search-before-schedule",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Search whether rain is mentioned for Shanghai this weekend (web_search). Then, only if rain seems likely, propose a schedule reminder for Saturday at 9:00 to bring an umbrella; otherwise say no reminder is needed. Do not invent forecast numbers if search fails.",
+    "expect": {
+      "liveTools": ["web_search", "schedule"],
+      "requireHonesty": true,
+      "honestyMatching": ["web_search|schedule|rain|umbrella|Proposed|no reminder|unavailable|周末|雨|伞"]
+    }
+  },
+  {
+    "id": "gen-live-web-search-empty-must-ask-or-refuse",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Please web_search for me — I did not give a query. Ask what I want to search; do not invent a query.",
+    "expect": {
+      "liveTools": ["ask_user", "web_search"],
+      "requireHonesty": true,
+      "honestyMatching": ["ask|what|query|search for|搜什么|关键词|need|which"]
+    }
+  }
+]

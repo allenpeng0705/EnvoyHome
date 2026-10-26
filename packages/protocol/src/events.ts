@@ -349,6 +349,22 @@ export const EVENTS: Readonly<Record<string, EventSpec>> = {
       ["fileName", "status", "bytesReceived"],
     ),
   },
+  "home:embed-model-download": {
+    summary: "Home embed GGUF download progress / pause / complete (:18793; Knowledge-RAG §5)",
+    data: obj(
+      {
+        fileName: str({ minLength: 1 }),
+        url: str(),
+        status: enumOf("downloading", "paused", "completed", "failed"),
+        bytesReceived: int({ minimum: 0 }),
+        bytesTotal: int({ minimum: 0 }),
+        modelId: str(),
+        path: str(),
+        error: str(),
+      },
+      ["fileName", "status", "bytesReceived"],
+    ),
+  },
 };
 
 /** Every event name, sorted — the subscribable set. */

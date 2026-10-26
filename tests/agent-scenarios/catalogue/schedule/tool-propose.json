@@ -1,0 +1,70 @@
+[
+  {
+    "id": "sched-tool-propose-tomorrow-8am",
+    "pack": "schedule",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Remind me tomorrow at 8:00 to stretch",
+    "tool": {
+      "name": "schedule",
+      "args": { "action": "propose", "text": "Remind me tomorrow at 8:00 to stretch" }
+    },
+    "expect": {
+      "toolOk": true,
+      "jsonFields": ["proposalId", "resolvedLocal"],
+      "resolvedLocalMatching": "\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}"
+    }
+  },
+  {
+    "id": "sched-tool-refuse-invented-whenInstant",
+    "pack": "schedule",
+    "mode": "tool",
+    "live": false,
+    "prompt": "tomorrow at 8am",
+    "tool": {
+      "name": "schedule",
+      "args": {
+        "action": "propose",
+        "text": "tomorrow at 8am",
+        "whenInstant": "2026-10-10T00:00:00.000Z"
+      },
+      "refuse": true
+    },
+    "expect": {
+      "refuseMatching": "refuses whenInstant|whenInstant"
+    }
+  },
+  {
+    "id": "sched-tool-propose-then-confirm",
+    "pack": "schedule",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Remind me tomorrow at 9:00 to water plants",
+    "tool": {
+      "name": "schedule",
+      "args": { "action": "propose", "text": "Remind me tomorrow at 9:00 to water plants" },
+      "confirmAfter": true
+    },
+    "expect": {
+      "toolOk": true,
+      "confirmOk": true,
+      "jsonFields": ["proposalId"]
+    }
+  },
+  {
+    "id": "sched-tool-list-after-propose",
+    "pack": "schedule",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Remind me in 45 minutes to stretch",
+    "tool": {
+      "name": "schedule",
+      "args": { "action": "propose", "text": "Remind me in 45 minutes to stretch" },
+      "listAfter": true
+    },
+    "expect": {
+      "toolOk": true,
+      "listHasProposal": true
+    }
+  }
+]

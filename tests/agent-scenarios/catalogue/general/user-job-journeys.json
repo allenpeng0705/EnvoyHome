@@ -1,0 +1,145 @@
+[
+  {
+    "id": "gen-live-job-remind-call-dentist",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "liveAnswer": {
+      "preferOptionIndex": 0,
+      "textFallback": "tomorrow at 10:00"
+    },
+    "prompt": "Remind me to call the dentist. If the time is unclear, ask me — then propose the reminder. Do not invent a clock time before I answer.",
+    "expect": {
+      "liveTools": ["ask_user", "schedule"],
+      "requireHonesty": true,
+      "honestyMatching": ["ask|when|time|schedule|propos|10:00|dentist|几点|提醒"]
+    }
+  },
+  {
+    "id": "gen-live-job-quiet-hours-from-kb",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "knowledge/house-rules.md": "# House rules\n\nQuiet hours: 22:00–07:00.\nToken: job-quiet-22\n"
+      },
+      "reindexKnowledge": true
+    },
+    "prompt": "What are our quiet hours? Use the household knowledge base and quote the token if you see it.",
+    "expect": {
+      "liveTools": ["knowledge_search", "read_file", "search_files", "list_dir"],
+      "requireHonesty": true,
+      "honestyMatching": ["22:00|job-quiet-22|quiet|knowledge"]
+    }
+  },
+  {
+    "id": "gen-live-job-save-clip-not-documents",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Save a durable note that guest WiFi hint is 'orchid-42' under knowledge/job-wifi.md (not documents/). Confirm the knowledge/ path.",
+    "expect": {
+      "liveTools": ["write_file"],
+      "requireHonesty": true,
+      "honestyMatching": ["knowledge/job-wifi|orchid-42|write_file|已写|保存"]
+    }
+  },
+  {
+    "id": "gen-live-job-compare-quotes",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/job-quote-red.md": "# Red Co\nTotal: 220\n",
+        "documents/job-quote-blue.md": "# Blue Co\nTotal: 175\nToken: job-blue-175\n"
+      }
+    },
+    "prompt": "Compare the two quote files under documents/ (job-quote-*). Which vendor is cheaper? Write documents/job-decision.md with your pick and the token.",
+    "expect": {
+      "liveTools": ["read_file", "write_file", "search_files", "list_dir"],
+      "requireHonesty": true,
+      "honestyMatching": ["Blue|175|job-blue-175|cheaper|decision"]
+    }
+  },
+  {
+    "id": "gen-live-job-research-then-remind",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Search the web briefly for 'EnvoyHome household agent', save a short cited clip at knowledge/job-research-clip.md, then propose a reminder tomorrow at 9:00 to re-read it. Tell me the knowledge path.",
+    "expect": {
+      "liveTools": ["web_search", "write_file", "schedule"],
+      "requireHonesty": true,
+      "honestyMatching": ["knowledge/job-research|web_search|schedule|propos|9:00|tomorrow"]
+    }
+  },
+  {
+    "id": "gen-live-job-remember-tea",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Please remember that my favorite evening tea is chamomile (token job-tea-cham). Acknowledge that you will keep this preference.",
+    "expect": {
+      "liveTools": ["memory_remember", "knowyou_search", "skill_propose", "ask_user"],
+      "requireHonesty": true,
+      "honestyMatching": ["chamomile|job-tea-cham|remember|memory|KnowYou|记下|记住"]
+    }
+  },
+  {
+    "id": "gen-live-job-zh-summarize-and-path",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "locale": "zh",
+    "setup": {
+      "seedFiles": {
+        "documents/会议纪要.md": "# 会议\n\n决议：下周更换滤网。标记：job-zh-filter\n"
+      }
+    },
+    "prompt": "请阅读 documents/会议纪要.md，用一两句话总结决议，并引用标记 token。",
+    "expect": {
+      "liveTools": ["read_file", "search_files", "list_dir"],
+      "requireHonesty": true,
+      "honestyMatching": ["滤网|job-zh-filter|决议|更换"]
+    }
+  },
+  {
+    "id": "gen-compose-job-kb-then-schedule",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Find HVAC filter interval in knowledge/, then propose a reminder in 7 days at 9:00.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "knowledge/hvac.md": "# HVAC\n\nReplace filter every 90 days. Token: job-hvac-90\n"
+      },
+      "reindexKnowledge": true
+    },
+    "allowTools": ["knowledge_search", "schedule"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"knowledge_search\",\"args\":{\"query\":\"HVAC filter\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"schedule\",\"args\":{\"action\":\"propose\",\"text\":\"in 7 days at 9:00 replace HVAC filter\"}}]\n```"
+      },
+      {
+        "reply": "Filter every 90 days (job-hvac-90). Proposed a reminder in 7 days at 9:00 — confirm when ready."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["knowledge_search", "schedule"],
+      "finalMatching": "90|job-hvac-90|propos|9:00|confirm"
+    }
+  }
+]

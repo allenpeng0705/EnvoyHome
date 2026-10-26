@@ -38,7 +38,11 @@ import { isHomeAssistantReady, isMqttReady } from "./home-intent.js";
 import type { HomePaths } from "./home-paths.js";
 import { assertPublicHttpsUrl } from "./skill-remote.js";
 import type { SkillService } from "./skills.js";
-import type { MemoryFacade } from "@envoyhome/memory";
+import {
+  filterEpisodicAgainstStanding,
+  filterKnowledgeAgainstStanding,
+  type MemoryFacade,
+} from "@envoyhome/memory";
 import type { WebSearchService } from "./web-search.js";
 import type { BrowserControlService } from "./browser-control.js";
 import { describeScheduleSpec } from "./schedule/chat-card.js";
@@ -147,6 +151,15 @@ const BUILTIN_META: Record<
     summary:
       "Find files/dirs by basename glob or substring under sandbox/workspace (capped walk)",
     sampleArgs: { pattern: "*.md", path: "documents", maxDepth: 4 },
+  },
+  knowledge_search: {
+    summary:
+      "Search the account knowledge/ Doc KB (section FTS / hybrid) — cite knowledge/… paths",
+    sampleArgs: { query: "quiet hours", limit: 8 },
+  },
+  knowyou_search: {
+    summary: "Search KnowYou episodic facts/chunks (related past context)",
+    sampleArgs: { query: "favorite drink", limit: 8 },
   },
   web_search: {
     summary: "Search the public web (household provider; Design §9.5f)",
@@ -684,6 +697,34 @@ function sanitizeSkillProposeId(raw: string): string {
   return cleaned || "";
 }
 
+/** Standing L1/L2 facts for Knowledge-RAG §6 tool-path contradiction filter. */
+async function loadStandingFacts(
+  memory: MemoryFacade,
+  accountId: string,
+): Promise<{ profileFacts: Record<string, string>; memoryMd: string }> {
+  const profileFacts: Record<string, string> = {};
+  try {
+    const { profile } = await memory.getProfile(accountId);
+    for (const [k, fact] of Object.entries(profile.facts ?? {})) {
+      const v = fact?.value;
+      if (typeof v === "string") profileFacts[k] = v;
+      else if (typeof v === "number" || typeof v === "boolean") profileFacts[k] = String(v);
+      else if (Array.isArray(v)) profileFacts[k] = v.join(", ");
+    }
+  } catch {
+    /* optional */
+  }
+  let memoryMd = "";
+  try {
+    const listed = await memory.listMemory(accountId, { includeContent: true });
+    const note = listed.notes.find((n) => n.path === "MEMORY.md");
+    memoryMd = typeof note?.content === "string" ? note.content : "";
+  } catch {
+    memoryMd = "";
+  }
+  return { profileFacts, memoryMd };
+}
+
 /**
  * Design §9.2 (`2026-10-22b`) — enqueue skill create/patch/delete as PendingLearn only.
  */
@@ -849,10 +890,56 @@ export async function runExtendedWorkflowTool(input: {
   turnId?: string;
   /** SSRF-safe fetch for view_image https (same as http_fetch). */
   httpFetchImpl?: typeof fetch;
+  /** Knowledge-RAG — Doc KB + KnowYou. */
+  knowledge?: import("./knowledge-service.js").KnowledgeService | null;
 }): Promise<string> {
   ensureSmarthomeToolSpecsRegistered();
   const tool = normalizeWorkflowToolName(input.tool);
   const origin = input.origin ?? "attended";
+
+  if (tool === "knowledge_search") {
+    if (!input.knowledge || !input.accountId) {
+      throw new Error("envoyhome.tool_unavailable: knowledge_search");
+    }
+    const query = typeof input.args.query === "string" ? input.args.query.trim() : "";
+    if (!query) throw new Error("envoyhome.bad_params: query required");
+    const limit =
+      typeof input.args.limit === "number" && input.args.limit > 0
+        ? Math.min(50, Math.floor(input.args.limit))
+        : 8;
+    let { hits } = await input.knowledge.searchKnowledge(input.accountId, query, { limit });
+    // Knowledge-RAG §6 — tool retrieve also filters detectable L1/L2 contradictions.
+    if (input.memory) {
+      try {
+        const standing = await loadStandingFacts(input.memory, input.accountId);
+        hits = filterKnowledgeAgainstStanding(hits, standing.profileFacts, standing.memoryMd);
+      } catch {
+        /* standing optional */
+      }
+    }
+    return JSON.stringify({ hits });
+  }
+  if (tool === "knowyou_search") {
+    if (!input.knowledge || !input.accountId) {
+      throw new Error("envoyhome.tool_unavailable: knowyou_search");
+    }
+    const query = typeof input.args.query === "string" ? input.args.query.trim() : "";
+    if (!query) throw new Error("envoyhome.bad_params: query required");
+    const limit =
+      typeof input.args.limit === "number" && input.args.limit > 0
+        ? Math.min(50, Math.floor(input.args.limit))
+        : 8;
+    let { hits } = await input.knowledge.searchKnowYou(input.accountId, query, { limit });
+    if (input.memory) {
+      try {
+        const standing = await loadStandingFacts(input.memory, input.accountId);
+        hits = filterEpisodicAgainstStanding(hits, standing.profileFacts, standing.memoryMd);
+      } catch {
+        /* standing optional */
+      }
+    }
+    return JSON.stringify({ hits });
+  }
 
   if (tool === "export_document") {
     return runExportDocumentTool(input);

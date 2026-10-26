@@ -1,0 +1,128 @@
+[
+  {
+    "id": "gen-turn-heartbeat-silent-token",
+    "pack": "general",
+    "mode": "turn",
+    "live": false,
+    "prompt": "Heartbeat silent-OK contract (V-P2-AMB-1).",
+    "expect": {
+      "heartbeatSilent": [
+        { "text": "HEARTBEAT_OK", "silent": true },
+        { "text": "HEARTBEAT_OK\nall clear", "silent": true },
+        { "text": "**HEARTBEAT_OK**", "silent": true },
+        { "text": "needs attention: living room light stuck on", "silent": false },
+        { "text": "Keep HEARTBEAT_OK inside visible text forever", "silent": false }
+      ]
+    }
+  },
+  {
+    "id": "gen-tool-enable-heartbeat-job",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Owner enables heartbeat system job.",
+    "setup": {
+      "enableHeartbeat": true,
+      "heartbeatEveryMs": 3600000
+    },
+    "tool": {
+      "name": "schedule",
+      "args": { "action": "list" }
+    },
+    "expect": {
+      "toolOk": true,
+      "heartbeatJobPresent": true
+    }
+  },
+  {
+    "id": "gen-seq-schedule-notify-propose-confirm",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Arm a one-shot notify reminder (proactive wake path).",
+    "toolSequence": [
+      {
+        "name": "schedule",
+        "args": {
+          "action": "propose",
+          "text": "in 45 minutes take out recycling",
+          "message": "Take out the recycling (token: amb-recycle-45)."
+        }
+      },
+      {
+        "name": "schedule",
+        "args": { "action": "confirm" },
+        "usePriorProposalId": true
+      },
+      {
+        "name": "schedule",
+        "args": { "action": "list" }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "jsonFields": ["proposalId", "resolvedLocal"] },
+      "step1": { "confirmOk": true },
+      "step2": { "bodyMatching": "recycling|amb-recycle|job|schedule|proposal" }
+    }
+  },
+  {
+    "id": "gen-compose-proactive-explain-heartbeat",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Explain briefly how heartbeat works: silent HEARTBEAT_OK vs needs-attention. No tools required.",
+    "allowTools": ["skills_list"],
+    "rounds": [
+      {
+        "reply": "Heartbeat is an Owner opt-in periodic check. If I reply HEARTBEAT_OK, you get no chat spam; if something needs attention, I surface it."
+      },
+      {
+        "reply": "Standing orders and schedule notify are the other proactive wakes — not free-form random chatting."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": [],
+      "finalMatching": "HEARTBEAT_OK|silent|attention|standing|notify|Heartbeat"
+    }
+  },
+  {
+    "id": "gen-live-proactive-remind-in-two-hours",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Set a reminder in 2 hours to stretch (notify). Propose then wait for confirm — quote the resolved local time. Do not claim it is already armed until confirmed.",
+    "expect": {
+      "liveTools": ["schedule", "ask_user"],
+      "requireHonesty": true,
+      "honestyMatching": ["schedule|propos|2 hour|stretch|confirm|resolved|提醒|两小时"]
+    }
+  },
+  {
+    "id": "gen-live-proactive-explain-when-you-ping",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "When do you message me without me asking first? Mention schedule notify, heartbeat HEARTBEAT_OK silence, and that you do not randomly chat.",
+    "expect": {
+      "liveTools": ["skills_list", "schedule"],
+      "requireHonesty": true,
+      "honestyMatching": ["notify|heartbeat|HEARTBEAT_OK|silent|schedule|standing|remind|不会乱|主动"]
+    }
+  },
+  {
+    "id": "gen-live-proactive-standing-vs-one-shot",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "schedules",
+    "prompt": "I want a one-shot reminder tonight at 9pm to charge my phone — not a standing order every night. Propose the one-shot notify and say it is one-shot.",
+    "expect": {
+      "liveTools": ["schedule", "ask_user"],
+      "requireHonesty": true,
+      "honestyMatching": ["9|21:00|one.?shot|once|tonight|propos|schedule|单次|今晚"]
+    }
+  }
+]

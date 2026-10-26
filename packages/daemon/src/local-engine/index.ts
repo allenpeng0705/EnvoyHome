@@ -1,11 +1,27 @@
 export {
   HOME_LOCAL_ENGINE_PORT,
+  HOME_EMBED_ENGINE_PORT,
   OLLAMA_DEFAULT_PORT,
   HOME_LOCAL_ENGINE_BASE,
+  HOME_EMBED_ENGINE_BASE,
   OLLAMA_DEFAULT_BASE,
   HOME_LOCAL_PROVIDER_ID,
   OLLAMA_PROVIDER_ID,
 } from "./ports.js";
+export {
+  EmbedEngineService,
+  mockEmbedding,
+  type EmbedEngineMode,
+  type EmbedEngineConfig,
+  type EmbedEngineStatus,
+} from "./embed-engine.js";
+export {
+  DEFAULT_HOME_EMBED_MODEL,
+  DEFAULT_HOME_EMBED_MODEL_ID,
+  HOME_EMBED_CURATED_MODELS,
+  getHomeEmbedCatalogModel,
+  type HomeEmbedCatalogModel,
+} from "./embed-catalog.js";
 export { probeOpenAiModels, type ProbeResult } from "./probe.js";
 export { buildHomeLlamaServerArgs } from "./server-args.js";
 export {

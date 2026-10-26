@@ -4,12 +4,12 @@ Living plan for **active** EnvoyHome build work. Style aligned with EnvoyMesh [`
 
 | Field | Value |
 |-------|-------|
-| **Role** | Subordinate to [`EnvoyHome-Design.md`](EnvoyHome-Design.md) and [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Design.md). **Design wins.** |
-| **Last updated** | 2026-10-20s |
+| **Role** | Subordinate to [`EnvoyHome-Design.md`](EnvoyHome-Design.md), [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Design.md), and [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md). **Design wins.** |
+| **Last updated** | 2026-10-25 |
 | **Owner** | Allen Peng |
 | **G6** | **Accepted 2026-10-09** for Plan text matching Design `2026-10-08f` (with G1) |
 
-**Start here:** [Current Milestone](#current-milestone) · **Ground truth:** [Design](EnvoyHome-Design.md) · [Memory Design](EnvoyHome-Memory-Design.md) · **08f Accept:** [`reviews/2026-10-08f-acceptance.md`](reviews/2026-10-08f-acceptance.md)
+**Start here:** [Current Milestone](#current-milestone) · **Ground truth:** [Design](EnvoyHome-Design.md) · [Memory Design](EnvoyHome-Memory-Design.md) · [Knowledge + RAG](EnvoyHome-Knowledge-RAG-Design.md) · **08f Accept:** [`reviews/2026-10-08f-acceptance.md`](reviews/2026-10-08f-acceptance.md)
 
 **For AI agents:** Read Design Normative → this **Current Milestone** → only the relevant `### B*` / epic checklist. Flip `[ ]`/`[~]`/`[x]` when shipping; add one **Changelog** row.
 
@@ -45,7 +45,9 @@ EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0
 **Next (after early-adopter ops):** Live HA checklist ([`docs/smart-home-live-checklist.md`](../docs/smart-home-live-checklist.md)); then **First-party IM live** (Telegram first) when Mesh phone path is solid  
 **Deferred from early-adopter claims:** Production IM zoo; Privacy Mode product toggle (`home.setPrivacyMode` stays Phase 2); agentskills.io conformance  
 
-**Last shipped (docs):** Early-adopter claim sheet + live HA checklist (`2026-10-22d`); Channels UI already merged
+**Active coding epic:** **Knowledge + RAG / KnowYou** — [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md); board **KB-P1…P5** below (V-KB / V-KY / V-EMB).
+
+**Last shipped (docs + KB spine):** Knowledge-RAG Normative (`2026-10-25`); KB-P1…P5 implementation (`2026-10-25b`); early-adopter claim sheet + live HA checklist (`2026-10-22d`)
 
 ## Key Decisions
 
@@ -147,6 +149,21 @@ Tag `v1.0.0` when (1)–(8) are honestly `[x]` including bar 1’s e2e bar you c
 | First-party IM set (Telegram + Discord + Slack + Feishu + DingTalk + WeCom) | `[ ]` | Design §5.0 `2026-10-16c` — after mobile solid |
 | **P2-A…E agent capabilities** | `[x]` | Accepted 2026-10-20; A–E + D2 shipped (`2026-10-20o`) |
 | Memory Tree / fleets / TokenJuice | `[>]` | §19.7 — not core |
+| **Knowledge + RAG / KnowYou (KB-P1…P5)** | `[x]` | Knowledge-RAG Design — see board below |
+
+## Knowledge + RAG / KnowYou (KB-P1…P5)
+
+Ground truth: [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md). Standing L1–L3 unchanged.
+
+| Epic | Status | Deliverable | Verify IDs |
+|------|--------|-------------|------------|
+| **KB-P1** Doc KB section FTS | `[x]` | `KnowledgeIndex` + `knowledge_search` + reindex RPCs | V-KB-1…4, V-KB-7 |
+| **KB-P2** Home embed `:18793` | `[x]` | EmbedEngineService + catalog + mock/Ollama; refuse Mesh attach | V-EMB-1…7 |
+| **KB-P3** Hybrid KB + optional inject | `[x]` | RRF FTS∪vec; `knowledgeInject` tool→auto Settings | V-KB-5, V-KB-6 |
+| **KB-P4** KnowYou engine | `[x]` | ADD\|SUPERSEDE\|SKIP; summarize/TTL on consolidate | V-KY-1…4, V-KY-6, V-KY-7 |
+| **KB-P5** Auto episodic inject | `[x]` | `episodicInject=auto` + L1/L2 filter; duty line + `knowledge_search` | V-KY-5 |
+
+**Defaults:** `knowledgeInject` / `episodicInject` = `tool` until Settings flips to `auto`. Embed off until Owner enables.
 
 ## Phase 2 agent capabilities (P2-A…E)
 
@@ -531,6 +548,8 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-CRON-10 | **B9** | system flush/review fire; ensureReviewJob when reviewEnabled |
 | V-CRON-11 | **B9** | chat propose verbatim WHEN; refuse invented specs; confirm shows resolvedLocal |
 | V-CRON-12 | **B9** | agentTurn payload fire with frozen prompt; elevated browser denied on schedule |
+| V-AGENT-SCENARIO-1 | **B9** | Deterministic agent scenario catalogue (Schedule + General) green in daemon tests (`tests/agent-scenarios/`) |
+| V-AGENT-SCENARIO-2 | **B9** | Optional live LLM soft-eval documented (`ENVOYHOME_AGENT_EVAL=1` → `scripts/agent-eval-live.mjs`); not a CI gate |
 | V-UX-1 | **B12** | new account + channel bind without raw config edit |
 | V-UX-2 | **B12** | view/revoke pairings, pending approvals, grants in the UI |
 | V-UX-3 | **B12** | Telegram enable + token via Settings only |
@@ -782,6 +801,11 @@ If you need to change the answer to "in what order we build," edit this doc and 
 
 | Date | Change |
 |------|--------|
+| 2026-10-25d | **Settings Knowledge & embed UI:** LLM → Memory card — curated embed download/progress, enable spawn/Ollama/disable, inject defaults `tool`, reindex; `home:embed-model-download` + cancel/resume RPCs. |
+| 2026-10-25c | **KB hardening:** session→episodic purge; V-KY-7 PendingLearn on L1/L2 conflict; real `downloadEmbedModel` + TOFU sha256; Doctor embed/stale; V-KB-7 artifact open; Settings Memory stub; KnowYou journeys; JSON day-one paths Normative note. |
+| 2026-10-25b | **KB-P1…P5 shipped:** section FTS + `knowledge_search`; Home embed `:18793` (+ mock); hybrid RRF; KnowYou ADD\|SUPERSEDE\|SKIP + summarize on consolidate; optional auto-inject + standing filter. Board checkboxes `[x]`; V-KB/V-KY/V-EMB tests. |
+| 2026-10-25a | **Design lock:** [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md) — Doc KB + KnowYou + Home embed `:18793`; ground-truth links; epic staging TBD (V-KB/V-KY/V-EMB). Aligns Design / Memory Design `2026-10-25`. |
+| 2026-10-25 | **Test infra:** agent scenario catalogue (Schedule + General) — V-AGENT-SCENARIO-1 deterministic CI; V-AGENT-SCENARIO-2 optional live eval. No Design Normative change. |
 | 2026-10-22e | **Mobile gap close:** live verify + privacy/store docs; CI mobile job; release signing pattern; System This machine; workflow Diagram↔YAML; §11.3/Q12 sync. Aligns Design `2026-10-22e`. |
 | 2026-10-22d | **Early-adopter freeze:** claim sheet; live HA checklist; IM live + Privacy Mode **out of marketing**; V-SEC-13…21 stage owners synced (no longer “post-v1”); desktop V-UX hygiene. Tag `v1.0.0` still `[ ]`. Aligns Design `2026-10-22d`. |
 | 2026-10-22c | **Watch-item close:** household L7 Normative; flat-skill migrate; media-generate catalogue; V-SEC-7 / V-MEM-22 test fixes. Aligns Design `2026-10-22c`. |
