@@ -81,6 +81,84 @@ test("V-KY-7: standing conflict → PENDING_LEARN with plain text (no episodic A
   });
 });
 
+test("V-KY-7: coffee-not-tea co-mention → PENDING_LEARN (no fail-open ADD)", async () => {
+  await withSvc(async (svc, accountId) => {
+    const results = await svc.ingestTurn(
+      accountId,
+      "I prefer coffee not tea",
+      undefined,
+      {
+        allowWrites: true,
+        profileFacts: { drink: "tea" },
+        memoryMd: "drink: tea",
+      },
+    );
+    assert.ok(
+      results.some((r) => r.action === "PENDING_LEARN"),
+      `expected PENDING_LEARN, got ${JSON.stringify(results)}`,
+    );
+    const { hits } = await svc.searchKnowYou(accountId, "coffee");
+    assert.equal(hits.length, 0);
+  });
+});
+
+test("V-KY-7 contract: PENDING_LEARN rows enqueue via proposeLearn (turn-service mirror)", async () => {
+  const { MemoryFacade, extractStandingPatchValue } = await import("@envoyhome/memory");
+  await withSvc(async (svc, accountId, root) => {
+    const mem = new MemoryFacade({ stateDir: root });
+    await mem.store.ensureAccountLayout(accountId);
+    const results = await svc.ingestTurn(
+      accountId,
+      "I no longer like tea, I prefer coffee",
+      undefined,
+      {
+        allowWrites: true,
+        profileFacts: { drink: "tea" },
+        memoryMd: "drink: tea",
+      },
+    );
+    const pending = results.filter((r) => r.action === "PENDING_LEARN" && r.text?.trim());
+    assert.ok(pending.length >= 1);
+    for (const r of pending) {
+      if (r.profileKey) {
+        await mem.proposeLearn(accountId, {
+          kind: "profile_patch",
+          targetPath: "profile.json",
+          profileKey: r.profileKey,
+          payload: extractStandingPatchValue(r.text!, r.profileKey),
+          summary: `KnowYou conflict: update ${r.profileKey}`,
+          trust: "agent",
+        });
+      } else {
+        await mem.proposeLearn(accountId, {
+          kind: "memory_append",
+          targetPath: "MEMORY.md",
+          payload: r.text!,
+          summary: "KnowYou conflict with standing",
+          trust: "agent",
+        });
+      }
+    }
+    const listed = await mem.listPendingLearns(accountId, { status: "pending" });
+    assert.ok(
+      listed.learns.length >= 1,
+      "proposeLearn must leave a pending LearnQueue row",
+    );
+  });
+});
+
+test("setPolicy clamps inject budgets to MAX_RAG_INJECT_BUDGET", async () => {
+  const { MAX_RAG_INJECT_BUDGET } = await import("../dist/knowledge-service.js");
+  await withSvc(async (svc, accountId) => {
+    const next = await svc.setPolicy(accountId, {
+      knowledgeInjectBudget: 999_999,
+      episodicInjectBudget: -5,
+    });
+    assert.equal(next.knowledgeInjectBudget, MAX_RAG_INJECT_BUDGET);
+    assert.equal(next.episodicInjectBudget, 4000); // invalid patch ignored → keep default/cur
+  });
+});
+
 test("KnowYou purgeSession removes rows for that session", async () => {
   await withSvc(async (svc, accountId) => {
     const sessionId = "sess-purge-1";

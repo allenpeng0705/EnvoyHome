@@ -135,7 +135,12 @@ function normalizeTimeToken(raw: string): string {
   return t;
 }
 
-/** True when text asserts an exclusive alternate of standing (not standing itself). */
+/**
+ * True when text asserts an exclusive alternate of standing (or negates it).
+ * Do NOT short-circuit on mere co-mention of the standing token — "I prefer
+ * coffee not tea" and "tea for owners, coffee for guests" must still conflict
+ * (V-KY-7 / V-KB-6).
+ */
 export function textContradictsStandingValue(
   text: string,
   standing: string,
@@ -144,12 +149,20 @@ export function textContradictsStandingValue(
   const t = text.toLowerCase();
   const stand = standing.toLowerCase().trim();
   if (!stand || stand.length < 2) return false;
-  if (t.includes(stand)) return false;
 
-  // Explicit negation of the standing value
+  // Explicit negation of the standing value (check before any "includes(stand)" gate)
   if (
     new RegExp(
       `\\b(?:not|no longer|don't|doesn’t|does not|never)\\s+(?:like |prefer |use |want )?${escapeRe(stand)}\\b`,
+      "i",
+    ).test(text)
+  ) {
+    return true;
+  }
+  // Trailing "… not <standing>" / "… instead of <standing>"
+  if (
+    new RegExp(
+      `\\b(?:not|instead of|rather than)\\s+${escapeRe(stand)}\\b`,
       "i",
     ).test(text)
   ) {
@@ -168,10 +181,8 @@ export function textContradictsStandingValue(
     }
     for (const a of ALLERGEN_ALT) {
       if (stand.includes(a)) continue;
-      if (
-        new RegExp(`\\ballerg(?:y|ic)(?:\\s+to)?\\s+${escapeRe(a)}\\b`, "i").test(t) &&
-        !t.includes(stand)
-      ) {
+      // Other allergen asserted ⇒ conflict (even if standing allergen is also named).
+      if (new RegExp(`\\ballerg(?:y|ic)(?:\\s+to)?\\s+${escapeRe(a)}\\b`, "i").test(t)) {
         return true;
       }
     }
@@ -209,6 +220,7 @@ export function textContradictsStandingValue(
   for (const a of alts) {
     if (standTok && a === standTok) continue;
     if (stand.includes(a)) continue;
+    // Exclusive alt present ⇒ conflict even if standing token also appears.
     if (new RegExp(`\\b${escapeRe(a)}\\b`, "i").test(t)) return true;
   }
   return false;
@@ -834,16 +846,14 @@ export function candidateConflictsWithStanding(
   if (key) {
     const standing = standingValueForKey(key, profileFacts, memoryMd);
     if (!standing) return { conflicts: false };
-    const stand = standing.toLowerCase();
-    if (text.toLowerCase().includes(stand)) return { conflicts: false };
-    // Same key with different value, or exclusive alt token
     const pref = /^pref\.(.+)$/.exec(key);
     const profileKey = pref ? pref[1]! : key;
-    if (
-      textContradictsStandingValue(text, standing, key) ||
-      !text.toLowerCase().includes(stand)
-    ) {
-      // Prefer-key family: any keyed non-agreeing text is a conflict for PendingLearn
+    // Negation / exclusive-alt / dual-mention (must run even when standing token appears).
+    if (textContradictsStandingValue(text, standing, key)) {
+      return { conflicts: true, standing, profileKey };
+    }
+    // Prefer-key family: keyed text that never affirms standing → PendingLearn
+    if (!text.toLowerCase().includes(standing.toLowerCase())) {
       return { conflicts: true, standing, profileKey };
     }
     return { conflicts: false };
@@ -906,7 +916,7 @@ export function filterKnowledgeAgainstStanding<T extends { snippet: string; path
   return hits.filter((h) => {
     const snip = h.snippet;
     for (const p of prefs) {
-      if (snip.toLowerCase().includes(p.value.toLowerCase())) continue;
+      // Co-mention of standing + exclusive alt must still drop (V-KB-6).
       if (textContradictsStandingValue(snip, p.value, p.key)) return false;
     }
     return true;

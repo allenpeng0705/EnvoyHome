@@ -124,6 +124,7 @@ export { SessionIndex, DEFAULT_SESSION_RETENTION_DAYS } from "./session-index.js
 export {
   KnowledgeIndex,
   DEFAULT_KNOWLEDGE_SECTION_CAP,
+  normalizeKnowledgeVirtualPath,
   type KnowledgeHit,
   type KnowledgeEngine,
   type EmbedFn,

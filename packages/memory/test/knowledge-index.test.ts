@@ -11,6 +11,7 @@ import {
   candidateConflictsWithStanding,
   filterEpisodicAgainstStanding,
   filterKnowledgeAgainstStanding,
+  normalizeKnowledgeVirtualPath,
   textContradictsStandingValue,
   STANDING_DUTY_LINE,
 } from "../dist/index.js";
@@ -192,6 +193,23 @@ test("V-KB-6: filterKnowledgeAgainstStanding drops exclusive alt (tea vs coffee)
   assert.match(kept[0]!.snippet, /Quiet hours/);
 });
 
+test("V-KB-6: co-mention of standing + exclusive alt still drops", () => {
+  const kept = filterKnowledgeAgainstStanding(
+    [
+      {
+        path: "knowledge/guest.md",
+        snippet: "tea for owners, coffee for guests. Token kb-dual-coffee",
+      },
+      { path: "knowledge/ok.md", snippet: "I prefer tea in the morning." },
+    ],
+    { drink: "tea" },
+    "drink: tea",
+  );
+  assert.equal(kept.length, 1);
+  assert.match(kept[0]!.snippet, /prefer tea/);
+  assert.ok(!kept.some((h) => /coffee/i.test(h.snippet)));
+});
+
 test("V-KY-1 SUPERSEDE same key", async () => {
   const root = await mkdtemp(join(tmpdir(), "ky-"));
   const epi = new EpisodicIndex((id) => join(root, "accounts", id));
@@ -293,6 +311,27 @@ test("V-KY-7 candidateConflictsWithStanding detects L1 clash", () => {
   assert.equal(ok.conflicts, false);
 });
 
+test("V-KY-7: negation / coffee-not-tea co-mention conflicts (no fail-open)", () => {
+  const profiles = { drink: "tea" };
+  for (const text of [
+    "I no longer like tea, I prefer coffee",
+    "I prefer coffee not tea",
+    "I prefer coffee instead of tea",
+  ]) {
+    assert.equal(
+      textContradictsStandingValue(text, "tea", "pref.drink"),
+      true,
+      text,
+    );
+    const gate = candidateConflictsWithStanding(
+      { key: "pref.drink", text },
+      profiles,
+      "drink: tea",
+    );
+    assert.equal(gate.conflicts, true, text);
+  }
+});
+
 test("V-KY-6: KnowYou off does not break session corpus independence", async () => {
   // Episodic index is optional; empty search must not throw (session_search stays V-MEM-9).
   const root = await mkdtemp(join(tmpdir(), "ky-"));
@@ -337,6 +376,13 @@ test("standing contradiction: allergy + quiet hours + drink alt", () => {
     textContradictsStandingValue("Guests drink coffee here", "tea", "drink"),
     true,
   );
+});
+
+test("normalizeKnowledgeVirtualPath refuses path escape", () => {
+  assert.equal(normalizeKnowledgeVirtualPath("knowledge/ok.md"), "knowledge/ok.md");
+  assert.equal(normalizeKnowledgeVirtualPath("knowledge/../documents/x.md"), null);
+  assert.equal(normalizeKnowledgeVirtualPath("documents/x.md"), null);
+  assert.equal(normalizeKnowledgeVirtualPath("knowledge/raw/secret.md"), null);
 });
 
 test("Doc KB soft section cap prefers non-archive", async () => {

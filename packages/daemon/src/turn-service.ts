@@ -3706,9 +3706,8 @@ ${lines.join("\n")}
         const resolved = await resolvePath(rel, true);
         await mkdir(dirname(resolved.absolute), { recursive: true });
         await writeFile(resolved.absolute, content, "utf8");
-        const norm = rel.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\//, "");
-        if (this.knowledge && norm.startsWith("knowledge/") && norm.endsWith(".md")) {
-          void this.knowledge.onKnowledgeFileWrite(accountId, norm).catch(() => undefined);
+        if (this.knowledge) {
+          void this.knowledge.onKnowledgeFileWrite(accountId, rel).catch(() => undefined);
         }
       },
       readFile: async (rel: string) => {

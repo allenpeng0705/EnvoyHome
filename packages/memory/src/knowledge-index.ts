@@ -3,7 +3,7 @@
 
 import { createHash } from "node:crypto";
 import { access, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { atomicWriteFile } from "./atomic-write.js";
 import { recallOverCorpus, type RecallEngine } from "./recall-fts.js";
 import {
@@ -12,6 +12,31 @@ import {
   type KnowledgeSection,
 } from "./knowledge-sections.js";
 import { withAccountLock } from "./writer-lock.js";
+
+/**
+ * Resolve `rel` under `root`; refuse `..` / absolute escapes (Knowledge-RAG §3.1).
+ * Memory package stays free of daemon `safeJoin`; containment is local.
+ */
+function resolveUnderRoot(root: string, rel: string): string {
+  if (!rel || rel.includes("\0") || /(^|[\\/])\.\.([\\/]|$)/.test(rel)) {
+    throw new Error("envoyhome.path_jail: knowledge upsert path escape");
+  }
+  const absRoot = resolve(root);
+  const abs = resolve(absRoot, rel);
+  if (abs !== absRoot && !abs.startsWith(absRoot + sep)) {
+    throw new Error("envoyhome.path_jail: knowledge upsert path escape");
+  }
+  return abs;
+}
+
+/** Canonical `knowledge/…` virtual path or null if unsafe / out of tree. */
+export function normalizeKnowledgeVirtualPath(virtualPath: string): string | null {
+  const norm = virtualPath.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\//, "");
+  if (!norm.startsWith("knowledge/") || !norm.endsWith(".md")) return null;
+  if (norm.includes("\0") || norm.split("/").includes("..")) return null;
+  if (norm.includes("/raw/")) return null;
+  return norm;
+}
 
 /** Soft cap on indexed Doc KB sections per account (Knowledge-RAG §7 Caps). */
 export const DEFAULT_KNOWLEDGE_SECTION_CAP = 2000;
@@ -183,16 +208,21 @@ export class KnowledgeIndex {
     virtualPath: string,
     opts?: { embed?: EmbedFn; embedModelId?: string; sectionCap?: number },
   ): Promise<void> {
-    if (!virtualPath.startsWith("knowledge/") || !virtualPath.endsWith(".md")) return;
-    if (virtualPath.includes("/raw/")) return;
+    const norm = normalizeKnowledgeVirtualPath(virtualPath);
+    if (!norm) return;
     return withAccountLock(accountId, this.accountRoot(accountId), async () => {
-      const rel = virtualPath.slice("knowledge/".length);
-      const abs = join(knowledgeFilesRoot, rel);
+      const rel = norm.slice("knowledge/".length);
+      let abs: string;
+      try {
+        abs = resolveUnderRoot(knowledgeFilesRoot, rel);
+      } catch {
+        return;
+      }
       const data = await this.load(accountId);
-      data.sections = data.sections.filter((s) => s.path !== virtualPath);
+      data.sections = data.sections.filter((s) => s.path !== norm);
       try {
         const text = await readFile(abs, "utf8");
-        const fresh = splitKnowledgeMarkdown(virtualPath, text);
+        const fresh = splitKnowledgeMarkdown(norm, text);
         if (opts?.embed && fresh.length > 0) {
           try {
             const vectors = await opts.embed(fresh.map((s) => s.text.slice(0, 4000)));

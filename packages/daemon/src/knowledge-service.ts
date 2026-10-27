@@ -11,6 +11,7 @@ import {
   candidateConflictsWithStanding,
   filterEpisodicAgainstStanding,
   filterKnowledgeAgainstStanding,
+  normalizeKnowledgeVirtualPath,
   type EpisodicHit,
   type IngestCandidate,
   type KnowledgeHit,
@@ -34,6 +35,14 @@ const DEFAULT_POLICY: KnowledgePolicy = {
   knowledgeInjectBudget: 4000,
   episodicInjectBudget: 4000,
 };
+
+/** Cap inject budgets (desktop UI also caps; RPC must fail closed). */
+export const MAX_RAG_INJECT_BUDGET = 32_000;
+
+function clampInjectBudget(n: number): number {
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.min(MAX_RAG_INJECT_BUDGET, Math.floor(n));
+}
 
 function isRagMode(v: unknown): v is RagInjectMode {
   return v === "off" || v === "tool" || v === "auto";
@@ -78,11 +87,11 @@ export class KnowledgeService {
           : DEFAULT_POLICY.episodicInject,
         knowledgeInjectBudget:
           typeof parsed.knowledgeInjectBudget === "number" && parsed.knowledgeInjectBudget >= 0
-            ? parsed.knowledgeInjectBudget
+            ? clampInjectBudget(parsed.knowledgeInjectBudget)
             : DEFAULT_POLICY.knowledgeInjectBudget,
         episodicInjectBudget:
           typeof parsed.episodicInjectBudget === "number" && parsed.episodicInjectBudget >= 0
-            ? parsed.episodicInjectBudget
+            ? clampInjectBudget(parsed.episodicInjectBudget)
             : DEFAULT_POLICY.episodicInjectBudget,
       };
     } catch {
@@ -104,11 +113,11 @@ export class KnowledgeService {
         : cur.episodicInject,
       knowledgeInjectBudget:
         typeof patch.knowledgeInjectBudget === "number" && patch.knowledgeInjectBudget >= 0
-          ? patch.knowledgeInjectBudget
+          ? clampInjectBudget(patch.knowledgeInjectBudget)
           : cur.knowledgeInjectBudget,
       episodicInjectBudget:
         typeof patch.episodicInjectBudget === "number" && patch.episodicInjectBudget >= 0
-          ? patch.episodicInjectBudget
+          ? clampInjectBudget(patch.episodicInjectBudget)
           : cur.episodicInjectBudget,
     };
     await mkdir(join(this.paths.accountRoot(accountId), "memory-backend"), { recursive: true });
@@ -140,9 +149,10 @@ export class KnowledgeService {
   }
 
   async onKnowledgeFileWrite(accountId: string, virtualPath: string): Promise<void> {
-    if (!virtualPath.startsWith("knowledge/") || !virtualPath.endsWith(".md")) return;
+    const norm = normalizeKnowledgeVirtualPath(virtualPath);
+    if (!norm) return;
     const emb = await this.embedFn();
-    await this.knowledge.upsertPath(accountId, this.knowledgeRoot(accountId), virtualPath, {
+    await this.knowledge.upsertPath(accountId, this.knowledgeRoot(accountId), norm, {
       ...(emb ? { embed: emb, embedModelId: this.embed.currentModelId() } : {}),
     });
   }
