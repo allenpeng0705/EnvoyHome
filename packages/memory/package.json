@@ -21,7 +21,8 @@
     "test": "tsc -p tsconfig.json && node --test test/*.test.ts"
   },
   "dependencies": {
-    "@envoyhome/protocol": "workspace:*"
+    "@envoyhome/protocol": "workspace:*",
+    "sqlite-vec": "0.1.9"
   },
   "devDependencies": {
     "@envoyhome/test-utils": "workspace:*",

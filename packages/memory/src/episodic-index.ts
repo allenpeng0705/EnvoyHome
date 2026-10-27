@@ -1,12 +1,27 @@
 // KnowYou L4′ episodic engine — Knowledge-RAG Design §4.
-// ADD | SUPERSEDE | SKIP; summarize + TTL; pure-JS JSON persistence.
+// ADD | SUPERSEDE | SKIP; summarize + TTL; episodic-index.sqlite (FTS5 + sqlite-vec / BLOB).
 
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
-import { atomicWriteFile } from "./atomic-write.js";
-import { recallOverCorpus } from "./recall-fts.js";
+import type { DatabaseSync } from "node:sqlite";
 import { withAccountLock } from "./writer-lock.js";
+import {
+  blobToFloat32,
+  cosineSimilarity,
+  ensureParentDir,
+  ensureVec0Table,
+  float32ToBlob,
+  fts5MatchQuery,
+  metaGet,
+  metaSet,
+  needsShortCjkScan,
+  openAccountIndexDb,
+  renameJsonMigrated,
+  vecToMatchLiteral,
+  type OpenedIndexDb,
+} from "./sqlite-index.js";
 
 /** Soft cap on active KnowYou rows per account (Knowledge-RAG §7 Caps). */
 export const DEFAULT_KNOWYOU_ACTIVE_CAP = 5000;
@@ -66,9 +81,15 @@ function indexDir(accountRoot: string): string {
   return join(accountRoot, "memory-backend", "episodic-index");
 }
 
-function indexPath(accountRoot: string): string {
+function indexSqlitePath(accountRoot: string): string {
+  return join(indexDir(accountRoot), "episodic-index.sqlite");
+}
+
+function indexJsonPath(accountRoot: string): string {
   return join(indexDir(accountRoot), "index.json");
 }
+
+type CachedDb = OpenedIndexDb & { accountRoot: string };
 
 function hashText(s: string): string {
   return createHash("sha256").update(s, "utf8").digest("hex").slice(0, 32);
@@ -249,28 +270,28 @@ export function extractStandingPatchValue(text: string, _profileKey?: string): s
   return words.slice(0, 80) || raw.slice(0, 80);
 }
 
-function cosine(a: number[], b: number[]): number {
-  let dot = 0;
-  let na = 0;
-  let nb = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i]! * b[i]!;
-    na += a[i]! * a[i]!;
-    nb += b[i]! * b[i]!;
-  }
-  if (na === 0 || nb === 0) return 0;
-  return dot / (Math.sqrt(na) * Math.sqrt(nb));
-}
-
 export class EpisodicIndex {
+  private readonly dbs = new Map<string, CachedDb>();
+
   constructor(private readonly accountRoot: (accountId: string) => string) {}
 
   async ensure(accountId: string): Promise<void> {
     await mkdir(indexDir(this.accountRoot(accountId)), { recursive: true });
+    await this.openDb(accountId);
   }
 
   async deleteIndex(accountId: string): Promise<void> {
-    await rm(indexDir(this.accountRoot(accountId)), { recursive: true, force: true });
+    const root = this.accountRoot(accountId);
+    const cached = this.dbs.get(root);
+    if (cached) {
+      try {
+        cached.db.close();
+      } catch {
+        /* ignore */
+      }
+      this.dbs.delete(root);
+    }
+    await rm(indexDir(root), { recursive: true, force: true });
   }
 
   async purgeSession(accountId: string, sessionId: string): Promise<number> {
@@ -581,50 +602,18 @@ export class EpisodicIndex {
     const active = data.rows.filter((r) => r.status === "active");
     const recentCut =
       Date.now() - data.meta.recentPreferDays * 24 * 60 * 60 * 1000;
-
-    const fts = recallOverCorpus(
-      active.map((r) => ({ path: r.id, content: `${r.key}\n${r.text}` })),
-      query,
-      { limit: limit * 2 },
-    );
-
-    const ftsHits: EpisodicHit[] = fts.map((h) => {
-      const row = active.find((r) => r.id === h.path);
-      const hit: EpisodicHit = {
-        id: h.path,
-        key: row?.key ?? "",
-        text: row?.text ?? h.snippet,
-        score: h.score,
-        engine: h.engine === "scan" ? "scan" : "fts",
-      };
-      if (row?.isSummary !== undefined) hit.isSummary = row.isSummary;
-      return hit;
-    });
+    const opened = await this.openDb(accountId);
+    const q = query.trim();
+    const ftsHits = q ? this.searchFts(opened.db, q, limit * 2) : [];
 
     // V-EMB-6: while embedStale, never fuse old vectors with a new query space.
     const qv = data.meta.embedStale ? undefined : opts?.queryEmbedding;
     let hits = ftsHits;
     if (qv?.length) {
-      const vecHits: EpisodicHit[] = [];
-      for (const r of active) {
-        if (!r.embedding || r.embedding.length !== qv.length) continue;
-        const score = cosine(qv, r.embedding);
-        if (score < 0.2) continue;
-        const hit: EpisodicHit = {
-          id: r.id,
-          key: r.key,
-          text: r.text,
-          score,
-          engine: "vec",
-        };
-        if (r.isSummary !== undefined) hit.isSummary = r.isSummary;
-        vecHits.push(hit);
-      }
-      vecHits.sort((a, b) => b.score - a.score);
-      hits = rrfMergeEpisodic(ftsHits, vecHits.slice(0, limit * 2), limit * 2);
+      const vecHits = this.searchVec(opened, qv, limit * 2);
+      hits = rrfMergeEpisodic(ftsHits, vecHits, limit * 2);
     }
 
-    // Prefer recent raw over summary
     hits.sort((a, b) => {
       const ra = active.find((r) => r.id === a.id);
       const rb = active.find((r) => r.id === b.id);
@@ -749,25 +738,367 @@ export class EpisodicIndex {
     return dedupeCandidates(out);
   }
 
-  private async load(accountId: string): Promise<EpisodicFile> {
-    try {
-      const raw = await readFile(indexPath(this.accountRoot(accountId)), "utf8");
-      const parsed = JSON.parse(raw) as EpisodicFile;
-      return {
-        meta: { ...defaultMeta(), ...parsed.meta },
-        rows: Array.isArray(parsed.rows) ? parsed.rows : [],
-      };
-    } catch {
-      return { meta: defaultMeta(), rows: [] };
+  private async openDb(accountId: string): Promise<CachedDb> {
+    const root = this.accountRoot(accountId);
+    const cached = this.dbs.get(root);
+    if (cached) return cached;
+    await mkdir(indexDir(root), { recursive: true });
+    const dbPath = indexSqlitePath(root);
+    await ensureParentDir(dbPath);
+    const opened = openAccountIndexDb(dbPath);
+    this.initSchema(opened.db);
+    const cachedDb: CachedDb = { ...opened, accountRoot: root };
+    this.dbs.set(root, cachedDb);
+    await this.maybeMigrateJson(accountId, cachedDb);
+    return cachedDb;
+  }
+
+  private initSchema(db: DatabaseSync): void {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS meta (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS rows (
+        id TEXT PRIMARY KEY,
+        key TEXT NOT NULL DEFAULT '',
+        text TEXT NOT NULL,
+        status TEXT NOT NULL,
+        replaces_id TEXT,
+        is_summary INTEGER NOT NULL DEFAULT 0,
+        covers_json TEXT,
+        source_turn_ids_json TEXT,
+        source_session_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        embedding BLOB
+      );
+      CREATE INDEX IF NOT EXISTS idx_rows_status ON rows(status);
+      CREATE INDEX IF NOT EXISTS idx_rows_session ON rows(source_session_id);
+    `);
+    const ftsExists = db
+      .prepare(`SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'rows_fts'`)
+      .get() as { ok: number } | undefined;
+    if (!ftsExists) {
+      try {
+        db.exec(`
+          CREATE VIRTUAL TABLE rows_fts USING fts5(
+            id UNINDEXED,
+            key,
+            body,
+            tokenize = 'trigram'
+          );
+        `);
+      } catch {
+        db.exec(`
+          CREATE VIRTUAL TABLE rows_fts USING fts5(
+            id UNINDEXED,
+            key,
+            body
+          );
+        `);
+      }
     }
   }
 
+  private async maybeMigrateJson(accountId: string, opened: CachedDb): Promise<void> {
+    const jsonPath = indexJsonPath(this.accountRoot(accountId));
+    if (!existsSync(jsonPath)) return;
+    const count = (opened.db.prepare(`SELECT COUNT(*) AS n FROM rows`).get() as { n: number }).n;
+    if (count > 0) {
+      renameJsonMigrated(jsonPath);
+      return;
+    }
+    try {
+      const raw = await readFile(jsonPath, "utf8");
+      const parsed = JSON.parse(raw) as EpisodicFile;
+      const data: EpisodicFile = {
+        meta: { ...defaultMeta(), ...parsed.meta },
+        rows: Array.isArray(parsed.rows) ? parsed.rows : [],
+      };
+      this.writeAll(opened, data);
+      renameJsonMigrated(jsonPath);
+    } catch {
+      /* keep json */
+    }
+  }
+
+  private async load(accountId: string): Promise<EpisodicFile> {
+    const opened = await this.openDb(accountId);
+    return this.readAll(opened.db);
+  }
+
   private async save(accountId: string, data: EpisodicFile): Promise<void> {
-    await this.ensure(accountId);
-    await atomicWriteFile(
-      indexPath(this.accountRoot(accountId)),
-      JSON.stringify(data) + "\n",
-    );
+    const opened = await this.openDb(accountId);
+    this.writeAll(opened, data);
+  }
+
+  private readAll(db: DatabaseSync): EpisodicFile {
+    const meta = defaultMeta();
+    const keep = metaGet(db, "keepOriginalDays");
+    if (keep) meta.keepOriginalDays = Number(keep);
+    const minAge = metaGet(db, "minAgeDays");
+    if (minAge) meta.minAgeDays = Number(minAge);
+    const recent = metaGet(db, "recentPreferDays");
+    if (recent) meta.recentPreferDays = Number(recent);
+    meta.lastSummarizeAt = metaGet(db, "lastSummarizeAt") || null;
+    meta.embedStale = metaGet(db, "embedStale") === "1";
+    meta.embedModelId = metaGet(db, "embedModelId") || null;
+
+    const rawRows = db.prepare(`SELECT * FROM rows`).all() as Array<{
+      id: string;
+      key: string;
+      text: string;
+      status: string;
+      replaces_id: string | null;
+      is_summary: number;
+      covers_json: string | null;
+      source_turn_ids_json: string | null;
+      source_session_id: string | null;
+      created_at: string;
+      updated_at: string;
+      content_hash: string;
+      embedding: Buffer | null;
+    }>;
+
+    const rows: EpisodicRow[] = rawRows.map((r) => {
+      const row: EpisodicRow = {
+        id: r.id,
+        key: r.key,
+        text: r.text,
+        status: r.status === "superseded" ? "superseded" : "active",
+        createdAt: r.created_at,
+        updatedAt: r.updated_at,
+        contentHash: r.content_hash,
+      };
+      if (r.replaces_id) row.replacesId = r.replaces_id;
+      if (r.is_summary) row.isSummary = true;
+      if (r.covers_json) {
+        try {
+          row.covers = JSON.parse(r.covers_json) as string[];
+        } catch {
+          /* ignore */
+        }
+      }
+      if (r.source_turn_ids_json) {
+        try {
+          row.sourceTurnIds = JSON.parse(r.source_turn_ids_json) as string[];
+        } catch {
+          /* ignore */
+        }
+      }
+      if (r.source_session_id) row.sourceSessionId = r.source_session_id;
+      if (r.embedding) row.embedding = blobToFloat32(r.embedding);
+      return row;
+    });
+
+    return { meta, rows };
+  }
+
+  private writeAll(opened: CachedDb, data: EpisodicFile): void {
+    const { db, vecOk } = opened;
+    metaSet(db, "keepOriginalDays", String(data.meta.keepOriginalDays));
+    metaSet(db, "minAgeDays", String(data.meta.minAgeDays));
+    metaSet(db, "recentPreferDays", String(data.meta.recentPreferDays));
+    metaSet(db, "lastSummarizeAt", data.meta.lastSummarizeAt ?? "");
+    metaSet(db, "embedStale", data.meta.embedStale ? "1" : "0");
+    metaSet(db, "embedModelId", data.meta.embedModelId ?? "");
+
+    db.exec(`DELETE FROM rows`);
+    db.exec(`DELETE FROM rows_fts`);
+    try {
+      db.exec(`DELETE FROM rows_vec`);
+    } catch {
+      /* optional */
+    }
+
+    const ins = db.prepare(`
+      INSERT INTO rows(
+        id, key, text, status, replaces_id, is_summary, covers_json,
+        source_turn_ids_json, source_session_id, created_at, updated_at, content_hash, embedding
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const insFts = db.prepare(`INSERT INTO rows_fts(id, key, body) VALUES (?, ?, ?)`);
+
+    let embedDim: number | null = null;
+    for (const r of data.rows) {
+      const blob =
+        r.embedding && r.embedding.length > 0 ? float32ToBlob(r.embedding) : null;
+      if (blob) embedDim = r.embedding!.length;
+      ins.run(
+        r.id,
+        r.key,
+        r.text,
+        r.status,
+        r.replacesId ?? null,
+        r.isSummary ? 1 : 0,
+        r.covers ? JSON.stringify(r.covers) : null,
+        r.sourceTurnIds ? JSON.stringify(r.sourceTurnIds) : null,
+        r.sourceSessionId ?? null,
+        r.createdAt,
+        r.updatedAt,
+        r.contentHash,
+        blob,
+      );
+      if (r.status === "active") {
+        insFts.run(r.id, r.key, r.text);
+      }
+    }
+
+    if (embedDim && embedDim > 0) {
+      metaSet(db, "embedDim", String(embedDim));
+      if (ensureVec0Table(db, vecOk, "rows_vec", embedDim, "vec0_dim")) {
+        const insVec = db.prepare(`INSERT INTO rows_vec(id, embedding) VALUES (?, ?)`);
+        for (const r of data.rows) {
+          if (r.status !== "active" || !r.embedding || r.embedding.length !== embedDim) continue;
+          try {
+            insVec.run(r.id, vecToMatchLiteral(r.embedding));
+          } catch {
+            try {
+              insVec.run(r.id, float32ToBlob(r.embedding));
+            } catch {
+              /* skip */
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private searchFts(db: DatabaseSync, query: string, limit: number): EpisodicHit[] {
+    const hits: EpisodicHit[] = [];
+    const seen = new Set<string>();
+    try {
+      const rows = db
+        .prepare(
+          `
+          SELECT r.id, r.key, r.text, r.is_summary, bm25(rows_fts) AS rank
+          FROM rows_fts
+          JOIN rows r ON r.id = rows_fts.id
+          WHERE rows_fts MATCH ? AND r.status = 'active'
+          ORDER BY rank
+          LIMIT ?
+        `,
+        )
+        .all(fts5MatchQuery(query), limit) as Array<{
+        id: string;
+        key: string;
+        text: string;
+        is_summary: number;
+        rank: number;
+      }>;
+      for (const r of rows) {
+        seen.add(r.id);
+        const hit: EpisodicHit = {
+          id: r.id,
+          key: r.key,
+          text: r.text,
+          score: 1 / (1 + Math.abs(Number(r.rank) || 0)),
+          engine: "fts",
+        };
+        if (r.is_summary) hit.isSummary = true;
+        hits.push(hit);
+      }
+    } catch {
+      /* MATCH failed */
+    }
+
+    if (needsShortCjkScan(query) || hits.length === 0) {
+      const needle = query.toLowerCase();
+      const rows = db
+        .prepare(
+          `SELECT id, key, text, is_summary FROM rows WHERE status = 'active' LIMIT 5000`,
+        )
+        .all() as Array<{ id: string; key: string; text: string; is_summary: number }>;
+      for (const r of rows) {
+        if (seen.has(r.id)) continue;
+        if (!`${r.key}\n${r.text}`.toLowerCase().includes(needle)) continue;
+        seen.add(r.id);
+        const hit: EpisodicHit = {
+          id: r.id,
+          key: r.key,
+          text: r.text,
+          score: 0.5,
+          engine: "scan",
+        };
+        if (r.is_summary) hit.isSummary = true;
+        hits.push(hit);
+      }
+    }
+    hits.sort((a, b) => b.score - a.score);
+    return hits.slice(0, limit);
+  }
+
+  private searchVec(opened: CachedDb, qv: number[], limit: number): EpisodicHit[] {
+    const { db, vecOk } = opened;
+    const dim = Number(metaGet(db, "embedDim") ?? 0);
+    if (dim > 0 && ensureVec0Table(db, vecOk, "rows_vec", dim, "vec0_dim")) {
+      try {
+        const rows = db
+          .prepare(
+            `
+            SELECT v.id, v.distance, r.key, r.text, r.is_summary
+            FROM rows_vec v
+            JOIN rows r ON r.id = v.id
+            WHERE v.embedding MATCH ? AND k = ? AND r.status = 'active'
+            ORDER BY distance
+          `,
+          )
+          .all(vecToMatchLiteral(qv), limit) as Array<{
+          id: string;
+          distance: number;
+          key: string;
+          text: string;
+          is_summary: number;
+        }>;
+        if (rows.length > 0) {
+          return rows.map((r) => {
+            const hit: EpisodicHit = {
+              id: r.id,
+              key: r.key,
+              text: r.text,
+              score: 1 / (1 + Math.abs(Number(r.distance) || 0)),
+              engine: "vec",
+            };
+            if (r.is_summary) hit.isSummary = true;
+            return hit;
+          });
+        }
+      } catch {
+        /* blob fallback */
+      }
+    }
+
+    const rows = db
+      .prepare(
+        `SELECT id, key, text, is_summary, embedding FROM rows WHERE status = 'active' AND embedding IS NOT NULL`,
+      )
+      .all() as Array<{
+      id: string;
+      key: string;
+      text: string;
+      is_summary: number;
+      embedding: Buffer;
+    }>;
+    const scored: EpisodicHit[] = [];
+    for (const r of rows) {
+      const emb = blobToFloat32(r.embedding);
+      if (emb.length !== qv.length) continue;
+      const score = cosineSimilarity(qv, emb);
+      if (score < 0.2) continue;
+      const hit: EpisodicHit = {
+        id: r.id,
+        key: r.key,
+        text: r.text,
+        score,
+        engine: "vec",
+      };
+      if (r.is_summary) hit.isSummary = true;
+      scored.push(hit);
+    }
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, limit);
   }
 }
 

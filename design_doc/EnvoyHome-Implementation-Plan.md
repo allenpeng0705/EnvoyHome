@@ -45,9 +45,9 @@ EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0
 **Next (after early-adopter ops):** Live HA checklist ([`docs/smart-home-live-checklist.md`](../docs/smart-home-live-checklist.md)); then **First-party IM live** (Telegram first) when Mesh phone path is solid  
 **Deferred from early-adopter claims:** Production IM zoo; Privacy Mode product toggle (`home.setPrivacyMode` stays Phase 2); agentskills.io conformance  
 
-**Active coding epic:** **Knowledge + RAG / KnowYou** — [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md); board **KB-P1…P5** below (V-KB / V-KY / V-EMB).
+**Active coding epic:** _(none — KB-P1…P5 + SQLite indexes shipped)_ — next operator track: live HA checklist / IM when ready.
 
-**Last shipped (docs + KB spine):** Knowledge-RAG Normative (`2026-10-25`); KB-P1…P5 implementation (`2026-10-25b`); early-adopter claim sheet + live HA checklist (`2026-10-22d`)
+**Last shipped:** Knowledge-RAG SQLite+FTS5+sqlite-vec indexes (`2026-10-27b`); inject defaults `auto` (`2026-10-27`); KB-P1…P5 (`2026-10-25b`); early-adopter claim sheet (`2026-10-22d`)
 
 ## Key Decisions
 
@@ -815,6 +815,7 @@ If you need to change the answer to "in what order we build," edit this doc and 
 
 | Date | Change |
 |------|--------|
+| 2026-10-27b | **KB SQLite indexes:** `knowledge-index.sqlite` / `episodic-index.sqlite` via `node:sqlite` + FTS5 trigram + sqlite-vec (BLOB cosine fallback); JSON migrate-once; Active coding epic cleared. |
 | 2026-10-27 | **KB item 5 close:** live `agent:eval:kb` green (auto-inject + standing filter); ship `knowledgeInject`/`episodicInject` default **`auto`**; V-KB/V-KY/V-EMB checklist in Plan. |
 | 2026-10-25d | **Settings Knowledge & embed UI:** LLM → Memory card — curated embed download/progress, enable spawn/Ollama/disable, inject defaults `tool`, reindex; `home:embed-model-download` + cancel/resume RPCs. |
 | 2026-10-25c | **KB hardening:** session→episodic purge; V-KY-7 PendingLearn on L1/L2 conflict; real `downloadEmbedModel` + TOFU sha256; Doctor embed/stale; V-KB-7 artifact open; Settings Memory stub; KnowYou journeys; JSON day-one paths Normative note. |

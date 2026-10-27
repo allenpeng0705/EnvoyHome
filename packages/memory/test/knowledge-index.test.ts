@@ -424,13 +424,61 @@ test("KnowYou soft activeCap supersedes oldest unkeyed", async () => {
   await rm(root, { recursive: true, force: true });
 });
 
-test("index save is atomic (tmp then rename leaves valid JSON)", async () => {
-  const root = await mkdtemp(join(tmpdir(), "ky-atom-"));
+test("episodic index persists to sqlite (not JSON)", async () => {
+  const root = await mkdtemp(join(tmpdir(), "ky-sqlite-"));
   const epi = new EpisodicIndex((id) => join(root, "accounts", id));
   await epi.ingest("a", [{ key: "pref.drink", text: "I prefer tea" }]);
-  const idxFile = join(root, "accounts", "a", "memory-backend", "episodic-index", "index.json");
-  const raw = await readFile(idxFile, "utf8");
-  assert.doesNotThrow(() => JSON.parse(raw));
-  assert.match(raw, /prefer tea/);
+  const sqlitePath = join(
+    root,
+    "accounts",
+    "a",
+    "memory-backend",
+    "episodic-index",
+    "episodic-index.sqlite",
+  );
+  const { access } = await import("node:fs/promises");
+  await access(sqlitePath);
+  const { hits } = await epi.search("a", "prefer tea");
+  assert.ok(hits.some((h) => /tea/i.test(h.text)));
+  await rm(root, { recursive: true, force: true });
+});
+
+test("JSON day-one index migrates into knowledge-index.sqlite", async () => {
+  const root = await mkdtemp(join(tmpdir(), "kb-mig-"));
+  const accountId = "acc1";
+  const knowledge = join(root, "accounts", accountId, "files", "knowledge");
+  await mkdir(knowledge, { recursive: true });
+  await writeFile(join(knowledge, "a.md"), "# Quiet\n\nQuiet hours at 22:00. Token mig-22\n", "utf8");
+  const idxDir = join(root, "accounts", accountId, "memory-backend", "knowledge-index");
+  await mkdir(idxDir, { recursive: true });
+  // Seed legacy JSON then open KnowledgeIndex (migrate on ensure/reindex path via openDb)
+  const legacy = {
+    meta: {
+      version: 1,
+      sectionCount: 1,
+      lastReindexAt: null,
+      embedModelId: null,
+      embedDim: null,
+      embedStale: false,
+    },
+    sections: [
+      {
+        sectionId: "legacy1",
+        path: "knowledge/a.md",
+        heading: "Quiet",
+        level: 1,
+        startLine: 1,
+        endLine: 3,
+        text: "Quiet hours at 22:00. Token mig-22",
+        contentHash: "abc",
+      },
+    ],
+  };
+  await writeFile(join(idxDir, "index.json"), JSON.stringify(legacy) + "\n", "utf8");
+  const idx = new KnowledgeIndex((id) => join(root, "accounts", id));
+  const { hits } = await idx.search(accountId, "mig-22");
+  assert.ok(hits.length >= 1, "migrated sections searchable");
+  const st = await idx.status(accountId);
+  assert.match(st.indexPath, /knowledge-index\.sqlite/);
   await rm(root, { recursive: true, force: true });
 });

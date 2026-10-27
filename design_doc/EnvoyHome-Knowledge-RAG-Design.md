@@ -4,7 +4,7 @@
 |-------|--------|
 | **Document** | Normative design for **Doc KB (L6)**, **KnowYou episodic (L4′)**, **local hybrid RAG**, and the **Home embed engine** |
 | **Status** | Living draft — Owner direction 2026-10-25 |
-| **Last updated** | 2026-10-27 |
+| **Last updated** | 2026-10-27b |
 | **Parent** | [`EnvoyHome-Design.md`](EnvoyHome-Design.md) — product-wide ground truth (§2.4 ports, §8.5 Local, §9 Memory summary) |
 | **Sibling** | [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Design.md) — L0–L7 standing, flush, LearnQueue |
 | **Peer research** | [`analysis/peer-memory-systems.md`](analysis/peer-memory-systems.md); OSS survey notes in §14 |
@@ -20,6 +20,7 @@
 
 | Date | Change |
 |------|--------|
+| 2026-10-27b | **SQLite ship persistence:** Doc KB / KnowYou indexes are `knowledge-index.sqlite` / `episodic-index.sqlite` (`node:sqlite` FTS5 trigram + **sqlite-vec** when loadable; float BLOB + JS cosine fallback). Legacy `index.json` migrates once on open. Hit shape unchanged. |
 | 2026-10-27 | **Ship defaults → `auto`:** `knowledgeInject` / `episodicInject` default **`auto`** after live eval gates (`pnpm agent:eval:kb`, incl. auto-inject + standing-filter cases). Owner may set `tool`/`off` in Settings. |
 | 2026-10-26 | **Ship defaults + hardening:** `knowledgeInject` / `episodicInject` default **`tool`** until eval gates green; KnowYou extract **user-turn only**; standing contradiction widened (allergy / quiet-hours / drink / food) and applied on tool retrieve; Doc KB section soft cap 2000 + KnowYou active soft cap 5000; index writes under account lock + atomic rename; Home embed `prefer=attach` refused at router; embed HTTP retry-once. |
 | 2026-10-25b | **Day-one persistence:** indexes MAY live as rebuildable JSON under `memory-backend/knowledge-index/` and `memory-backend/episodic-index/` (pure-JS trigram + float vectors). Conceptual `*.sqlite` paths remain the long-term target; hit shape unchanged on FTS5/`sqlite-vec` swap. |
@@ -111,8 +112,8 @@
 
 | Store | Path (day-one / conceptual) | Source of truth |
 |-------|-----------------------------|-----------------|
-| Doc KB index | `memory-backend/knowledge-index/index.json` (→ `knowledge-index.sqlite`) | `accounts/<id>/files/knowledge/**` (+ extract md) |
-| KnowYou / episodic | `memory-backend/episodic-index/index.json` (→ `episodic-index.sqlite`) | transcripts + derived fact rows (not a replacement for `sessions/`) |
+| Doc KB index | `memory-backend/knowledge-index/knowledge-index.sqlite` (legacy `index.json` migrates once) | `accounts/<id>/files/knowledge/**` (+ extract md) |
+| KnowYou / episodic | `memory-backend/episodic-index/episodic-index.sqlite` (legacy `index.json` migrates once) | transcripts + derived fact rows (not a replacement for `sessions/`) |
 
 L4 legacy `session-fts/` (trigram files) MAY migrate into `episodic-index` FTS tables; until migration completes, `session_search` MUST keep working (V-MEM-9).
 
@@ -524,7 +525,7 @@ Cite Mesh peers when adapting:
 |------|------|
 | Ship `episodicInject` default `tool` until P5 eval green? | **Resolved 2026-10-27** — default `auto`; Settings override remains |
 | One SQLite file vs two per account | Two files for blast-radius; or one with prefixed tables |
-| sqlite-vec vs float blob + JS cosine | Prefer sqlite-vec when native OK; pure JS OK for P3 |
+| sqlite-vec vs float blob + JS cosine | **Resolved 2026-10-27b** — sqlite-vec preferred (`node:sqlite` loadExtension); BLOB + JS cosine fallback when extension unavailable |
 | Exact default budgets | Tune with agent-eval knowledge + live KnowYou packs |
 
 ---
