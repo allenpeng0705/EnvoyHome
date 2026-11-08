@@ -49,7 +49,9 @@ export function filterChildAllowTools(raw: unknown): string[] {
         t &&
         !DENY_CHILD_TOOLS.has(t) &&
         !t.startsWith("ha_") &&
-        !t.startsWith("mqtt_"),
+        !t.startsWith("mqtt_") &&
+        // Design §9.5h — MCP parent-attended catalogue only in v1.
+        !t.startsWith("mcp__"),
     )
     .slice(0, 12);
 }

@@ -82,6 +82,30 @@ const sessionTail = obj(
     updatedAt: iso(),
     /** Unarmed schedule offer waiting for Confirm / Cancel on this session. */
     pendingSchedule: pendingScheduleConfirm,
+    /** Attended plan→execute checklist snapshot (P2-E4); omit when absent. */
+    sessionPlan: obj(
+      {
+        planId: str({ minLength: 1 }),
+        phase: enumOf("planning", "awaiting_confirm", "executing", "done"),
+        entries: arr(
+          obj(
+            {
+              id: str(),
+              content: str({ minLength: 1 }),
+              status: enumOf("pending", "in_progress", "completed", "cancelled"),
+              risk: enumOf("read", "write", "exec", "network", "admin", "sensitive"),
+            },
+            ["content", "status"],
+          ),
+        ),
+        needsWriteConfirm: bool(),
+        confirmedAt: iso(),
+        hopCount: int({ minimum: 0 }),
+        hopBudget: int({ minimum: 1 }),
+        updatedAt: iso(),
+      },
+      ["planId", "phase", "entries", "needsWriteConfirm", "hopCount", "hopBudget"],
+    ),
   },
   ["sessionId", "updatedAt"],
 );
@@ -216,7 +240,7 @@ const approval = obj(
   ],
 );
 
-/** EnvoyCoder ApprovalChoices peer — chat question card (Design V-UX-14). */
+/** EnvoyCoder ApprovalChoices peer — chat question card (Design V-UX-14 / §9.5g.3). */
 const choiceOption = obj(
   {
     id: str({ minLength: 1 }),
@@ -224,6 +248,27 @@ const choiceOption = obj(
     destructive: bool(),
   },
   ["id", "label"],
+);
+
+const choiceFormField = obj(
+  {
+    id: str({ minLength: 1 }),
+    label: str({ minLength: 1 }),
+    ref: str({ minLength: 1 }),
+    kind: enumOf("text", "password", "otp", "textarea", "select", "checkbox"),
+    required: bool(),
+    options: arr(
+      obj(
+        {
+          value: str({ minLength: 1 }),
+          label: str({ minLength: 1 }),
+        },
+        ["value", "label"],
+      ),
+    ),
+    sensitive: bool(),
+  },
+  ["id", "label", "ref", "kind", "sensitive"],
 );
 
 const pendingChoice = obj(
@@ -235,9 +280,26 @@ const pendingChoice = obj(
     question: str({ minLength: 1 }),
     detail: str(),
     options: arr(choiceOption),
-    selection: enumOf("one", "many", "text"),
+    selection: enumOf("one", "many", "text", "form"),
     multiline: bool(),
-    purpose: enumOf("ask_user", "schedule_candidates", "home_disambiguation", "general"),
+    purpose: enumOf(
+      "ask_user",
+      "schedule_candidates",
+      "home_disambiguation",
+      "general",
+      "session_plan",
+      "browser_form",
+      "outbound_handoff",
+    ),
+    fields: arr(choiceFormField),
+    snapshotId: str({ minLength: 1 }),
+    targetId: str({ minLength: 1 }),
+    profile: enumOf("managed", "personal", "remote"),
+    submitRef: str({ minLength: 1 }),
+    url: str({ minLength: 1 }),
+    title: str({ minLength: 1 }),
+    openUrl: str({ minLength: 1 }),
+    steps: arr(str({ minLength: 1 })),
     createdAt: iso(),
     expiresAt: iso(),
   },
@@ -1356,7 +1418,8 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     group: "chat",
     scope: "account-scoped",
     paramsOptional: false,
-    summary: "Answer or cancel a chat choice card (one / many / text); TTL expires as cancel",
+    summary:
+      "Answer or cancel a chat choice card (one / many / text / form); TTL expires as cancel",
     params: obj(
       {
         accountId: str({ minLength: 1 }),
@@ -1364,6 +1427,8 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         optionId: str({ minLength: 1 }),
         optionIds: arr(str({ minLength: 1 })),
         text: str({ minLength: 1 }),
+        /** §9.5g.3 — field id → string|boolean; secrets one-shot on this RPC only. */
+        fieldValues: obj({}, [], true),
         cancel: bool(),
       },
       ["accountId", "id"],
@@ -1377,6 +1442,7 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         followUp: bool(),
         canceled: bool(),
         proposed: bool(),
+        formApplied: bool(),
       },
       ["ok"],
     ),
@@ -1655,6 +1721,175 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
         "remoteReady",
         "elevatedAcknowledged",
       ],
+    ),
+  },
+  "home.listMcpServers": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary: "List Owner MCP servers (Design §9.5h) — no secrets",
+    params: emptyParams,
+    result: obj(
+      {
+        servers: arr(
+          obj(
+            {
+              id: str({ minLength: 1 }),
+              label: str(),
+              enabled: bool(),
+              transport: enumOf("stdio", "http", "sse"),
+              command: str(),
+              args: arr(str()),
+              url: str(),
+              hasEnvSecret: bool(),
+              hasAuthToken: bool(),
+              ready: bool(),
+              lastTestOkAt: str(),
+              lastTestError: str(),
+              toolCount: int({ minimum: 0 }),
+              updatedAt: str(),
+            },
+            [
+              "id",
+              "label",
+              "enabled",
+              "transport",
+              "hasEnvSecret",
+              "hasAuthToken",
+              "ready",
+              "toolCount",
+              "updatedAt",
+            ],
+          ),
+        ),
+      },
+      ["servers"],
+    ),
+  },
+  "home.upsertMcpServer": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Create/update an MCP server (Owner; secrets write-only) — Design §9.5h",
+    params: obj(
+      {
+        id: str({ minLength: 1 }),
+        label: str({ minLength: 1 }),
+        transport: enumOf("stdio", "http", "sse"),
+        command: str(),
+        args: arr(str()),
+        url: str(),
+        env: any(),
+        authToken: str(),
+        enabled: bool(),
+      },
+      ["label", "transport"],
+    ),
+    result: obj(
+      {
+        id: str({ minLength: 1 }),
+        label: str(),
+        enabled: bool(),
+        transport: enumOf("stdio", "http", "sse"),
+        command: str(),
+        args: arr(str()),
+        url: str(),
+        hasEnvSecret: bool(),
+        hasAuthToken: bool(),
+        ready: bool(),
+        lastTestOkAt: str(),
+        lastTestError: str(),
+        toolCount: int({ minimum: 0 }),
+        updatedAt: str(),
+      },
+      [
+        "id",
+        "label",
+        "enabled",
+        "transport",
+        "hasEnvSecret",
+        "hasAuthToken",
+        "ready",
+        "toolCount",
+        "updatedAt",
+      ],
+    ),
+  },
+  "home.removeMcpServer": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Remove MCP server, tear down stdio, delete secrets — Design §9.5h",
+    params: obj({ id: str({ minLength: 1 }) }, ["id"]),
+    result: obj({ ok: bool() }, ["ok"]),
+  },
+  "home.setMcpServerEnabled": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Enable/disable MCP server (enable requires prior Test ok) — Design §9.5h",
+    params: obj(
+      { id: str({ minLength: 1 }), enabled: bool() },
+      ["id", "enabled"],
+    ),
+    result: obj(
+      {
+        id: str({ minLength: 1 }),
+        label: str(),
+        enabled: bool(),
+        transport: enumOf("stdio", "http", "sse"),
+        ready: bool(),
+        toolCount: int({ minimum: 0 }),
+        updatedAt: str(),
+      },
+      ["id", "label", "enabled", "transport", "ready", "toolCount", "updatedAt"],
+    ),
+  },
+  "home.testMcpServer": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary: "Test MCP: initialize + tools/list only (no mutating call) — Design §9.5h",
+    params: obj({ id: str({ minLength: 1 }) }, ["id"]),
+    result: obj(
+      {
+        ok: bool(),
+        tools: arr(
+          obj(
+            {
+              name: str({ minLength: 1 }),
+              description: str(),
+              mcpName: str(),
+            },
+            ["name", "mcpName"],
+          ),
+        ),
+        latencyMs: int({ minimum: 0 }),
+        error: str(),
+      },
+      ["ok", "tools", "latencyMs"],
+    ),
+  },
+  "home.listMcpTools": {
+    group: "channels",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary: "Cached MCP catalogue tools for ready servers — Design §9.5h",
+    params: obj({ serverId: str({ minLength: 1 }) }, []),
+    result: obj(
+      {
+        tools: arr(
+          obj(
+            {
+              name: str({ minLength: 1 }),
+              description: str(),
+              mcpName: str(),
+            },
+            ["name", "mcpName"],
+          ),
+        ),
+      },
+      ["tools"],
     ),
   },
   "home.startDemoHa": {

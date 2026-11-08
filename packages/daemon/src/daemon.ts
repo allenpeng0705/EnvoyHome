@@ -46,6 +46,7 @@ import { SkillService, createSkillServiceL7Adapter } from "./skills.js";
 import { ArtifactService } from "./artifacts.js";
 import { WebSearchService } from "./web-search.js";
 import { BrowserControlService } from "./browser-control.js";
+import { McpHub } from "./mcp-hub.js";
 import { ProductEventBus, homeEventDispositions } from "./product-events.js";
 import { ScheduleService } from "./schedule/service.js";
 import { StandingOrderStore } from "./standing-orders.js";
@@ -77,6 +78,7 @@ export interface RunningDaemon {
   artifacts: ArtifactService;
   webSearch: import("./web-search.js").WebSearchService;
   browserControl: BrowserControlService;
+  mcpHub: McpHub;
   actuations: ActuationService;
   pushTokens: PushTokenStore;
   push: PushDispatcher;
@@ -178,6 +180,8 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   await webSearch.load();
   const browserControl = new BrowserControlService(paths);
   await browserControl.load();
+  const mcpHub = new McpHub(paths);
+  await mcpHub.load();
   const pushTokens = new PushTokenStore(paths);
   ensureSmarthomeToolSpecsRegistered();
   const demoHa = new DemoHaService();
@@ -197,6 +201,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   turns.setOwnerAccountIdLookup(() => household.getOwnerAccountId());
   turns.setWebSearch(webSearch);
   turns.setBrowserControl(browserControl);
+  turns.setMcpHub(mcpHub);
   turns.setKnowledge(knowledge);
   const events = new ProductEventBus();
   localEngine.setEmit((event, data) => events.emit(event, data));
@@ -521,6 +526,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       artifacts,
       webSearch,
       browserControl,
+      mcpHub,
       actuations,
       pushTokens,
       push,
@@ -593,6 +599,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   });
   stoppers.push(() => schedules.stop());
   stoppers.push(() => browserControl.shutdown());
+  stoppers.push(() => mcpHub.shutdown());
 
   const mesh: MeshHostHandle = {
     status: meshStatus,
@@ -658,6 +665,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     artifacts,
     webSearch,
     browserControl,
+    mcpHub,
     actuations,
     pushTokens,
     push,

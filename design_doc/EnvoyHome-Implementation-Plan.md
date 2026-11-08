@@ -5,7 +5,7 @@ Living plan for **active** EnvoyHome build work. Style aligned with EnvoyMesh [`
 | Field | Value |
 |-------|-------|
 | **Role** | Subordinate to [`EnvoyHome-Design.md`](EnvoyHome-Design.md), [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Design.md), and [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md). **Design wins.** |
-| **Last updated** | 2026-10-25 |
+| **Last updated** | 2026-11-04c |
 | **Owner** | Allen Peng |
 | **G6** | **Accepted 2026-10-09** for Plan text matching Design `2026-10-08f` (with G1) |
 
@@ -31,7 +31,7 @@ Maintenance: flip checkboxes when shipping; refresh **Current Milestone**; keep 
 - [Build stage board (B0–B14)](#build-stage-board-b0b14)
 - [Release bar (§8 / Design §21)](#release-bar-8--design-21)
 - [Post-v1 product epics](#post-v1-product-epics)
-- [Phase 2 agent capabilities (P2-A…E)](#phase-2-agent-capabilities-p2-ae)
+- [Phase 2 agent capabilities (P2-A…G)](#phase-2-agent-capabilities-p2-ae)
 - [§2 Repo layout](#2-repo-layout-target)
 - [§3 Build Stages (detail)](#3-build-stages-b0b14)
 - [§4 Verification ID index](#4-verification-id-index)
@@ -45,9 +45,9 @@ EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0
 **Next (after early-adopter ops):** Live HA checklist ([`docs/smart-home-live-checklist.md`](../docs/smart-home-live-checklist.md)); then **First-party IM live** (Telegram first) when Mesh phone path is solid  
 **Deferred from early-adopter claims:** Production IM zoo; Privacy Mode product toggle (`home.setPrivacyMode` stays Phase 2); agentskills.io conformance  
 
-**Active coding epic:** _(none — KB-P1…P5 + SQLite indexes shipped)_ — next operator track: live HA checklist / IM when ready.
+**Active coding epic:** _(none)_ — Phase 2 board through **P2-I** shipped.
 
-**Last shipped:** Knowledge-RAG SQLite+FTS5+sqlite-vec indexes (`2026-10-27b`); inject defaults `auto` (`2026-10-27`); KB-P1…P5 (`2026-10-25b`); early-adopter claim sheet (`2026-10-22d`)
+**Last shipped:** P2-I Daily Outbound Assist (`2026-11-04d`); P2-H browser form assist (`2026-11-04c`); P2-G observe→act→verify (`2026-11-04`); P2-F MCP (`2026-11-03b`)
 
 ## Key Decisions
 
@@ -181,7 +181,7 @@ Ground truth: [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Desi
 
 ## Phase 2 agent capabilities (P2-A…E)
 
-Design ground truth: **§19.9–§19.13** (**Accepted 2026-10-20**). Ship after Current Milestone IM/mobile unless Owner reorders. Wire: additive catalogue / methods only.
+Design ground truth: **§19.9–§19.13** (**Accepted 2026-10-20**); **P2-F** §9.5h; **P2-G** §9.5g.2; **P2-H** §9.5g.3; **P2-I** §9.5i (Ship `2026-11-04d`). Ship after Current Milestone IM/mobile unless Owner reorders. Wire: additive catalogue / methods only.
 
 | Epic | Status | Design | Depends on | Deliverable (when coding) | Verify IDs |
 |------|--------|--------|------------|---------------------------|------------|
@@ -193,10 +193,15 @@ Design ground truth: **§19.9–§19.13** (**Accepted 2026-10-20**). Ship after 
 | **P2-D2** Media generate | `[x]` | §19.12 D2 | Privacy Mode (§19.4) | OpenAI Images + async job / `wait:true` + Owner/Privacy/cap (`2026-10-20o`/`p`) | V-P2-MEDIA-2, V-P2-MEDIA-3 |
 | **P2-E2** Harness sub-agents | `[x]` | §19.13 E2 | P2-E `[x]` | `LocalMeshSubmitter`+`Agent` children; `task` caps; `spawn_helper` via task (`2026-10-20s`) | V-P2-AGENT-3 |
 | **P2-E3** Parent Agent | `[x]` | §19.13 E3 | P2-E2 `[x]` | Parent `Agent.run`; Home Session + full ToolRegistry; `runTurn` fallback (`2026-10-20t`) | V-P2-AGENT-4 |
+| **P2-E4** Plan→execute | `[x]` | §19.13 E4 | P2-E3 `[x]` | Attended complex plan checklist + soft write/admin confirm + hop budget; simple/medium unchanged (`2026-11-03`) | V-P2-AGENT-6, V-P2-AGENT-7, V-P2-AGENT-8 |
+| **P2-F** MCP servers | `[x]` | §9.5h | Design `2026-11-03b` | `McpHub` + Owner RPCs + turn catalogue `mcp__*` + mobile Connections → MCP + compose scenario; V-MCP tests (`2026-11-03b`) | V-MCP-1…V-MCP-6 |
+| **P2-G** Browser observe→act→verify | `[x]` | §9.5g.2 | Design `2026-11-04` | `snapshotId` freshness; `act.verify`; `wait`/`press`; richer snapshot; structured `blocked`; V-OUT-11…15 (`2026-11-04`) | V-OUT-11…V-OUT-15 |
+| **P2-H** Browser form assist | `[x]` | §9.5g.3 | Design `2026-11-04b` **Accepted** / Ship `2026-11-04c`; P2-G `[x]` | Dynamic form card from snapshot (`selection: form`); mobile/desktop fill; one Allow apply; secret one-shot | V-OUT-16…V-OUT-19 |
+| **P2-I** Daily Outbound Assist | `[x]` | §9.5i | Design Ship `2026-11-04d`; P2-H + P2-F `[x]` | Hard stop pay/OTP/CAPTCHA; MCP prefer; `blocked: payment`; `outbound_handoff` https Open card; skills + live scenarios | V-OUT-20…V-OUT-24 |
 
-**Ship order:** P2-A → P2-B → P2-C → P2-D1 → P2-E → P2-D2 → P2-E2 → **P2-E3**. Owner MAY pull E2/E3 forward.
+**Ship order:** P2-A → … → P2-F → P2-G → P2-H → **P2-I**.
 
-**Package touch points (at code time):** `packages/harness-host` (policy + parse), `packages/daemon` (turn-service, schedule, standing-orders, message dispatch), `packages/protocol` (additive schemas), Settings desktop/mobile surfaces, Doctor issues.
+**Package touch points (at code time):** `packages/harness-host` (policy + parse), `packages/daemon` (turn-service, choice-store, **browser-control** form/handoff + payment wall), `packages/protocol` (additive `outbound_handoff` / `openUrl` / `steps`), mobile/desktop chat choice UI, skills-samples, Doctor issues.
 
 **Soft risks (owning epic):**
 
@@ -206,6 +211,23 @@ Design ground truth: **§19.9–§19.13** (**Accepted 2026-10-20**). Ship after 
 | Helper privilege escalation | P2-E | Inherit origin; reduced allow-list; depth 1 (V-P2-AGENT-1/2) |
 | Sub-agent stampede / cost | P2-E2 | maxSubagents + parallel pool + account caps; Doctor; refuse-all on over-cap (V-P2-AGENT-3) |
 | Parent Agent streaming / honesty drift | P2-E3 | Keep TurnService preambles; `runTurn` rollback flag; golden home/schedule tests (V-P2-AGENT-4) |
+| False-positive complexity (simple/medium tax) | P2-E4 | Conservative gate never looser than EnvoyCoder; golden corpus V-P2-AGENT-6 |
+| Silent write / actuation via plan | P2-E4 | Soft confirm when plan risks write/admin; Approvals still apply (V-P2-AGENT-7) |
+| Plan hop stampede / cost | P2-E4 | Attended hop budget; unattended never auto-advances (V-P2-AGENT-8) |
+| Stdio MCP = Owner RCE on daemon host | P2-F | Owner-scope only; Settings warn; Test ≠ tools/call (V-MCP-1/2) |
+| Remote MCP SSRF / token leak | P2-F | URL SSRF refuse; secrets write-only (V-MCP-3) |
+| MCP tool flood / silent act | P2-F | Caps 16×128; fail closed until Test; ask/grant; no child allow-list (V-MCP-4/5) |
+| Stale ref / wrong-target click | P2-G | Require matching `snapshotId`; `stale_snapshot` / `stale_ref` no side effect (V-OUT-11/12) |
+| Verify cost / screenshot privacy | P2-G | Attended default `text`; unattended `none`; screenshot jail + 5 MiB (V-OUT-15) |
+| Wait stampede / hang | P2-G | `ms` ≤15 s; action ≤30 s; ≤3 detach retries (V-OUT-13) |
+| Wall false-positive blocks | P2-G | Structured `blocked` + honest handoff; never solve; tune heuristics conservatively (V-OUT-14) |
+| Form card vs stale page / wrong refs | P2-H | Bind `snapshotId`; fail closed on mismatch; re-snapshot (V-OUT-17) |
+| Password/OTP leak to memory or chat | P2-H | One-shot; redact transcript; never LearnQueue; unattended refuse sensitive (V-OUT-18) |
+| Oversized / junk form cards | P2-H | ≤24 fields; skip nav-only controls; no card on `blocked` (V-OUT-16/19) |
+| False payment block / miss pay wall | P2-I | Conservative heuristics + live refuse case (V-OUT-21); tune labels/autocomplete |
+| Malicious / SSRF openUrl | P2-I | https-only + same host refuse as browser navigate (V-OUT-23) |
+| Cart-sync honesty | P2-I | Handoff checklist; never claim daemon cart ≡ phone app (V-OUT-23) |
+| Browser thrash vs MCP | P2-I | Skill + live prefer-MCP case (V-OUT-20) |
 | `message` spam / cross-account leak | P2-C | Bound target + same account only; grantable; Privacy Mode (V-P2-MSG-*) |
 | Patch path escape / huge diff | P2-A | Jail + size cap (V-P2-EDIT-1) |
 | Media generate egress / bill shock | P2-D2 | Owner opt-in; Privacy Mode; rate caps; attended default (V-P2-MEDIA-2) |
@@ -555,13 +577,33 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-OUT-8 | **B11** | browser control tool: Owner opt-in; Playwright managed session; SSRF; snapshot/act; attended ask; restricted/unattended gates |
 | V-OUT-9 | **B11** | browser personal profile: Owner-only; ack; loopback CDP; never unattended; summary tag |
 | V-OUT-10 | **B11** | browser remote profile: Owner-only; ack; cdpUrl+secret; never unattended; summary tag |
+| V-OUT-11 | **P2-G** | `act` without matching `snapshotId` → `stale_snapshot`; no side effect |
+| V-OUT-12 | **P2-G** | missing/unknown ref → `stale_ref`; `verify=text` returns structured payload |
+| V-OUT-13 | **P2-G** | `wait` respects until/ms cap (≤15 s); over-cap refused |
+| V-OUT-14 | **P2-G** | captcha/login_wall/challenge → structured `blocked`; never solves |
+| V-OUT-15 | **P2-G** | attended default `verify=text`; unattended `none`; screenshot jail + 5 MiB |
+| V-OUT-16 | **P2-H** | form card fields derived from snapshot; not login-only template |
+| V-OUT-17 | **P2-H** | stale/mismatched snapshotId on Submit → no fill |
+| V-OUT-18 | **P2-H** | password/otp one-shot; redact; unattended refuse sensitive |
+| V-OUT-19 | **P2-H** | one Allow fills all (+ submit); no form card on CAPTCHA/blocked |
+| V-OUT-20 | **P2-I** | when matching Owner MCP tools exist, prefer them over browser for commerce-class asks |
+| V-OUT-21 | **P2-I** | payment / wallet / card wall → `blocked: "payment"`; no form card for card fields |
+| V-OUT-22 | **P2-I** | OTP honesty — never invent/receive SMS; otp form only when Owner types |
+| V-OUT-23 | **P2-I** | `outbound_handoff` https `openUrl` (SSRF refuse); Open launches system URL; no cross-device cart claim |
+| V-OUT-24 | **P2-I** | multi-step form chain (2+ propose_form across pages) supported in live/tool scenarios |
+| V-MCP-1 | **P2-F** | Owner upsert MCP config; non-Owner denied |
+| V-MCP-2 | **P2-F** | testMcpServer = initialize+tools/list only (no mutating call) |
+| V-MCP-3 | **P2-F** | Remote MCP URL SSRF refused |
+| V-MCP-4 | **P2-F** | Disabled/not-ready MCP tools absent from turn catalogue |
+| V-MCP-5 | **P2-F** | Attended ask; unattended grant; restricted deny |
+| V-MCP-6 | **P2-F** | Remove tears down stdio + secrets |
 | V-UX-12b | **B9** | Mobile Schedules: `jobs` key; desktop parity badges/argChoices/receipts |
 | V-CRON-7 | **B9** | updateSchedule name/spec/payload; workflow-synced refuse; no system payload |
 | V-CRON-8 | **B9** | listScheduleReceipts capped receipts |
 | V-CRON-9 | **B9** | chat schedule tool propose/confirm/list; confirm asks; propose no arm |
 | V-CRON-10 | **B9** | system flush/review fire; ensureReviewJob when reviewEnabled |
 | V-CRON-11 | **B9** | chat propose verbatim WHEN; refuse invented specs; confirm shows resolvedLocal |
-| V-CRON-12 | **B9** | agentTurn payload fire with frozen prompt; elevated browser denied on schedule |
+| V-CRON-12 | **B9** | agentTurn payload fire with frozen prompt; elevated browser denied on schedule; `maxToolRounds` stored and enforced as Agent maxIterations (≤5) |
 | V-AGENT-SCENARIO-1 | **B9** | Deterministic agent scenario catalogue (Schedule + General) green in daemon tests (`tests/agent-scenarios/`) |
 | V-AGENT-SCENARIO-2 | **B9** | Optional live LLM soft-eval documented (`ENVOYHOME_AGENT_EVAL=1` → `scripts/agent-eval-live.mjs`); not a CI gate |
 | V-UX-1 | **B12** | new account + channel bind without raw config edit |
@@ -615,6 +657,8 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-P2-AGENT-1, V-P2-AGENT-2 | **P2-E** | spawn_helper origin/allow-list; depth/caps; Q10 default (Design §19.13) |
 | V-P2-AGENT-3 | **P2-E2** | harness `task`/meshSubmitter; caps/batching; origin inherit; no sessions_spawn (Design §19.13 E2) |
 | V-P2-AGENT-4 | **P2-E3** | parent Agent path; tools via ApprovalSink; transcript durable; task depth-1 (Design §19.13 E3) |
+| V-P2-AGENT-5 | **P2-E3** | long-task: parent default iterations; schedule `maxToolRounds` enforced; attended continue cue + one auto-hop (Design §19.13 / `2026-10-27`) |
+| V-P2-AGENT-6, V-P2-AGENT-7, V-P2-AGENT-8 | **P2-E4** | plan-execute: simple/medium corpus; write/admin confirm; attended hop budget / unattended no-op (Design §19.13 E4 / `2026-11-03`) |
 | Design Appendix C.2 (pre-MVP floor) | **B0–B14 (gate)** | every C.2 row green, including the smart-home safety IDs (V-HA-4/5/7/8/11/13/14/19) in the every-PR `smarthome` suite |
 
 **Not owned by any single v1 stage, on purpose:** `V-P2-PRIV-*`, `V-P2-MOB-1`, and `V-P2-HA-*` remain Design §19.6 Phase 2 (unowned for v1). **P2-A…E** IDs are owned by the Phase 2 epics above — still **not** claimable for v1 / B0–B14.
@@ -815,8 +859,15 @@ If you need to change the answer to "in what order we build," edit this doc and 
 
 | Date | Change |
 |------|--------|
+| 2026-11-04d | **P2-I shipped:** §9.5i Daily Outbound Assist — hard stop pay/OTP/CAPTCHA; MCP prefer; `outbound_handoff`; V-OUT-20…24. Aligns Design `2026-11-04d`. |
+| 2026-11-04c | **P2-H shipped:** §9.5g.3 form card + `propose_form`/`apply_form`; V-OUT-16…19. Aligns Design `2026-11-04c`. |
+| 2026-11-04b | **P2-H Normative board:** §9.5g.3 browser form assist (dynamic fields card; login ⊂ forms); epic `[ ]` pending Owner Accept; V-OUT-16…19. Aligns Design `2026-11-04b`. |
+| 2026-11-04 | **P2-G shipped:** §9.5g.2 observe→act→verify (`snapshotId`, `verify`, `wait`/`press`, `blocked`); V-OUT-11…15. Aligns Design `2026-11-04`. |
+| 2026-11-03b | **P2-F shipped:** §9.5h MCP Owner-add + Test; `McpHub`/RPCs/turn/`mcp__*`; mobile Connections → MCP; V-MCP-1…6. Aligns Design `2026-11-03b`. |
+| 2026-11-03 | **P2-E4 shipped:** attended plan→execute; V-P2-AGENT-6/7/8; simple/medium non-regression. Aligns Design `2026-11-03`. |
 | 2026-10-27b | **KB SQLite indexes:** `knowledge-index.sqlite` / `episodic-index.sqlite` via `node:sqlite` + FTS5 trigram + sqlite-vec (BLOB cosine fallback); JSON migrate-once; Active coding epic cleared. |
 | 2026-10-27 | **KB item 5 close:** live `agent:eval:kb` green (auto-inject + standing filter); ship `knowledgeInject`/`episodicInject` default **`auto`**; V-KB/V-KY/V-EMB checklist in Plan. |
+| 2026-10-27 | **Long-task enhancements:** parent default maxIterations 48; schedule `maxToolRounds` enforced on agentTurn fire; attended incomplete marker + continue intent + one auto-continue. V-P2-AGENT-5. Aligns Design `2026-10-27`. |
 | 2026-10-25d | **Settings Knowledge & embed UI:** LLM → Memory card — curated embed download/progress, enable spawn/Ollama/disable, inject defaults `tool`, reindex; `home:embed-model-download` + cancel/resume RPCs. |
 | 2026-10-25c | **KB hardening:** session→episodic purge; V-KY-7 PendingLearn on L1/L2 conflict; real `downloadEmbedModel` + TOFU sha256; Doctor embed/stale; V-KB-7 artifact open; Settings Memory stub; KnowYou journeys; JSON day-one paths Normative note. |
 | 2026-10-25b | **KB-P1…P5 shipped:** section FTS + `knowledge_search`; Home embed `:18793` (+ mock); hybrid RRF; KnowYou ADD\|SUPERSEDE\|SKIP + summarize on consolidate; optional auto-inject + standing filter. Board checkboxes `[x]`; V-KB/V-KY/V-EMB tests. |

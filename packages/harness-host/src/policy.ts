@@ -77,6 +77,15 @@ export const BUILTIN_TOOLS: Readonly<Record<string, ToolSpec>> = {
     risk: "read",
     grantable: false,
   },
+  /**
+   * Design §19.13 P2-E4 — write/update attended session plan checklist.
+   * Risk read: does not actuate; soft confirm + Approvals still gate write/admin steps.
+   */
+  session_plan: {
+    name: "session_plan",
+    risk: "read",
+    grantable: false,
+  },
   /** Design §19.11 — send to a bound chat target (same account). */
   message: {
     name: "message",
@@ -180,8 +189,24 @@ export function registerToolSpec(spec: ToolSpec): void {
   EXTRA_TOOLS.set(spec.name, spec);
 }
 
+export function unregisterToolSpec(name: string): void {
+  EXTRA_TOOLS.delete(name);
+}
+
+/** Drop every registered `mcp__*` extra (before hub re-registers ready tools). */
+export function clearMcpToolSpecs(): void {
+  for (const name of [...EXTRA_TOOLS.keys()]) {
+    if (name.startsWith("mcp__")) EXTRA_TOOLS.delete(name);
+  }
+}
+
 export function clearExtraToolSpecsForTests(): void {
   EXTRA_TOOLS.clear();
+}
+
+/** True when the hub registered this catalogue name (not the open fallback). */
+export function isRegisteredMcpTool(name: string): boolean {
+  return name.startsWith("mcp__") && EXTRA_TOOLS.has(name);
 }
 
 export function toolSpec(name: string): ToolSpec | undefined {
@@ -191,6 +216,11 @@ export function toolSpec(name: string): ToolSpec | undefined {
   // Verified skills appear as skill:<id> — read-tier prompt packs.
   if (name.startsWith("skill:") && name.length > "skill:".length) {
     return { name, risk: "read", grantable: false };
+  }
+  // Design §9.5h — Owner MCP tools (default network; hub may register escalated specs).
+  // Approval path uses this fallback; fence parse requires isRegisteredMcpTool.
+  if (name.startsWith("mcp__") && name.length > "mcp__".length) {
+    return { name, risk: "network", grantable: true };
   }
   return undefined;
 }

@@ -17,6 +17,7 @@ import '../client_context.dart';
 import '../l10n/app_localizations.dart';
 import '../sandbox_paths.dart';
 import '../state/session_controller.dart';
+import '../utils/open_external_url.dart';
 import 'artifact_viewer_screen.dart';
 
 const _kChatAttachMaxFiles = 8;
@@ -148,6 +149,12 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _pendingChoices = [];
   final Map<String, Set<String>> _choiceManySelected = {};
   final Map<String, TextEditingController> _choiceTextCtrls = {};
+  /** choiceId → fieldId → controller / checkbox value (§9.5g.3). */
+  final Map<String, Map<String, TextEditingController>> _choiceFormCtrls = {};
+  final Map<String, Map<String, bool>> _choiceFormChecks = {};
+  final Map<String, Map<String, String>> _choiceFormSelects = {};
+  /// P2-E4 attended session plan checklist (null when idle/done).
+  Map<String, dynamic>? _sessionPlan;
   List<Map<String, dynamic>> _boundSources = [];
   bool _approvalsLoading = false;
   bool _choicesLoading = false;
@@ -255,6 +262,14 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
       c.dispose();
     }
     _choiceTextCtrls.clear();
+    for (final m in _choiceFormCtrls.values) {
+      for (final c in m.values) {
+        c.dispose();
+      }
+    }
+    _choiceFormCtrls.clear();
+    _choiceFormChecks.clear();
+    _choiceFormSelects.clear();
     super.dispose();
   }
 
@@ -443,6 +458,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
         'home:approval-resolved',
         'home:choice-needed',
         'home:choice-resolved',
+        'home:session-plan',
       ]);
       // Redial may have replaced the session while subscribe awaited.
       if (!mounted || !identical(widget.session.session, home)) return;
@@ -452,6 +468,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
       _unsubs.add(home.onEvent('home:approval-resolved', _onApprovalEvent));
       _unsubs.add(home.onEvent('home:choice-needed', _onChoiceEvent));
       _unsubs.add(home.onEvent('home:choice-resolved', _onChoiceEvent));
+      _unsubs.add(home.onEvent('home:session-plan', _onSessionPlanEvent));
       _subscribed = true;
     } catch (e) {
       if (!mounted || !identical(widget.session.session, home)) return;
@@ -487,6 +504,78 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
       }
     }
     unawaited(_refreshChoices());
+  }
+
+  void _onSessionPlanEvent(dynamic data) {
+    if (data is! Map) return;
+    final sid = data['sessionId']?.toString();
+    if (sid != null && sid.isNotEmpty && _sessionId != null && sid != _sessionId) {
+      return;
+    }
+    if (!mounted) return;
+    final phase = data['phase']?.toString();
+    setState(() {
+      if (phase == null || phase == 'done') {
+        _sessionPlan = null;
+      } else {
+        _sessionPlan = Map<String, dynamic>.from(data);
+      }
+    });
+  }
+
+  Widget _sessionPlanChip(ThemeData theme) {
+    final plan = _sessionPlan;
+    if (plan == null) return const SizedBox.shrink();
+    final entries = plan['entries'];
+    final list = entries is List
+        ? entries.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+        : <Map<String, dynamic>>[];
+    final done = list
+        .where((e) => e['status'] == 'completed' || e['status'] == 'cancelled')
+        .length;
+    final phase = plan['phase']?.toString() ?? '';
+    final hop = plan['hopCount'] ?? 0;
+    final budget = plan['hopBudget'] ?? 0;
+    final phaseLabel = phase == 'awaiting_confirm'
+        ? 'Confirm to run'
+        : phase == 'executing'
+            ? 'Working'
+            : 'Planning';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Plan · $done/${list.length} · hop $hop/$budget · $phaseLabel',
+              style: theme.textTheme.labelLarge,
+            ),
+            if (list.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              ...list.take(8).map((e) {
+                final status = e['status']?.toString() ?? 'pending';
+                final mark = status == 'completed'
+                    ? '✓'
+                    : status == 'in_progress'
+                        ? '…'
+                        : status == 'cancelled'
+                            ? '–'
+                            : '○';
+                return Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    '$mark ${e['content'] ?? ''}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                );
+              }),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _loadBoundSources() async {
@@ -570,6 +659,18 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
           _choiceTextCtrls.remove(id)?.dispose();
         }
       }
+      for (final id in _choiceFormCtrls.keys.toList()) {
+        if (!alive.contains(id)) {
+          final m = _choiceFormCtrls.remove(id);
+          if (m != null) {
+            for (final c in m.values) {
+              c.dispose();
+            }
+          }
+          _choiceFormChecks.remove(id);
+          _choiceFormSelects.remove(id);
+        }
+      }
       setState(() {
         _pendingChoices = rows;
         _choicesLoading = false;
@@ -584,6 +685,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
     String? optionId,
     List<String>? optionIds,
     String? text,
+    Map<String, dynamic>? fieldValues,
     bool cancel = false,
   }) async {
     final home = widget.session.session;
@@ -599,6 +701,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
         optionId: optionId,
         optionIds: optionIds,
         text: text,
+        fieldValues: fieldValues,
         cancel: cancel,
       );
       if (!mounted) return;
@@ -2801,6 +2904,200 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
           color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
         ),
       );
+    } else if (row['purpose']?.toString() == 'outbound_handoff' &&
+        (row['openUrl']?.toString() ?? '').startsWith('https://')) {
+      final openUrl = row['openUrl']!.toString();
+      final stepsRaw = row['steps'];
+      final steps = stepsRaw is List
+          ? stepsRaw.map((e) => e.toString()).where((s) => s.isNotEmpty).toList()
+          : <String>[];
+      final handoffTitle = row['title']?.toString();
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (handoffTitle != null && handoffTitle.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text(
+                handoffTitle,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+              ),
+            ),
+          if (steps.isNotEmpty)
+            ...[
+              for (var i = 0; i < steps.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text('${i + 1}. ${steps[i]}'),
+                ),
+              const SizedBox(height: 6),
+            ],
+          Text(
+            l10n.choiceCardHandoffHint,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton(
+                onPressed: () {
+                  unawaited(openExternalUrl(openUrl));
+                  unawaited(_answerChoice(row, optionId: 'open'));
+                },
+                child: Text(l10n.choiceCardOpen),
+              ),
+              cancelBtn,
+            ],
+          ),
+        ],
+      );
+    } else if (selection == 'form') {
+      final fieldsRaw = row['fields'];
+      final fields = fieldsRaw is List
+          ? fieldsRaw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList()
+          : <Map<String, dynamic>>[];
+      final ctrls = _choiceFormCtrls.putIfAbsent(id, () => <String, TextEditingController>{});
+      final checks = _choiceFormChecks.putIfAbsent(id, () => <String, bool>{});
+      final selects = _choiceFormSelects.putIfAbsent(id, () => <String, String>{});
+      body = Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final f in fields) ...[
+            Builder(builder: (_) {
+              final fid = f['id']?.toString() ?? '';
+              final label = f['label']?.toString() ?? fid;
+              final kind = f['kind']?.toString() ?? 'text';
+              final sensitive = f['sensitive'] == true ||
+                  kind == 'password' ||
+                  kind == 'otp';
+              if (kind == 'checkbox') {
+                checks.putIfAbsent(fid, () => false);
+                return CheckboxListTile(
+                  dense: true,
+                  contentPadding: EdgeInsets.zero,
+                  value: checks[fid] ?? false,
+                  title: Text(label),
+                  onChanged: (v) {
+                    setState(() => checks[fid] = v == true);
+                  },
+                );
+              }
+              if (kind == 'select') {
+                final optsRaw = f['options'];
+                final opts = optsRaw is List
+                    ? optsRaw
+                        .whereType<Map>()
+                        .map((e) => Map<String, dynamic>.from(e))
+                        .toList()
+                    : <Map<String, dynamic>>[];
+                final current = selects[fid] ??
+                    (opts.isNotEmpty ? opts.first['value']?.toString() ?? '' : '');
+                if (current.isNotEmpty) selects.putIfAbsent(fid, () => current);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      labelText: label,
+                    ),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        isExpanded: true,
+                        value: selects[fid]?.isNotEmpty == true ? selects[fid] : null,
+                        items: [
+                          for (final o in opts)
+                            DropdownMenuItem(
+                              value: o['value']?.toString() ?? '',
+                              child: Text(o['label']?.toString() ?? o['value']?.toString() ?? ''),
+                            ),
+                        ],
+                        onChanged: (v) {
+                          if (v == null) return;
+                          setState(() => selects[fid] = v);
+                        },
+                      ),
+                    ),
+                  ),
+                );
+              }
+              final ctrl = ctrls.putIfAbsent(fid, TextEditingController.new);
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: TextField(
+                  controller: ctrl,
+                  obscureText: sensitive,
+                  keyboardType: kind == 'otp'
+                      ? TextInputType.number
+                      : TextInputType.text,
+                  maxLines: kind == 'textarea' ? 3 : 1,
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    isDense: true,
+                    labelText: label,
+                  ),
+                ),
+              );
+            }),
+          ],
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              FilledButton(
+                onPressed: () {
+                  final values = <String, dynamic>{};
+                  for (final f in fields) {
+                    final fid = f['id']?.toString() ?? '';
+                    if (fid.isEmpty) continue;
+                    final kind = f['kind']?.toString() ?? 'text';
+                    final required = f['required'] == true;
+                    if (kind == 'checkbox') {
+                      values[fid] = checks[fid] == true;
+                      continue;
+                    }
+                    if (kind == 'select') {
+                      final v = selects[fid] ?? '';
+                      if (v.isEmpty && required) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(l10n.choiceCardPickOne)),
+                        );
+                        return;
+                      }
+                      if (v.isNotEmpty) values[fid] = v;
+                      continue;
+                    }
+                    final v = ctrls[fid]?.text.trim() ?? '';
+                    if (v.isEmpty && required) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(l10n.choiceCardPickOne)),
+                      );
+                      return;
+                    }
+                    if (v.isNotEmpty) values[fid] = v;
+                  }
+                  if (values.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(l10n.choiceCardPickOne)),
+                    );
+                    return;
+                  }
+                  unawaited(_answerChoice(row, fieldValues: values));
+                },
+                child: Text(l10n.choiceCardConfirm),
+              ),
+              cancelBtn,
+            ],
+          ),
+        ],
+      );
     } else if (selection == 'text') {
       final ctrl = _choiceTextCtrls.putIfAbsent(id, TextEditingController.new);
       body = Column(
@@ -3099,6 +3396,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
                   if (_approvalsLoading && _pending.isEmpty)
                     const LinearProgressIndicator(),
                   ..._pending.map((row) => _approvalCard(row, l10n, theme)),
+                  if (_sessionPlan != null) _sessionPlanChip(theme),
                   if (_pendingChoices.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6, left: 4, top: 4),

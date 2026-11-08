@@ -16,7 +16,8 @@
  * @property {Array<{reply: string}>} [rounds] — multi-round model replies (mode=compose)
  * @property {string[]} [allowTools] — compose allow-list
  * @property {Record<string, unknown>} [setup]
- * @property {Record<string, unknown>} [liveAnswer] — auto-answer ask_user in live eval
+ * @property {Record<string, unknown>} [liveAnswer] — auto-answer ask_user / form cards in live eval
+ *   (`preferOptionIndex`, `textFallback`, `approvalDecision`, `formByKind`, `formDefault`)
  * @property {Record<string, unknown>} expect
  */
 

@@ -12,7 +12,7 @@
 1. **`design_doc/EnvoyHome-Design.md`** — what we build, why, every Normative rule.
 2. **`design_doc/EnvoyHome-Memory-Design.md`** — how memory works (L0–L7, flush, LearnQueue).
 3. **`design_doc/EnvoyHome-Knowledge-RAG-Design.md`** — Doc KB (`knowledge/`), KnowYou (L4′), local SQLite hybrid RAG, Home embed `:18793` (Adapt Mesh; never Mesh Local).
-4. **`design_doc/EnvoyHome-Implementation-Plan.md`** — Build Stages **B0–B14**, Phase 2 epics **P2-A…E**, verification IDs, soft-risk mitigations.
+4. **`design_doc/EnvoyHome-Implementation-Plan.md`** — Build Stages **B0–B14**, Phase 2 epics **P2-A…H**, verification IDs, soft-risk mitigations.
 5. **`tests/min/conventions.md`** — 13 must-follow rules (R1–R13). **Read before editing any package code.**
 
 ## Don't
@@ -38,10 +38,15 @@
 - Don't take mem0 / Cognee / Neo4j as **required** Doc KB or KnowYou core — files under `knowledge/` + per-account SQLite (+ optional Home embed `:18793`) per `EnvoyHome-Knowledge-RAG-Design.md`; heavy backends are optional plugins only.
 - Don't attach to or reuse Mesh Envoy Local chat `:18790` or embed `:18791`; Home chat is `:18792`, Home embed is `:18793` (Design §8.5 / §8.5.1). Don't load an embedding GGUF into the chat sidecar.
 - Don't ship OpenClaw-shaped **shared interactive terminal/PTY**, **swarm-as-default** / **`sessions_spawn`**, a **Lobster-style** second workflow engine, or **device nodes** (`nodes` / camera/screen/computer-use as core tools) — Phase 2 uses path-jailed `edit_file`/`apply_patch`, ScheduleService heartbeat + standing orders, `spawn_helper`, and **`task`** (P2-E2/E3: envoy-harness `LocalMeshSubmitter`+`Agent` children; **parent** harness turns use `Agent.run` — `runTurn` is fallback/tests only; `ENVOYHOME_PARENT_AGENT=0` rollback) under Q10. Nodes stay Defer / mesh-first (Design §19.3 `2026-10-22`; §19.9–§19.13; `2026-10-20t`).
+- Don't refuse Owner-added MCP servers for “quality,” auto-install MCP from the agent, use Chrome DevTools MCP as the §9.5g browser backend, or inject sandbox/HA write credentials into MCP env by default — Owner-add + Test + Approvals (Design §9.5h / P2-F).
+- Don't invent a second browser tool, solve CAPTCHAs, or treat MCP as the §9.5g implementation — harden the builtin `browser` observe→act→verify loop (§9.5g.2 / P2-G); device nodes / computer-use stay Defer (§19.3).
+- Don't ship a static username/password login UI for browser assist — form cards MUST be dynamic from the page snapshot (Design §9.5g.3 / P2-H); don't Learn password/otp into standing memory.
 
 ## Do
 
 - Read the Build Stage you're working on (`Plan §3 B0–B14`) before touching code.
+- For interactive `browser` work after P2-G Accept: require matching `snapshotId` on `act` (fail closed `stale_snapshot` / `stale_ref`); default attended `verify=text`; use `wait`/`press` for SPA races; return structured `blocked` on captcha/login walls — never solve (Design §9.5g.2; V-OUT-11…15).
+- For browser form assist after P2-H Accept: derive `fields[]` from snapshot; `selection: "form"` / `purpose: "browser_form"`; one Allow apply; redact secrets; unattended refuse sensitive fields (Design §9.5g.3; V-OUT-16…19).
 - Map your change to **exactly one** owning stage via the verification ID in `Plan §4`. If an ID appears to need two stages, the table is wrong — fix the table.
 - For sandbox/path work, use the chokepoint resolvers — `safeJoin` for files, `homePaths(stateDir)` for every on-disk path, `resolveObject` for smart-home objects (all three land in B3/B14). Run the security corpus fixture (`packages/daemon/test/security-corpus.test.ts`, **lands in B3**) and the required-deny corpus (Design Appendix C.4) for anything touching actuation.
 - For harness/plugins work, follow the allow-list contract (conventions R2).

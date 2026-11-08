@@ -1,16 +1,34 @@
-// Durable chat choice cards (EnvoyCoder ApprovalChoices peer — Design §3 / V-UX-14).
+// Durable chat choice cards (EnvoyCoder ApprovalChoices peer — Design §3 / V-UX-14 / §9.5g.3 / §9.5i).
 // Fail-closed TTL: expiry clears without selecting.
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-export type ChoiceSelection = "one" | "many" | "text";
+export type ChoiceSelection = "one" | "many" | "text" | "form";
 
 export type ChoiceOption = {
   id: string;
   label: string;
   destructive?: boolean;
+};
+
+export type ChoiceFormFieldKind =
+  | "text"
+  | "password"
+  | "otp"
+  | "textarea"
+  | "select"
+  | "checkbox";
+
+export type ChoiceFormField = {
+  id: string;
+  label: string;
+  ref: string;
+  kind: ChoiceFormFieldKind;
+  required?: boolean;
+  options?: { value: string; label: string }[];
+  sensitive: boolean;
 };
 
 export type PendingChoice = {
@@ -24,7 +42,31 @@ export type PendingChoice = {
   selection: ChoiceSelection;
   multiline?: boolean;
   /** Who created it — resume tool vs follow-up user message. */
-  purpose: "ask_user" | "schedule_candidates" | "home_disambiguation" | "general";
+  purpose:
+    | "ask_user"
+    | "schedule_candidates"
+    | "home_disambiguation"
+    | "general"
+    | "session_plan"
+    | "browser_form"
+    | "outbound_handoff";
+  /** §9.5g.3 — form card schema (no secret values). */
+  fields?: ChoiceFormField[];
+  snapshotId?: string;
+  targetId?: string;
+  profile?: "managed" | "personal" | "remote";
+  submitRef?: string;
+  url?: string;
+  title?: string;
+  /** §9.5i — https destination for Open (Universal Links / App Links). */
+  openUrl?: string;
+  /** §9.5i — short checklist shown on the handoff card. */
+  steps?: string[];
+  /**
+   * Origin of the proposing turn — apply must use the same gates
+   * (unattended refuses sensitive; managed-only unattended).
+   */
+  formOrigin?: "attended" | "unattended";
   createdAt: string;
   expiresAt: string;
 };
@@ -33,9 +75,62 @@ export type ChoiceAnswer = {
   optionId?: string;
   optionIds?: string[];
   text?: string;
+  /** §9.5g.3 — field id → string | boolean. */
+  fieldValues?: Record<string, string | boolean>;
+  /**
+   * When answerChoice applies the form before waking the parked tool,
+   * the apply outcome is attached so propose_form does not re-fill.
+   */
+  formApplyResult?: {
+    ok: boolean;
+    error?: string;
+    result?: Record<string, unknown>;
+  };
 };
 
 const DEFAULT_TTL_SEC = 600;
+const FORM_FIELD_CAP = 24;
+
+function normalizeFormFields(raw: ChoiceFormField[] | undefined): ChoiceFormField[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ChoiceFormField[] = [];
+  for (const f of raw.slice(0, FORM_FIELD_CAP)) {
+    const id = String(f.id || "").trim().slice(0, 64);
+    const label = String(f.label || "").trim().slice(0, 200);
+    const ref = String(f.ref || "").trim().slice(0, 64);
+    const kind = f.kind;
+    if (!id || !label || !ref) continue;
+    if (
+      kind !== "text" &&
+      kind !== "password" &&
+      kind !== "otp" &&
+      kind !== "textarea" &&
+      kind !== "select" &&
+      kind !== "checkbox"
+    ) {
+      continue;
+    }
+    const sensitive =
+      f.sensitive === true || kind === "password" || kind === "otp";
+    out.push({
+      id,
+      label,
+      ref,
+      kind,
+      sensitive,
+      ...(f.required === true ? { required: true } : {}),
+      ...(kind === "select" && Array.isArray(f.options) && f.options.length
+        ? {
+            options: f.options.slice(0, 48).map((o) => ({
+              value: String(o.value ?? "").trim().slice(0, 200),
+              label: String(o.label ?? o.value ?? "").trim().slice(0, 200),
+            })),
+          }
+        : {}),
+    });
+  }
+  return out;
+}
 
 export class ChoiceStore {
   constructor(
@@ -54,10 +149,42 @@ export class ChoiceStore {
     const now = new Date();
     const ttl = input.ttlSec ?? DEFAULT_TTL_SEC;
     const selection = input.selection;
-    if (selection !== "text" && (!input.options || input.options.length === 0)) {
+    if (
+      selection !== "text" &&
+      selection !== "form" &&
+      (!input.options || input.options.length === 0)
+    ) {
       throw Object.assign(new Error("envoyhome.bad_params: choice needs options"), {
         code: "bad_params",
       });
+    }
+    const fields =
+      selection === "form" ? normalizeFormFields(input.fields) : undefined;
+    if (selection === "form" && (!fields || fields.length === 0)) {
+      throw Object.assign(new Error("envoyhome.bad_params: form choice needs fields"), {
+        code: "bad_params",
+      });
+    }
+    if (selection === "form" && input.purpose !== "browser_form") {
+      throw Object.assign(
+        new Error("envoyhome.bad_params: form selection requires purpose browser_form"),
+        { code: "bad_params" },
+      );
+    }
+    if (input.purpose === "outbound_handoff") {
+      if (selection !== "one") {
+        throw Object.assign(
+          new Error("envoyhome.bad_params: outbound_handoff requires selection one"),
+          { code: "bad_params" },
+        );
+      }
+      const openUrl = String(input.openUrl ?? "").trim();
+      if (!openUrl || !/^https:\/\//i.test(openUrl)) {
+        throw Object.assign(
+          new Error("envoyhome.bad_params: outbound_handoff requires https openUrl"),
+          { code: "bad_params" },
+        );
+      }
     }
     const row: PendingChoice = {
       id: randomUUID(),
@@ -76,11 +203,65 @@ export class ChoiceStore {
       ...(input.turnId ? { turnId: input.turnId } : {}),
       ...(input.detail?.trim() ? { detail: input.detail.trim().slice(0, 2000) } : {}),
       ...(input.multiline === true ? { multiline: true } : {}),
+      ...(fields ? { fields } : {}),
+      ...(selection === "form" && input.snapshotId?.trim()
+        ? { snapshotId: input.snapshotId.trim().slice(0, 64) }
+        : {}),
+      ...(selection === "form" && input.targetId?.trim()
+        ? { targetId: input.targetId.trim().slice(0, 64) }
+        : {}),
+      ...(selection === "form" &&
+      (input.profile === "managed" ||
+        input.profile === "personal" ||
+        input.profile === "remote")
+        ? { profile: input.profile }
+        : {}),
+      ...(selection === "form" && input.submitRef?.trim()
+        ? { submitRef: input.submitRef.trim().slice(0, 64) }
+        : {}),
+      ...(selection === "form" && input.url?.trim()
+        ? { url: input.url.trim().slice(0, 2000) }
+        : {}),
+      ...(selection === "form" && input.title?.trim()
+        ? { title: input.title.trim().slice(0, 200) }
+        : {}),
+      ...(selection === "form" &&
+      (input.formOrigin === "attended" || input.formOrigin === "unattended")
+        ? { formOrigin: input.formOrigin }
+        : {}),
+      ...(input.purpose === "outbound_handoff" && input.openUrl?.trim()
+        ? { openUrl: input.openUrl.trim().slice(0, 2000) }
+        : {}),
+      ...(input.purpose === "outbound_handoff" &&
+      Array.isArray(input.steps) &&
+      input.steps.length
+        ? {
+            steps: input.steps
+              .map((s) => String(s ?? "").trim().slice(0, 200))
+              .filter(Boolean)
+              .slice(0, 8),
+          }
+        : {}),
+      ...(input.purpose === "outbound_handoff" && input.title?.trim()
+        ? { title: input.title.trim().slice(0, 200) }
+        : {}),
     };
     if (!row.question) {
       throw Object.assign(new Error("envoyhome.bad_params: choice needs question"), {
         code: "bad_params",
       });
+    }
+    if (selection === "form" && (!row.snapshotId || !row.targetId || !row.profile)) {
+      throw Object.assign(
+        new Error("envoyhome.bad_params: form choice needs snapshotId, targetId, profile"),
+        { code: "bad_params" },
+      );
+    }
+    if (input.purpose === "outbound_handoff" && !row.openUrl) {
+      throw Object.assign(
+        new Error("envoyhome.bad_params: outbound_handoff needs openUrl"),
+        { code: "bad_params" },
+      );
     }
     const dir = this.dir(row.accountId);
     await mkdir(dir, { recursive: true });
@@ -148,11 +329,50 @@ export class ChoiceStore {
   resolveAnswer(
     row: PendingChoice,
     answer: ChoiceAnswer,
-  ): { ok: true; labels: string[]; optionIds: string[]; text?: string } | { ok: false; reason: string } {
+  ):
+    | {
+        ok: true;
+        labels: string[];
+        optionIds: string[];
+        text?: string;
+        fieldValues?: Record<string, string | boolean>;
+      }
+    | { ok: false; reason: string } {
     if (row.selection === "text") {
       const text = typeof answer.text === "string" ? answer.text.trim() : "";
       if (!text) return { ok: false, reason: "text required" };
       return { ok: true, labels: [text], optionIds: [], text };
+    }
+    if (row.selection === "form") {
+      const fields = row.fields ?? [];
+      const raw = answer.fieldValues;
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+        return { ok: false, reason: "fieldValues required" };
+      }
+      const fieldValues: Record<string, string | boolean> = {};
+      const labels: string[] = [];
+      for (const f of fields) {
+        const v = raw[f.id];
+        if (v === undefined || v === null) {
+          if (f.required) return { ok: false, reason: `field required: ${f.id}` };
+          continue;
+        }
+        if (f.kind === "checkbox") {
+          const b = v === true || v === "true" || v === "1";
+          fieldValues[f.id] = Boolean(b);
+          labels.push(f.sensitive ? `${f.label}=••••` : `${f.label}=${fieldValues[f.id] ? "on" : "off"}`);
+          continue;
+        }
+        const s = typeof v === "boolean" ? (v ? "true" : "false") : String(v).trim();
+        if (!s && f.required) return { ok: false, reason: `field required: ${f.id}` };
+        if (!s) continue;
+        fieldValues[f.id] = s;
+        labels.push(f.sensitive ? `${f.label}=••••` : `${f.label}=${s.slice(0, 40)}`);
+      }
+      if (Object.keys(fieldValues).length === 0) {
+        return { ok: false, reason: "fieldValues required" };
+      }
+      return { ok: true, labels, optionIds: [], fieldValues };
     }
     const ids =
       Array.isArray(answer.optionIds) && answer.optionIds.length > 0

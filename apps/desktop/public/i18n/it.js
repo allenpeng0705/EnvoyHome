@@ -1274,6 +1274,8 @@ export default {
   "scheduleCard.canceledToast": "Reminder canceled.",
   "scheduleCard.failed": "Could not update that reminder.",
   "choiceCard.confirm": "Conferma",
+  "choiceCard.open": "Open",
+  "choiceCard.handoffHint": "Opens in your browser or app so you can finish and pay there. Home will not enter card details.",
   "choiceCard.pickOne": "Seleziona almeno un'opzione.",
   "choiceCard.answeredToast": "Ricevuto.",
   "choiceCard.failed": "Impossibile inviare la scelta.",

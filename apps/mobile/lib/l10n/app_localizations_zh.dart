@@ -611,6 +611,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connTabWebSearch => '网页搜索';
 
   @override
+  String get connTabMcp => 'MCP';
+
   String get connTabBrowser => '浏览器';
 
   @override
@@ -1501,6 +1503,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get choiceCardConfirm => '确认';
+  @override
+  String get choiceCardOpen => '打开';
+  @override
+  String get choiceCardHandoffHint => '将在浏览器或 App 中打开以便你完成并付款。Home 不会填写银行卡信息。';
 
   @override
   String get choiceCardPickOne => '请至少选一项。';

@@ -314,12 +314,20 @@ const HOME_AFFIRM =
 const HOME_DENY =
   /^(不用了?|不了|不要|取消|算了|先别|别了|no|nope|cancel|never\s*mind|don't)[.!。！…]*$/i;
 
+/** Attended resume after Agent maxIterations (long-task continue UX). Fail-closed. */
+const TURN_CONTINUE =
+  /^(继续|继续吧|接着|接着做|接着干|go\s*on|keep\s*going|continue|resume)[.!。！…]*$/i;
+
 export function isHomeAffirmation(userText: string): boolean {
   return HOME_AFFIRM.test(userText.trim());
 }
 
 export function isHomeDenial(userText: string): boolean {
   return HOME_DENY.test(userText.trim());
+}
+
+export function isTurnContinueIntent(userText: string): boolean {
+  return TURN_CONTINUE.test(userText.trim());
 }
 
 /** Durable multi-round offer stored on session meta. */

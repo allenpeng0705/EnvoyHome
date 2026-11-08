@@ -6,7 +6,7 @@ import { registerResetHook } from "@envoyhome/test-utils";
 import type { TurnContext } from "./context.js";
 import { ApprovalSink, type ToolDispatchRequest } from "./approval-sink.js";
 import type { ProviderHandle } from "./provider-handle.js";
-import { toolSpec } from "./policy.js";
+import { isRegisteredMcpTool, toolSpec } from "./policy.js";
 import { applyEditFile, applyUnifiedPatch } from "./file-edit.js";
 import { validateIntent } from "./validator.js";
 
@@ -50,6 +50,8 @@ export interface TurnDeps {
    * the tool call omits `args.profile` so the prompt matches execution.
    */
   browserDefaultProfile?: string;
+  /** Design §9.5h — resolve MCP server label for approval summaries. */
+  mcpServerLabel?: (serverId: string) => string | undefined;
   /**
    * Design §7.4 V-CRON-11 — peek a schedule proposal so confirm ask shows resolvedLocal.
    */
@@ -71,6 +73,10 @@ export interface TurnDeps {
    * Design V-UX-14 — park on a choice card; returns the user's selected labels.
    */
   askUserImpl?: (args: Record<string, unknown>) => Promise<string>;
+  /**
+   * Design §19.13 P2-E4 — persist session plan checklist (attended plan→execute).
+   */
+  sessionPlanImpl?: (args: Record<string, unknown>) => Promise<string>;
   /**
    * Home tool-loop: recover concrete tools from free-text claims/offers when the
    * model skipped the envoyhome-tools fence (multi-round honesty).
@@ -163,6 +169,16 @@ function isAskUserToolName(tool: string): boolean {
   return tool === "ask_user";
 }
 
+/** Design §19.13 P2-E4 — attended session plan checklist. */
+function isSessionPlanToolName(tool: string): boolean {
+  return tool === "session_plan";
+}
+
+/** Design §9.5h — Owner MCP catalogue tools (`mcp__<server>__<tool>`). */
+function isMcpToolName(tool: string): boolean {
+  return tool.startsWith("mcp__") && tool.length > "mcp__".length;
+}
+
 export type ParseToolCallsOptions = {
   /** Design §5.7.8 — ha_/mqtt_ tools only when home surface tool-loop is on. */
   allowSmartHome?: boolean;
@@ -203,13 +219,49 @@ export async function dispatchTool(
       typeof a.profile === "string" && a.profile.trim()
         ? a.profile.trim()
         : deps.browserDefaultProfile?.trim() || "managed";
-    const extra =
-      typeof a.url === "string"
-        ? ` ${a.url}`
-        : typeof a.targetId === "string"
-          ? ` target=${a.targetId}`
-          : "";
+    const bits: string[] = [];
+    if (typeof a.url === "string" && a.url.trim()) bits.push(a.url.trim());
+    else if (typeof a.targetId === "string" && a.targetId.trim()) {
+      bits.push(`target=${a.targetId.trim()}`);
+    }
+    if (action === "act") {
+      if (typeof a.kind === "string" && a.kind.trim()) bits.push(a.kind.trim());
+      if (typeof a.ref === "string" && a.ref.trim()) bits.push(`ref=${a.ref.trim()}`);
+      if (typeof a.snapshotId === "string" && a.snapshotId.trim()) {
+        bits.push(`snap=${a.snapshotId.trim()}`);
+      }
+      if (typeof a.verify === "string" && a.verify.trim()) bits.push(`verify=${a.verify.trim()}`);
+    } else if (action === "wait") {
+      if (typeof a.until === "string" && a.until.trim()) bits.push(`until=${a.until.trim()}`);
+      if (a.ms !== undefined) bits.push(`ms=${String(a.ms)}`);
+    } else if (action === "press") {
+      const key = typeof a.key === "string" ? a.key : typeof a.text === "string" ? a.text : "";
+      if (key.trim()) bits.push(`key=${key.trim()}`);
+    } else if (action === "propose_form" || action === "apply_form") {
+      if (typeof a.snapshotId === "string" && a.snapshotId.trim()) {
+        bits.push(`snap=${a.snapshotId.trim()}`);
+      }
+      if (Array.isArray(a.fields)) bits.push(`fields=${a.fields.length}`);
+      // Never put fieldValues / passwords into the approval summary.
+    }
+    const extra = bits.length ? ` ${bits.join(" ")}` : "";
     summary = `browser ${action} [${profile}]${extra}`;
+  }
+  if (isMcpToolName(req.tool) && (!summary || !summary.trim())) {
+    const rest = req.tool.slice("mcp__".length);
+    const sep = rest.indexOf("__");
+    const serverId = sep > 0 ? rest.slice(0, sep) : rest;
+    const toolPart = sep > 0 ? rest.slice(sep + 2) : "tool";
+    const label = deps.mcpServerLabel?.(serverId)?.trim() || serverId || "mcp";
+    const dig = (() => {
+      try {
+        const blob = JSON.stringify(req.args ?? {});
+        return blob.length > 80 ? `${blob.slice(0, 80)}…` : blob;
+      } catch {
+        return "";
+      }
+    })();
+    summary = dig ? `mcp:${label} ${toolPart} ${dig}` : `mcp:${label} ${toolPart}`;
   }
   if (req.tool === "schedule") {
     const a = (req.args ?? {}) as Record<string, unknown>;
@@ -414,6 +466,16 @@ export async function dispatchTool(
           : {};
       return { ok: true, output: await deps.askUserImpl(args) };
     }
+    if (req.tool === "session_plan") {
+      if (!deps.sessionPlanImpl) {
+        throw new Error("envoyhome.tool_unavailable: session_plan not configured");
+      }
+      const args =
+        req.args && typeof req.args === "object" && !Array.isArray(req.args)
+          ? (req.args as Record<string, unknown>)
+          : {};
+      return { ok: true, output: await deps.sessionPlanImpl(args) };
+    }
     // export_document / skill: / ha_* / mqtt_* — daemon workflow dispatcher.
     if (deps.extraToolImpl) {
       const out = await deps.extraToolImpl(req.tool, (req.args as Record<string, unknown>) ?? {});
@@ -610,6 +672,9 @@ export function parseAssistantToolCalls(
     // exec/http_fetch only when explicitly opted in (parent attended); ApprovalSink still gates.
     const okSchedule = isScheduleToolName(name);
     const okAskUser = isAskUserToolName(name);
+    const okSessionPlan = isSessionPlanToolName(name);
+    // Only hub-registered catalogue names — reject invented mcp__* fences.
+    const okMcp = isRegisteredMcpTool(name);
     if (schedulesOnly) {
       if (!okSchedule) continue;
     } else {
@@ -628,6 +693,8 @@ export function parseAssistantToolCalls(
         !okAgentNet &&
         !okSchedule &&
         !okAskUser &&
+        !okSessionPlan &&
+        !okMcp &&
         !okPhase2 &&
         !okSkill &&
         !okMemory &&

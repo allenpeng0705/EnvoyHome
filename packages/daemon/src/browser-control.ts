@@ -1,4 +1,4 @@
-// Built-in browser control — Design §9.5g / V-OUT-8 + §9.5g.1 / V-OUT-9/10.
+// Built-in browser control — Design §9.5g / V-OUT-8 + §9.5g.1 / V-OUT-9/10 + §9.5g.2 / V-OUT-11…15 + §9.5g.3 / V-OUT-16…19 + §9.5i / V-OUT-20…24.
 
 import { mkdir, readFile, writeFile, unlink, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -11,12 +11,30 @@ import {
   releaseBrowserGate,
 } from "./web-search-browser.js";
 import { isBlockedHostname } from "./skill-remote.js";
+import {
+  deriveBrowserFormFields,
+  detectPaymentWall,
+  type BrowserFormField,
+} from "./browser-form.js";
+
+export {
+  deriveBrowserFormFields,
+  detectPaymentWall,
+  BROWSER_FORM_FIELD_CAP,
+  type BrowserFormField,
+  type BrowserFormFieldKind,
+} from "./browser-form.js";
 
 export const BROWSER_CONTROL_ACTION_TIMEOUT_MS = 30_000;
 export const BROWSER_CONTROL_MAX_CHARS = 40_000;
 export const BROWSER_CONTROL_IDLE_MS = 5 * 60_000;
 /** Max screenshot file size written under output/browser/ (Design §9.5g). */
 export const BROWSER_CONTROL_SCREENSHOT_MAX_BYTES = 5 * 1024 * 1024;
+/** Design §9.5g.2 — `wait` ms cap. */
+export const BROWSER_CONTROL_WAIT_MS_CAP = 15_000;
+export const BROWSER_CONTROL_SNAPSHOT_ELEMENT_CAP = 150;
+export const BROWSER_CONTROL_WAIT_RETRIES = 3;
+export const BROWSER_CONTROL_VERIFY_TEXT_CHARS = 1_200;
 export const DEFAULT_PERSONAL_CDP = "http://127.0.0.1:9222";
 const REMOTE_TOKEN_FILE = "browser_remote_cdp_token.secret";
 
@@ -35,7 +53,15 @@ export type BrowserControlAction =
   | "snapshot"
   | "screenshot"
   | "act"
-  | "text";
+  | "text"
+  | "wait"
+  | "press"
+  | "propose_form"
+  | "apply_form"
+  | "propose_handoff";
+
+export type BrowserVerifyMode = "none" | "text" | "screenshot";
+export type BrowserBlockedKind = "captcha" | "login_wall" | "challenge" | "payment";
 
 const ACTIONS = new Set<BrowserControlAction>([
   "doctor",
@@ -51,6 +77,28 @@ const ACTIONS = new Set<BrowserControlAction>([
   "screenshot",
   "act",
   "text",
+  "wait",
+  "press",
+  "propose_form",
+  "apply_form",
+  "propose_handoff",
+]);
+
+const PRESS_KEYS = new Set([
+  "Enter",
+  "Tab",
+  "Escape",
+  "Backspace",
+  "Delete",
+  "ArrowUp",
+  "ArrowDown",
+  "ArrowLeft",
+  "ArrowRight",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
+  "Space",
 ]);
 
 const PROFILES = new Set<BrowserProfile>(["managed", "personal", "remote"]);
@@ -110,8 +158,12 @@ type PageLike = {
       screenshot(opts: { path: string; type?: string }): Promise<Buffer>;
     };
   };
-  evaluate<T>(fn: () => T | Promise<T>): Promise<T>;
+  evaluate<T>(fn: (() => T | Promise<T>) | ((arg: unknown) => T | Promise<T>), arg?: unknown): Promise<T>;
   screenshot(opts: { path: string; fullPage?: boolean; type?: string }): Promise<Buffer>;
+  waitForLoadState?(state: string, opts?: { timeout?: number }): Promise<void>;
+  waitForSelector?(selector: string, opts?: { timeout?: number }): Promise<unknown>;
+  waitForTimeout?(ms: number): Promise<void>;
+  keyboard?: { press(key: string): Promise<void> };
   close(): Promise<void>;
 };
 
@@ -125,6 +177,11 @@ type BrowserSession = {
     close(): Promise<void>;
   };
   tabs: Map<string, PageLike>;
+  /** Per-tab monotonic snapshot id (Design §9.5g.2). */
+  snapshotByTab: Map<string, string>;
+  /** Last stamped elements per tab (for §9.5g.3 form derive / apply). */
+  elementsByTab: Map<string, Array<Record<string, unknown>>>;
+  snapshotSeq: number;
   focusedId: string | null;
   lastUsedAt: number;
 };
@@ -263,6 +320,34 @@ export function assertBrowserNavigateUrl(raw: string): URL {
   return url;
 }
 
+/** §9.5i handoff openUrl — https only + SSRF host refuse (V-OUT-23). */
+export function assertHandoffOpenUrl(raw: string): URL {
+  let url: URL;
+  try {
+    url = new URL(String(raw).trim());
+  } catch {
+    throw Object.assign(new Error("envoyhome.bad_params: invalid openUrl"), {
+      code: "bad_params",
+    });
+  }
+  if (url.protocol !== "https:") {
+    throw Object.assign(new Error("envoyhome.unsafe: handoff openUrl must be https"), {
+      code: "unsafe",
+    });
+  }
+  if (url.username || url.password) {
+    throw Object.assign(new Error("envoyhome.unsafe: openUrl must not include credentials"), {
+      code: "unsafe",
+    });
+  }
+  if (isBlockedHostname(url.hostname)) {
+    throw Object.assign(new Error(`envoyhome.unsafe: openUrl host refused: ${url.hostname}`), {
+      code: "unsafe",
+    });
+  }
+  return url;
+}
+
 /** Allow data/blob/about; otherwise same as navigate SSRF (redirects + subresources). */
 export function assertBrowserNetworkUrl(raw: string): void {
   const s = String(raw);
@@ -278,9 +363,13 @@ export function assertBrowserNetworkUrl(raw: string): void {
   assertBrowserNavigateUrl(s);
 }
 
-/** Install Playwright route that aborts SSRF-unsafe requests (incl. redirects). */
+const SSRF_GUARDED_PAGES = new WeakSet<object>();
+
+/** Install Playwright route that aborts SSRF-unsafe requests (incl. redirects). Idempotent per page. */
 export async function installBrowserSsrfGuard(page: PageLike): Promise<void> {
   if (typeof page.route !== "function") return;
+  if (SSRF_GUARDED_PAGES.has(page as object)) return;
+  SSRF_GUARDED_PAGES.add(page as object);
   await page.route("**/*", async (route) => {
     try {
       assertBrowserNetworkUrl(route.request().url());
@@ -299,6 +388,93 @@ function clampMaxChars(raw: unknown): number {
 
 function isAction(v: unknown): v is BrowserControlAction {
   return typeof v === "string" && ACTIONS.has(v as BrowserControlAction);
+}
+
+function parseVerifyMode(
+  raw: unknown,
+  origin: "attended" | "unattended",
+): BrowserVerifyMode {
+  if (raw === "none" || raw === "text" || raw === "screenshot") return raw;
+  return origin === "unattended" ? "none" : "text";
+}
+
+/**
+ * Design §9.5g.2 — honest wall/challenge refuse (never solve).
+ *
+ * `mode: "act"` — fail-closed only on strong captcha/challenge signals (URL/title/body
+ * captcha markers, Cloudflare interstitial). Generic “Sign in” footer copy MUST NOT
+ * block act on normal sites.
+ * `mode: "advisory"` (navigate/snapshot) — also flag login-path URLs and strong
+ * login-required title/body phrases as `login_wall` (warn; snapshot still returned).
+ */
+export function detectBrowserBlocked(input: {
+  url: string;
+  title?: string;
+  textSample?: string;
+  mode?: "act" | "advisory";
+}): { blocked: BrowserBlockedKind; message: string } | null {
+  const mode = input.mode ?? "advisory";
+  const url = (input.url || "").toLowerCase();
+  const title = (input.title || "").toLowerCase();
+  const text = (input.textSample || "").toLowerCase();
+  const head = `${url}\n${title}`;
+  const blob = `${head}\n${text}`;
+
+  if (
+    /recaptcha|hcaptcha|cf-turnstile|captcha|challenge-platform|geo\.captcha|arkose/i.test(
+      blob,
+    )
+  ) {
+    return {
+      blocked: "captcha",
+      message:
+        "CAPTCHA / bot challenge detected — hand off to Owner; Home will not solve it.",
+    };
+  }
+  if (
+    /cloudflare|attention required|just a moment|access denied|bot detection/i.test(blob)
+  ) {
+    return {
+      blocked: "challenge",
+      message:
+        "Interstitial challenge page detected — hand off to Owner; Home will not bypass it.",
+    };
+  }
+
+  // §9.5i / V-OUT-21 — payment / wallet wall (hard stop; never fill card fields).
+  if (
+    detectPaymentWall({
+      url: input.url,
+      ...(input.title !== undefined ? { title: input.title } : {}),
+      ...(input.textSample !== undefined ? { textSample: input.textSample } : {}),
+    })
+  ) {
+    return {
+      blocked: "payment",
+      message:
+        "Payment / wallet wall detected — hand off via propose_handoff (https Open); Home will not fill card data.",
+    };
+  }
+
+  // Act: stop here — do not treat nav chrome "Sign in" as a hard wall.
+  if (mode === "act") return null;
+
+  const loginPath =
+    /\/login\b|\/signin\b|\/sign-in\b|\/sso\b|accounts\.google\.com\/v3\/signin|login\.microsoftonline|auth0\.com/i.test(
+      url,
+    );
+  const strongLoginCopy =
+    /\b(login required|please sign in|sign in to continue|log in to continue|verify you are human)\b/i.test(
+      `${title}\n${text.slice(0, 400)}`,
+    );
+  if (loginPath || strongLoginCopy) {
+    return {
+      blocked: "login_wall",
+      message:
+        "Login wall detected — use an elevated personal/remote profile (Owner ack) or sign in yourself.",
+    };
+  }
+  return null;
 }
 
 async function probeCdpEndpoint(endpoint: string): Promise<boolean> {
@@ -602,6 +778,11 @@ export class BrowserControlService {
       accountId: string;
       origin?: "attended" | "unattended";
       ownerAccountId?: string | null;
+      /**
+       * Daemon-only: `apply_form` carries secrets and MUST NOT be agent-callable
+       * (Design §9.5g.3 / V-OUT-18). Set only from ChoiceStore answer path.
+       */
+      internal?: boolean;
     },
   ): Promise<string> {
     const ready = this.readyInfo();
@@ -609,6 +790,16 @@ export class BrowserControlService {
       throw Object.assign(
         new Error(`envoyhome.tool_unavailable: ${ready.reason ?? "browser unavailable"}`),
         { code: "tool_unavailable" },
+      );
+    }
+
+    // Fail closed before profile gates — never let model tool args carry fieldValues.
+    if (args.action === "apply_form" && opts.internal !== true) {
+      throw Object.assign(
+        new Error(
+          "envoyhome.bad_params: apply_form is daemon-internal — use propose_form + form card",
+        ),
+        { code: "bad_params" },
       );
     }
 
@@ -688,6 +879,11 @@ export class BrowserControlService {
       });
     }
 
+    // §9.5i — handoff card needs no Playwright session (https openUrl only).
+    if (action === "propose_handoff") {
+      return this.runProposeHandoff(args);
+    }
+
     if (profile === "managed") {
       const probe = await probeBrowserRuntime();
       if (probe.status !== "ready" && !this.pageFactory) {
@@ -716,7 +912,7 @@ export class BrowserControlService {
       });
     }
     try {
-      return await this.dispatchAction(action, args, opts.accountId, profile);
+      return await this.dispatchAction(action, args, opts.accountId, profile, origin);
     } finally {
       releaseBrowserGate();
     }
@@ -731,6 +927,7 @@ export class BrowserControlService {
     args: Record<string, unknown>,
     accountId: string,
     profile: BrowserProfile,
+    origin: "attended" | "unattended",
   ): Promise<string> {
     if (action === "start") {
       await this.ensureSession(accountId, profile);
@@ -748,6 +945,7 @@ export class BrowserControlService {
           url: page.url(),
           title: await page.title().catch(() => ""),
           focused: id === session.focusedId,
+          snapshotId: session.snapshotByTab.get(id) ?? null,
         });
       }
       return JSON.stringify({ action: "tabs", profile, tabs });
@@ -766,6 +964,8 @@ export class BrowserControlService {
       } else {
         targetId = session.focusedId;
         page = session.tabs.get(targetId)!;
+        // Defense in depth — reuse path must keep the SSRF route guard.
+        await installBrowserSsrfGuard(page);
       }
       try {
         await page.goto(url, {
@@ -791,13 +991,41 @@ export class BrowserControlService {
           { code: "unsafe" },
         );
       }
-      const snap = await this.buildSnapshot(page, clampMaxChars(args.maxChars));
+      const title = await page.title().catch(() => "");
+      const textSample = await page.innerText("body").catch(() => "");
+      const blocked = detectBrowserBlocked({
+        url: page.url(),
+        title,
+        textSample: textSample.slice(0, 2_000),
+        mode: "advisory",
+      });
+      const snap = await this.stampSnapshot(
+        session,
+        targetId,
+        page,
+        clampMaxChars(args.maxChars),
+        args.includeHidden === true,
+      );
+      if (blocked) {
+        return JSON.stringify({
+          action,
+          profile,
+          targetId,
+          url: page.url(),
+          title,
+          snapshotId: snap.snapshotId,
+          snapshot: snap,
+          blocked: blocked.blocked,
+          message: blocked.message,
+        });
+      }
       return JSON.stringify({
         action,
         profile,
         targetId,
         url: page.url(),
-        title: await page.title().catch(() => ""),
+        title,
+        snapshotId: snap.snapshotId,
         snapshot: snap,
       });
     }
@@ -815,6 +1043,8 @@ export class BrowserControlService {
       }
       const page = session.tabs.get(targetId)!;
       session.tabs.delete(targetId);
+      session.snapshotByTab.delete(targetId);
+      session.elementsByTab.delete(targetId);
       if (session.focusedId === targetId) {
         session.focusedId = session.tabs.keys().next().value ?? null;
       }
@@ -823,15 +1053,35 @@ export class BrowserControlService {
     }
 
     const page = this.requireFocusedPage(session, args.targetId);
+    const targetId = session.focusedId!;
 
     if (action === "snapshot") {
-      const snap = await this.buildSnapshot(page, clampMaxChars(args.maxChars));
+      const title = await page.title().catch(() => "");
+      const textSample = await page.innerText("body").catch(() => "");
+      const blocked = detectBrowserBlocked({
+        url: page.url(),
+        title,
+        textSample: textSample.slice(0, 2_000),
+        mode: "advisory",
+      });
+      const snap = await this.stampSnapshot(
+        session,
+        targetId,
+        page,
+        clampMaxChars(args.maxChars),
+        args.includeHidden === true,
+      );
       return JSON.stringify({
         action: "snapshot",
         profile,
-        targetId: session.focusedId,
+        targetId,
         url: page.url(),
+        title,
+        snapshotId: snap.snapshotId,
         snapshot: snap,
+        ...(blocked
+          ? { blocked: blocked.blocked, message: blocked.message }
+          : {}),
       });
     }
 
@@ -853,43 +1103,619 @@ export class BrowserControlService {
       return JSON.stringify({
         action: "text",
         profile,
-        targetId: session.focusedId,
+        targetId,
         text,
         truncated,
       });
     }
 
     if (action === "screenshot") {
-      const outDir = join(this.paths.accountFiles(accountId), "output", "browser");
-      await mkdir(outDir, { recursive: true });
-      const fileName = `shot-${Date.now()}.png`;
-      const abs = join(outDir, fileName);
-      await page.screenshot({ path: abs, fullPage: args.fullPage === true, type: "png" });
-      const st = await stat(abs).catch(() => null);
-      if (st && st.size > BROWSER_CONTROL_SCREENSHOT_MAX_BYTES) {
-        await unlink(abs).catch(() => undefined);
-        throw Object.assign(
-          new Error(
-            `envoyhome.bad_params: screenshot exceeds ${BROWSER_CONTROL_SCREENSHOT_MAX_BYTES} bytes`,
-          ),
-          { code: "bad_params" },
-        );
-      }
+      const shot = await this.writeScreenshot(page, accountId, args.fullPage === true);
       return JSON.stringify({
         action: "screenshot",
         profile,
-        targetId: session.focusedId,
-        path: `output/browser/${fileName}`,
-        bytes: st?.size ?? 0,
+        targetId,
+        path: shot.path,
+        bytes: shot.bytes,
       });
     }
 
+    if (action === "wait") {
+      return this.runWait(page, session, args, profile, targetId);
+    }
+
+    if (action === "press") {
+      return this.runPress(page, session, args, profile, targetId);
+    }
+
+    if (action === "propose_form") {
+      return this.runProposeForm(page, session, args, profile, origin, targetId);
+    }
+
+    if (action === "apply_form") {
+      return this.runApplyForm(page, session, args, profile, origin, accountId, targetId);
+    }
+
     if (action === "act") {
-      return this.runAct(page, session, args, profile);
+      return this.runAct(page, session, args, profile, origin, accountId, targetId);
     }
 
     throw Object.assign(new Error(`envoyhome.bad_params: unhandled action ${action}`), {
       code: "bad_params",
+    });
+  }
+
+  private async stampSnapshot(
+    session: BrowserSession,
+    targetId: string,
+    page: PageLike,
+    maxChars: number,
+    includeHidden: boolean,
+  ): Promise<{
+    snapshotId: string;
+    elements: Array<Record<string, unknown>>;
+    truncated: boolean;
+  }> {
+    session.snapshotSeq += 1;
+    const snapshotId = `s${session.snapshotSeq}`;
+    session.snapshotByTab.set(targetId, snapshotId);
+    const built = await this.buildSnapshot(page, maxChars, includeHidden);
+    session.elementsByTab.set(targetId, built.elements);
+    return { snapshotId, ...built };
+  }
+
+  private clearTabSnapshot(session: BrowserSession, targetId: string): void {
+    session.snapshotByTab.delete(targetId);
+    session.elementsByTab.delete(targetId);
+  }
+
+  /** §9.5i — validate handoff payload; turn-service parks the choice card. */
+  private runProposeHandoff(args: Record<string, unknown>): string {
+    const openUrl = assertHandoffOpenUrl(String(args.openUrl ?? "")).href;
+    const question =
+      typeof args.question === "string" && args.question.trim()
+        ? args.question.trim().slice(0, 500)
+        : "Finish in your app (Open), then pay there — Home will not enter card details.";
+    const title =
+      typeof args.title === "string" && args.title.trim()
+        ? args.title.trim().slice(0, 200)
+        : undefined;
+    const steps = Array.isArray(args.steps)
+      ? args.steps
+          .map((s) => String(s ?? "").trim().slice(0, 200))
+          .filter(Boolean)
+          .slice(0, 8)
+      : [];
+    return JSON.stringify({
+      action: "propose_handoff",
+      ok: true,
+      openUrl,
+      question,
+      ...(title ? { title } : {}),
+      ...(steps.length ? { steps } : {}),
+      message:
+        "Handoff ready — Owner Open launches https (app may catch Universal Link). Do not claim daemon cart is already in the phone app.",
+    });
+  }
+
+  private async runProposeForm(
+    page: PageLike,
+    session: BrowserSession,
+    args: Record<string, unknown>,
+    profile: BrowserProfile,
+    origin: "attended" | "unattended",
+    targetId: string,
+  ): Promise<string> {
+    const title = await page.title().catch(() => "");
+    const url = page.url();
+    const textSample = await page.innerText("body").catch(() => "");
+    const blocked = detectBrowserBlocked({
+      url,
+      title,
+      textSample: textSample.slice(0, 2_000),
+      mode: "act",
+    });
+    // V-OUT-19 / V-OUT-21 — CAPTCHA / challenge / payment must not open a form card.
+    if (
+      blocked &&
+      (blocked.blocked === "captcha" ||
+        blocked.blocked === "challenge" ||
+        blocked.blocked === "payment")
+    ) {
+      return JSON.stringify({
+        action: "propose_form",
+        profile,
+        ok: false,
+        targetId,
+        blocked: blocked.blocked,
+        message: blocked.message,
+        url,
+        title,
+      });
+    }
+
+    let snapshotId = session.snapshotByTab.get(targetId);
+    let elements = session.elementsByTab.get(targetId);
+    const givenSnap =
+      typeof args.snapshotId === "string" ? args.snapshotId.trim() : "";
+    if (givenSnap) {
+      if (!snapshotId || givenSnap !== snapshotId || !elements) {
+        return JSON.stringify({
+          action: "propose_form",
+          profile,
+          ok: false,
+          error: "stale_snapshot",
+          message: "snapshotId missing or stale — take a new snapshot",
+          targetId,
+          expectedSnapshotId: snapshotId ?? null,
+          gotSnapshotId: givenSnap,
+        });
+      }
+    } else if (!snapshotId || !elements) {
+      const snap = await this.stampSnapshot(
+        session,
+        targetId,
+        page,
+        clampMaxChars(args.maxChars),
+        args.includeHidden === true,
+      );
+      snapshotId = snap.snapshotId;
+      elements = snap.elements;
+    }
+
+    const fieldRefs = Array.isArray(args.fieldRefs)
+      ? args.fieldRefs.map((r) => String(r)).filter(Boolean)
+      : undefined;
+    const submitArg =
+      typeof args.submitRef === "string" && args.submitRef.trim()
+        ? args.submitRef.trim()
+        : undefined;
+    const derived = deriveBrowserFormFields(elements ?? [], {
+      ...(fieldRefs?.length ? { fieldRefs } : {}),
+      ...(submitArg ? { submitRef: submitArg } : {}),
+    });
+    if (
+      derived.paymentBlocked ||
+      detectPaymentWall({ url, title, textSample: textSample.slice(0, 2_000), elements })
+    ) {
+      return JSON.stringify({
+        action: "propose_form",
+        profile,
+        ok: false,
+        targetId,
+        snapshotId,
+        blocked: "payment",
+        message:
+          "Payment / card fields detected — use propose_handoff with an https openUrl; Home will not fill card data.",
+        url,
+        title,
+        ...(derived.skippedPaymentFields
+          ? { skippedPaymentFields: derived.skippedPaymentFields }
+          : {}),
+      });
+    }
+    if (derived.fields.length === 0) {
+      return JSON.stringify({
+        action: "propose_form",
+        profile,
+        ok: false,
+        error: "no_fields",
+        message: "no fillable form controls in snapshot",
+        targetId,
+        snapshotId,
+        url,
+        title,
+      });
+    }
+    const hasSensitive = derived.fields.some((f) => f.sensitive);
+    if (origin === "unattended" && hasSensitive) {
+      return JSON.stringify({
+        action: "propose_form",
+        profile,
+        ok: false,
+        error: "sensitive_unattended",
+        message: "unattended refuses password/otp form fields",
+        targetId,
+        snapshotId,
+        url,
+        title,
+      });
+    }
+
+    return JSON.stringify({
+      action: "propose_form",
+      profile,
+      ok: true,
+      targetId,
+      snapshotId,
+      url,
+      title,
+      fields: derived.fields,
+      ...(derived.submitRef ? { submitRef: derived.submitRef } : {}),
+      ...(blocked ? { blocked: blocked.blocked, message: blocked.message } : {}),
+    });
+  }
+
+  private async runApplyForm(
+    page: PageLike,
+    session: BrowserSession,
+    args: Record<string, unknown>,
+    profile: BrowserProfile,
+    origin: "attended" | "unattended",
+    accountId: string,
+    targetId: string,
+  ): Promise<string> {
+    const currentSnap = session.snapshotByTab.get(targetId);
+    const givenSnap = typeof args.snapshotId === "string" ? args.snapshotId.trim() : "";
+    if (!givenSnap || !currentSnap || givenSnap !== currentSnap) {
+      return JSON.stringify({
+        action: "apply_form",
+        profile,
+        ok: false,
+        error: "stale_snapshot",
+        message: "snapshotId missing or stale — no fill",
+        targetId,
+        expectedSnapshotId: currentSnap ?? null,
+        gotSnapshotId: givenSnap || null,
+      });
+    }
+
+    const rawFields = Array.isArray(args.fields) ? args.fields : [];
+    const fields: BrowserFormField[] = [];
+    for (const f of rawFields) {
+      if (!f || typeof f !== "object" || Array.isArray(f)) continue;
+      const rec = f as Record<string, unknown>;
+      const id = typeof rec.id === "string" ? rec.id.trim() : "";
+      const ref = typeof rec.ref === "string" ? rec.ref.trim() : "";
+      const kind = rec.kind;
+      if (!id || !ref) continue;
+      if (
+        kind !== "text" &&
+        kind !== "password" &&
+        kind !== "otp" &&
+        kind !== "textarea" &&
+        kind !== "select" &&
+        kind !== "checkbox"
+      ) {
+        continue;
+      }
+      fields.push({
+        id,
+        label: typeof rec.label === "string" ? rec.label : id,
+        ref,
+        kind,
+        sensitive: rec.sensitive === true || kind === "password" || kind === "otp",
+        ...(rec.required === true ? { required: true } : {}),
+      });
+    }
+    if (fields.length === 0) {
+      throw Object.assign(new Error("envoyhome.bad_params: apply_form requires fields"), {
+        code: "bad_params",
+      });
+    }
+
+    const valuesRaw = args.fieldValues;
+    if (!valuesRaw || typeof valuesRaw !== "object" || Array.isArray(valuesRaw)) {
+      throw Object.assign(new Error("envoyhome.bad_params: apply_form requires fieldValues"), {
+        code: "bad_params",
+      });
+    }
+    const fieldValues = valuesRaw as Record<string, unknown>;
+
+    if (origin === "unattended" && fields.some((f) => f.sensitive)) {
+      return JSON.stringify({
+        action: "apply_form",
+        profile,
+        ok: false,
+        error: "sensitive_unattended",
+        message: "unattended refuses password/otp form fields",
+        targetId,
+        snapshotId: currentSnap,
+      });
+    }
+
+    const beforeUrl = page.url();
+    const title = await page.title().catch(() => "");
+    const textSample = await page.innerText("body").catch(() => "");
+    const blocked = detectBrowserBlocked({
+      url: beforeUrl,
+      title,
+      textSample: textSample.slice(0, 2_000),
+      mode: "act",
+    });
+    if (blocked && (blocked.blocked === "captcha" || blocked.blocked === "challenge")) {
+      return JSON.stringify({
+        action: "apply_form",
+        profile,
+        ok: false,
+        targetId,
+        snapshotId: currentSnap,
+        blocked: blocked.blocked,
+        message: blocked.message,
+        url: beforeUrl,
+      });
+    }
+
+    // Enforce required before any mutation (ChoiceStore also checks; defense in depth).
+    for (const f of fields) {
+      if (!f.required) continue;
+      const v = fieldValues[f.id];
+      if (v === undefined || v === null) {
+        return JSON.stringify({
+          action: "apply_form",
+          profile,
+          ok: false,
+          error: "field_required",
+          message: `required field missing: ${f.id}`,
+          targetId,
+          snapshotId: currentSnap,
+        });
+      }
+      if (f.kind !== "checkbox" && String(v).trim() === "") {
+        return JSON.stringify({
+          action: "apply_form",
+          profile,
+          ok: false,
+          error: "field_required",
+          message: `required field missing: ${f.id}`,
+          targetId,
+          snapshotId: currentSnap,
+        });
+      }
+    }
+
+    const filled: string[] = [];
+    for (const f of fields) {
+      const v = fieldValues[f.id];
+      if (v === undefined || v === null) continue;
+      const selector = f.ref.startsWith("[data-eh-ref=")
+        ? f.ref
+        : `[data-eh-ref="${f.ref}"]`;
+      const loc = page.locator(selector);
+      if ((await loc.count()) < 1) {
+        return JSON.stringify({
+          action: "apply_form",
+          profile,
+          ok: false,
+          error: "stale_ref",
+          message: `ref not found: ${f.ref}`,
+          targetId,
+          snapshotId: currentSnap,
+          filled,
+        });
+      }
+      const el = loc.nth(0);
+      if (f.kind === "checkbox") {
+        const want = v === true || v === "true" || v === "1";
+        let checked = false;
+        try {
+          checked = await el.evaluate((node) => {
+            const input = node as HTMLInputElement;
+            if (typeof input.checked === "boolean") return input.checked;
+            return input.getAttribute?.("aria-checked") === "true";
+          });
+        } catch {
+          checked = false;
+        }
+        if (checked !== want) {
+          await el.click({ timeout: 10_000 });
+        }
+      } else if (f.kind === "select") {
+        await el.selectOption(String(v));
+      } else {
+        await el.fill(String(v), { timeout: 10_000 });
+      }
+      filled.push(f.id);
+    }
+
+    const submitRef =
+      typeof args.submitRef === "string" && args.submitRef.trim()
+        ? args.submitRef.trim()
+        : "";
+    let submitted = false;
+    if (submitRef) {
+      const sel = submitRef.startsWith("[data-eh-ref=")
+        ? submitRef
+        : `[data-eh-ref="${submitRef}"]`;
+      const loc = page.locator(sel);
+      if ((await loc.count()) >= 1) {
+        await loc.nth(0).click({ timeout: 10_000 });
+        submitted = true;
+      }
+    }
+
+    this.clearTabSnapshot(session, targetId);
+
+    const verifyMode = parseVerifyMode(args.verify, origin);
+    let verify: Record<string, unknown> | undefined;
+    if (verifyMode === "text") {
+      let text = await page.innerText("body").catch(() => "");
+      text = (text || "").trim();
+      const truncated = text.length > BROWSER_CONTROL_VERIFY_TEXT_CHARS;
+      if (truncated) text = text.slice(0, BROWSER_CONTROL_VERIFY_TEXT_CHARS);
+      verify = { mode: "text", url: page.url(), text, truncated };
+    } else if (verifyMode === "screenshot") {
+      const shot = await this.writeScreenshot(page, accountId, false);
+      verify = {
+        mode: "screenshot",
+        url: page.url(),
+        path: shot.path,
+        bytes: shot.bytes,
+      };
+    }
+
+    return JSON.stringify({
+      action: "apply_form",
+      profile,
+      ok: true,
+      targetId,
+      snapshotId: currentSnap,
+      snapshotConsumed: true,
+      filledCount: filled.length,
+      // Never echo secret values — ids only.
+      filledIds: filled,
+      submitted,
+      url: page.url(),
+      ...(verify ? { verify } : {}),
+    });
+  }
+
+  private async writeScreenshot(
+    page: PageLike,
+    accountId: string,
+    fullPage: boolean,
+  ): Promise<{ path: string; bytes: number }> {
+    const outDir = join(this.paths.accountFiles(accountId), "output", "browser");
+    await mkdir(outDir, { recursive: true });
+    const fileName = `shot-${Date.now()}.png`;
+    const abs = join(outDir, fileName);
+    await page.screenshot({ path: abs, fullPage, type: "png" });
+    const st = await stat(abs).catch(() => null);
+    if (st && st.size > BROWSER_CONTROL_SCREENSHOT_MAX_BYTES) {
+      await unlink(abs).catch(() => undefined);
+      throw Object.assign(
+        new Error(
+          `envoyhome.bad_params: screenshot exceeds ${BROWSER_CONTROL_SCREENSHOT_MAX_BYTES} bytes`,
+        ),
+        { code: "bad_params" },
+      );
+    }
+    return { path: `output/browser/${fileName}`, bytes: st?.size ?? 0 };
+  }
+
+  private async runWait(
+    page: PageLike,
+    session: BrowserSession,
+    args: Record<string, unknown>,
+    profile: BrowserProfile,
+    targetId: string,
+  ): Promise<string> {
+    const until = String(args.until ?? "load");
+    const rawMs =
+      typeof args.ms === "number"
+        ? args.ms
+        : typeof args.ms === "string"
+          ? Number(args.ms)
+          : NaN;
+    if (Number.isFinite(rawMs) && rawMs > BROWSER_CONTROL_WAIT_MS_CAP) {
+      throw Object.assign(
+        new Error(
+          `envoyhome.bad_params: wait ms exceeds ${BROWSER_CONTROL_WAIT_MS_CAP}`,
+        ),
+        { code: "bad_params" },
+      );
+    }
+    const ms = Number.isFinite(rawMs) && rawMs > 0
+      ? Math.min(BROWSER_CONTROL_WAIT_MS_CAP, Math.floor(rawMs))
+      : until === "timeout"
+        ? 1_000
+        : BROWSER_CONTROL_WAIT_MS_CAP;
+    const t0 = Date.now();
+    let lastErr: string | undefined;
+    for (let attempt = 1; attempt <= BROWSER_CONTROL_WAIT_RETRIES; attempt++) {
+      try {
+        if (until === "timeout") {
+          if (typeof page.waitForTimeout === "function") {
+            await page.waitForTimeout(ms);
+          } else {
+            await new Promise((r) => setTimeout(r, ms));
+          }
+        } else if (until === "selector") {
+          const selector = String(args.selector ?? "").trim();
+          if (!selector) {
+            throw Object.assign(
+              new Error("envoyhome.bad_params: wait until=selector requires selector"),
+              { code: "bad_params" },
+            );
+          }
+          if (typeof page.waitForSelector === "function") {
+            await page.waitForSelector(selector, { timeout: ms });
+          } else {
+            // Mock / minimal page: poll locator.
+            const deadline = Date.now() + ms;
+            for (;;) {
+              if ((await page.locator(selector).count()) > 0) break;
+              if (Date.now() >= deadline) throw new Error("wait_timeout");
+              await new Promise((r) => setTimeout(r, 50));
+            }
+          }
+        } else if (until === "networkidle" || until === "load" || until === "domcontentloaded") {
+          const state = until === "networkidle" ? "networkidle" : until === "load" ? "load" : "domcontentloaded";
+          if (typeof page.waitForLoadState === "function") {
+            await page.waitForLoadState(state, { timeout: ms });
+          } else if (typeof page.waitForTimeout === "function") {
+            await page.waitForTimeout(Math.min(ms, 100));
+          }
+        } else {
+          throw Object.assign(
+            new Error(`envoyhome.bad_params: unknown wait until: ${until}`),
+            { code: "bad_params" },
+          );
+        }
+        return JSON.stringify({
+          action: "wait",
+          profile,
+          ok: true,
+          until,
+          waitedMs: Date.now() - t0,
+          targetId,
+          url: page.url(),
+          snapshotId: session.snapshotByTab.get(targetId) ?? null,
+        });
+      } catch (err) {
+        lastErr = err instanceof Error ? err.message : String(err);
+        if (err && typeof err === "object" && (err as { code?: string }).code === "bad_params") {
+          throw err;
+        }
+        if (attempt >= BROWSER_CONTROL_WAIT_RETRIES) break;
+      }
+    }
+    return JSON.stringify({
+      action: "wait",
+      profile,
+      ok: false,
+      until,
+      waitedMs: Date.now() - t0,
+      targetId,
+      error: "wait_failed",
+      message: lastErr ?? "wait failed",
+    });
+  }
+
+  private async runPress(
+    page: PageLike,
+    _session: BrowserSession,
+    args: Record<string, unknown>,
+    profile: BrowserProfile,
+    targetId: string,
+  ): Promise<string> {
+    const keyRaw = String(args.key ?? args.text ?? "").trim();
+    const key = keyRaw === " " ? "Space" : keyRaw;
+    if (!key || !PRESS_KEYS.has(key)) {
+      throw Object.assign(
+        new Error(
+          `envoyhome.bad_params: press key must be one of ${[...PRESS_KEYS].join("|")}`,
+        ),
+        { code: "bad_params" },
+      );
+    }
+    if (!page.keyboard?.press) {
+      throw Object.assign(
+        new Error("envoyhome.tool_unavailable: page keyboard not available"),
+        { code: "tool_unavailable" },
+      );
+    }
+    await page.keyboard.press(key === "Space" ? " " : key);
+    // Press can submit forms / change focus — require a fresh snapshot before next act.
+    this.clearTabSnapshot(_session, targetId);
+    return JSON.stringify({
+      action: "press",
+      profile,
+      ok: true,
+      key,
+      targetId,
+      url: page.url(),
+      snapshotConsumed: true,
     });
   }
 
@@ -898,7 +1724,46 @@ export class BrowserControlService {
     session: BrowserSession,
     args: Record<string, unknown>,
     profile: BrowserProfile,
+    origin: "attended" | "unattended",
+    accountId: string,
+    targetId: string,
   ): Promise<string> {
+    const currentSnap = session.snapshotByTab.get(targetId);
+    const givenSnap = typeof args.snapshotId === "string" ? args.snapshotId.trim() : "";
+    if (!givenSnap || !currentSnap || givenSnap !== currentSnap) {
+      return JSON.stringify({
+        action: "act",
+        profile,
+        error: "stale_snapshot",
+        message: "snapshotId missing or stale — take a new snapshot",
+        targetId,
+        expectedSnapshotId: currentSnap ?? null,
+        gotSnapshotId: givenSnap || null,
+      });
+    }
+
+    const beforeUrl = page.url();
+    const title = await page.title().catch(() => "");
+    const textSample = await page.innerText("body").catch(() => "");
+    const blocked = detectBrowserBlocked({
+      url: beforeUrl,
+      title,
+      textSample: textSample.slice(0, 2_000),
+      mode: "act",
+    });
+    if (blocked) {
+      return JSON.stringify({
+        action: "act",
+        profile,
+        ok: false,
+        targetId,
+        snapshotId: currentSnap,
+        blocked: blocked.blocked,
+        message: blocked.message,
+        url: beforeUrl,
+      });
+    }
+
     const kind = String(args.kind ?? "click");
     const ref = String(args.ref ?? args.selector ?? "").trim();
     if (!ref) {
@@ -915,7 +1780,8 @@ export class BrowserControlService {
         profile,
         error: "stale_ref",
         message: "ref not found — take a new snapshot",
-        targetId: session.focusedId,
+        targetId,
+        snapshotId: currentSnap,
       });
     }
     const el = loc.nth(0);
@@ -935,7 +1801,13 @@ export class BrowserControlService {
       const toSel = toRef.startsWith("[data-eh-ref=") ? toRef : `[data-eh-ref="${toRef}"]`;
       const toLoc = page.locator(toSel);
       if ((await toLoc.count()) < 1) {
-        return JSON.stringify({ action: "act", profile, error: "stale_ref", kind: "drag" });
+        return JSON.stringify({
+          action: "act",
+          profile,
+          error: "stale_ref",
+          kind: "drag",
+          snapshotId: currentSnap,
+        });
       }
       await el.dragTo(toLoc.nth(0) as unknown as { click(): Promise<void> });
     } else {
@@ -943,14 +1815,45 @@ export class BrowserControlService {
         code: "bad_params",
       });
     }
+
+    const verifyMode = parseVerifyMode(args.verify, origin);
+    let verify: Record<string, unknown> | undefined;
+    if (verifyMode === "text") {
+      let text = await page.innerText("body").catch(() => "");
+      text = (text || "").trim();
+      const truncated = text.length > BROWSER_CONTROL_VERIFY_TEXT_CHARS;
+      if (truncated) text = text.slice(0, BROWSER_CONTROL_VERIFY_TEXT_CHARS);
+      verify = {
+        mode: "text",
+        url: page.url(),
+        text,
+        truncated,
+      };
+    } else if (verifyMode === "screenshot") {
+      const shot = await this.writeScreenshot(page, accountId, false);
+      verify = {
+        mode: "screenshot",
+        url: page.url(),
+        path: shot.path,
+        bytes: shot.bytes,
+      };
+    }
+
+    // Consume snapshot after a mutating act — force a fresh snapshot before next act.
+    this.clearTabSnapshot(session, targetId);
+
     return JSON.stringify({
       action: "act",
       profile,
       kind,
       ref,
       ok: true,
-      targetId: session.focusedId,
+      targetId,
+      snapshotId: currentSnap,
+      snapshotConsumed: true,
+      beforeUrl,
       url: page.url(),
+      ...(verify ? { verify } : { verify: { mode: "none" } }),
     });
   }
 
@@ -975,32 +1878,93 @@ export class BrowserControlService {
   private async buildSnapshot(
     page: PageLike,
     maxChars: number,
+    includeHidden: boolean,
   ): Promise<{ elements: Array<Record<string, unknown>>; truncated: boolean }> {
-    const elements = await page.evaluate(() => {
-      const nodes = document.querySelectorAll(
-        'a[href], button, input, textarea, select, [role="button"], [onclick]',
-      );
-      return Array.from(nodes)
-        .slice(0, 100)
-        .map((el, i) => {
-          el.setAttribute("data-eh-ref", String(i));
-          const text = (
-            (el as HTMLElement).innerText ||
-            (el as HTMLInputElement).value ||
-            (el as HTMLInputElement).placeholder ||
+    const cap = BROWSER_CONTROL_SNAPSHOT_ELEMENT_CAP;
+    const elements = await page.evaluate(
+      ((opts: { cap: number; includeHidden: boolean }) => {
+        const roleSel =
+          '[role="link"],[role="button"],[role="textbox"],[role="checkbox"],[role="combobox"],[role="tab"],[role="menuitem"]';
+        const nodes = document.querySelectorAll(
+          `a[href], button, input, textarea, select, [role="button"], [onclick], ${roleSel}`,
+        );
+        const isVisible = (el: Element) => {
+          const style = window.getComputedStyle(el);
+          if (style.display === "none" || style.visibility === "hidden") return false;
+          const r = (el as HTMLElement).getBoundingClientRect?.();
+          if (r && (r.width === 0 || r.height === 0)) return false;
+          return true;
+        };
+        const out: Array<Record<string, unknown>> = [];
+        let i = 0;
+        for (const el of Array.from(nodes)) {
+          if (out.length >= opts.cap) break;
+          const visible = isVisible(el);
+          if (!opts.includeHidden && !visible) continue;
+          const ref = String(i++);
+          el.setAttribute("data-eh-ref", ref);
+          const input = el as HTMLInputElement;
+          const inputType =
+            el.tagName === "INPUT" ? String(input.type || "text").toLowerCase() : "";
+          const role =
+            el.getAttribute("role") ||
+            (el.tagName === "A"
+              ? "link"
+              : el.tagName === "BUTTON"
+                ? "button"
+                : el.tagName === "INPUT"
+                  ? inputType === "checkbox"
+                    ? "checkbox"
+                    : "textbox"
+                  : el.tagName === "TEXTAREA"
+                    ? "textbox"
+                    : el.tagName === "SELECT"
+                      ? "combobox"
+                      : el.tagName.toLowerCase());
+          const name = (
             el.getAttribute("aria-label") ||
+            (el as HTMLElement).innerText ||
+            input.placeholder ||
+            el.getAttribute("name") ||
             ""
           )
             .trim()
             .slice(0, 80);
-          return {
-            ref: String(i),
-            selector: `[data-eh-ref="${i}"]`,
+          const row: Record<string, unknown> = {
+            ref,
+            selector: `[data-eh-ref="${ref}"]`,
             tag: el.tagName.toLowerCase(),
-            text: text || "(no text)",
+            role,
+            name: name || "(no name)",
+            visible,
+            text: name || "(no text)",
           };
-        });
-    });
+          if (inputType) row.inputType = inputType;
+          const nameAttr = el.getAttribute("name");
+          if (nameAttr) row.nameAttr = nameAttr.slice(0, 80);
+          const placeholder = input.placeholder;
+          if (placeholder) row.placeholder = String(placeholder).slice(0, 80);
+          const autocomplete = el.getAttribute("autocomplete");
+          if (autocomplete) row.autocomplete = autocomplete.slice(0, 80);
+          const hasRequired =
+            (typeof (el as HTMLElement).hasAttribute === "function" &&
+              (el as HTMLElement).hasAttribute("required")) ||
+            el.getAttribute("aria-required") === "true";
+          if (hasRequired) row.required = true;
+          if (el.tagName === "SELECT") {
+            const selectEl = el as HTMLSelectElement;
+            const opts = Array.from(selectEl.options || []).map((o) => ({
+              value: String(o.value ?? "").slice(0, 200),
+              label: String(o.label || o.text || o.value || "").slice(0, 200),
+            }));
+            if (opts.length) row.selectOptions = opts.slice(0, 48);
+          }
+          out.push(row);
+        }
+        return out;
+      }) as (arg: unknown) => Array<Record<string, unknown>>,
+      { cap, includeHidden },
+    );
     let truncated = false;
     let list = elements;
     const packed = JSON.stringify(list);
@@ -1039,6 +2003,9 @@ export class BrowserControlService {
           close: async () => undefined,
         },
         tabs: new Map(),
+        snapshotByTab: new Map(),
+        elementsByTab: new Map(),
+        snapshotSeq: 0,
         focusedId: null,
         lastUsedAt: Date.now(),
       };
@@ -1071,6 +2038,9 @@ export class BrowserControlService {
       },
       context: context as unknown as BrowserSession["context"],
       tabs: new Map(),
+      snapshotByTab: new Map(),
+      elementsByTab: new Map(),
+      snapshotSeq: 0,
       focusedId: null,
       lastUsedAt: Date.now(),
     };
@@ -1131,6 +2101,9 @@ export class BrowserControlService {
       browser,
       context,
       tabs: new Map(),
+      snapshotByTab: new Map(),
+      elementsByTab: new Map(),
+      snapshotSeq: 0,
       focusedId: null,
       lastUsedAt: Date.now(),
     };

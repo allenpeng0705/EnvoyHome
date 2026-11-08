@@ -103,6 +103,7 @@ import {
   extractHomeProposalFromAssistant,
   isHomeDenial,
   isSmartHomeReady,
+  isTurnContinueIntent,
   normalizePurpose,
   pendingFromPlan,
   planAffirmedHomeActuation,
@@ -230,6 +231,15 @@ function wireChoice(row: PendingChoice): Record<string, unknown> {
     ...(row.turnId ? { turnId: row.turnId } : {}),
     ...(row.detail ? { detail: row.detail } : {}),
     ...(row.multiline === true ? { multiline: true } : {}),
+    ...(row.fields ? { fields: row.fields } : {}),
+    ...(row.snapshotId ? { snapshotId: row.snapshotId } : {}),
+    ...(row.targetId ? { targetId: row.targetId } : {}),
+    ...(row.profile ? { profile: row.profile } : {}),
+    ...(row.submitRef ? { submitRef: row.submitRef } : {}),
+    ...(row.url ? { url: row.url } : {}),
+    ...(row.title ? { title: row.title } : {}),
+    ...(row.openUrl ? { openUrl: row.openUrl } : {}),
+    ...(row.steps?.length ? { steps: row.steps } : {}),
   };
 }
 
@@ -292,6 +302,7 @@ export class TurnService {
   private getOwnerAccountId: () => string | null = () => null;
   private webSearch: WebSearchService | null = null;
   private browserControl: BrowserControlService | null = null;
+  private mcpHub: import("./mcp-hub.js").McpHub | null = null;
   private schedules: ScheduleService | null = null;
   private knowledge: import("./knowledge-service.js").KnowledgeService | null = null;
 
@@ -459,6 +470,10 @@ export class TurnService {
 
   setWebSearch(svc: WebSearchService): void {
     this.webSearch = svc;
+  }
+
+  setMcpHub(hub: import("./mcp-hub.js").McpHub): void {
+    this.mcpHub = hub;
   }
 
   setBrowserControl(svc: BrowserControlService): void {
@@ -781,6 +796,22 @@ export class TurnService {
               },
             }
           : {}),
+        ...(s.sessionPlan
+          ? {
+              sessionPlan: {
+                planId: s.sessionPlan.planId,
+                phase: s.sessionPlan.phase,
+                entries: s.sessionPlan.entries,
+                needsWriteConfirm: s.sessionPlan.needsWriteConfirm,
+                ...(s.sessionPlan.confirmedAt
+                  ? { confirmedAt: s.sessionPlan.confirmedAt }
+                  : {}),
+                hopCount: s.sessionPlan.hopCount,
+                hopBudget: s.sessionPlan.hopBudget,
+                updatedAt: s.sessionPlan.updatedAt,
+              },
+            }
+          : {}),
       });
     }
     return { sessions: out };
@@ -1026,6 +1057,8 @@ export class TurnService {
         code: "bad_params",
       });
     }
+    const { clampScheduleMaxToolRounds } = await import("./home-harness-bridge.js");
+    const maxToolRounds = clampScheduleMaxToolRounds(opts.maxToolRounds);
     const session = await this.sessions.open({
       accountId,
       title: `schedule:agentTurn`,
@@ -1047,6 +1080,7 @@ export class TurnService {
       route: "harness",
       at: new Date().toISOString(),
     });
+    // Design §7.4 / 2026-10-19j → enforced: schedule agentTurn maxIterations = maxToolRounds.
     void this.runTurnBackground({
       accountId,
       sessionId: session.sessionId,
@@ -1058,10 +1092,8 @@ export class TurnService {
       origin: "unattended",
       memoryTrust: "agent",
       toolPolicyOverride: opts.toolPolicyPreset ?? "restricted",
+      maxIterations: maxToolRounds,
     });
-    // Design 2026-10-19j — maxToolRounds validated/stored on the job; reserved
-    // until a multi-round harness tool loop exists (then MUST enforce ≤ stored cap).
-    void opts.maxToolRounds;
     return { turnId, sessionId: session.sessionId };
   }
 
@@ -1250,6 +1282,7 @@ export class TurnService {
       route: "harness",
       at: new Date().toISOString(),
     });
+    const { HOME_SCHEDULE_MAX_TOOL_ROUNDS } = await import("./home-harness-bridge.js");
     await this.runTurnBackground({
       accountId,
       sessionId: session.sessionId,
@@ -1261,6 +1294,7 @@ export class TurnService {
       origin: "unattended",
       memoryTrust: "agent",
       toolPolicyOverride: "restricted",
+      maxIterations: HOME_SCHEDULE_MAX_TOOL_ROUNDS,
     });
     const sessionDir = this.sessions.sessionDir(accountId, session.sessionId);
     let reply = "";
@@ -1433,6 +1467,7 @@ export class TurnService {
     | "execImpl"
     | "extraToolImpl"
     | "browserDefaultProfile"
+    | "mcpServerLabel"
     | "peekScheduleProposal"
   > {
     const origin: "attended" | "unattended" =
@@ -1451,6 +1486,7 @@ export class TurnService {
         }
         return browserDefaultProfileForOrigin(origin, configured);
       })(),
+      mcpServerLabel: (serverId) => this.mcpHub?.getServerLabel(serverId),
       peekScheduleProposal: (proposalId) => {
         const p = this.schedules?.store.getProposal(proposalId);
         // Fail closed: never surface another account's resolvedLocal in the ask card.
@@ -1466,6 +1502,53 @@ export class TurnService {
         };
       },
       extraToolImpl: async (tool, args) => {
+        if (tool.startsWith("mcp__") && this.mcpHub) {
+          return this.mcpHub.callTool(tool, args);
+        }
+        // Design §9.5g.3 — park form card then apply on answer (one tool call).
+        // apply_form is never agent-callable (secrets stay on home.answerChoice).
+        if (
+          tool === "browser" &&
+          args &&
+          typeof args === "object" &&
+          (args as Record<string, unknown>).action === "apply_form"
+        ) {
+          throw new Error(
+            "envoyhome.bad_params: apply_form is daemon-internal — use propose_form + form card",
+          );
+        }
+        if (
+          tool === "browser" &&
+          args &&
+          typeof args === "object" &&
+          (args as Record<string, unknown>).action === "propose_form" &&
+          input.ctx?.session_id &&
+          input.ctx?.turn_id
+        ) {
+          return this.runBrowserProposeFormTool({
+            accountId: input.accountId,
+            sessionId: input.ctx.session_id,
+            turnId: input.ctx.turn_id,
+            args: args as Record<string, unknown>,
+            origin,
+          });
+        }
+        if (
+          tool === "browser" &&
+          args &&
+          typeof args === "object" &&
+          (args as Record<string, unknown>).action === "propose_handoff" &&
+          input.ctx?.session_id &&
+          input.ctx?.turn_id
+        ) {
+          return this.runBrowserProposeHandoffTool({
+            accountId: input.accountId,
+            sessionId: input.ctx.session_id,
+            turnId: input.ctx.turn_id,
+            args: args as Record<string, unknown>,
+            origin,
+          });
+        }
         const mounts = await this.accounts.getWorkspaceMountRefs(
           input.accountId,
           this.getOwnerAccountId(),
@@ -2422,6 +2505,11 @@ ${lines.join("\n")}
     hasMedia?: boolean;
     /** Schedule agentTurn may force restricted/standard over account default. */
     toolPolicyOverride?: "standard" | "restricted";
+    /**
+     * Parent Agent.maxIterations. Schedule agentTurn MUST pass maxToolRounds (≤5).
+     * Interactive omits this → HOME_PARENT_MAX_ITERATIONS.
+     */
+    maxIterations?: number;
     media?: Array<{
       kind: "image" | "audio" | "video" | "file";
       uri: string;
@@ -2521,6 +2609,80 @@ ${lines.join("\n")}
       ...(input.memoryTrust !== undefined ? { memoryTrust: input.memoryTrust } : {}),
       ...(contextTokens !== undefined ? { contextTokens } : {}),
     });
+
+    // Long-task continue (attended only): explicit continue intent or clear stale marker.
+    let resumePreamble: string | undefined;
+    const incompleteMeta = turnMeta?.pendingTurnIncomplete;
+    const continuingIncomplete =
+      origin === "attended" &&
+      incompleteMeta !== undefined &&
+      isTurnContinueIntent(input.text);
+    if (origin === "attended" && incompleteMeta) {
+      if (continuingIncomplete) {
+        const prior = incompleteMeta.lastUserText.trim().slice(0, 500);
+        resumePreamble = [
+          "The previous turn hit the step limit before finishing.",
+          "Resume the unfinished task from the conversation transcript; do not restart from scratch unless necessary.",
+          prior ? `Original user ask (for context): ${prior}` : "",
+        ]
+          .filter(Boolean)
+          .join(" ");
+      } else {
+        await this.sessions.patchMeta(input.accountId, input.sessionId, {
+          pendingTurnIncomplete: null,
+        });
+      }
+    }
+
+    // P2-E4 plan→execute — attended only; simple/medium never enter (V-P2-AGENT-6).
+    const {
+      shouldEnterPlanPath,
+      HOME_PLAN_FIRST_PREFIX,
+      planExecutePreamble,
+      planRevisePreamble,
+    } = await import("./plan-execute.js");
+    const purposeNow = normalizePurpose(turnMeta?.purpose);
+    const livePlan = turnMeta?.sessionPlan;
+    const planAtTurnStart = livePlan;
+    const planActive =
+      livePlan !== undefined &&
+      livePlan.phase !== "done" &&
+      purposeNow !== "schedules";
+    const enterPlan =
+      purposeNow !== "schedules" &&
+      shouldEnterPlanPath({
+        origin,
+        prompt: input.text,
+        hasActiveSessionPlan:
+          planActive &&
+          (livePlan.phase === "executing" ||
+            livePlan.phase === "planning" ||
+            livePlan.phase === "awaiting_confirm"),
+      });
+    const isPlanHop =
+      /^\s*continue the next session plan step\b/i.test(input.text.trim()) ||
+      /^\s*implement the approved session plan\b/i.test(input.text.trim());
+    const isPlanReviseAsk = /^\s*revise the session plan\b/i.test(input.text.trim());
+    if (enterPlan && origin === "attended") {
+      if (livePlan?.phase === "executing") {
+        resumePreamble = [resumePreamble, planExecutePreamble(livePlan)]
+          .filter(Boolean)
+          .join("\n\n");
+      } else if (livePlan && isPlanReviseAsk) {
+        resumePreamble = [resumePreamble, planRevisePreamble(livePlan)]
+          .filter(Boolean)
+          .join("\n\n");
+      } else if (
+        !livePlan ||
+        livePlan.phase === "planning" ||
+        livePlan.phase === "done" ||
+        (!isPlanHop && livePlan.phase !== "awaiting_confirm")
+      ) {
+        resumePreamble = [resumePreamble, HOME_PLAN_FIRST_PREFIX.trim()]
+          .filter(Boolean)
+          .join("\n\n");
+      }
+    }
 
     // Design §5.7.8 — P1 local planner / session pending / affirm; else tool-loop.
     let plannedTools = input.plannedTools;
@@ -2712,6 +2874,7 @@ ${lines.join("\n")}
 
     let replyText = "";
     let status: "ok" | "cancelled" | "error" = "ok";
+    let sessionPlanTouched = false;
     try {
       const turnDeps = {
         ctx,
@@ -2804,6 +2967,17 @@ ${lines.join("\n")}
             turnId: input.turnId,
             args,
           }),
+        sessionPlanImpl: async (args: Record<string, unknown>) => {
+          sessionPlanTouched = true;
+          return this.runSessionPlanTool({
+            accountId: input.accountId,
+            sessionId: input.sessionId,
+            turnId: input.turnId,
+            sourceUserText: input.text,
+            origin,
+            args,
+          });
+        },
       };
       let toolsDispatched = false;
       let scheduleArmed = false;
@@ -2819,13 +2993,163 @@ ${lines.join("\n")}
         | undefined;
       // P2-E3: parent Agent path (default on). Fall back to runTurn for
       // plannedTools / completionText injects and ENVOYHOME_PARENT_AGENT=0.
-      const { parentAgentEnabled, runAgentTurn } = await import("./home-agent-turn.js");
+      const {
+        parentAgentEnabled,
+        runAgentTurn,
+        TURN_INCOMPLETE_CONTINUE_CUE,
+        TURN_INCOMPLETE_ERROR,
+      } = await import("./home-agent-turn.js");
+      const { HOME_SCHEDULE_MAX_TOOL_ROUNDS } = await import("./home-harness-bridge.js");
+      const {
+        shouldEmitIncompleteCue,
+        shouldAttemptAutoContinue,
+        nextAutoContinueUsedOnCap,
+      } = await import("./long-task-continue.js");
       const useParentAgent =
         (plannedTools === undefined || plannedTools.length === 0) &&
         completionText === undefined &&
         parentAgentEnabled();
-      const turnEvents = useParentAgent
-        ? runAgentTurn({
+      const resolvedMaxIterations =
+        typeof input.maxIterations === "number" && Number.isFinite(input.maxIterations)
+          ? Math.max(1, Math.floor(input.maxIterations))
+          : input.callerKind === "schedule"
+            ? HOME_SCHEDULE_MAX_TOOL_ROUNDS
+            : undefined;
+      /** Only when this turn is an explicit continue of an incomplete marker — not plan framing. */
+      const priorAutoContinueUsed =
+        continuingIncomplete === true && incompleteMeta?.autoContinueUsed === true;
+      const emitCueFirstHop = shouldEmitIncompleteCue({
+        origin,
+        autoContinueUsed: priorAutoContinueUsed,
+      });
+      let iterationCapHit = false;
+      const markIterationCap = async (lastUserText: string, autoContinueUsed: boolean) => {
+        iterationCapHit = true;
+        if (origin !== "attended") return;
+        await this.sessions.patchMeta(input.accountId, input.sessionId, {
+          pendingTurnIncomplete: {
+            lastUserText: lastUserText.slice(0, 2000),
+            at: new Date().toISOString(),
+            autoContinueUsed,
+          },
+        });
+      };
+      const consumeTurnEvents = async (
+        turnEvents: AsyncIterable<{
+          kind: string;
+          text?: string;
+          tool?: string;
+        }>,
+      ): Promise<void> => {
+        for await (const ev of turnEvents) {
+          if (input.abort.signal.aborted) {
+            status = "cancelled";
+            break;
+          }
+          if (ev.kind === "tool_call") {
+            toolsDispatched = true;
+            this.emit("home:turn-delta", {
+              turnId: input.turnId,
+              sessionId: input.sessionId,
+              accountId: input.accountId,
+              agentId: input.agentId,
+              kind: "tool_call",
+              tool: { name: ev.tool ?? "unknown" },
+              ...(ev.text ? { text: ev.text } : {}),
+            });
+          }
+          if (ev.kind === "tool_result") {
+            this.emit("home:turn-delta", {
+              turnId: input.turnId,
+              sessionId: input.sessionId,
+              accountId: input.accountId,
+              agentId: input.agentId,
+              kind: "tool_result",
+              tool: { name: ev.tool ?? "unknown" },
+              ...(ev.text ? { text: ev.text } : {}),
+            });
+            if (ev.tool === "schedule" && ev.text) {
+              try {
+                const j = JSON.parse(ev.text) as {
+                  proposalId?: unknown;
+                  resolvedLocal?: unknown;
+                  armed?: unknown;
+                  updated?: unknown;
+                };
+                if (j.armed === true || j.updated === true) scheduleArmed = true;
+                else if (typeof j.proposalId === "string" && j.proposalId.trim()) {
+                  const peek = this.schedules?.store.getProposal(j.proposalId.trim());
+                  capturedSchedule = {
+                    proposalId: j.proposalId.trim(),
+                    resolvedLocal:
+                      typeof j.resolvedLocal === "string"
+                        ? j.resolvedLocal
+                        : (peek?.resolvedLocal ?? ""),
+                    createdAt: new Date().toISOString(),
+                    ...(peek?.expiresAt ? { expiresAt: peek.expiresAt } : {}),
+                    ...(peek?.name ? { name: peek.name } : {}),
+                    ...(peek?.payload.message ? { message: peek.payload.message } : {}),
+                  };
+                }
+              } catch {
+                /* non-JSON schedule result */
+              }
+            }
+          }
+          if (ev.kind === "text" && ev.text) {
+            replyText += ev.text;
+            const format = classifyOutputFormat(replyText);
+            this.emit("home:turn-delta", {
+              turnId: input.turnId,
+              sessionId: input.sessionId,
+              accountId: input.accountId,
+              agentId: input.agentId,
+              kind: "text",
+              text: ev.text,
+              format,
+            });
+            await appendTranscriptLine(sessionDir, {
+              role: "assistant",
+              text: ev.text,
+              format,
+              at: new Date().toISOString(),
+              turnId: input.turnId,
+            });
+          }
+          if (ev.kind === "error" && ev.text) {
+            this.emit("home:turn-delta", {
+              turnId: input.turnId,
+              sessionId: input.sessionId,
+              accountId: input.accountId,
+              agentId: input.agentId,
+              kind: "error",
+              text: ev.text,
+            });
+            await appendTranscriptLine(sessionDir, {
+              role: "system",
+              text: ev.text,
+              at: new Date().toISOString(),
+              turnId: input.turnId,
+            });
+          }
+        }
+      };
+
+      const mcpTools =
+        purposeNow !== "schedules" && this.mcpHub
+          ? await this.mcpHub.listReadyToolNames()
+          : [];
+      // ENVOYHOME_PARENT_AGENT=0 (runTurn): surface ready MCP names in standing inject.
+      if (!useParentAgent && mcpTools.length > 0) {
+        const tip = `Owner MCP tools (envoyhome-tools fence, approvals apply): ${mcpTools.slice(0, 48).join(", ")}`;
+        ctx.standing_inject = ctx.standing_inject
+          ? `${ctx.standing_inject}\n\n${tip}`
+          : tip;
+      }
+
+      if (useParentAgent) {
+        await consumeTurnEvents(
+          runAgentTurn({
             userText: input.text,
             history,
             deps: turnDeps,
@@ -2834,107 +3158,129 @@ ${lines.join("\n")}
             turnId: input.turnId,
             ...(toolLoop ? { toolLoop: true } : {}),
             abortSignal: input.abort.signal,
+            ...(resolvedMaxIterations !== undefined
+              ? { maxIterations: resolvedMaxIterations }
+              : {}),
+            ...(resumePreamble ? { resumePreamble } : {}),
+            ...(mcpTools.length ? { mcpTools } : {}),
+            emitIncompleteCue: emitCueFirstHop,
+            onIterationCap: () =>
+              markIterationCap(
+                input.text,
+                nextAutoContinueUsedOnCap({
+                  priorAutoContinueUsed,
+                  isAutoContinueHop: false,
+                }),
+              ),
+          }),
+        );
+        // Attended only: one auto-continue hop after step-limit (never for schedule/unattended).
+        const liveAfterCap = await this.sessions.get(input.accountId, input.sessionId);
+        const autoUsedAfter =
+          liveAfterCap?.pendingTurnIncomplete?.autoContinueUsed === true;
+        if (
+          shouldAttemptAutoContinue({
+            origin,
+            iterationCapHit,
+            aborted: input.abort.signal.aborted,
+            statusOk: status === "ok",
+            autoContinueUsed: autoUsedAfter,
           })
-        : runTurn({
+        ) {
+          const continueStub = "Continue the unfinished task from the conversation transcript.";
+          await this.sessions.patchMeta(input.accountId, input.sessionId, {
+            pendingTurnIncomplete: {
+              lastUserText: input.text.slice(0, 2000),
+              at: new Date().toISOString(),
+              autoContinueUsed: true,
+            },
+          });
+          await appendTranscriptLine(sessionDir, {
+            role: "user",
+            text: continueStub,
+            at: new Date().toISOString(),
+            turnId: input.turnId,
+          });
+          const historyAfter: HistoryMessage[] = [
+            ...history,
+            { role: "user", content: input.text },
+            ...(replyText.trim()
+              ? [{ role: "assistant" as const, content: replyText }]
+              : []),
+          ];
+          iterationCapHit = false;
+          await consumeTurnEvents(
+            runAgentTurn({
+              userText: continueStub,
+              history: historyAfter,
+              deps: turnDeps,
+              sessionDir,
+              sessionId: input.sessionId,
+              turnId: input.turnId,
+              ...(toolLoop ? { toolLoop: true } : {}),
+              abortSignal: input.abort.signal,
+              ...(resolvedMaxIterations !== undefined
+                ? { maxIterations: resolvedMaxIterations }
+                : {}),
+              ...(mcpTools.length ? { mcpTools } : {}),
+              resumePreamble:
+                "Auto-continue after step limit. Finish the unfinished task from the transcript. This is the only automatic hop — prefer completing over starting new work.",
+              emitIncompleteCue: true,
+              onIterationCap: () =>
+                markIterationCap(
+                  input.text,
+                  nextAutoContinueUsedOnCap({ isAutoContinueHop: true }),
+                ),
+            }),
+          );
+        } else if (
+          iterationCapHit &&
+          !emitCueFirstHop &&
+          origin === "attended" &&
+          !replyText.includes(TURN_INCOMPLETE_CONTINUE_CUE)
+        ) {
+          // Suppressed cue but auto-hop did not run (abort / already used) — surface now.
+          const hadPartial = replyText.trim().length > 0;
+          const deferredText = hadPartial
+            ? TURN_INCOMPLETE_CONTINUE_CUE
+            : TURN_INCOMPLETE_ERROR;
+          if (hadPartial) replyText += `\n\n${deferredText}`;
+          else replyText = deferredText;
+          this.emit("home:turn-delta", {
+            turnId: input.turnId,
+            sessionId: input.sessionId,
+            accountId: input.accountId,
+            agentId: input.agentId,
+            kind: hadPartial ? "text" : "error",
+            text: deferredText,
+          });
+          await appendTranscriptLine(sessionDir, {
+            role: hadPartial ? "assistant" : "system",
+            text: deferredText,
+            at: new Date().toISOString(),
+            turnId: input.turnId,
+          });
+        }
+        if (
+          origin === "attended" &&
+          !iterationCapHit &&
+          status === "ok" &&
+          !input.abort.signal.aborted
+        ) {
+          await this.sessions.patchMeta(input.accountId, input.sessionId, {
+            pendingTurnIncomplete: null,
+          });
+        }
+      } else {
+        await consumeTurnEvents(
+          runTurn({
             userText: input.text,
             history,
             deps: turnDeps,
             ...(plannedTools !== undefined ? { plannedTools } : {}),
             ...(toolLoop ? { toolLoop: true } : {}),
-          });
-      for await (const ev of turnEvents) {
-        if (input.abort.signal.aborted) {
-          status = "cancelled";
-          break;
-        }
-        if (ev.kind === "tool_call") {
-          toolsDispatched = true;
-          // Protocol: tool = { name, id? }; text carries args JSON when present.
-          this.emit("home:turn-delta", {
-            turnId: input.turnId,
-            sessionId: input.sessionId,
-            accountId: input.accountId,
-            agentId: input.agentId,
-            kind: "tool_call",
-            tool: { name: ev.tool ?? "unknown" },
-            ...(ev.text ? { text: ev.text } : {}),
-          });
-        }
-        if (ev.kind === "tool_result") {
-          this.emit("home:turn-delta", {
-            turnId: input.turnId,
-            sessionId: input.sessionId,
-            accountId: input.accountId,
-            agentId: input.agentId,
-            kind: "tool_result",
-            tool: { name: ev.tool ?? "unknown" },
-            ...(ev.text ? { text: ev.text } : {}),
-          });
-          if (ev.tool === "schedule" && ev.text) {
-            try {
-              const j = JSON.parse(ev.text) as {
-                proposalId?: unknown;
-                resolvedLocal?: unknown;
-                armed?: unknown;
-                updated?: unknown;
-              };
-              if (j.armed === true || j.updated === true) scheduleArmed = true;
-              else if (typeof j.proposalId === "string" && j.proposalId.trim()) {
-                const peek = this.schedules?.store.getProposal(j.proposalId.trim());
-                capturedSchedule = {
-                  proposalId: j.proposalId.trim(),
-                  resolvedLocal:
-                    typeof j.resolvedLocal === "string"
-                      ? j.resolvedLocal
-                      : (peek?.resolvedLocal ?? ""),
-                  createdAt: new Date().toISOString(),
-                  ...(peek?.expiresAt ? { expiresAt: peek.expiresAt } : {}),
-                  ...(peek?.name ? { name: peek.name } : {}),
-                  ...(peek?.payload.message ? { message: peek.payload.message } : {}),
-                };
-              }
-            } catch {
-              /* non-JSON schedule result */
-            }
-          }
-        }
-        if (ev.kind === "text" && ev.text) {
-          replyText += ev.text;
-          // Classify on the cumulative reply so early chunks stay consistent with the final tier.
-          const format = classifyOutputFormat(replyText);
-          this.emit("home:turn-delta", {
-            turnId: input.turnId,
-            sessionId: input.sessionId,
-            accountId: input.accountId,
-            agentId: input.agentId,
-            kind: "text",
-            text: ev.text,
-            format,
-          });
-          await appendTranscriptLine(sessionDir, {
-            role: "assistant",
-            text: ev.text,
-            format,
-            at: new Date().toISOString(),
-            turnId: input.turnId,
-          });
-        }
-        if (ev.kind === "error" && ev.text) {
-          this.emit("home:turn-delta", {
-            turnId: input.turnId,
-            sessionId: input.sessionId,
-            accountId: input.accountId,
-            agentId: input.agentId,
-            kind: "error",
-            text: ev.text,
-          });
-          await appendTranscriptLine(sessionDir, {
-            role: "system",
-            text: ev.text,
-            at: new Date().toISOString(),
-            turnId: input.turnId,
-          });
-        }
+          }),
+        );
       }
       if (toolsDispatched) {
         await this.sessions.patchMeta(input.accountId, input.sessionId, {
@@ -2978,6 +3324,23 @@ ${lines.join("\n")}
         });
       }
       await this.sessions.touch(input.accountId, input.sessionId);
+      // P2-E4: attended auto-advance along session plan (never unattended / never on cap).
+      if (
+        origin === "attended" &&
+        status === "ok" &&
+        !input.abort.signal.aborted &&
+        !iterationCapHit &&
+        purposeNow !== "schedules"
+      ) {
+        await this.maybeAutoAdvanceSessionPlan({
+          accountId: input.accountId,
+          sessionId: input.sessionId,
+          origin,
+          priorPlan: planAtTurnStart ?? null,
+          planTouched: sessionPlanTouched,
+          iterationCapHit,
+        });
+      }
     } catch {
       status = "error";
     } finally {
@@ -3082,6 +3445,7 @@ ${lines.join("\n")}
     optionId?: string;
     optionIds?: string[];
     text?: string;
+    fieldValues?: Record<string, string | boolean>;
     /** Explicit dismiss — fail closed, same as TTL expire for ask_user. */
     cancel?: boolean;
   }): Promise<Record<string, unknown>> {
@@ -3094,7 +3458,7 @@ ${lines.join("\n")}
 
     if (input.cancel === true) {
       await this.choices.remove(input.accountId, input.id);
-      // ask_user: wake waiter only — tool emits choice-resolved once (no double emit).
+      // ask_user / browser_form / outbound_handoff: wake waiter only — tool emits once.
       if (row.turnId) {
         const turn = active.get(row.turnId);
         const waiter = turn?.choiceWaiters.get(row.id);
@@ -3117,6 +3481,7 @@ ${lines.join("\n")}
       ...(input.optionId !== undefined ? { optionId: input.optionId } : {}),
       ...(input.optionIds !== undefined ? { optionIds: input.optionIds } : {}),
       ...(input.text !== undefined ? { text: input.text } : {}),
+      ...(input.fieldValues !== undefined ? { fieldValues: input.fieldValues } : {}),
     });
     if (!resolved.ok) {
       throw Object.assign(new Error(`envoyhome.bad_params: ${resolved.reason}`), {
@@ -3132,9 +3497,24 @@ ${lines.join("\n")}
       ...(resolved.optionIds.length ? { optionIds: resolved.optionIds } : {}),
       ...(resolved.labels.length ? { labels: resolved.labels } : {}),
       ...(resolved.text !== undefined ? { text: resolved.text } : {}),
+      // Never emit raw fieldValues (may contain secrets) — redacted labels only.
     });
 
-    // Wake ask_user tool if this turn is parked.
+    // §9.5g.3 — apply BEFORE waking the parked tool / returning formApplied.
+    let formApplyResult:
+      | { ok: boolean; error?: string; result?: Record<string, unknown> }
+      | undefined;
+    if (row.purpose === "browser_form" && resolved.fieldValues) {
+      const formOrigin =
+        row.formOrigin === "unattended" ? "unattended" : "attended";
+      formApplyResult = await this.applyBrowserFormChoice(
+        row,
+        resolved.fieldValues,
+        formOrigin,
+      );
+    }
+
+    // Wake ask_user / browser_form tool if this turn is parked.
     if (row.turnId) {
       const turn = active.get(row.turnId);
       const waiter = turn?.choiceWaiters.get(row.id);
@@ -3144,6 +3524,8 @@ ${lines.join("\n")}
           ...(resolved.optionIds[0] ? { optionId: resolved.optionIds[0] } : {}),
           ...(resolved.optionIds.length ? { optionIds: resolved.optionIds } : {}),
           ...(resolved.text !== undefined ? { text: resolved.text } : {}),
+          ...(resolved.fieldValues ? { fieldValues: resolved.fieldValues } : {}),
+          ...(formApplyResult ? { formApplyResult } : {}),
         });
         return {
           ok: true,
@@ -3151,6 +3533,117 @@ ${lines.join("\n")}
           optionIds: resolved.optionIds,
           ...(resolved.text !== undefined ? { text: resolved.text } : {}),
           followUp: false,
+          ...(row.purpose === "browser_form"
+            ? {
+                formApplied: formApplyResult?.ok === true,
+                ...(formApplyResult?.error ? { formError: formApplyResult.error } : {}),
+              }
+            : {}),
+        };
+      }
+    }
+
+    if (row.purpose === "browser_form") {
+      return {
+        ok: true,
+        labels: resolved.labels,
+        optionIds: resolved.optionIds,
+        followUp: false,
+        formApplied: formApplyResult?.ok === true,
+        ...(formApplyResult?.error ? { formError: formApplyResult.error } : {}),
+      };
+    }
+
+    // P2-E4 — Implement / Revise session plan (soft confirm for write/admin).
+    if (row.purpose === "session_plan") {
+      const meta = await this.sessions.get(row.accountId, row.sessionId);
+      const plan = meta?.sessionPlan;
+      if (!plan) {
+        return {
+          ok: true,
+          labels: resolved.labels,
+          optionIds: resolved.optionIds,
+          followUp: false,
+        };
+      }
+      const {
+        confirmSessionPlan,
+        reviseSessionPlan,
+        sessionPlanEventPayload,
+      } = await import("./plan-execute.js");
+      const choiceId = resolved.optionIds[0] ?? "";
+      const label = (resolved.labels[0] ?? "").toLowerCase();
+      const implement =
+        choiceId === "implement" ||
+        /\b(implement|approve|continue|accept|yes)\b/i.test(label);
+      const revise =
+        choiceId === "revise" || /\b(revise|reject|deny|no|keep planning)\b/i.test(label);
+      if (implement) {
+        // Stale card after plan already finished — do not waste a loopback turn.
+        if (plan.phase === "done") {
+          return {
+            ok: true,
+            labels: resolved.labels,
+            optionIds: resolved.optionIds,
+            followUp: false,
+          };
+        }
+        // Already executing under a valid confirm — ignore duplicate Implement.
+        if (plan.phase === "executing" && plan.confirmedAt) {
+          return {
+            ok: true,
+            labels: resolved.labels,
+            optionIds: resolved.optionIds,
+            followUp: false,
+          };
+        }
+        const next = confirmSessionPlan(plan);
+        await this.sessions.patchMeta(row.accountId, row.sessionId, { sessionPlan: next });
+        this.emit(
+          "home:session-plan",
+          sessionPlanEventPayload(row.accountId, row.sessionId, next),
+        );
+        void this.sendMessage({
+          accountId: row.accountId,
+          sessionId: row.sessionId,
+          text: "Implement the approved session plan.",
+          callerKind: "loopback-owner",
+          origin: "attended",
+        }).catch(() => undefined);
+        return {
+          ok: true,
+          labels: resolved.labels,
+          optionIds: resolved.optionIds,
+          followUp: true,
+        };
+      }
+      if (revise) {
+        if (plan.phase === "done") {
+          return {
+            ok: true,
+            labels: resolved.labels,
+            optionIds: resolved.optionIds,
+            followUp: false,
+          };
+        }
+        const next = reviseSessionPlan(plan);
+        await this.sessions.patchMeta(row.accountId, row.sessionId, { sessionPlan: next });
+        this.emit(
+          "home:session-plan",
+          sessionPlanEventPayload(row.accountId, row.sessionId, next),
+        );
+        void this.sendMessage({
+          accountId: row.accountId,
+          sessionId: row.sessionId,
+          text: "Revise the session plan.",
+          callerKind: "loopback-owner",
+          origin: "attended",
+        }).catch(() => undefined);
+        return {
+          ok: true,
+          labels: resolved.labels,
+          optionIds: resolved.optionIds,
+          followUp: true,
         };
       }
     }
@@ -3202,8 +3695,14 @@ ${lines.join("\n")}
     }
 
     // Home / general / schedule fallback: labels as the next user message.
+    // session_plan / outbound_handoff (and parked browser_form) already returned above.
     const followText = resolved.labels.join(", ").trim();
-    if (followText && row.purpose !== "ask_user") {
+    if (
+      followText &&
+      row.purpose !== "ask_user" &&
+      row.purpose !== "session_plan" &&
+      row.purpose !== "outbound_handoff"
+    ) {
       const text =
         row.purpose === "home_disambiguation" && row.detail?.trim()
           ? `${row.detail.trim()} — ${followText}`
@@ -3230,6 +3729,470 @@ ${lines.join("\n")}
       ...(resolved.text !== undefined ? { text: resolved.text } : {}),
       followUp: false,
     };
+  }
+
+  private async runSessionPlanTool(input: {
+    accountId: string;
+    sessionId: string;
+    turnId: string;
+    sourceUserText: string;
+    origin: TurnOrigin;
+    args: Record<string, unknown>;
+  }): Promise<string> {
+    const {
+      normalizePlanEntries,
+      buildSessionPlan,
+      sessionPlanEventPayload,
+    } = await import("./plan-execute.js");
+    if (input.origin !== "attended") {
+      return JSON.stringify({
+        ok: false,
+        error: "envoyhome.plan_unattended: session_plan is attended-only",
+      });
+    }
+    const entries = normalizePlanEntries(input.args.entries);
+    if (entries.length === 0) {
+      return JSON.stringify({
+        ok: false,
+        error: "envoyhome.bad_params: session_plan requires entries[]",
+      });
+    }
+    const meta = await this.sessions.get(input.accountId, input.sessionId);
+    const prior = meta?.sessionPlan ?? null;
+    const plan = buildSessionPlan({
+      ...(typeof input.args.planId === "string" ? { planId: input.args.planId } : {}),
+      entries,
+      sourceUserText: prior?.sourceUserText || input.sourceUserText,
+      ...(prior ? { prior } : {}),
+    });
+    await this.sessions.patchMeta(input.accountId, input.sessionId, { sessionPlan: plan });
+    this.emit(
+      "home:session-plan",
+      sessionPlanEventPayload(input.accountId, input.sessionId, plan),
+    );
+    // Always clear confirm cards first: leaving awaiting_confirm (→ executing/done)
+    // must not leave a stale Implement/Revise UI; re-enter replaces with a fresh card.
+    await this.clearSessionPlanChoices(input.accountId, input.sessionId);
+    if (plan.phase === "awaiting_confirm") {
+      const replyZh = /[\u4e00-\u9fff]/.test(input.sourceUserText);
+      await this.createChoiceAndEmit({
+        accountId: input.accountId,
+        sessionId: input.sessionId,
+        turnId: input.turnId,
+        question: replyZh ? "按此计划执行？" : "Implement this plan?",
+        detail: plan.entries
+          .map((e, i) => `${i + 1}. ${e.content}${e.risk ? ` [${e.risk}]` : ""}`)
+          .join("\n")
+          .slice(0, 2000),
+        options: [
+          { id: "implement", label: replyZh ? "执行计划" : "Implement plan" },
+          { id: "revise", label: replyZh ? "继续规划" : "Keep planning", destructive: true },
+        ],
+        selection: "one",
+        purpose: "session_plan",
+      });
+      return JSON.stringify({
+        ok: true,
+        phase: plan.phase,
+        needsWriteConfirm: true,
+        message: "Plan saved — waiting for Implement / Revise.",
+        entries: plan.entries,
+      });
+    }
+    if (plan.phase === "done") {
+      return JSON.stringify({
+        ok: true,
+        phase: plan.phase,
+        message: "Plan complete.",
+        entries: plan.entries,
+      });
+    }
+    return JSON.stringify({
+      ok: true,
+      phase: plan.phase,
+      needsWriteConfirm: plan.needsWriteConfirm,
+      message: "Plan saved — execute pending steps.",
+      entries: plan.entries,
+    });
+  }
+
+  /** Drop prior session_plan choice cards (avoid stacked Implement/Revise). */
+  private async clearSessionPlanChoices(
+    accountId: string,
+    sessionId: string,
+  ): Promise<void> {
+    const rows = await this.choices.list(accountId, sessionId);
+    for (const row of rows) {
+      if (row.purpose !== "session_plan") continue;
+      await this.choices.remove(accountId, row.id);
+      this.emit("home:choice-resolved", {
+        id: row.id,
+        accountId: row.accountId,
+        sessionId: row.sessionId,
+        status: "canceled",
+      });
+    }
+  }
+
+  /** Attended hop budget advance — V-P2-AGENT-8. */
+  private async maybeAutoAdvanceSessionPlan(input: {
+    accountId: string;
+    sessionId: string;
+    origin: TurnOrigin;
+    priorPlan?: import("./plan-execute.js").SessionPlan | null;
+    planTouched?: boolean;
+    iterationCapHit?: boolean;
+  }): Promise<void> {
+    const { shouldAutoAdvancePlan, nextPlanHop, sessionPlanEventPayload } =
+      await import("./plan-execute.js");
+    const meta = await this.sessions.get(input.accountId, input.sessionId);
+    const plan = meta?.sessionPlan;
+    if (
+      !shouldAutoAdvancePlan({
+        origin: input.origin,
+        plan,
+        ...(input.priorPlan !== undefined ? { priorPlan: input.priorPlan } : {}),
+        ...(input.planTouched !== undefined ? { planTouched: input.planTouched } : {}),
+        ...(input.iterationCapHit !== undefined
+          ? { iterationCapHit: input.iterationCapHit }
+          : {}),
+      })
+    ) {
+      return;
+    }
+    const hopped = nextPlanHop(plan!);
+    await this.sessions.patchMeta(input.accountId, input.sessionId, {
+      sessionPlan: hopped,
+    });
+    this.emit(
+      "home:session-plan",
+      sessionPlanEventPayload(input.accountId, input.sessionId, hopped),
+    );
+    void this.sendMessage({
+      accountId: input.accountId,
+      sessionId: input.sessionId,
+      text: "Continue the next session plan step.",
+      callerKind: "loopback-owner",
+      origin: "attended",
+    }).catch(() => undefined);
+  }
+
+  private async applyBrowserFormChoice(
+    row: PendingChoice,
+    fieldValues: Record<string, string | boolean>,
+    origin: "attended" | "unattended",
+  ): Promise<{ ok: boolean; error?: string; result?: Record<string, unknown> }> {
+    if (!this.browserControl) {
+      return { ok: false, error: "browser_unavailable" };
+    }
+    if (!row.snapshotId || !row.targetId || !row.profile || !row.fields?.length) {
+      return { ok: false, error: "incomplete_form_meta" };
+    }
+    try {
+      const raw = await this.browserControl.runTool(
+        {
+          action: "apply_form",
+          profile: row.profile,
+          targetId: row.targetId,
+          snapshotId: row.snapshotId,
+          fields: row.fields,
+          fieldValues,
+          ...(row.submitRef ? { submitRef: row.submitRef } : {}),
+        },
+        {
+          accountId: row.accountId,
+          origin,
+          ownerAccountId: this.getOwnerAccountId(),
+          internal: true,
+        },
+      );
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      if (parsed.ok === false || parsed.error) {
+        return {
+          ok: false,
+          error: String(parsed.error ?? parsed.blocked ?? "apply_failed"),
+          result: parsed,
+        };
+      }
+      return { ok: true, result: parsed };
+    } catch (e) {
+      return {
+        ok: false,
+        error: e instanceof Error ? e.message : String(e),
+      };
+    }
+  }
+
+  private async runBrowserProposeHandoffTool(input: {
+    accountId: string;
+    sessionId: string;
+    turnId: string;
+    args: Record<string, unknown>;
+    origin: TurnOrigin;
+  }): Promise<string> {
+    if (!this.browserControl) {
+      throw new Error("envoyhome.tool_unavailable: browser control not configured");
+    }
+    const origin = input.origin === "unattended" ? "unattended" : "attended";
+    const proposeRaw = await this.browserControl.runTool(
+      { ...input.args, action: "propose_handoff" },
+      {
+        accountId: input.accountId,
+        origin,
+        ownerAccountId: this.getOwnerAccountId(),
+      },
+    );
+    let proposed: Record<string, unknown>;
+    try {
+      proposed = JSON.parse(proposeRaw) as Record<string, unknown>;
+    } catch {
+      return proposeRaw;
+    }
+    if (proposed.ok !== true || typeof proposed.openUrl !== "string") {
+      return proposeRaw;
+    }
+    const openUrl = String(proposed.openUrl);
+    const question = String(
+      proposed.question ??
+        "Finish in your app (Open), then pay there — Home will not enter card details.",
+    );
+    const steps = Array.isArray(proposed.steps)
+      ? proposed.steps.map((s) => String(s)).filter(Boolean)
+      : [];
+    const title = typeof proposed.title === "string" ? proposed.title : "";
+    const row = await this.createChoiceAndEmit({
+      accountId: input.accountId,
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      question: question.slice(0, 500),
+      options: [{ id: "open", label: "Open" }],
+      selection: "one",
+      purpose: "outbound_handoff",
+      openUrl,
+      ...(steps.length ? { steps } : {}),
+      ...(title ? { title } : {}),
+      detail: openUrl.slice(0, 2000),
+    });
+    const turn = active.get(input.turnId);
+    if (!turn) {
+      await this.choices.remove(input.accountId, row.id);
+      throw new Error("envoyhome.bad_params: turn gone");
+    }
+    type WaitOutcome =
+      | { kind: "answer"; answer: ChoiceAnswer }
+      | { kind: "canceled" }
+      | { kind: "expired" };
+    const outcome = await new Promise<WaitOutcome>((resolve) => {
+      let settled = false;
+      const settle = (o: WaitOutcome) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        turn.abort.signal.removeEventListener("abort", onAbort);
+        turn.choiceWaiters.delete(row.id);
+        resolve(o);
+      };
+      const ttlMs = Math.max(0, Date.parse(row.expiresAt) - Date.now());
+      const timer = setTimeout(() => settle({ kind: "expired" }), ttlMs);
+      const onAbort = () => settle({ kind: "canceled" });
+      turn.choiceWaiters.set(row.id, (a) => {
+        if (a === "expired") settle({ kind: "expired" });
+        else if (a === null) settle({ kind: "canceled" });
+        else settle({ kind: "answer", answer: a });
+      });
+      if (turn.abort.signal.aborted) onAbort();
+      else turn.abort.signal.addEventListener("abort", onAbort, { once: true });
+    });
+    if (outcome.kind !== "answer") {
+      await this.choices.remove(input.accountId, row.id).catch(() => undefined);
+      this.emit("home:choice-resolved", {
+        id: row.id,
+        accountId: row.accountId,
+        sessionId: row.sessionId,
+        status: outcome.kind === "expired" ? "expired" : "canceled",
+      });
+      return JSON.stringify({
+        action: "propose_handoff",
+        ok: false,
+        canceled: outcome.kind !== "expired",
+        expired: outcome.kind === "expired",
+        message:
+          outcome.kind === "expired"
+            ? "handoff choice expired"
+            : "handoff choice canceled",
+      });
+    }
+    const opened =
+      outcome.answer.optionId === "open" ||
+      (Array.isArray(outcome.answer.optionIds) &&
+        outcome.answer.optionIds.includes("open"));
+    return JSON.stringify({
+      action: "propose_handoff",
+      ok: true,
+      opened,
+      openUrl,
+      message: opened
+        ? "Owner opened the https handoff URL (app may catch Universal Link). Do not claim cart sync across devices."
+        : "Handoff answered without Open.",
+    });
+  }
+
+  private async runBrowserProposeFormTool(input: {
+    accountId: string;
+    sessionId: string;
+    turnId: string;
+    args: Record<string, unknown>;
+    origin: TurnOrigin;
+  }): Promise<string> {
+    if (!this.browserControl) {
+      throw new Error("envoyhome.tool_unavailable: browser control not configured");
+    }
+    const origin = input.origin === "unattended" ? "unattended" : "attended";
+    const proposeRaw = await this.browserControl.runTool(
+      { ...input.args, action: "propose_form" },
+      {
+        accountId: input.accountId,
+        origin,
+        ownerAccountId: this.getOwnerAccountId(),
+      },
+    );
+    let proposed: Record<string, unknown>;
+    try {
+      proposed = JSON.parse(proposeRaw) as Record<string, unknown>;
+    } catch {
+      return proposeRaw;
+    }
+    if (proposed.ok !== true || !Array.isArray(proposed.fields) || proposed.fields.length === 0) {
+      return proposeRaw;
+    }
+    const fields = proposed.fields as PendingChoice["fields"];
+    const snapshotId = String(proposed.snapshotId ?? "");
+    const targetId = String(proposed.targetId ?? "");
+    const profileRaw = String(proposed.profile ?? "managed");
+    const profile =
+      profileRaw === "personal" || profileRaw === "remote" ? profileRaw : "managed";
+    if (!fields?.length || !snapshotId || !targetId) {
+      return proposeRaw;
+    }
+    const url = typeof proposed.url === "string" ? proposed.url : "";
+    const title = typeof proposed.title === "string" ? proposed.title : "";
+    const n = fields.length;
+    const questionZh = /[\u4e00-\u9fff]/.test(`${title}${url}`);
+    const question = questionZh
+      ? `请填写网页表单（${n} 个字段）${title ? ` — ${title}` : ""}`
+      : `Fill the page form (${n} fields)${title ? ` — ${title}` : ""}`;
+    const row = await this.createChoiceAndEmit({
+      accountId: input.accountId,
+      sessionId: input.sessionId,
+      turnId: input.turnId,
+      question: question.slice(0, 500),
+      options: [],
+      selection: "form",
+      purpose: "browser_form",
+      fields,
+      snapshotId,
+      targetId,
+      profile,
+      formOrigin: origin,
+      ...(typeof proposed.submitRef === "string" && proposed.submitRef
+        ? { submitRef: proposed.submitRef }
+        : {}),
+      ...(url ? { url } : {}),
+      ...(title ? { title } : {}),
+      ...(url ? { detail: url.slice(0, 2000) } : {}),
+    });
+    const turn = active.get(input.turnId);
+    if (!turn) {
+      await this.choices.remove(input.accountId, row.id);
+      throw new Error("envoyhome.bad_params: turn gone");
+    }
+    type WaitOutcome =
+      | { kind: "answer"; answer: ChoiceAnswer }
+      | { kind: "canceled" }
+      | { kind: "expired" };
+    const outcome = await new Promise<WaitOutcome>((resolve) => {
+      let settled = false;
+      const settle = (o: WaitOutcome) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        turn.abort.signal.removeEventListener("abort", onAbort);
+        turn.choiceWaiters.delete(row.id);
+        resolve(o);
+      };
+      const ttlMs = Math.max(0, Date.parse(row.expiresAt) - Date.now());
+      const timer = setTimeout(() => settle({ kind: "expired" }), ttlMs);
+      const onAbort = () => settle({ kind: "canceled" });
+      turn.choiceWaiters.set(row.id, (a) => {
+        if (a === "expired") settle({ kind: "expired" });
+        else if (a === null) settle({ kind: "canceled" });
+        else settle({ kind: "answer", answer: a });
+      });
+      if (turn.abort.signal.aborted) onAbort();
+      else turn.abort.signal.addEventListener("abort", onAbort, { once: true });
+    });
+    if (outcome.kind !== "answer") {
+      await this.choices.remove(input.accountId, row.id).catch(() => undefined);
+      this.emit("home:choice-resolved", {
+        id: row.id,
+        accountId: row.accountId,
+        sessionId: row.sessionId,
+        status: outcome.kind === "expired" ? "expired" : "canceled",
+      });
+      return JSON.stringify({
+        action: "propose_form",
+        ok: false,
+        canceled: outcome.kind !== "expired",
+        expired: outcome.kind === "expired",
+        message:
+          outcome.kind === "expired"
+            ? "form choice expired"
+            : "form choice canceled",
+      });
+    }
+    // Prefer apply result from answerChoice (applied before wake); never re-fill.
+    const applied =
+      outcome.answer.formApplyResult ??
+      (outcome.answer.fieldValues
+        ? await this.applyBrowserFormChoice(row, outcome.answer.fieldValues, origin)
+        : { ok: false, error: "missing_field_values" });
+    // Redacted summary for the model — never echo secrets.
+    return JSON.stringify({
+      action: "propose_form",
+      ok: applied.ok,
+      formApplied: applied.ok,
+      filledCount: applied.result?.filledCount ?? 0,
+      submitted: applied.result?.submitted === true,
+      snapshotConsumed: true,
+      ...(applied.error ? { error: applied.error } : {}),
+      message: applied.ok
+        ? `form applied (${String(applied.result?.filledCount ?? 0)} fields${applied.result?.submitted ? ", submitted" : ""})`
+        : `form apply failed: ${applied.error ?? "unknown"}`,
+    });
+  }
+
+  /** Test-only: register a parked turn so answerChoice can wake choice waiters. */
+  __registerActiveTurnForTests(input: {
+    turnId: string;
+    accountId: string;
+    sessionId: string;
+  }): {
+    abort: AbortController;
+    choiceWaiters: Map<string, (a: ChoiceAnswer | null | "expired") => void>;
+  } {
+    const abort = new AbortController();
+    const choiceWaiters = new Map<
+      string,
+      (a: ChoiceAnswer | null | "expired") => void
+    >();
+    active.set(input.turnId, {
+      accountId: input.accountId,
+      sessionId: input.sessionId,
+      abort,
+      approvalWaiters: new Map(),
+      choiceWaiters,
+    });
+    return { abort, choiceWaiters };
   }
 
   private async runAskUserTool(
@@ -3525,7 +4488,8 @@ ${lines.join("\n")}
           t !== "spawn_helper" &&
           t !== "task" &&
           !t.startsWith("ha_") &&
-          !t.startsWith("mqtt_"),
+          !t.startsWith("mqtt_") &&
+          !t.startsWith("mcp__"),
       ),
     );
     const sessionId = input.parentCtx?.session_id ?? "helper";
@@ -3551,7 +4515,7 @@ ${lines.join("\n")}
         : "(none — answer from the prompt only)";
     const system =
       `You are a turn-scoped helper (EnvoyHome §19.13). Allowed tools only: ${allowList}. ` +
-      "Never call spawn_helper, task, exec, ha_*, or mqtt_*. Prefer answering without tools when possible. " +
+      "Never call spawn_helper, task, exec, ha_*, mqtt_*, or mcp__*. Prefer answering without tools when possible. " +
       "When you need a tool, emit a ```envoyhome-tools fence with JSON array of {tool,args}.";
 
     type Msg = { role: "system" | "user" | "assistant"; content: string };

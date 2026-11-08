@@ -4243,6 +4243,35 @@ body[data-view="schedulesChat"] .chat-log .chat-schedule {
   margin-top: 0.55rem;
 }
 
+.session-plan-chip {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--border, #ccc) 80%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel, #f6f6f6) 92%, transparent);
+}
+.session-plan-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.65rem;
+  align-items: baseline;
+  margin-bottom: 0.35rem;
+}
+.session-plan-list {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+.session-plan-list li {
+  margin: 0.15rem 0;
+}
+.session-plan-mark {
+  display: inline-block;
+  width: 1.1em;
+  opacity: 0.7;
+}
 .chat-choice {
   background: color-mix(in srgb, var(--accent) 8%, var(--panel-2));
   border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
@@ -4296,6 +4325,26 @@ body[data-view="schedulesChat"] .chat-log .chat-schedule {
   margin: 0.35rem 0 0.55rem;
   min-height: 4.5rem;
   resize: vertical;
+}
+
+.chat-choice-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin: 0.35rem 0 0.55rem;
+}
+
+.chat-choice-form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.9rem;
+}
+
+.chat-choice-form-field input,
+.chat-choice-form-field textarea,
+.chat-choice-form-field select {
+  width: 100%;
 }
 
 .job-history-heading {

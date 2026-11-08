@@ -1274,6 +1274,8 @@ export default {
   "scheduleCard.canceledToast": "Reminder canceled.",
   "scheduleCard.failed": "Could not update that reminder.",
   "choiceCard.confirm": "확인",
+  "choiceCard.open": "Open",
+  "choiceCard.handoffHint": "Opens in your browser or app so you can finish and pay there. Home will not enter card details.",
   "choiceCard.pickOne": "하나 이상 선택하세요.",
   "choiceCard.answeredToast": "확인했습니다.",
   "choiceCard.failed": "선택을 보낼 수 없습니다.",

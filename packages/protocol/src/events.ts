@@ -120,7 +120,7 @@ export const EVENTS: Readonly<Record<string, EventSpec>> = {
     ),
   },
   "home:choice-needed": {
-    summary: "A chat choice card is pending (one / many / text; Design V-UX-14)",
+    summary: "A chat choice card is pending (one / many / text / form; Design V-UX-14 / §9.5g.3)",
     data: obj(
       {
         id: str({ minLength: 1 }),
@@ -139,9 +139,47 @@ export const EVENTS: Readonly<Record<string, EventSpec>> = {
             ["id", "label"],
           ),
         ),
-        selection: enumOf("one", "many", "text"),
+        selection: enumOf("one", "many", "text", "form"),
         multiline: bool(),
-        purpose: enumOf("ask_user", "schedule_candidates", "home_disambiguation", "general"),
+        purpose: enumOf(
+          "ask_user",
+          "schedule_candidates",
+          "home_disambiguation",
+          "general",
+          "session_plan",
+          "browser_form",
+          "outbound_handoff",
+        ),
+        fields: arr(
+          obj(
+            {
+              id: str({ minLength: 1 }),
+              label: str({ minLength: 1 }),
+              ref: str({ minLength: 1 }),
+              kind: enumOf("text", "password", "otp", "textarea", "select", "checkbox"),
+              required: bool(),
+              options: arr(
+                obj(
+                  {
+                    value: str({ minLength: 1 }),
+                    label: str({ minLength: 1 }),
+                  },
+                  ["value", "label"],
+                ),
+              ),
+              sensitive: bool(),
+            },
+            ["id", "label", "ref", "kind", "sensitive"],
+          ),
+        ),
+        snapshotId: str({ minLength: 1 }),
+        targetId: str({ minLength: 1 }),
+        profile: enumOf("managed", "personal", "remote"),
+        submitRef: str({ minLength: 1 }),
+        url: str({ minLength: 1 }),
+        title: str({ minLength: 1 }),
+        openUrl: str({ minLength: 1 }),
+        steps: arr(str({ minLength: 1 })),
         createdAt: iso(),
         expiresAt: iso(),
       },
@@ -155,6 +193,44 @@ export const EVENTS: Readonly<Record<string, EventSpec>> = {
         "purpose",
         "createdAt",
         "expiresAt",
+      ],
+    ),
+  },
+  "home:session-plan": {
+    summary: "Attended session plan checklist snapshot (Design §19.13 P2-E4)",
+    data: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        sessionId: str({ minLength: 1 }),
+        planId: str({ minLength: 1 }),
+        phase: enumOf("planning", "awaiting_confirm", "executing", "done"),
+        entries: arr(
+          obj(
+            {
+              id: str(),
+              content: str({ minLength: 1 }),
+              status: enumOf("pending", "in_progress", "completed", "cancelled"),
+              risk: enumOf("read", "write", "exec", "network", "admin", "sensitive"),
+            },
+            ["content", "status"],
+          ),
+        ),
+        needsWriteConfirm: bool(),
+        confirmedAt: iso(),
+        hopCount: int({ minimum: 0 }),
+        hopBudget: int({ minimum: 1 }),
+        at: iso(),
+      },
+      [
+        "accountId",
+        "sessionId",
+        "planId",
+        "phase",
+        "entries",
+        "needsWriteConfirm",
+        "hopCount",
+        "hopBudget",
+        "at",
       ],
     ),
   },

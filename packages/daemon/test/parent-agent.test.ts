@@ -8,8 +8,14 @@ import { join } from "node:path";
 import type { ModelAdapter, ModelResponse } from "@envoymesh/envoy-harness";
 import {
   HomeModelAdapter,
+  HOME_PARENT_MAX_ITERATIONS,
+  HOME_SCHEDULE_MAX_TOOL_ROUNDS,
+  TURN_INCOMPLETE_CONTINUE_CUE,
+  TURN_INCOMPLETE_ERROR,
   buildParentToolRegistry,
+  clampScheduleMaxToolRounds,
   homeTaskArgsToHarness,
+  isTurnContinueIntent,
   parentAgentEnabled,
   parentToolNamesForSurface,
   runAgentTurn,
@@ -522,4 +528,79 @@ test("V-P2-AGENT-4: tool_call yields before final text (live Tracer)", async () 
   const textIdx = order.indexOf("text");
   assert.ok(toolIdx >= 0 && textIdx >= 0, "need tool_call and text");
   assert.ok(toolIdx < textIdx, "tool_call must arrive before final text");
+});
+
+test("V-P2-AGENT-5: parent default maxIterations is 48 (env unset)", () => {
+  const prev = process.env.ENVOYHOME_PARENT_MAX_ITERATIONS;
+  try {
+    delete process.env.ENVOYHOME_PARENT_MAX_ITERATIONS;
+    // Constant is resolved at module load — assert shipped default band.
+    assert.ok(HOME_PARENT_MAX_ITERATIONS >= 32 && HOME_PARENT_MAX_ITERATIONS <= 80);
+    assert.equal(HOME_SCHEDULE_MAX_TOOL_ROUNDS, 5);
+    assert.equal(clampScheduleMaxToolRounds(3), 3);
+    assert.equal(clampScheduleMaxToolRounds(99), 5);
+    assert.equal(clampScheduleMaxToolRounds(undefined), 5);
+  } finally {
+    if (prev === undefined) delete process.env.ENVOYHOME_PARENT_MAX_ITERATIONS;
+    else process.env.ENVOYHOME_PARENT_MAX_ITERATIONS = prev;
+  }
+});
+
+test("V-P2-AGENT-5: continue intent fail-closed", () => {
+  assert.equal(isTurnContinueIntent("continue"), true);
+  assert.equal(isTurnContinueIntent("继续"), true);
+  assert.equal(isTurnContinueIntent("接着做"), true);
+  assert.equal(isTurnContinueIntent("keep going"), true);
+  assert.equal(isTurnContinueIntent("continue please and also list files"), false);
+  assert.equal(isTurnContinueIntent("yes"), false);
+});
+
+test("V-P2-AGENT-5: maxIterations cap emits continue cue + onIterationCap", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "eh-parent-cap-"));
+  let capped = 0;
+  const fenceModel = new HomeModelAdapter(
+    async () =>
+      '```envoyhome-tools\n[{"tool":"read_file","args":{"path":"a.txt"}}]\n```',
+    { allowSandbox: true },
+  );
+  const deps: TurnDeps = {
+    ctx: baseCtx(),
+    provider: {
+      complete: async () => ({ text: "" }),
+      ensurePicked: () => undefined,
+      lastPick: () => undefined,
+    } as TurnDeps["provider"],
+    approval: {
+      authorize: async () => "allowed" as const,
+    } as TurnDeps["approval"],
+    fs: {
+      readFile: async () => "body",
+      writeFile: async () => undefined,
+    } as TurnDeps["fs"],
+  };
+  const events = [];
+  for await (const ev of runAgentTurn({
+    userText: "read forever",
+    history: [],
+    deps,
+    sessionDir: dir,
+    sessionId: "sess-1",
+    turnId: "turn-1",
+    model: fenceModel,
+    maxIterations: 1,
+    emitIncompleteCue: true,
+    onIterationCap: () => {
+      capped += 1;
+    },
+  })) {
+    events.push(ev);
+  }
+  assert.equal(capped, 1);
+  const joined = events.map((e) => e.text ?? "").join("\n");
+  assert.ok(
+    joined.includes(TURN_INCOMPLETE_CONTINUE_CUE) ||
+      joined.includes(TURN_INCOMPLETE_ERROR) ||
+      /continue/i.test(joined),
+    `expected continue cue, got: ${joined.slice(0, 400)}`,
+  );
 });

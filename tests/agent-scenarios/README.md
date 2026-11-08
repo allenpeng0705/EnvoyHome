@@ -82,15 +82,19 @@ pnpm agent:eval:web
 # P0 packs (browser + memory inject + ask_user multi-turn):
 pnpm agent:eval:p0
 pnpm agent:eval:browser
+pnpm agent:eval:browser-form   # P2-H live form card (real LLM + Chromium)
 pnpm agent:eval:memory
 pnpm agent:eval:ask
 ```
+
+**Browser form live (`gen-live-browser-form*`):** enables managed browser via `setup.browserEnabled`, opens `https://httpbin.org/forms/post`, expects `propose_form` + a `selection: form` choice. The live runner fills `fieldValues` from `liveAnswer.formByKind` / `formDefault` (secrets never logged) and auto-allows Approvals. Needs Playwright Chromium on the daemon host (`npx playwright install chromium`) and an enabled LLM in `~/.envoyhome`.
 
 ### P0 packs (browser / memory / ask_user)
 
 | Pack | Covers |
 |------|--------|
 | `browser-journeys.json` | navigate/text, SSRF refuse, mock + optional Chromium, live soft |
+| `browser-form-journeys.json` | P2-H `propose_form` / refuse agent `apply_form`; live httpbin form card + `liveAnswer.formByKind` |
 | `memory-journeys.json` | `memory_remember` / `memory_recall` / `session_search` (facade helpers until Design tools land), live standing inject |
 | `ask-user-multiturn.json` | compose auto-answer → schedule/write; live `liveAnswer` via `home.answerChoice` |
 | `knowledge-journeys.json` | Sandbox **`knowledge/`** Doc KB: `knowledge_search` / files / cite / export; standing wins vs guest notes |
@@ -102,6 +106,8 @@ pnpm agent:eval:ask
 | `user-job-journeys.json` | NL “do this for me” jobs (remind, KB, decide, research+remind, remember) |
 | `proactive-ambient.json` | Heartbeat silent OK, enable heartbeat job, notify propose→confirm, live explain |
 | `exec-terminal-journeys.json` | `exec` echo / write+cat multi-round / live approve + refuse `/etc/passwd` |
+| `plan-execute-journeys.json` | P2-E4 plan→execute: compose `session_plan` + live simple forbid / complex read+write |
+| `mcp-journeys.json` | P2-F MCP: compose mock `mcp__*` tool round |
 
 ```bash
 pnpm agent:eval:knowledge
@@ -116,7 +122,10 @@ pnpm agent:eval:jobs
 pnpm agent:eval:proactive
 pnpm agent:eval:exec
 pnpm agent:eval:user-agent  # jobs + proactive + exec
+pnpm agent:eval:plan        # P2-E4 live plan→execute (gen-live-plan*)
 ```
+
+**`session_plan` follow-up drain:** confirming Implement does **not** park the turn — it starts a follow-up `sendMessage`. The live runner (`agent-eval-live.mjs`) answers `purpose === "session_plan"` choices (prefer `implement`), waits for up to **3** follow-up `home:turn-finished` events on the same session, and soft-asserts tools/text across the whole slice. Soft expects: `forbidTools`, `liveSessionPlan`.
 
 Live setup extras (also honored by deterministic runner): `reindexKnowledge`, `seedKnowYou` (`[{key,text}]` → `home.updateKnowYou` supersede), `knowledgePolicy`, `demoHa` (`home.startDemoHa`), `enableHeartbeat`. Doc KB is `files/knowledge/` (+ section index); KnowYou is episodic — not chat-stream MEMORY. Parent attended turns may fence-propose `exec` (ApprovalSink still asks).
 

@@ -938,6 +938,46 @@ let chatPendingSchedule = null;
 /** @type {Array<{ id: string, question: string, options?: Array<{ id: string, label: string, destructive?: boolean }>, selection?: string, multiline?: boolean, sessionId?: string, turnId?: string, expiresAt?: string, detail?: string }>} */
 let chatPendingChoices = [];
 
+/**
+ * Attended session plan checklist (P2-E4) for the open chat.
+ * @type {{ planId: string, phase: string, entries: Array<{ content: string, status: string, risk?: string }>, hopCount: number, hopBudget: number, needsWriteConfirm?: boolean } | null}
+ */
+let chatSessionPlan = null;
+
+function sessionPlanChipHtml(plan) {
+  if (!plan || plan.phase === "done") return "";
+  const entries = Array.isArray(plan.entries) ? plan.entries : [];
+  const done = entries.filter((e) => e.status === "completed" || e.status === "cancelled").length;
+  const total = entries.length;
+  const phase = String(plan.phase || "");
+  const title = t("sessionPlan.progress", {
+    done: String(done),
+    total: String(total),
+    hop: String(plan.hopCount ?? 0),
+    budget: String(plan.hopBudget ?? 0),
+  });
+  const phaseLabel =
+    phase === "awaiting_confirm"
+      ? t("sessionPlan.phaseAwaiting")
+      : phase === "executing"
+        ? t("sessionPlan.phaseExecuting")
+        : t("sessionPlan.phasePlanning");
+  const rows = entries
+    .slice(0, 8)
+    .map((e) => {
+      const mark =
+        e.status === "completed" ? "✓" : e.status === "in_progress" ? "…" : e.status === "cancelled" ? "–" : "○";
+      return `<li><span class="session-plan-mark">${mark}</span> ${escapeHtml(String(e.content || ""))}</li>`;
+    })
+    .join("");
+  return `<div class="session-plan-chip" role="status" aria-label="${escapeHtml(title)}">
+    <div class="session-plan-head"><strong>${escapeHtml(t("sessionPlan.title"))}</strong>
+      <span class="badge">${escapeHtml(phaseLabel)}</span>
+      <span class="muted">${escapeHtml(title)}</span></div>
+    ${rows ? `<ul class="session-plan-list">${rows}</ul>` : ""}
+  </div>`;
+}
+
 function choiceExpiryHint(expiresAt) {
   if (!expiresAt) return "";
   const ms = Date.parse(expiresAt) - Date.now();
@@ -949,7 +989,10 @@ function choiceExpiryHint(expiresAt) {
 
 function choiceCardHtml(c) {
   if (!c || !c.id) return "";
-  const selection = c.selection === "many" || c.selection === "text" ? c.selection : "one";
+  const selection =
+    c.selection === "many" || c.selection === "text" || c.selection === "form"
+      ? c.selection
+      : "one";
   const q = escapeHtml(c.question || "");
   const expired = c.expiresAt && Date.parse(c.expiresAt) < Date.now();
   const expiry = choiceExpiryHint(c.expiresAt);
@@ -964,6 +1007,64 @@ function choiceCardHtml(c) {
     </div>`;
   }
   const cancelBtn = `<button type="button" class="secondary" data-act="cancel">${escapeHtml(t("choiceCard.cancel"))}</button>`;
+  // §9.5i outbound_handoff — Open launches https (Universal Links may open native apps).
+  if (c.purpose === "outbound_handoff" && c.openUrl) {
+    const steps = Array.isArray(c.steps) ? c.steps : [];
+    const stepsHtml = steps.length
+      ? `<ol class="chat-choice-steps">${steps
+          .map((s) => `<li>${escapeHtml(String(s))}</li>`)
+          .join("")}</ol>`
+      : "";
+    const titleHtml = c.title
+      ? `<p class="muted chat-choice-handoff-title">${escapeHtml(String(c.title))}</p>`
+      : "";
+    return `<div class="chat-choice" data-choice-id="${escapeHtml(c.id)}" data-selection="one" data-purpose="outbound_handoff" data-open-url="${escapeHtml(String(c.openUrl))}">
+      <div class="chat-choice-head"><strong>${q}</strong>${expiryHtml}</div>
+      ${titleHtml}
+      ${stepsHtml}
+      <p class="muted">${escapeHtml(t("choiceCard.handoffHint"))}</p>
+      <div class="row chat-choice-btns">
+        <button type="button" data-act="one" data-option-id="open">${escapeHtml(t("choiceCard.open"))}</button>
+        ${cancelBtn}
+      </div>
+    </div>`;
+  }
+  if (selection === "form") {
+    const fields = Array.isArray(c.fields) ? c.fields : [];
+    const rows = fields
+      .map((f) => {
+        const fid = escapeHtml(f.id || "");
+        const label = escapeHtml(f.label || f.id || "");
+        const kind = f.kind || "text";
+        const sensitive = f.sensitive === true || kind === "password" || kind === "otp";
+        if (kind === "checkbox") {
+          return `<label class="chat-choice-opt"><input type="checkbox" data-field-id="${fid}" /> <span>${label}</span></label>`;
+        }
+        if (kind === "select") {
+          const opts = (f.options || [])
+            .map(
+              (o) =>
+                `<option value="${escapeHtml(o.value)}">${escapeHtml(o.label || o.value)}</option>`,
+            )
+            .join("");
+          return `<label class="chat-choice-form-field"><span>${label}</span><select data-field-id="${fid}">${opts}</select></label>`;
+        }
+        const inputType = sensitive ? "password" : kind === "textarea" ? null : "text";
+        if (kind === "textarea") {
+          return `<label class="chat-choice-form-field"><span>${label}</span><textarea data-field-id="${fid}" rows="3"></textarea></label>`;
+        }
+        return `<label class="chat-choice-form-field"><span>${label}</span><input type="${inputType}" data-field-id="${fid}" autocomplete="off" /></label>`;
+      })
+      .join("");
+    return `<div class="chat-choice" data-choice-id="${escapeHtml(c.id)}" data-selection="form">
+      <div class="chat-choice-head"><strong>${q}</strong>${expiryHtml}</div>
+      <div class="chat-choice-form">${rows}</div>
+      <div class="row">
+        <button type="button" data-act="confirm">${escapeHtml(t("choiceCard.confirm"))}</button>
+        ${cancelBtn}
+      </div>
+    </div>`;
+  }
   if (selection === "text") {
     return `<div class="chat-choice" data-choice-id="${escapeHtml(c.id)}" data-selection="text">
       <div class="chat-choice-head"><strong>${q}</strong>${expiryHtml}</div>
@@ -1030,6 +1131,19 @@ function bindChoiceCardActions(root, onDone) {
             return;
           }
           params.optionId = oid;
+          if (
+            card.getAttribute("data-purpose") === "outbound_handoff" &&
+            oid === "open"
+          ) {
+            const openUrl = card.getAttribute("data-open-url") || "";
+            if (/^https:\/\//i.test(openUrl)) {
+              try {
+                window.open(openUrl, "_blank", "noopener,noreferrer");
+              } catch {
+                /* ignore */
+              }
+            }
+          }
         } else if (selection === "many") {
           const ids = [...card.querySelectorAll('input[type="checkbox"]:checked')].map(
             (el) => /** @type {HTMLInputElement} */ (el).value,
@@ -1040,6 +1154,30 @@ function bindChoiceCardActions(root, onDone) {
             return;
           }
           params.optionIds = ids;
+        } else if (selection === "form") {
+          /** @type {Record<string, string | boolean>} */
+          const fieldValues = {};
+          card.querySelectorAll("[data-field-id]").forEach((el) => {
+            const fid = el.getAttribute("data-field-id");
+            if (!fid) return;
+            if (el instanceof HTMLInputElement && el.type === "checkbox") {
+              fieldValues[fid] = el.checked;
+              return;
+            }
+            const val =
+              el instanceof HTMLInputElement ||
+              el instanceof HTMLTextAreaElement ||
+              el instanceof HTMLSelectElement
+                ? String(el.value ?? "").trim()
+                : "";
+            if (val) fieldValues[fid] = val;
+          });
+          if (!Object.keys(fieldValues).length) {
+            showToast(t("choiceCard.pickOne"), "err");
+            btn.disabled = false;
+            return;
+          }
+          params.fieldValues = fieldValues;
         } else {
           const ta = card.querySelector("textarea");
           const text = ta && "value" in ta ? String(ta.value).trim() : "";
@@ -1170,12 +1308,25 @@ async function refreshChatPendingSchedule(sessionId) {
   const aid = accountId();
   if (!aid || !sessionId) {
     chatPendingSchedule = null;
+    chatSessionPlan = null;
     return;
   }
   const body = await rpc("home.listSessions", { accountId: aid }).catch(() => null);
   const sessions = body?.result?.sessions || body?.sessions || [];
   const row = sessions.find((s) => s && s.sessionId === sessionId);
   chatPendingSchedule = row?.pendingSchedule || null;
+  const sp = row?.sessionPlan;
+  chatSessionPlan =
+    sp && sp.phase && sp.phase !== "done"
+      ? {
+          planId: String(sp.planId || ""),
+          phase: String(sp.phase || ""),
+          entries: Array.isArray(sp.entries) ? sp.entries : [],
+          hopCount: Number(sp.hopCount) || 0,
+          hopBudget: Number(sp.hopBudget) || 0,
+          needsWriteConfirm: sp.needsWriteConfirm === true,
+        }
+      : null;
 }
 
 /** Schedules chat sub-pane: conversation vs Histories (Not set + Runs). */
@@ -2341,7 +2492,8 @@ function scrollChatLogToEnd(logEl) {
 function renderChatLogDom(log, emptyKey) {
   const logEl = document.getElementById("chat-log");
   if (!logEl) return false;
-  logEl.innerHTML = chatThreadHtml(log, chatPendingApprovals, emptyKey);
+  const planChip = sessionPlanChipHtml(chatSessionPlan);
+  logEl.innerHTML = `${planChip}${chatThreadHtml(log, chatPendingApprovals, emptyKey)}`;
   scrollChatLogToEnd(logEl);
   if (chatPendingApprovals.length) {
     bindApprovalActions(logEl, chatPendingApprovals, () => showView(activeView));
@@ -2784,6 +2936,7 @@ function connect() {
           "home:schedule-proposal-closed",
           "home:choice-needed",
           "home:choice-resolved",
+          "home:session-plan",
         ],
       });
       for (const event of [
@@ -2800,6 +2953,7 @@ function connect() {
         "home:schedule-proposal-closed",
         "home:choice-needed",
         "home:choice-resolved",
+        "home:session-plan",
       ]) {
         await rpc("on", { event }).catch(() => undefined);
       }
@@ -3070,6 +3224,24 @@ function connect() {
         chatPendingChoices = chatPendingChoices.filter((c) => c.id !== data.id);
         if (before !== chatPendingChoices.length && isChatSurface(activeView)) {
           refreshOpenChatView();
+        }
+      }
+      if (name === "home:session-plan" && data?.sessionId) {
+        const purpose = purposeForView(activeView);
+        const sid = readChatSessionId(purpose);
+        if (sid && data.sessionId === sid) {
+          chatSessionPlan =
+            data.phase === "done"
+              ? null
+              : {
+                  planId: String(data.planId || ""),
+                  phase: String(data.phase || ""),
+                  entries: Array.isArray(data.entries) ? data.entries : [],
+                  hopCount: Number(data.hopCount) || 0,
+                  hopBudget: Number(data.hopBudget) || 0,
+                  needsWriteConfirm: data.needsWriteConfirm === true,
+                };
+          if (isChatSurface(activeView)) refreshOpenChatView();
         }
       }
       if (

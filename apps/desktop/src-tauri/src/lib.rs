@@ -6,6 +6,9 @@ use std::thread;
 use std::time::Duration;
 use tauri::Manager;
 
+#[cfg(target_os = "macos")]
+mod dmg_cleanup;
+
 struct DaemonState {
   child: Mutex<Option<Child>>,
 }
@@ -446,6 +449,11 @@ pub fn run() {
       open_external_url
     ])
     .setup(|app| {
+      // macOS DMG: eject the installer volume (closes its Finder window) and offer to trash
+      // the downloaded `.dmg`. Cannot run during the drag — only once the installed app opens.
+      #[cfg(target_os = "macos")]
+      dmg_cleanup::after_launch();
+
       let handle = app.handle().clone();
       if let Err(err) = spawn_daemon(&handle) {
         eprintln!("EnvoyHome: daemon supervise skipped: {err}");

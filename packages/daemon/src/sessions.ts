@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { HomePaths } from "./home-paths.js";
+import type { SessionPlan } from "./plan-execute.js";
 
 export type SessionPurpose = "general" | "home" | "schedules";
 
@@ -44,6 +45,21 @@ export interface SessionMeta {
     message?: string;
     name?: string;
   };
+  /**
+   * Attended turn hit Agent maxIterations — explicit "continue" or one auto-hop
+   * may resume (Design §19.13 long-task continue). Unattended never auto-continues.
+   */
+  pendingTurnIncomplete?: {
+    lastUserText: string;
+    at: string;
+    /** True after the single attended auto-continue hop for this incomplete. */
+    autoContinueUsed: boolean;
+  };
+  /**
+   * Attended plan→execute checklist (Design §19.13 P2-E4).
+   * Unattended MUST NOT auto-advance this.
+   */
+  sessionPlan?: SessionPlan;
   createdAt: string;
   updatedAt: string;
   /** How many L0 session compactionsits have run (Memory Design §8 / OpenClaw cycle). */
@@ -136,6 +152,14 @@ export class SessionStore {
         message?: string;
         name?: string;
       } | null;
+      /** Pass `null` to clear an incomplete long-task marker. */
+      pendingTurnIncomplete?: {
+        lastUserText: string;
+        at: string;
+        autoContinueUsed: boolean;
+      } | null;
+      /** Pass `null` to clear an attended session plan. */
+      sessionPlan?: SessionPlan | null;
     },
   ): Promise<SessionMeta | undefined> {
     const meta = await this.get(accountId, sessionId);
@@ -169,6 +193,22 @@ export class SessionStore {
         delete meta.pendingScheduleConfirm;
       } else {
         meta.pendingScheduleConfirm = next;
+      }
+    }
+    if ("pendingTurnIncomplete" in patch) {
+      const next = patch.pendingTurnIncomplete;
+      if (next === undefined || next === null) {
+        delete meta.pendingTurnIncomplete;
+      } else {
+        meta.pendingTurnIncomplete = next;
+      }
+    }
+    if ("sessionPlan" in patch) {
+      const next = patch.sessionPlan;
+      if (next === undefined || next === null) {
+        delete meta.sessionPlan;
+      } else {
+        meta.sessionPlan = next;
       }
     }
     meta.updatedAt = new Date().toISOString();

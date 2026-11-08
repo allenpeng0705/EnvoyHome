@@ -126,6 +126,8 @@ export interface RouterDeps {
   webSearch: import("./web-search.js").WebSearchService;
   /** Design §9.5g browser control. */
   browserControl: import("./browser-control.js").BrowserControlService;
+  /** Design §9.5h MCP servers. */
+  mcpHub?: import("./mcp-hub.js").McpHub;
   /** B14 actuation journal (owner-scope reads). */
   actuations: ActuationService;
   /** Mobile APNs/FCM token registry. */
@@ -1342,6 +1344,71 @@ export function createDispatcher(deps: RouterDeps) {
       case "home.getBrowserControlConfig": {
         return await deps.browserControl.getPublicConfig();
       }
+      case "home.listMcpServers": {
+        if (!deps.mcpHub) throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "mcp hub unavailable");
+        return { servers: await deps.mcpHub.listServers() };
+      }
+      case "home.upsertMcpServer": {
+        if (!deps.mcpHub) throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "mcp hub unavailable");
+        try {
+          const p = params as Record<string, unknown>;
+          const envRaw = p.env;
+          let env: Record<string, string> | null | undefined;
+          if (envRaw === null) env = null;
+          else if (envRaw && typeof envRaw === "object" && !Array.isArray(envRaw)) {
+            env = {};
+            for (const [k, v] of Object.entries(envRaw as Record<string, unknown>)) {
+              if (typeof v === "string") env[k] = v;
+            }
+          }
+          return await deps.mcpHub.upsert({
+            label: String(p.label ?? ""),
+            transport: p.transport as "stdio" | "http" | "sse",
+            ...(typeof p.id === "string" ? { id: p.id } : {}),
+            ...(typeof p.command === "string" ? { command: p.command } : {}),
+            ...(Array.isArray(p.args) ? { args: p.args.map(String) } : {}),
+            ...(typeof p.url === "string" ? { url: p.url } : {}),
+            ...(env !== undefined ? { env } : {}),
+            ...(typeof p.authToken === "string" ? { authToken: p.authToken } : {}),
+            ...(typeof p.enabled === "boolean" ? { enabled: p.enabled } : {}),
+          });
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.removeMcpServer": {
+        if (!deps.mcpHub) throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "mcp hub unavailable");
+        try {
+          return await deps.mcpHub.remove(String((params as { id: string }).id));
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.setMcpServerEnabled": {
+        if (!deps.mcpHub) throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "mcp hub unavailable");
+        try {
+          const p = params as { id: string; enabled: boolean };
+          return await deps.mcpHub.setEnabled(String(p.id), p.enabled === true);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.testMcpServer": {
+        if (!deps.mcpHub) throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "mcp hub unavailable");
+        try {
+          return await deps.mcpHub.test(String((params as { id: string }).id));
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.listMcpTools": {
+        if (!deps.mcpHub) throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "mcp hub unavailable");
+        const sid =
+          params && typeof (params as { serverId?: unknown }).serverId === "string"
+            ? String((params as { serverId: string }).serverId)
+            : undefined;
+        return { tools: await deps.mcpHub.listMcpTools(sid) };
+      }
       case "home.setBrowserControlConfig": {
         try {
           const patch: {
@@ -1602,6 +1669,24 @@ export function createDispatcher(deps: RouterDeps) {
           const optionIds = Array.isArray(params.optionIds)
             ? params.optionIds.map(String).filter((s) => s.trim())
             : undefined;
+          const fieldValuesRaw = params.fieldValues;
+          let fieldValues: Record<string, string | boolean> | undefined;
+          if (
+            fieldValuesRaw &&
+            typeof fieldValuesRaw === "object" &&
+            !Array.isArray(fieldValuesRaw)
+          ) {
+            fieldValues = {};
+            for (const [k, v] of Object.entries(fieldValuesRaw as Record<string, unknown>)) {
+              const key = String(k).trim();
+              if (!key) continue;
+              if (typeof v === "boolean") fieldValues[key] = v;
+              else if (typeof v === "string" || typeof v === "number") {
+                fieldValues[key] = String(v);
+              }
+            }
+            if (Object.keys(fieldValues).length === 0) fieldValues = undefined;
+          }
           return await deps.turns.answerChoice({
             accountId,
             id: String(params.id),
@@ -1612,6 +1697,7 @@ export function createDispatcher(deps: RouterDeps) {
             ...(typeof params.text === "string" && params.text.trim()
               ? { text: params.text.trim() }
               : {}),
+            ...(fieldValues ? { fieldValues } : {}),
             ...(params.cancel === true ? { cancel: true } : {}),
           });
         } catch (err) {

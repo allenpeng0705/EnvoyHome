@@ -1378,3 +1378,66 @@ test("V-HA-21: omitted homeSurface defaults to off for smart-home tools", async 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("V-MCP-1: fence parse keeps only registered mcp__ tools", () => {
+  clearExtraToolSpecsForTests();
+  const bare = parseAssistantToolCalls(
+    '```envoyhome-tools\n[{"tool":"mcp__demo__ping","args":{}}]\n```',
+    { allowSandbox: true },
+  );
+  assert.equal(bare.tools.length, 0);
+  registerToolSpec({ name: "mcp__demo__ping", risk: "network", grantable: true });
+  const ok = parseAssistantToolCalls(
+    '```envoyhome-tools\n[{"tool":"mcp__demo__ping","args":{}},{"tool":"mcp__other__x","args":{}}]\n```',
+    { allowSandbox: true },
+  );
+  assert.equal(ok.tools.length, 1);
+  assert.equal(ok.tools[0]?.tool, "mcp__demo__ping");
+  clearExtraToolSpecsForTests();
+});
+
+test("V-MCP-5: MCP approval summary uses mcp:<label> tool", async () => {
+  __resetActiveXForTests();
+  clearExtraToolSpecsForTests();
+  registerToolSpec({ name: "mcp__demo__ping", risk: "network", grantable: true });
+  const root = await mkdtemp(join(tmpdir(), "eh-mcp-sum-"));
+  try {
+    const store = new ApprovalStore((id) => join(root, id));
+    const ctx = baseCtx({
+      sandbox_root: join(root, "files"),
+      turn_id: "t-mcp-sum",
+    });
+    let lastSummary = "";
+    const approval = new ApprovalSink({
+      store,
+      policy: ctx.policy_snapshot,
+      toolPolicy: "standard",
+      onApprovalNeeded: (row) => {
+        lastSummary = row.summary ?? "";
+      },
+      waitForAnswer: async () => "allow",
+    });
+    const res = await dispatchTool(
+      {
+        ctx,
+        provider: new ProviderHandle({
+          router: new MixRouter(undefined, undefined),
+          mode: "local",
+        }),
+        approval,
+        fs: { writeFile: async () => undefined, readFile: async () => "" },
+        mcpServerLabel: (id) => (id === "demo" ? "Demo MCP" : undefined),
+        extraToolImpl: async (tool) => {
+          if (tool === "mcp__demo__ping") return '{"ok":true}';
+          throw new Error(`unexpected ${tool}`);
+        },
+      },
+      { tool: "mcp__demo__ping", args: { q: "hi" } },
+    );
+    assert.equal(res.ok, true);
+    assert.match(lastSummary, /^mcp:Demo MCP ping/);
+  } finally {
+    clearExtraToolSpecsForTests();
+    await rm(root, { recursive: true, force: true });
+  }
+});

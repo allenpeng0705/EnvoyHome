@@ -41,6 +41,26 @@ export type HomeHistoryLine = {
   content: string;
 };
 
+/**
+ * ACP-style live checklist (todo_write / plan_update).
+ *
+ * Declared structurally on purpose: `envoy-harness` added `setPlanItems` /
+ * `getPlanItems` to its `Session` contract on `main`, but `scripts/envoy-harness.pin`
+ * pins an older commit (used by `build-desktop.sh` when the sibling is absent) that
+ * has neither the methods nor `SessionMetadata.planItems`. A local structural type
+ * keeps this adapter compiling against BOTH harness versions — importing the
+ * upstream type would break the pinned build, and reading `metadata.planItems`
+ * would break against the pinned `SessionMetadata`.
+ *
+ * Keep in sync with upstream `PlanItem` (packages/envoy-harness/src/plan/items.ts).
+ */
+export type HomePlanItem = {
+  id: string;
+  content: string;
+  status: "pending" | "in_progress" | "completed" | "cancelled";
+  priority?: "high" | "medium" | "low";
+};
+
 export interface HomeAgentSessionOptions {
   id: string;
   sessionDir: string;
@@ -74,6 +94,8 @@ export class HomeAgentSession implements Session {
   private userAlreadyPersisted: boolean;
   private readonly persistAssistant: boolean;
   private _messages: Message[] = [];
+  /** Live ACP checklist (todo_write). Private field — `metadata.planItems` may not exist on older harness. */
+  private _planItems: readonly HomePlanItem[] = [];
 
   constructor(opts: HomeAgentSessionOptions) {
     this.id = opts.id;
@@ -176,6 +198,16 @@ export class HomeAgentSession implements Session {
 
   getPlan(): SessionMetadata["plan"] {
     return this.metadata.plan;
+  }
+
+  /** Replace the live ACP checklist (todo_write). Empty clears. */
+  setPlanItems(items: readonly HomePlanItem[]): void {
+    this._planItems = items.length === 0 ? [] : items.map((item) => ({ ...item }));
+  }
+
+  /** Current checklist, or empty when none. */
+  getPlanItems(): readonly HomePlanItem[] {
+    return this._planItems;
   }
 
   setCollaborationMode(mode: NonNullable<SessionMetadata["collaborationMode"]>): void {

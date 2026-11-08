@@ -21,7 +21,7 @@ pnpm mobile:live          # mint pair URI + Dart live hello (when daemon up)
 | 3 | Set accountId; Chat sends a turn and gets a reply | | |
 | 4 | Trigger an approval (e.g. write tool) → Allow/Deny **inline in Chat** | | |
 | 5 | Open a long/link artifact via mesh (`getArtifactContent`) | | |
-| 6 | Push: configure APNs/FCM → Owner phone System **Send test push** → banner; tap opens Chat. Soft Disconnect must still allow a later approval wake (token kept). | | |
+| 6 | Push: configure APNs/FCM → Owner phone System **Send test push** → banner; tap opens Chat. Soft Disconnect must still allow a later approval wake (token kept). | partial | **2026-11-03** iPhone: APNs **prod**, banner showed, tap opened Chat. Soft-disconnect → later approval wake **not yet exercised**. |
 | 7 | HA configured → Home tab visible → short home turn | | |
 | 8 | Schedules tab opens Schedules chat / Histories | | |
 | 9 | Owner device: Connections → mint pairing for a second phone (optional) | | |
@@ -31,11 +31,11 @@ pnpm mobile:live          # mint pair URI + Dart live hello (when daemon up)
 
 | Field | Value |
 |-------|-------|
-| Date | _pending_ |
+| Date | _pending_ (full checklist) |
 | Operator | |
-| Devices (iOS / Android build) | |
-| Push | APNs sandbox / prod · FCM yes/no |
-| Result | **PASS** / **FAIL** / **DEFER** |
-| Blockers | |
+| Devices (iOS / Android build) | iPhone (APNs prod push exercised 2026-11-03) |
+| Push | APNs **prod** — banner + tap→Chat OK; soft-disconnect wake TBD · FCM no |
+| Result | **DEFER** (not full PASS — steps 1–5 / 7–8 / 10 unchecked; step 6 soft-disconnect open) |
+| Blockers | Soft-disconnect approval wake; remaining physical rows |
 
 Until **PASS**, marketing stays “preview thin client”; do not claim App Store production readiness.

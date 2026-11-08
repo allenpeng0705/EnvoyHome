@@ -121,46 +121,136 @@ async function chromiumFetchLocal(url: string, timeoutMs: number): Promise<strin
 }
 
 /** Minimal page factory for browser tool scenarios (mirrors browser-control.test). */
-function mockBrowserPage(url = "https://example.com/") {
+function mockBrowserPage(
+  url = "https://example.com/",
+  opts?: { form?: boolean; payment?: boolean },
+) {
   let current = url;
-  const attrs = new Map<string, string>();
+  const stamped = new Map<string, string>();
   return {
     goto: async (u: string) => {
       current = u;
     },
     url: () => current,
-    title: async () => "Example",
+    title: async () =>
+      opts?.payment ? "Checkout — payment" : opts?.form ? "Customer form" : "Example",
     content: async () => "<html></html>",
-    innerText: async () => "Hello body text",
-    locator: (sel: string) => ({
-      count: async () => (sel.includes("data-eh-ref") ? 1 : 0),
-      nth: () => ({
-        click: async () => undefined,
-        fill: async () => undefined,
-        selectOption: async () => undefined,
-        dragTo: async () => undefined,
-        evaluate: async <T>(fn: (el: Element) => T) => fn({} as Element),
-        screenshot: async () => Buffer.from([]),
-      }),
-    }),
-    evaluate: async <T>(fn: () => T) => {
-      const fakeDoc = {
-        querySelectorAll: () => [
-          {
-            setAttribute: (k: string, v: string) => attrs.set(k, v),
-            innerText: "Go",
-            tagName: "BUTTON",
-            getAttribute: () => null,
-          },
-        ],
+    innerText: async () =>
+      opts?.payment
+        ? "Enter card details to place order. Credit card number and CVV. Apple Pay available."
+        : opts?.form
+          ? "Please fill out the form"
+          : "Hello body text",
+    locator: (sel: string) => {
+      const m = /data-eh-ref="([^"]+)"/.exec(sel);
+      const ref = m?.[1] ?? "";
+      return {
+        count: async () => (stamped.has(ref) || sel.includes("data-eh-ref") ? 1 : 0),
+        nth: () => ({
+          click: async () => undefined,
+          fill: async () => undefined,
+          selectOption: async () => undefined,
+          dragTo: async () => undefined,
+          evaluate: async <T>(fn: (el: Element) => T) =>
+            fn({ checked: false, getAttribute: () => null } as unknown as Element),
+          screenshot: async () => Buffer.from([]),
+        }),
       };
-      const orig = (globalThis as { document?: unknown }).document;
+    },
+    evaluate: async <T>(
+      fn: (() => T) | ((arg: unknown) => T),
+      arg?: unknown,
+    ) => {
+      stamped.clear();
+      const makeEl = (tag: string, attrs: Record<string, string | boolean>) => {
+        const store: Record<string, string> = {};
+        return {
+          tagName: tag,
+          setAttribute: (k: string, v: string) => {
+            store[k] = v;
+            if (k === "data-eh-ref") stamped.set(v, tag);
+          },
+          getAttribute: (name: string) => {
+            if (name === "role") return (attrs.role as string) ?? null;
+            if (name === "name") return (attrs.name as string) ?? null;
+            if (name === "aria-label") return (attrs["aria-label"] as string) ?? null;
+            if (name === "aria-required") return attrs.required ? "true" : null;
+            return store[name] ?? null;
+          },
+          hasAttribute: (name: string) => name === "required" && attrs.required === true,
+          innerText: (attrs.label as string) || "",
+          placeholder: "",
+          type: (attrs.type as string) || "",
+          value: "",
+          options: [],
+          getBoundingClientRect: () => ({ width: 10, height: 10 }),
+        };
+      };
+      const els = opts?.payment
+        ? [
+            makeEl("INPUT", {
+              type: "text",
+              name: "cc-number",
+              "aria-label": "Card number",
+              required: true,
+            }),
+            makeEl("INPUT", {
+              type: "text",
+              name: "cvc",
+              "aria-label": "CVV",
+              required: true,
+            }),
+            makeEl("BUTTON", { role: "button", "aria-label": "Pay now" }),
+          ]
+        : opts?.form
+          ? [
+              makeEl("INPUT", {
+                type: "text",
+                name: "custname",
+                "aria-label": "Customer name",
+                required: true,
+              }),
+              makeEl("INPUT", {
+                type: "email",
+                name: "custemail",
+                "aria-label": "Email",
+                required: true,
+              }),
+              makeEl("INPUT", {
+                type: "password",
+                name: "password",
+                "aria-label": "Password",
+                required: true,
+              }),
+              makeEl("TEXTAREA", {
+                name: "comments",
+                "aria-label": "Comments",
+              }),
+              makeEl("BUTTON", { role: "button", "aria-label": "Submit order" }),
+            ]
+          : [
+              makeEl("BUTTON", {
+                role: "button",
+                "aria-label": "Go",
+                label: "Go",
+              }),
+            ];
+      const fakeDoc = { querySelectorAll: () => els };
+      const fakeWin = {
+        getComputedStyle: () => ({ display: "block", visibility: "visible" }),
+      };
+      const origDoc = (globalThis as { document?: unknown }).document;
+      const origWin = (globalThis as { window?: unknown }).window;
       (globalThis as { document: unknown }).document = fakeDoc;
+      (globalThis as { window: unknown }).window = fakeWin;
       try {
-        return fn();
+        if (arg !== undefined) return (fn as (a: unknown) => T)(arg);
+        return (fn as () => T)();
       } finally {
-        if (orig === undefined) delete (globalThis as { document?: unknown }).document;
-        else (globalThis as { document: unknown }).document = orig;
+        if (origDoc === undefined) delete (globalThis as { document?: unknown }).document;
+        else (globalThis as { document: unknown }).document = origDoc;
+        if (origWin === undefined) delete (globalThis as { window?: unknown }).window;
+        else (globalThis as { window: unknown }).window = origWin;
       }
     },
     screenshot: async () => Buffer.from([1, 2, 3]),
@@ -178,10 +268,20 @@ async function applyBrowserSetup(
     await bc.setConfig({ enabled: false });
     return {};
   }
-  if (setup.browserMock) {
+  if (setup.browserMock || setup.browserFormMock || setup.browserPaymentMock) {
     __resetBrowserSerpGatesForTests();
     await bc.setConfig({ enabled: true });
-    bc.pageFactory = async () => mockBrowserPage() as never;
+    const form = setup.browserFormMock === true;
+    const payment = setup.browserPaymentMock === true;
+    bc.pageFactory = async () =>
+      mockBrowserPage(
+        payment
+          ? "https://shop.example/checkout/pay"
+          : form
+            ? "https://example.com/form"
+            : "https://example.com/",
+        { form, payment },
+      ) as never;
     return {};
   }
   if (setup.browserChromium) {
@@ -1181,6 +1281,7 @@ describe("V-AGENT-SCENARIO-1 agent catalogue", async () => {
         "skill_propose",
         "schedule",
         "ask_user",
+        "session_plan",
         "read_file",
         "write_file",
         "edit_file",
@@ -1250,6 +1351,33 @@ describe("V-AGENT-SCENARIO-1 agent catalogue", async () => {
                 });
               }
               return JSON.stringify({ parked: true, args });
+            }
+            if (tool === "session_plan") {
+              // P2-E4 compose: mirror ask_user auto-answer — no full ChoiceStore.
+              const entries = Array.isArray(
+                (args as Record<string, unknown>).entries,
+              )
+                ? (args as { entries: unknown[] }).entries
+                : [];
+              const needsWriteConfirm = entries.some((raw) => {
+                if (!raw || typeof raw !== "object") return false;
+                const risk = (raw as { risk?: unknown }).risk;
+                return risk === "write" || risk === "admin";
+              });
+              const phase = needsWriteConfirm ? "awaiting_confirm" : "executing";
+              return JSON.stringify({
+                ok: true,
+                phase,
+                needsWriteConfirm,
+                message: needsWriteConfirm
+                  ? "Plan saved — waiting for Implement / Revise."
+                  : "Plan saved — execute pending steps.",
+                entries,
+              });
+            }
+            if (tool.startsWith("mcp__")) {
+              // P2-F compose: mock MCP tools/call result (no live server).
+              return JSON.stringify({ ok: true, tool, args });
             }
             const out = await runSandboxOrWorkflowTool({
               daemon,

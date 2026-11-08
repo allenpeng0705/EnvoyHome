@@ -309,6 +309,9 @@ export {
   homeSubagentInput,
   textFromSubagentResult,
   HOME_PARENT_MAX_ITERATIONS,
+  HOME_SCHEDULE_MAX_TOOL_ROUNDS,
+  clampScheduleMaxToolRounds,
+  clampParentMaxIterations,
 } from "./home-harness-bridge.js";
 
 export {
@@ -320,7 +323,59 @@ export {
   runAgentTurn,
   parentAgentEnabled,
   parentToolNamesForSurface,
+  TURN_INCOMPLETE_CONTINUE_CUE,
+  TURN_INCOMPLETE_ERROR,
 } from "./home-agent-turn.js";
+
+export { isTurnContinueIntent } from "./home-intent.js";
+
+export {
+  shouldEmitIncompleteCue,
+  shouldAttemptAutoContinue,
+  nextAutoContinueUsedOnCap,
+} from "./long-task-continue.js";
+
+export {
+  McpHub,
+  MCP_MAX_SERVERS,
+  MCP_MAX_TOOLS_PER_SERVER,
+  sanitizeMcpServerId,
+  mcpCatalogueToolName,
+  parseMcpCatalogueToolName,
+  assertSafeMcpUrl,
+  assertSafeMcpUrlResolved,
+  riskFromAnnotations,
+  type McpServerRecord,
+  type McpToolInfo,
+  type McpSession,
+  type McpSessionFactory,
+} from "./mcp-hub.js";
+
+export {
+  DEFAULT_PLAN_HOP_BUDGET,
+  HOME_PLAN_FIRST_PREFIX,
+  looksLikeComplexHomeTask,
+  shouldEnterPlanPath,
+  withPlanFirstFraming,
+  stripPlanFirstFraming,
+  planNeedsWriteConfirm,
+  writeAdminPendingKeys,
+  writeAdminSettledKeys,
+  planEntriesChanged,
+  normalizePlanEntries,
+  buildSessionPlan,
+  confirmSessionPlan,
+  reviseSessionPlan,
+  shouldAutoAdvancePlan,
+  nextPlanHop,
+  nextPendingPlanEntry,
+  planExecutePreamble,
+  planRevisePreamble,
+  sessionPlanEventPayload,
+  type SessionPlan,
+  type SessionPlanEntry,
+  type SessionPlanPhase,
+} from "./plan-execute.js";
 
 export {
   MediaGenerateStore,

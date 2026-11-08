@@ -185,6 +185,33 @@ test("V-P2-AGENT-3: nested task refused; spawn_helper wraps mesh task", async ()
   assert.equal(single.reply, "ok-reply");
 });
 
+test("V-MCP-1: spawn_helper / task strip mcp__* from child allowTools", async () => {
+  __resetPhase2ToolsForTests();
+  await runSpawnHelperTool({
+    args: {
+      prompt: "child",
+      allowTools: ["read_file", "mcp__demo__ping", "exec"],
+    },
+    accountId: "bob",
+    origin: "attended",
+    helperDepth: 0,
+    runMeshChild: async ({ allowTools }) => {
+      assert.deepEqual(allowTools, ["read_file"]);
+      assert.ok(!allowTools.some((t) => t.startsWith("mcp__")));
+      const model = scriptedModel([
+        { content: [{ type: "text", text: "ok" }], stopReason: "end_turn" },
+      ]);
+      const submitter = createHomeMeshSubmitter({
+        model,
+        allowTools,
+        cwd: "/tmp",
+        dispatch: async () => "",
+      });
+      return submitter.submit(homeSubagentInput("x"), AbortSignal.timeout(10_000));
+    },
+  });
+});
+
 test("V-P2-AGENT-3: complete fallback still works for unit tests", async () => {
   __resetPhase2ToolsForTests();
   const out = JSON.parse(

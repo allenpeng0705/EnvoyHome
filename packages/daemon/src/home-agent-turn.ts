@@ -28,6 +28,7 @@ import {
   createHomeMeshSubmitter,
   homeTaskArgsToHarness,
   HOME_PARENT_MAX_ITERATIONS,
+  clampParentMaxIterations,
   type HomeModelAdapterOptions,
 } from "./home-harness-bridge.js";
 import {
@@ -40,6 +41,13 @@ import {
   TASK_MAX_SUBAGENTS,
   filterChildAllowTools,
 } from "./harness-subagents.js";
+
+/** Stable incomplete footer when Agent hits maxIterations (attended continue UX). */
+export const TURN_INCOMPLETE_CONTINUE_CUE =
+  "Task incomplete (step limit). Reply **continue** to keep going.";
+
+export const TURN_INCOMPLETE_ERROR =
+  "This turn used too many steps. Reply **continue** to keep going, or try a shorter question.";
 
 const HOME_SMART_HOME_TOOLS = [
   "ha_list_entities",
@@ -54,6 +62,8 @@ const HOME_SMART_HOME_TOOLS = [
 export function parentToolNamesForSurface(opts: {
   homeSurface: boolean;
   schedulesSurface: boolean;
+  /** Design §9.5h — ready MCP catalogue names (`mcp__…`). */
+  mcpTools?: string[];
 }): string[] {
   if (opts.schedulesSurface) return ["schedule"];
   const names = Object.keys(BUILTIN_TOOLS).filter((n) => n !== "task");
@@ -61,6 +71,9 @@ export function parentToolNamesForSurface(opts: {
     for (const t of HOME_SMART_HOME_TOOLS) {
       if (!names.includes(t)) names.push(t);
     }
+  }
+  for (const t of opts.mcpTools ?? []) {
+    if (t.startsWith("mcp__") && !names.includes(t)) names.push(t);
   }
   return names;
 }
@@ -242,9 +255,25 @@ export interface RunAgentTurnInput {
   turnId: string;
   toolLoop?: boolean;
   abortSignal?: AbortSignal;
+  /**
+   * Per-call Agent.maxIterations. Interactive defaults to HOME_PARENT_MAX_ITERATIONS;
+   * schedule agentTurn MUST pass stored maxToolRounds (≤ HOME_SCHEDULE_MAX_TOOL_ROUNDS).
+   */
+  maxIterations?: number;
+  /** Extra system lines (e.g. resume-after-cap preamble). */
+  resumePreamble?: string;
+  /** Fired when the loop throws on max iterations (before partial/error emit). */
+  onIterationCap?: () => void | Promise<void>;
+  /**
+   * When false, suppress the “reply continue” cue (TurnService will auto-continue).
+   * Default true. Callers that omit the cue MUST emit it later if auto-hop does not run.
+   */
+  emitIncompleteCue?: boolean;
   /** Override model (tests). */
   model?: ModelAdapter;
   meshSubmitter?: MeshSubmitter;
+  /** Ready MCP tool names for this turn (§9.5h). */
+  mcpTools?: string[];
 }
 
 /**
@@ -266,7 +295,11 @@ export async function* runAgentTurn(
 
   const homeSurface = deps.ctx.policy_snapshot.homeSurface === true;
   const schedulesSurface = deps.ctx.policy_snapshot.schedulesSurface === true;
-  const toolNames = parentToolNamesForSurface({ homeSurface, schedulesSurface });
+  const toolNames = parentToolNamesForSurface({
+    homeSurface,
+    schedulesSurface,
+    ...(input.mcpTools?.length ? { mcpTools: input.mcpTools } : {}),
+  });
 
   const adapterOpts: HomeModelAdapterOptions = {
     allowSandbox: !schedulesSurface,
@@ -349,7 +382,14 @@ export async function* runAgentTurn(
       : `Available tools: ${toolNames.join(", ")}, and task (harness sub-agents).`,
     "When you need a tool, emit a ```envoyhome-tools fence with JSON [{tool,args}].",
     "Prefer answering without tools when possible.",
+    ...(input.resumePreamble?.trim() ? [input.resumePreamble.trim()] : []),
   ].join("\n");
+
+  const maxIterations =
+    typeof input.maxIterations === "number" && Number.isFinite(input.maxIterations)
+      ? clampParentMaxIterations(input.maxIterations)
+      : HOME_PARENT_MAX_ITERATIONS;
+  const emitIncompleteCue = input.emitIncompleteCue !== false;
 
   const agent = new Agent({
     model,
@@ -357,7 +397,7 @@ export async function* runAgentTurn(
     session,
     hooks,
     cwd: deps.ctx.sandbox_root,
-    maxIterations: HOME_PARENT_MAX_ITERATIONS,
+    maxIterations,
     maxSubagents: TASK_MAX_SUBAGENTS,
     maxParallelToolCalls: TASK_MAX_PARALLEL,
     retryPolicy: { ...DEFAULT_RETRY_POLICY, maxRetries: 0 },
@@ -401,6 +441,11 @@ export async function* runAgentTurn(
       // Prefer last assistant text when the loop hit the iteration cap — the
       // model may already have a usable answer after many tool rounds.
       if (/exceeded max iterations/i.test(message)) {
+        try {
+          await input.onIterationCap?.();
+        } catch {
+          /* marker best-effort */
+        }
         const last = [...session.messages].reverse().find((m) => m.role === "assistant");
         const partial = last
           ? last.content
@@ -413,8 +458,11 @@ export async function* runAgentTurn(
         let emittedPartial = false;
         if (partial) {
           try {
+            const rawOut = emitIncompleteCue
+              ? `${partial.trimEnd()}\n\n${TURN_INCOMPLETE_CONTINUE_CUE}`
+              : partial;
             await finalizeHomeText({
-              raw: partial,
+              raw: rawOut,
               userText,
               deps,
               toolLoop,
@@ -425,12 +473,13 @@ export async function* runAgentTurn(
             /* fall through to soft error */
           }
         }
-        if (!emittedPartial) {
+        if (!emittedPartial && emitIncompleteCue) {
           queue.push({
             kind: "error",
-            text: "This turn used too many steps. Try a shorter question, or ask again.",
+            text: TURN_INCOMPLETE_ERROR,
           });
         }
+        // When emitIncompleteCue is false, TurnService auto-continues — no stop cue.
       } else {
         queue.push({ kind: "error", text: message });
       }

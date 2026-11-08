@@ -5,7 +5,7 @@
 | **Document** | Single all-in-one design for EnvoyHome |
 | **Role** | Ground truth for **implementation** and **verification** |
 | **Status** | Living draft — refine in place; bump changelog |
-| **Last updated** | 2026-10-24 (turn-push privacy) |
+| **Last updated** | 2026-11-04d (P2-I Daily Outbound Assist shipped) |
 | **Not** | A port of HomeClaw; a clone of Hermes / OpenClaw / OpenHuman |
 
 **How to use this doc**
@@ -22,6 +22,13 @@
 
 | Date | Change |
 |------|--------|
+| 2026-11-04d | **Ship (P2-I §9.5i Daily Outbound Assist):** Hard stop before pay/OTP-SMS/CAPTCHA/wallet; prefer Owner MCP over browser for commerce; multi-step form chain; `blocked: "payment"`; handoff choice `purpose: "outbound_handoff"` + https `openUrl` + `steps[]` (Open → system URL / Universal Links; never claim daemon cart ≡ phone app). V-OUT-20…24. No `protocolApiVersion` bump. |
+| 2026-11-04c | **Ship (P2-H §9.5g.3 browser form assist):** Dynamic form choice card (`selection: "form"`, `purpose: "browser_form"`) from snapshot fields; `browser` `propose_form` / `apply_form`; mobile + desktop cards; secrets one-shot + redact; unattended refuses sensitive; no card on captcha/challenge. V-OUT-16…19 green. No `protocolApiVersion` bump. |
+| 2026-11-04b | **Normative (§9.5g.3 browser form assist / P2-H):** Dynamic **form card** from the current page snapshot — not login-only; N fields derived from stamped refs (text/password/otp/select/checkbox/textarea). Additive choice `selection: "form"` + purpose `browser_form`; thin clients render fields dynamically. One Submit → daemon fills matching refs under matching `snapshotId` (+ optional submit click) with a single attended Allow; secrets one-shot (never standing Learn). Unattended refuses any `password`/`otp` field. CAPTCHA/`blocked` still hand off. Extends V-UX-14. V-OUT-16…19. No `protocolApiVersion` bump. |
+| 2026-11-04 | **Ship (P2-G §9.5g.2 browser observe→act→verify):** Harden builtin `browser` — monotonic `snapshotId`; `act` requires match else `stale_snapshot`; `stale_ref`; `verify` on `act` (attended default `text`, unattended `none`); `wait` + `press`; richer ARIA visible-first snapshot; structured `blocked` (never solve). V-OUT-11…15 green. No `protocolApiVersion` bump. |
+| 2026-11-03b | **Ship (P2-F MCP servers — §9.5h):** Owner-driven MCP import — add **any** server (no quality allow-list); **Test connection** (initialize + `tools/list` only); tools enter catalogue as `mcp__<serverId>__<tool>` under Approvals/grants (default risk `network`, grantable; annotations MAY escalate only). Transports `stdio` \| `http` \| `sse`; remote URL SSRF-refused. Caps ≤16 servers / ≤128 tools each. Fail closed until Test ok once. Not the browser plane (Chrome DevTools MCP still rejected as §9.5g dep). Additive RPCs `home.listMcpServers` / `upsert` / `remove` / `setMcpServerEnabled` / `testMcpServer` / `listMcpTools`. V-MCP-1…6. §19.3: MCP runtime in core via §9.5h. No `protocolApiVersion` bump. |
+| 2026-11-03 | **Ship (P2-E4 plan-execute):** Attended complex asks MAY enter session plan→execute (Adapt EnvoyCoder plan-first). Conservative complexity gate — **simple/medium asks unchanged**. Soft one-tap confirm only when plan includes `write`/`admin`; read-only plans auto-run. Attended hop budget; unattended never auto-advances plans. Additive `home:session-plan` + choice purpose `session_plan` + builtin `session_plan`. V-P2-AGENT-6/7/8. No wire bump. |
+| 2026-10-27 | **Ship (long-task):** Parent interactive `Agent.maxIterations` default **48** (`ENVOYHOME_PARENT_MAX_ITERATIONS` 8…80). Schedule/`agentTurn` **enforces** stored `maxToolRounds` (≤5) as `maxIterations` (Design `2026-10-19j` reserved → enforced). Attended incomplete marker + explicit continue intent + **one** auto-continue hop; unattended never auto-continues. No `sessions_spawn`. V-P2-AGENT-5 / V-CRON-12. No wire bump. |
 | 2026-10-25e | **Additive:** Knowledge/KnowYou/embed RPCs in §3.2 / §3.5 / §4.3.1 / Appendix A; `home:embed-model-download`. No `protocolApiVersion` bump.
 | 2026-10-25 | **Normative (Knowledge + RAG / KnowYou):** Dedicated [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md) — Doc KB over `knowledge/` (section FTS → hybrid local embed), KnowYou L4′ (ADD\|SUPERSEDE\|SKIP + summarize/TTL + budgeted auto-inject), Home embed engine Adapt Mesh Phase 57E on **`:18793`** (never Mesh `:18790`/`:18791`; embed ≠ chat `:18792`). Ports §2.4; §8.5.1; §9 summary. Rejects mem0/Cognee-as-core. No `protocolApiVersion` bump (additive RPCs/tools). |
 | 2026-10-24b | **Normative (push wake):** Turn-finished APNs/FCM body is **generic** (localized “reply ready” from account `locale`; never assistant `preview` on the lock screen). Prefer fan-out to the originating `deviceId` when present (else account fan-out). Live touch skips `home.subscribe` / `home.hello` / `home.health`. Soft/fuzzy DE `vor` / FR `avant` require a nearby clock; FR bare `Nh` only with a soft cue. Ambiguous schedule propose surfaces `schedule_candidates` choice + structured tool JSON. §11.3 / A.4. No wire bump. |
@@ -468,7 +475,7 @@ Three transports carry `home.*`: the local/LAN WebSocket host (reuse-host), the 
 
 | Group | Methods (initial) | Notes |
 |-------|-------------------|--------|
-| **Accounts** | `home.listAccounts`, `home.createAccount`, `home.updateAccount`, `home.deleteAccount`, `home.getHouseholdOwner`, `home.transferHouseholdOwner`, `home.getWorkspace`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig` | Settings-first; transfer = Owner-scope; workspace rules §4.2.1 / §4.1.1; web search §9.5f; browser §9.5g |
+| **Accounts** | `home.listAccounts`, `home.createAccount`, `home.updateAccount`, `home.deleteAccount`, `home.getHouseholdOwner`, `home.transferHouseholdOwner`, `home.getWorkspace`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig`, `home.listMcpServers`, `home.upsertMcpServer`, `home.removeMcpServer`, `home.setMcpServerEnabled`, `home.testMcpServer`, `home.listMcpTools` | Settings-first; transfer = Owner-scope; workspace rules §4.2.1 / §4.1.1; web search §9.5f; browser §9.5g; MCP §9.5h |
 | **Bindings** | `home.listBindings`, `home.setBinding`, `home.removeBinding` | IM sender **or** `deviceId` → account (+ agent); set/remove = **Owner-scope**; list = seat-or-Owner; Owner exclusive-bind (§4.1.1) |
 | **Devices** | `home.mintPairing`, `home.listPairedDevices`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts` | Mint/revoke/list/rebind = Owner-scope (§4.1.1). Machine lifecycle = loopback-owner |
 | **Sessions / chat** | `home.listSessions`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.clearTranscript`, `home.deleteTranscriptMessages`, `home.archiveSession`, `home.unarchiveSession`, `home.removeSession`, `home.renameSession`, `home.listChoices`, `home.answerChoice` | Core chat path; `accountId` bounded by device binding. `uploadChatMedia` stores attachments under the account sandbox for `sendMessage.media[]`. Clear/delete edit the transcript; archive soft-hides; unarchive restores; remove deletes the session dir; rename sets display title. Choice cards (V-UX-14) = EnvoyCoder ask_user peer |
@@ -494,7 +501,8 @@ Three transports carry `home.*`: the local/LAN WebSocket host (reuse-host), the 
 | `home:turn-started` / `home:turn-delta` / `home:turn-finished` | session, account, text/tool deltas |
 | `home:route-decided` | which provider was chosen for a turn (`providerId`, `reason`, …) |
 | `home:approval-needed` / `home:approval-resolved` | risk, tool, account |
-| `home:choice-needed` / `home:choice-resolved` | chat choice card (V-UX-14) |
+| `home:choice-needed` / `home:choice-resolved` | chat choice card (V-UX-14); purpose MAY be `session_plan` (P2-E4) |
+| `home:session-plan` | attended session plan checklist snapshot (P2-E4) |
 | `home:learn-proposed` / `home:memory-compacted` | pending learn / standing consolidate done |
 | `home:session-compacted` | L0 transcript compacted under context pressure (Memory Design §8) |
 | `home:learn-rejected-full` | a PendingLearn was refused because the queue hit its cap (Memory Design §7.2) — the event exists so a silent eviction is impossible |
@@ -796,7 +804,7 @@ Verification: V-SEC-13, V-SEC-14, V-SEC-20; Settings on `account.detail` (§10.1
 | Scope | Methods | Rule |
 |-------|---------|------|
 | **loopback-owner** | `home.getDaemonLog`, `home.shutdown`, `home.getServiceStatus`, `home.installService`, `home.uninstallService`, `home.restartService` | Only from the home machine Settings window — never over mesh, never from a paired device. Host OS / process lifecycle. |
-| **owner-scope** | `home.mintPairing`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts`, `home.listPairedDevices`, `home.sendTestPush`, `home.transferHouseholdOwner`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig`, `home.setBinding`, `home.removeBinding`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations`, `home.createAccount`, `home.deleteAccount`, `home.enableChannel`, `home.disableChannel`, `home.setChannelConfig`, `home.stopDemoHa`, `home.stopDemoMqtt`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.getEmbedEngineStatus`, `home.enableEmbedEngine`, `home.disableEmbedEngine`, `home.downloadEmbedModel`, `home.cancelEmbedModelDownload`, `home.resumeEmbedModelDownload`, `home.searchClawHubSkills`, `home.installSkill`, `home.verifySkill`, `home.removeSkill`, `home.setHarness`, `home.doctorFix`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate` | **`isHouseholdOwner(caller)`** (§4.1.1): loopback **or** device with `accountIds = [ownerAccountId]`. Mobile OK. `setWorkspace` filesystem root only for Owner seat (R3). |
+| **owner-scope** | `home.mintPairing`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts`, `home.listPairedDevices`, `home.sendTestPush`, `home.transferHouseholdOwner`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig`, `home.listMcpServers`, `home.upsertMcpServer`, `home.removeMcpServer`, `home.setMcpServerEnabled`, `home.testMcpServer`, `home.listMcpTools`, `home.setBinding`, `home.removeBinding`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations`, `home.createAccount`, `home.deleteAccount`, `home.enableChannel`, `home.disableChannel`, `home.setChannelConfig`, `home.stopDemoHa`, `home.stopDemoMqtt`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.getEmbedEngineStatus`, `home.enableEmbedEngine`, `home.disableEmbedEngine`, `home.downloadEmbedModel`, `home.cancelEmbedModelDownload`, `home.resumeEmbedModelDownload`, `home.searchClawHubSkills`, `home.installSkill`, `home.verifySkill`, `home.removeSkill`, `home.setHarness`, `home.doctorFix`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate` | **`isHouseholdOwner(caller)`** (§4.1.1): loopback **or** device with `accountIds = [ownerAccountId]`. Mobile OK. `setWorkspace` filesystem root only for Owner seat (R3). |
 | **account-scoped** | bootstrap/negotiation: `home.hello`, `home.health`, `home.subscribe`, `home.meshStatus`, `home.registerPushToken`, `home.unregisterPushToken`. Reads of shared catalogs: `home.listAccounts`, `home.listChannels`, `home.getChannelStatus`, `home.listHarnesses`, `home.listProviders`, `home.listWorkflows`, `home.getWorkflow`, `home.listSkills`, `home.doctor`, `home.listWorkflowStepTemplates`, `home.getDemoHaStatus`, `home.getDemoMqttStatus`, `home.listSources` (household object registry — Design `2026-10-16l`), `home.getHouseholdOwner`. Seat-or-Owner (§4.1.1 `mayActForSeat`): `home.listGrants`, `home.revokeGrant`, `home.listBindings`, `home.updateAccount` (field rules: `toolPolicy` still Owner-only), `home.getWorkspace`. Own-account data: `home.getUsage`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getMediaGenerateConfig`, `home.setMediaGenerateConfig`, `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.listMemory`, `home.setMemorySettings`, `home.recall`, `home.forget`, `home.compactMemory`, `home.searchKnowledge`, `home.reindexKnowledge`, `home.getKnowledgeStatus`, `home.searchKnowYou`, `home.updateKnowYou`, `home.getKnowledgePolicy`, `home.setKnowledgePolicy`, `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.clearTranscript`, `home.deleteTranscriptMessages`, `home.archiveSession`, `home.unarchiveSession`, `home.removeSession`, `home.renameSession`, `home.listChoices`, `home.answerChoice`, `home.listSessions`, `home.listApprovals`, `home.answerApproval`, `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.cancelScheduleProposal`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts`, `home.getHeartbeatConfig`, `home.setHeartbeatConfig`, `home.listStandingOrders`, `home.putStandingOrder`, `home.removeStandingOrder`, `home.setStandingOrderEnabled`, `home.runWorkflow`, `home.listWorkflowTools`, `home.startDemoHa`, `home.startDemoMqtt` | Default: device bound to that account (§4.1). **Seat-or-Owner** as §4.1.1. Zero-binding devices may still call bootstrap methods including push register/unregister. A method that appears in **none** of the three rows is a spec bug — `scripts/docs-lint.mjs` fails the build if a catalogued method is missing here. |
 
 A method's scope is **transport-independent** (§3.3.1), except loopback-owner methods which are refused on both remote transports. Owner-scope over mesh requires an **exclusive** Owner-bound device.
@@ -1745,7 +1753,7 @@ Rules:
 
 **Payloads:** `notify` · `workflow` · `tool` (catalogue + §4.4 grants) · `agentTurn` (restricted unattended harness turn) · `system` (consolidate/flush/review).
 
-**`agentTurn` (Normative — `2026-10-19i` / `2026-10-19j`):** Frozen at confirm: `prompt` (capped), `toolPolicyPreset` ∈ {`standard`,`restricted`} (default `restricted`), optional `maxToolRounds` (≤ 5; validated + stored). Fire: `origin: unattended`, ephemeral session, frozen prompt only — **no** resolve-nl. **v1 harness cycle:** one model→tools→reply; `maxToolRounds` is **reserved** until a multi-round tool loop exists — then the stored cap MUST be enforced (fail closed above the cap). Tools under §4.4 grants; `browser` only when grant + `unattendedEnabled` + profile **`managed`** (unattended turns force managed default). Elevated (`personal`/`remote`) browser **never** on schedules (V-OUT-9/10).
+**`agentTurn` (Normative — `2026-10-19i` / `2026-10-19j` / `2026-10-27`):** Frozen at confirm: `prompt` (capped), `toolPolicyPreset` ∈ {`standard`,`restricted`} (default `restricted`), optional `maxToolRounds` (≤ 5; validated + stored; default 5). Fire: `origin: unattended`, ephemeral session, frozen prompt only — **no** resolve-nl. Parent `Agent.run` **MUST** use `maxIterations = maxToolRounds` (fail closed; never the interactive parent default). Tools under §4.4 grants; `browser` only when grant + `unattendedEnabled` + profile **`managed`** (unattended turns force managed default). Elevated (`personal`/`remote`) browser **never** on schedules (V-OUT-9/10). Unattended fires **MUST NOT** auto-continue after the cap.
 
 **Propose visibility (Normative — `2026-10-19j` / `2026-10-19l`):** Chat propose tool output MAY stay structured for the model, but the harness turn text and thin-client bubbles MUST surface **`resolvedLocal`** in plain language — never dump raw propose JSON as the user-visible body. Propose MAY also include additive **`relativeHint`** / **`nextRunAt`** (preview from the same `computeNext` math as arm). If the assistant promises a reminder without a `schedule` propose, the harness MUST append a short honesty disclaimer (does not invent WHEN).
 
@@ -1776,7 +1784,7 @@ Rules:
 | V-CRON-9 | Chat `schedule` confirm asks; propose alone does not arm |
 | V-CRON-10 | System flush/review fire paths; ensureReviewJob when reviewEnabled |
 | V-CRON-11 | Chat propose refuses invented WHEN specs; confirm surfaces `resolvedLocal` |
-| V-CRON-12 | `agentTurn` fires with frozen prompt; elevated browser denied on schedule |
+| V-CRON-12 | `agentTurn` fires with frozen prompt; elevated browser denied on schedule; `maxToolRounds` enforced as Agent maxIterations (≤5) |
 
 ---
 
@@ -2233,9 +2241,9 @@ Household agents need to navigate and interact with pages beyond SERP scrape. **
 |-------|--------|
 | **Tool** | `browser` |
 | **Risk** | `network`, `grantable: true` (no `attendedAllow` — every attended call asks) |
-| **Args** | `action` (required) + action-specific fields (`url`, `targetId`, `ref`, `kind`, `text`, …) |
-| **v1 actions** | `doctor` \| `status` \| `start` \| `stop` \| `tabs` \| `open` \| `focus` \| `close` \| `navigate` \| `snapshot` \| `screenshot` \| `act` \| `text` |
-| **`act.kind`** | `click` \| `type` \| `select` \| `drag` (refs from prior `snapshot`) |
+| **Args** | `action` (required) + action-specific fields (`url`, `targetId`, `ref`, `kind`, `text`, `snapshotId`, `verify`, …) |
+| **v1 actions** | `doctor` \| `status` \| `start` \| `stop` \| `tabs` \| `open` \| `focus` \| `close` \| `navigate` \| `snapshot` \| `screenshot` \| `act` \| `text` \| `wait` \| `press` |
+| **`act.kind`** | `click` \| `type` \| `select` \| `drag` (refs from prior `snapshot`; freshness §9.5g.2) |
 | **Runtime** | Default: managed headless Chromium via Playwright on the **daemon host**. Elevated profiles: §9.5g.1 |
 | **Config** | `browser-control.json` — see §9.5g.1 for full shape; defaults `enabled: false`, `unattendedEnabled: false`, `defaultProfile: "managed"` |
 
@@ -2248,11 +2256,11 @@ Household agents need to navigate and interact with pages beyond SERP scrape. **
 
 **SSRF / isolation (Normative):** `open` / `navigate` MUST reject non-`http(s)`, link-local, and metadata IPs (same family as `http_fetch`) on the **initial URL and every subsequent request/redirect** (route guard + final-URL re-check). Managed: Playwright persistent context under `stateDir/browser-profiles/<accountId>/managed` — not the Owner’s daily Chrome. Household-wide **concurrency 1** with the SERP browser leg (shared busy mutex; the §9.5f.1 **10 s SERP rate limit does not apply** to interactive `browser` actions). Action timeout ≤ 30 s; `text`/`snapshot` capped (`maxChars` ≤ 40 000); screenshots under `output/browser/` capped at **5 MiB**. CDP endpoints are **Owner-config only** — never from tool args. Doctor MAY warn when enabled and managed Chromium is missing while the default profile needs it.
 
-**RPCs:** Owner-scope additive `home.getBrowserControlConfig` / `home.setBrowserControlConfig`. Settings: Connections → Browser (desktop + mobile Owner). Optional prompt-only skill `browser-automation` teaches the act loop — **not** a substitute for the builtin. Tool arg `profile` optional; default = household `defaultProfile`.
+**RPCs:** Owner-scope additive `home.getBrowserControlConfig` / `home.setBrowserControlConfig`. Settings: Connections → Browser (desktop + mobile Owner). Optional prompt-only skill `browser-automation` teaches the observe→act→verify loop (§9.5g.2) — **not** a substitute for the builtin. Tool arg `profile` optional; default = household `defaultProfile`.
 
-**Deferred:** `requests` / `errors` / `emulate`; Chrome extension relay; OpenClaw gateway control-service; arbitrary named profile maps; CAPTCHA solving; dashboards widget.
+**Deferred:** `requests` / `errors` / `emulate`; Chrome extension relay; OpenClaw gateway control-service; arbitrary named profile maps; **CAPTCHA solving** (honest `blocked` refuse is Normative in §9.5g.2 — solving stays deferred); dashboards widget; CN native-app / deep-link connectors (separate epic).
 
-Verification: **V-OUT-8** (managed); **V-OUT-9** / **V-OUT-10** (§9.5g.1).
+Verification: **V-OUT-8** (managed); **V-OUT-9** / **V-OUT-10** (§9.5g.1); **V-OUT-11…15** (§9.5g.2).
 
 ### 9.5g.1 Elevated browser profiles (Normative — `2026-10-19f`)
 
@@ -2280,6 +2288,184 @@ Beside managed Chromium, the Owner MAY enable two elevated profiles that reuse l
 **Deferred within elevated:** Chrome extension relay; multi arbitrary named profiles beyond these three; auto-launching daily Chrome with debugging flags.
 
 Verification: **V-OUT-9** (personal), **V-OUT-10** (remote).
+
+### 9.5g.2 Browser observe→act→verify (Normative — `2026-11-04` / P2-G)
+
+Harden **loop quality** on the existing builtin `browser` tool — not a second tool, not MCP-as-browser, not device nodes / computer-use (§19.3 Defer). MCP widens what can be *called*; browser widens what can be *done* when there is only a website. Approvals still gate every attended call.
+
+| Field | Value |
+|-------|--------|
+| **Tool** | Same `browser` (§9.5g) — additive actions/args only |
+| **Freshness** | Monotonic per-tab `snapshotId`; `act` requires match |
+| **Verify** | `act.verify`: `none` \| `text` \| `screenshot` (same tool call / one ask) |
+| **New actions** | `wait`, `press` |
+| **Wall honesty** | Structured `blocked`; never solve CAPTCHA |
+
+**Snapshot identity (Normative):**
+1. Each successful `snapshot`, and each `navigate` / `open` that returns a snapshot, MUST stamp a new monotonic `snapshotId` on that tab and rewrite `data-eh-ref` markers.
+2. The tool result MUST include `snapshotId` alongside elements / URL.
+3. Snapshot SHOULD be **visible-first** by default (`includeHidden: true` opt-in). Interactive set MUST cover common controls plus ARIA roles `link` \| `button` \| `textbox` \| `checkbox` \| `combobox` \| `tab` \| `menuitem`. Each element SHOULD expose `ref`, `role`, `name`, `visible` (plus tag/text as today). Element ceiling MAY rise modestly (≈150) but MUST still respect `maxChars` ≤ 40 000.
+
+**Act freshness (Normative):**
+1. `act` MUST include `snapshotId` equal to the tab’s current id. Mismatch or missing → return `{ error: "stale_snapshot" }` and MUST NOT click/type/select/drag.
+2. Unknown / missing `ref` → `{ error: "stale_ref" }` (message steers a fresh snapshot). No silent CSS “best effort” beyond the stamped ref map.
+3. Prompt / `browser-automation` skill MUST teach: `snapshot` → optional `wait` → `act(snapshotId, verify)` → read structured result.
+
+**Verify on act (Normative):**
+1. Additive arg `verify`: `none` \| `text` \| `screenshot`.
+2. Defaults: **attended** → `text`; **unattended** → `none`.
+3. `text` → post-act URL + short visible-text snippet (capped; no full DOM dump).
+4. `screenshot` → write under `output/browser/` with the existing **5 MiB** jail/size rules.
+5. Verify runs **inside the same** `act` dispatch (one ApprovalSink ask). Result shape MUST be structured, e.g. `{ ok, kind, ref, snapshotId, url, beforeUrl?, verify?: { mode, url, text?, path?, bytes? } }`.
+
+**`wait` (Normative):**
+- Args: `until`: `load` \| `networkidle` \| `selector` \| `timeout`; optional `selector`; optional `ms` with **cap ≤ 15 000** (overall browser action still ≤ 30 s).
+- Over-cap `ms` → refuse (`bad_params`).
+- Transient detach/race: ≤ **3** internal retries; then fail closed with structured error.
+- Result: `{ ok, until, waitedMs, … }`.
+
+**`press` (Normative):**
+- Page-focused keyboard for forms: `Enter` \| `Tab` \| `Escape` \| arrows (and short named chords the implementation lists). Still risk `network` + attended ask.
+- MUST NOT send OS-level hotkeys outside the page / CDP session.
+
+**Wall / challenge honesty (Normative):**
+- On `navigate` / `snapshot` / `act`, when heuristics detect CAPTCHA, login wall, interstitial challenge, or (after §9.5i) a **payment** wall, return `{ blocked: "captcha" \| "login_wall" \| "challenge" \| "payment", message }` and **stop** the loop for that goal.
+- MUST NOT solve CAPTCHAs, farm tokens, or auto-bypass auth. MUST NOT fill card/wallet fields (§9.5i hard stop). Hand off to the Owner (elevated `personal`/`remote` only under §9.5g.1 ack; pay → `outbound_handoff`).
+
+**Non-goals (this subsection):** CAPTCHA solving; WeChat / Meituan / other CN **native** apps (browser ≠ app; deep-link / connector epic separate); OpenClaw-shaped device nodes / computer-use; a second browser tool; Chrome DevTools MCP as the §9.5g backend; `requests` / `errors` / `emulate` (remain deferred under §9.5g).
+
+Verification: **V-OUT-11** … **V-OUT-15**.
+
+### 9.5g.3 Browser form assist (Normative — `2026-11-04b` / P2-H)
+
+When the agent needs human-supplied values for a **web form** (login, checkout draft, booking, settings page, …), Home MUST NOT invent a static username/password UI. Thin clients render a **dynamic form card** whose fields are derived from the **current browser snapshot** — the same page the daemon will fill.
+
+| Field | Value |
+|-------|--------|
+| **Trigger** | Attended turn; page has fillable controls; agent (or daemon helper) proposes a form card |
+| **Wire** | Choice / ask extension: `selection: "form"`, `purpose: "browser_form"` (additive on V-UX-14) |
+| **Apply** | One Owner Submit → fill refs + optional submit under one Allow |
+| **Freshness** | Card bound to `snapshotId` + `targetId` + `profile` (§9.5g.2) |
+
+**Not login-only (Normative):** Login is a common case (password/otp fields). The same card fills **any** form the snapshot exposes (2 fields or 12). Field count and labels come from the page, not a fixed template.
+
+**Field model (Normative):** Each field in the card:
+
+| Property | Meaning |
+|----------|---------|
+| `id` | Stable id within this card |
+| `label` | Human label (from `name` / aria / nearby text; daemon MAY shorten) |
+| `ref` | Snapshot `data-eh-ref` |
+| `kind` | `text` \| `password` \| `otp` \| `textarea` \| `select` \| `checkbox` |
+| `required?` | Hint for UI |
+| `options?` | For `select` — value/label pairs from the snapshot when available |
+| `sensitive` | `true` when `kind` ∈ {`password`,`otp`} **or** label/name heuristics say secret |
+
+Card envelope MUST include: `snapshotId`, `targetId`, `profile`, `url?`, `title?`, `submitRef?` (button/link ref to click after fill), `fields[]` (cap ≤ **24** fields).
+
+**Derivation (Normative):**
+1. Prefer current tab `snapshot` elements with roles/tags that are fillable (`textbox`, `checkbox`, `combobox`, `textarea`, password inputs, etc.).
+2. Skip purely navigational controls (bare links) unless they are the explicit `submitRef`.
+3. If the page returns §9.5g.2 `blocked` (`captcha` / challenge), MUST NOT open a form card — hand off.
+4. Stale page → new snapshot → **new** card (old card answers with mismatched `snapshotId` fail closed).
+
+**Thin-client UX (Normative):**
+1. Mobile and desktop MUST render `fields[]` dynamically (obscure `password` / `otp`; checkbox/select use native controls).
+2. Primary action: **Submit** (apply). Secondary: Cancel (fail closed, same as choice cancel).
+3. MUST NOT echo `password`/`otp` values into the chat transcript bubble; may show “•••• submitted” / field count only.
+4. Push wake: treat like other interactive cards (`home:choice-needed` with form selection) — §11.3 interactive catalogue.
+
+**Apply path (Normative):**
+1. `home.answerChoice` (or equivalent) returns `{ fieldValues: { [fieldId]: string\|boolean } }` — secrets in the answer payload only for that RPC.
+2. Daemon verifies card `snapshotId` still matches the tab; else `stale_snapshot` and re-prompt.
+3. Attended: **one** ApprovalSink ask summarizing `browser form [profile] <url> N fields` (+ submit if any). Allow → for each field, `act` type/select/checkbox on `ref` with that `snapshotId`; then optional click `submitRef`. Prefer a single internal apply that does not re-ask per field.
+4. After apply, consume `snapshotId` as §9.5g.2 mutating acts do; return structured verify when useful.
+5. Secrets: one-shot; MUST NOT enqueue PendingLearn / L1–L2 / KnowYou from field values. Logs/transcripts MUST redact password/otp.
+
+**Unattended (Normative):**
+- Any card containing a `sensitive` field → **refuse** unattended (no grant bypass).
+- Non-sensitive forms MAY run unattended only with matching grant + managed profile + `unattendedEnabled` (same family as §9.5g).
+
+**Agent tool (Normative):** Catalogue MAY expose `browser` action `propose_form` (or a thin builtin `browser_form`) that, given optional field filter, builds the card from the current snapshot and parks via the choice store — models MUST NOT paste passwords into free-text `ask_user` when a form card is available.
+
+**Non-goals:** CAPTCHA widgets; file-upload fields (Defer); native apps; storing site passwords as a vault (Defer — one-shot only in v1); autofill from third-party password managers.
+
+Verification: **V-OUT-16** … **V-OUT-19**.
+
+### 9.5h MCP servers (Normative — `2026-11-03b` / P2-F)
+
+Household Owners MAY extend the agent with **Model Context Protocol** servers they choose. EnvoyHome does **not** rank or refuse servers for “quality”; the Owner decides what to add. Runtime still gates **actions** (Approvals / grants) — open to add, gated to act.
+
+| Field | Value |
+|-------|--------|
+| **Config** | `stateDir/mcp-servers.json` (household-wide) |
+| **Secrets** | `secrets/mcp/<serverId>/…` — write-only; get returns `hasSecret` flags only |
+| **Transports (v1)** | `stdio` (command + args + env); `http` \| `sse` (Owner URL + optional auth header/token) |
+| **Tool names** | `mcp__<serverId>__<toolName>` (stable; collision-safe vs builtins) |
+| **Default risk** | `network`, `grantable: true`, **no** `attendedAllow` |
+| **Caps** | ≤ **16** servers; ≤ **128** tools per server |
+
+**Owner-driven (Normative):**
+1. Only **Owner-scope** may upsert / remove / enable / test.
+2. The agent MUST NOT invent, download, or auto-enable MCP servers.
+3. There is **no** curated allow-list that blocks an Owner-added server id or URL (SSRF and schema validation still apply).
+4. Settings copy MUST warn that **stdio** commands run as the daemon host user (Owner RCE surface).
+
+**Test connection (Normative):** `home.testMcpServer` performs MCP `initialize` + `tools/list` only. It MUST NOT call mutating tools. Success records `lastTestOkAt` / cached tool catalogue; **fail closed** — tools are absent from the turn catalogue until a successful Test (then reconnect on boot while `enabled`).
+
+**Remote SSRF (Normative):** `http`/`sse` URLs MUST be `http(s)` and MUST refuse link-local / cloud-metadata hosts (same family as `http_fetch` / remote CDP). Never agent-supplied endpoints.
+
+**Disposition (Normative):**
+- Attended → ApprovalSink **ask**; summary `mcp:<label> <tool>` + args digest.
+- Unattended → matching grant required; else deny. `restricted` → deny.
+- MCP tool `annotations` MAY **escalate** ask severity (e.g. destructive → treat as write/admin for summary); NEVER de-escalate below `network`.
+- Do **not** inject sandbox FS roots or HA write credentials into MCP env by default.
+- `task` / `spawn_helper` child allow-lists: MCP tools **off** in v1 (parent attended catalogue only).
+- Results are **untrusted** input for memory trust (peer channel/event text).
+
+**RPCs (additive Owner-scope):** `home.listMcpServers`, `home.upsertMcpServer`, `home.removeMcpServer`, `home.setMcpServerEnabled`, `home.testMcpServer`, `home.listMcpTools`.
+
+**Settings:** Connections → **MCP** — list (label, transport, Ready/Not tested/Error, enable); Add/Edit; **Test**; Remove. Doctor MAY warn when `enabled` but not ready / stdio child exited (Fix → MCP tab).
+
+**Non-goals (v1):** MCP marketplace/ranking; Chrome DevTools MCP as §9.5g browser backend; auto-grant / `attendedAllow`; computer-use / device nodes via MCP.
+
+Verification: **V-MCP-1** … **V-MCP-6**.
+
+### 9.5i Daily Outbound Assist (Normative — `2026-11-04d` / P2-I)
+
+Household agents help with **food, travel, shopping, rides, and bookings** by preparing the job — research, shortlist, cart/booking draft, multi-step web forms — then **handing off at the commit wall**. Home does **not** complete payment, wallets, CAPTCHA solving, or native mini-program automation.
+
+| Field | Value |
+|-------|--------|
+| **Job classes** | `research` \| `shortlist` \| `prefill` \| `handoff` |
+| **Route order** | Owner MCP tools (when ready) → browser (+ personal CDP on login wall) → honest refuse / handoff |
+| **Commit wall** | payment / wallet / 3DS / Apple Pay / card iframe → `blocked: "payment"`; never a form card for card fields |
+| **Handoff wire** | Choice `purpose: "outbound_handoff"` + https `openUrl` + optional `steps[]` |
+
+**Route (Normative):**
+1. If the turn catalogue already exposes matching Owner-added MCP tools for the ask (ride, food, shop, …), prefer those over browser thrash.
+2. Else use §9.5g browser: research / navigate / multi-step `propose_form` (wait → snapshot → new card per page). Prefer elevated `personal`/`remote` when a login wall appears and Owner ack is set (§9.5g.1).
+3. Native-only walls (WeChat mini-program, app-only Meituan flows with no https surface) → handoff or honest refuse — do **not** invent CAPTCHA solve or computer-use.
+
+**Hard stop (Normative):**
+1. Detect payment / wallet / card / 3DS / Apple Pay / Google Pay (URL, title, visible text, autocomplete `cc-*`, field labels). Return structured `{ blocked: "payment", message }` on navigate/snapshot/act/propose_form as appropriate.
+2. MUST NOT open a §9.5g.3 form card that includes card-number / CVV / expiry / wallet fields. MUST NOT fill those fields even attended.
+3. OTP: `kind: "otp"` form fields only when the Owner will type the code into the card; Home MUST NOT receive SMS/email codes or invent them. Prefer handoff when the wall is app-only 2FA.
+4. CAPTCHA / challenge remain §9.5g.2 `blocked` — never solve.
+5. Secrets (password/otp/payment) MUST NOT enter PendingLearn / L1–L2 / KnowYou.
+
+**Handoff card (Normative):**
+1. Additive choice purpose `outbound_handoff` (extends V-UX-14). Selection `one` with a primary **Open** option (Cancel remains secondary).
+2. `openUrl` MUST be `https:` only; apply the same SSRF host refuse family as browser navigate (`http_fetch` / skill-remote). Custom schemes (`taobao://`, `uber://`, …) MUST NOT be accepted in v1.
+3. Optional `steps[]` (short checklist, cap ≤8) and `title` for thin-client copy.
+4. Thin clients: Open launches the system URL handler (mobile → Universal Links / App Links MAY bounce into Uber/Meituan/Taobao/Amazon when installed; else browser). Desktop opens the external browser.
+5. Honesty: MUST NOT claim the daemon managed-Chromium cart is already in the phone app unless an Owner MCP created a server-side draft. Pass a destination https URL (product, merchant, ride, booking) + checklist.
+
+**Agent tool (Normative):** Catalogue MAY expose `browser` action `propose_handoff` (`openUrl`, optional `question` / `steps` / `title`) that parks the handoff card. Skills MUST teach: MCP prefer → prefill → hard stop → handoff.
+
+**Non-goals:** CAPTCHA solving; first-party Uber/Meituan/Taobao/Amazon APIs; custom-scheme registry in core; silent scheme opens without a user tap; forging cart state across daemon browser ↔ phone app; device nodes / computer-use; payment vault.
+
+Verification: **V-OUT-20** … **V-OUT-24**.
 
 ### 9.5d Thin-client file open (Normative)
 
@@ -2343,6 +2529,21 @@ Canonical memory IDs live in [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Des
 | V-OUT-8 | Builtin `browser` (§9.5g): Owner-disabled by default; catalogue available when managed Chromium ready **or** (Owner + elevated ready); attended ask (summary tags resolved profile incl. household default); unattended needs grant+`unattendedEnabled`+managed; restricted deny; navigate/open SSRF incl. redirects; snapshot/act; concurrency 1 with SERP (no SERP rate on browser); soft-fail missing Chromium + install hint |
 | V-OUT-9 | Elevated `personal` (§9.5g.1): acknowledge required; Owner-account only; never unattended; loopback CDP only; connectOverCDP; approval summary tags `[personal]`; CDP endpoint never from tool args |
 | V-OUT-10 | Elevated `remote` (§9.5g.1): acknowledge required; Owner-account only; never unattended; Owner `cdpUrl` + optional secret; connectOverCDP; approval summary tags `[remote]`; CDP URL never from tool args |
+| V-OUT-11 | §9.5g.2: `act` without matching `snapshotId` → `stale_snapshot`; no click/type/select/drag side effect |
+| V-OUT-12 | §9.5g.2: missing/unknown ref → `stale_ref`; successful `act` with `verify=text` returns structured verify payload (URL + capped text) |
+| V-OUT-13 | §9.5g.2: `wait` respects `until` / `ms` cap (≤15 s); over-cap refused |
+| V-OUT-14 | §9.5g.2: captcha/login_wall/challenge heuristic → structured `blocked`; does not continue act / never solves |
+| V-OUT-15 | §9.5g.2: attended default `verify=text`; unattended default `none`; `screenshot` verify uses `output/browser/` jail + 5 MiB cap |
+| V-OUT-16 | §9.5g.3: form card `fields[]` derived from snapshot (N≥2 shapes); not a fixed login-only template |
+| V-OUT-17 | §9.5g.3: Submit with mismatched/stale `snapshotId` fails closed; no fill |
+| V-OUT-18 | §9.5g.3: password/otp never LearnQueue/L1–L2; redacted in transcript; unattended refuses sensitive fields |
+| V-OUT-19 | §9.5g.3: one attended Allow applies all field fills (+ optional submit); CAPTCHA/`blocked` page does not open a form card |
+| V-MCP-1 | Owner upserts any MCP transport config; non-Owner denied (§9.5h) |
+| V-MCP-2 | `testMcpServer` lists tools via initialize+tools/list; does not invoke mutating `tools/call` |
+| V-MCP-3 | Remote MCP URL SSRF refused (link-local / metadata / non-http(s)) |
+| V-MCP-4 | Disabled or not-ready server tools absent from turn catalogue |
+| V-MCP-5 | Attended MCP call asks; unattended without grant denied; restricted deny |
+| V-MCP-6 | Remove tears down stdio child and deletes secrets |
 
 **IDs owned by §5.7 (smart home), listed here for one-place lookup — the range is V-HA-1 … V-HA-24:** V-HA-1 … V-HA-20 (§5.7.6 table through Approvals summary), V-HA-21 … V-HA-24 (§5.7.8 NL control), and V-CH-8/V-CH-9 (§5.6). They are memory-adjacent only in that V-HA-8 constrains what may enter standing memory.
 
@@ -2358,7 +2559,7 @@ YAML/JSON export is secondary. Desktop Settings is a **single window** with a le
 |--------|--------|-----------------|
 | `accounts` | *(legacy deep-link)* | Opens **System → Profiles** — create / delete (**Owner**); Owner badge; **Transfer ownership** (§4.1.1); workspace mounts (§4.2.1). Members see list read-mostly |
 | `account.detail` | *(in System → Profiles cards)* | Own **display name / locale** (seat-or-Owner); **tool policy** Owner-only; **Workspace folders** (§4.2.1 multi-mount): Owner adds/removes from desktop **or** mobile; members see status only |
-| `connections` | Connections (tabs) | **Pair devices** (`pairing`): QR / mint (Owner phone or desktop); revoke/list/rebind. **Home Assistant** / **MQTT**: config + enable + bind/flags Owner-scope. **Channels**: enable + `setChannelConfig` Owner-scope. **Web search** (§9.5f/§9.5f.1): provider + browser SERP fallback. **Browser** (§9.5g/§9.5g.1): managed Chromium + elevated personal/remote profiles (Owner ack). Legacy `bindings` → `channels`; legacy `smarthome` → HA tab. |
+| `connections` | Connections (tabs) | **Pair devices** (`pairing`): QR / mint (Owner phone or desktop); revoke/list/rebind. **Home Assistant** / **MQTT**: config + enable + bind/flags Owner-scope. **Channels**: enable + `setChannelConfig` Owner-scope. **Web search** (§9.5f/§9.5f.1): provider + browser SERP fallback. **Browser** (§9.5g/§9.5g.1/§9.5g.2/§9.5g.3): managed + elevated + observe→act→verify + dynamic form cards. **MCP** (§9.5h): Owner add any server + Test + enable; no quality allow-list. Legacy `bindings` → `channels`; legacy `smarthome` → HA tab. |
 | `chat` | Chats + approval inbox | Loopback turns; **ChatGPT-style session rail** (New chat + list; archive/delete); trash menu (**Empty** / **Archive** / **Delete chat**) + per-message copy/delete; **pending tool/actuation approvals** Allow/Deny inline (V-UX-7); toast + auto-focus Chats on `home:approval-needed`. **Home-intent routing** (§5.7.8): general sessions omit `ha_*`/`mqtt_*` unless the turn is home-related. |
 | `homeChat` | Home chat | Dedicated smart-home session (`purpose: "home"`): **one session per profile** (reuse, no New/Recents); trash menu (**Empty** / **Delete chat**) + per-message delete; bound-object card + `ha_*`/`mqtt_*` always available; same Approvals gate. Entry from the sidebar. Not a second brain — same daemon/harness. **Hidden until Home Assistant is configured and enabled** (`homeassistant` channel: baseUrl + access token saved, then Enable) — do not show an empty Home chat when HA is absent. MQTT-only homes use Workflows / MQTT bind until HA is connected. |
 | `llm` | LLM (tabs) | **Model Provider** (`models`, default): provider pool. **Local Model** (`local`): EnvoyHome Local / Ollama (§8.5). **Routing** (`routing`): Cloud / Local only / Smart Routing. **Memory** (`memory`): standing notes; On disk / In prompt; cloud vs local inject packages (Memory Design §4.2.1); pending learns; compact; flush/review. Harness UI hidden (envoy-harness default). Legacy ids deep-link to the tab. |
@@ -2396,7 +2597,7 @@ YAML/JSON export is secondary. Desktop Settings is a **single window** with a le
 | V-UX-12 | Skills → Schedules: create Reminder / Workflow / Tool (NL WHEN + confirm payload or `home.putSchedule`); list split **Repeating** · **Once**; shows human WHEN + `payloadKind` and Workflow badge for YAML-synced jobs; no remove on synced; no debug JSON dumps; chat Confirm/Cancel card for unarmed proposals (expire ≠ arm) |
 | V-UX-12b | Mobile Skills → Schedules: reads `jobs` from `listSchedules`; parity with V-UX-12 (Repeating/Once, badge, no remove synced, tool argChoices) |
 | V-UX-13 | User can open **Schedules chat** from the shell (desktop sidebar and mobile nav) without Home Assistant; session uses `purpose: "schedules"` (one session per profile); **Chat \| Histories** panes — Histories shows **Not set** (canceled/expired proposals) + **Runs** (`listScheduleReceipts`); the turn standing text lists non-system jobs and tells the model to propose/confirm via the schedule tool; smart-home tools are not enabled by that purpose |
-| V-UX-14 | Chat shows a **choice card** (`selection` one/many/text) for `ask_user`, schedule time candidates, and Home device disambiguation; `home.answerChoice` settles or cancels it; TTL expires as cancel (fail closed, wakes parked `ask_user`) |
+| V-UX-14 | Chat shows a **choice card** (`selection` one/many/text/`form`) for `ask_user`, schedule time candidates, Home device disambiguation, §9.5g.3 browser form assist, and §9.5i `outbound_handoff` (Open https); `home.answerChoice` settles or cancels it; TTL expires as cancel (fail closed, wakes parked `ask_user` / form apply / handoff) |
 
 ---
 
@@ -2732,7 +2933,9 @@ Same as v1, including §9.3: no silent skill overwrite. Thin clients stay thin. 
 
 Federation, Bot Mode, silent skill overwrite, vLLM-as-required, **EnvoyMesh Social product**, phone dial via attach. Capability nodes stay mesh-owned until needed. Optional `attachToMeshNode` = **dual-if-needed** (P2-Q4 / §2.3), not a Phase 2 blocker. **Family multi-account remains v1** (§4.0), not Phase 2. **Smart home is v1** (§5.7) — not Phase 2.
 
-**Reject as core (OpenClaw-shaped non-goals for §19.9–§19.13):** shared interactive operator `terminal`/PTY; swarm-as-default / ACP agent marketplace; Lobster-style resumable workflow engine (use §7 workflows + §7.4 schedules); cross-account `message` / session tools; Code Mode + Tool Search as required; MCP runtime in core (investigate only); device **nodes** (camera/screen/computer-use) — §13.1 deferral, not this epic set.
+**Reject as core (OpenClaw-shaped non-goals for §19.9–§19.13):** shared interactive operator `terminal`/PTY; swarm-as-default / ACP agent marketplace; Lobster-style resumable workflow engine (use §7 workflows + §7.4 schedules); cross-account `message` / session tools; Code Mode + Tool Search as required; device **nodes** (camera/screen/computer-use) — §13.1 deferral, not this epic set.
+
+**MCP (Normative — `2026-11-03b` / P2-F):** Owner-driven MCP **is** in core via **§9.5h** (not “investigate only”). Chrome DevTools MCP remains rejected as the §9.5g browser backend.
 
 **Device nodes — Owner reaffirm `2026-10-22` (Defer, not a Phase 2 epic):** Do **not** ship an OpenClaw-shaped `nodes` / `node.invoke` surface in EnvoyHome core. Mobile stays a **thin client** to the hosting daemon (chat + Settings), not a capability edge for camera/screen/computer-use. Household actuation remains HA/MQTT + path jail + ApprovalSink. **Investigate later only via EnvoyMesh** capability/node patterns if a concrete Owner need appears (e.g. “snap from kitchen iPad”); require Owner Accept + Design changelog before any daemon tool or RPC. No `protocolApiVersion` implication until then.
 
@@ -2780,6 +2983,10 @@ Federation, Bot Mode, silent skill overwrite, vLLM-as-required, **EnvoyMesh Soci
 | V-P2-AGENT-1 | `spawn_helper` child inherits origin and cannot escalate unattended admin; reduced allow-list enforced (§19.13) |
 | V-P2-AGENT-2 | Helper depth ≤ 1, concurrency / TTL / token caps enforced; user-facing agent remains `default` (Q10) (§19.13) |
 | V-P2-AGENT-3 | Harness `task` / mesh submitter wired for parallel children; caps + origin inherit; no OpenClaw `sessions_spawn` (§19.13 P2-E2) |
+| V-P2-AGENT-5 | Long-task: parent default iterations; schedule `maxToolRounds` enforced; attended continue cue + one auto-hop (§19.13 / `2026-10-27`) |
+| V-P2-AGENT-6 | Simple/medium corpus never enters plan-execute path (§19.13 P2-E4) |
+| V-P2-AGENT-7 | Complex → checklist; read-only auto-runs; write/admin requires one-tap confirm (§19.13 P2-E4) |
+| V-P2-AGENT-8 | Attended hop budget; unattended never auto-advances `sessionPlan` (§19.13 P2-E4) |
 
 ### 19.7 Advanced memory / scale investigation (**decisions locked**)
 
@@ -2969,14 +3176,27 @@ No cross-seat / cross-account session or message access. **Reject** OpenClaw `se
 - Tracer events map to `home:turn-delta` (tool_call / tool_result / text / error).
 - **TurnService preambles stay outside Agent:** `plannedTools`, schedule affirmation/deny, home recover/offer callbacks, memory inject, forceLocal — same as before `Agent.run`.
 - harness-host `runTurn` **MAY** remain as fallback for injected `completionText`/`plannedTools` tests and emergency rollback (`ENVOYHOME_PARENT_AGENT=0`). Soft-deprecate once V-P2-AGENT-4 is green.
+- **Long-task continue (`2026-10-27`):** Interactive parent default `maxIterations` is **48** (override `ENVOYHOME_PARENT_MAX_ITERATIONS`, clamped 8…80). On max-iterations: emit a stable continue cue; persist session `pendingTurnIncomplete`. Attended: explicit continue intent (`continue` / `继续` / …) injects a resume preamble; **at most one** auto-continue hop per capped ask. Unattended / schedule: no auto-continue. Still **Reject** unbounded overnight agents and `sessions_spawn`.
 
-**Still Reject:** OpenClaw-shaped `sessions_spawn` / swarm-as-default / ACP agent marketplace as core. Wave **2c** roster (named agents) is separate and still deferred.
+#### P2-E4 — attended plan→execute (`2026-11-03`)
 
-**Non-goals for P2-E / E2 / E3:** Settings roster UI, cross-agent mailbox, ACP marketplace, deleting `runTurn` entirely, Continuable/remote mesh, rewriting the workflow-keyword path to Agent.
+**Decision:** Adapt EnvoyCoder plan-first for **attended** complex asks only. Simple and medium asks **MUST** keep today’s path (one `Agent.run` + V-P2-AGENT-5 continue) — no plan framing, no checklist tax, no confirm card.
 
-**Verification:** V-P2-AGENT-1, V-P2-AGENT-2 (E); V-P2-AGENT-3 (E2); **V-P2-AGENT-4** (E3: parent Agent path; tools via ApprovalSink; transcript durable; task depth-1).
+**Complexity gate (fail open to normal):** Conservative heuristic (Adapt EnvoyCoder `looksLikeBigTask`; Home port **never looser**). Default false. Explicit “plan this” / plan-mode MAY force entry. Golden corpus: simple + medium → false.
 
-**Ship order (Normative intent):** P2-A → P2-B → P2-C → P2-D1 → P2-E → P2-D2 → P2-E2 → **P2-E3**. Owner MAY reorder.
+**Session plan:** Durable on session meta (`sessionPlan`: `planId`, `phase`, `entries[]` with status + optional risk, `needsWriteConfirm`, `confirmedAt?`, `hopCount`, `hopBudget`, `sourceUserText`). Builtin tool `session_plan` (risk `read`) writes/updates the checklist. Additive event `home:session-plan` (camelCase snapshot). Choice purpose `session_plan` for soft confirm (Implement / Revise) — reuse V-UX-14 cards.
+
+**Confirm gate (B):** If any entry risk ∈ {`write`,`admin`} (or declared tools of those tiers) → one-tap confirm before execute. Read-only plans auto-run after checklist is written. Approvals / safety class unchanged.
+
+**Execute (attended only):** Daemon advances pending entries under a hop budget (default 8). Prefer one logical step per hop; `task` / `spawn_helper` remain available within a step under existing caps. Cap / budget exhausted with remaining entries → keep plan + incomplete marker. **Unattended / schedule MUST NOT** auto-advance `sessionPlan` (V-P2-AGENT-8). Bounded unattended plan hops = later epic (D) — not this ship.
+
+**Still Reject:** OpenClaw-shaped `sessions_spawn` / swarm-as-default / ACP agent marketplace as core. Wave **2c** roster (named agents) is separate and still deferred. Lobster-style second orchestrator — use §7 workflows for known repeatable procedures.
+
+**Non-goals for P2-E / E2 / E3 / E4:** Settings roster UI, cross-agent mailbox, ACP marketplace, deleting `runTurn` entirely, Continuable/remote mesh, rewriting the workflow-keyword path to Agent, unattended plan multi-hop, team/job orchestrator from EnvoyCoder.
+
+**Verification:** V-P2-AGENT-1, V-P2-AGENT-2 (E); V-P2-AGENT-3 (E2); **V-P2-AGENT-4** (E3: parent Agent path; tools via ApprovalSink; transcript durable; task depth-1); **V-P2-AGENT-5** (long-task: continue cue / schedule `maxToolRounds` enforce / attended one-hop auto-continue); **V-P2-AGENT-6** (simple/medium never enter plan path); **V-P2-AGENT-7** (complex checklist; read-only auto-run; write/admin one-tap); **V-P2-AGENT-8** (attended hop budget; unattended never auto-advances plan).
+
+**Ship order (Normative intent):** P2-A → P2-B → P2-C → P2-D1 → P2-E → P2-D2 → P2-E2 → P2-E3 → **P2-E4**. Owner MAY reorder.
 
 ---
 
@@ -3324,6 +3544,8 @@ Returns the household object registry for callers on this EnvoyHome (Design `202
 - `deviceId` is optional; when present, turn wake prefers that device’s push token (falls back to account fan-out if missing).
 - `locale?` is optional and additive (`2026-10-24b`); used only for the generic push body.
 
+**`home:session-plan`** (P2-E4, additive) — `{ "accountId", "sessionId", "planId", "phase": "planning"|"awaiting_confirm"|"executing"|"done", "entries": [{ "id?", "content", "status": "pending"|"in_progress"|"completed"|"cancelled", "risk?": "read"|"write"|"exec"|"network"|"admin"|"sensitive" }], "needsWriteConfirm", "confirmedAt?", "hopCount", "hopBudget", "at" }`. Emitted when the checklist is written or advanced. Thin clients MAY show a progress chip; Implement/Revise uses `home:choice-needed` with `purpose: "session_plan"`.
+
 **Approval events** — `home:approval-needed` `{ "id", "accountId", "agentId", "turnId", "tool", "argsDigest", "risk", "origin", "createdAt", "expiresAt", "summary", "objectId?", "desiredState?", "safetyClass", "answerableBy" }` — **the same fields as `home.listApprovals` (A.5)**, because the event is what the human actually sees; an event that omitted `argsDigest` or `summary` would make the §4.4 echo requirement unanswerable. `home:approval-resolved` `{ "id", "accountId", "decision", "scope", "grantId?" }`. The `origin` field is what lets the UI label an unattended actuation differently from an interactive tool call (V-UX-7, V-HA-20).
 
 ### A.5 Approvals and grants
@@ -3356,9 +3578,9 @@ Returns the household object registry for callers on this EnvoyHome (Design `202
 
 **`home.answerApproval`** params `{ "id", "decision": "allow"|"deny", "scope?": "once"|"session"|"always", "argsDigest": "sha256:…" }` → `{ "ok": true, "grantId?" }`
 
-**`home.listChoices`** params `{ "accountId", "sessionId?" }` → `{ "choices": [{ "id", "accountId", "sessionId", "question", "options": [{ "id", "label", "destructive?" }], "selection": "one"|"many"|"text", "purpose", "createdAt", "expiresAt", … }] }` — pending chat choice cards (V-UX-14)
+**`home.listChoices`** params `{ "accountId", "sessionId?" }` → `{ "choices": [{ "id", "accountId", "sessionId", "question", "options": [{ "id", "label", "destructive?" }], "selection": "one"|"many"|"text"|"form", "purpose", "fields?", "snapshotId?", "targetId?", "profile?", "submitRef?", "url?", "openUrl?", "steps?", "title?", "createdAt", "expiresAt", … }] }` — pending chat choice cards (V-UX-14); `selection: "form"` + `purpose: "browser_form"` carry §9.5g.3 field schemas (no secret values in list); `purpose: "outbound_handoff"` carries https `openUrl` + optional `steps[]` (§9.5i)
 
-**`home.answerChoice`** params `{ "accountId", "id", "optionId?", "optionIds?", "text?", "cancel?" }` → `{ "ok": true, "labels?", "optionIds?", "text?", "followUp?", "canceled?", "proposed?" }` — TTL expiry and `cancel: true` fail closed (no selection). `ask_user` resumes the parked tool; `schedule_candidates` MAY `proposeFromText` from the pick; `home_disambiguation` / `general` MAY send labels as a follow-up user message.
+**`home.answerChoice`** params `{ "accountId", "id", "optionId?", "optionIds?", "text?", "fieldValues?", "cancel?" }` → `{ "ok": true, "labels?", "optionIds?", "text?", "followUp?", "canceled?", "proposed?", "formApplied?" }` — TTL expiry and `cancel: true` fail closed (no selection). `ask_user` resumes the parked tool; `schedule_candidates` MAY `proposeFromText` from the pick; `home_disambiguation` / `general` MAY send labels as a follow-up user message; `browser_form` applies `fieldValues` through browser fill (§9.5g.3) then redacts.
 
 - **`argsDigest` is REQUIRED and MUST equal the digest the caller was shown** (A.5 above). A mismatch is rejected with `envoyhome.approval_mismatch: …` — approval is bound to the arguments the human actually saw, not to whatever the pending row holds at answer time (V-HA-20).
 - `scope: "always"` returns the created `grantId` (§4.4). For an `admin`/`sensitive` tool the grant is stored with the **full** digest; a request that would produce a broad grant is refused with `envoyhome.grant_too_broad: …`.

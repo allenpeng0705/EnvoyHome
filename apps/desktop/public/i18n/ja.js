@@ -1274,6 +1274,8 @@ export default {
   "scheduleCard.canceledToast": "Reminder canceled.",
   "scheduleCard.failed": "Could not update that reminder.",
   "choiceCard.confirm": "確認",
+  "choiceCard.open": "Open",
+  "choiceCard.handoffHint": "Opens in your browser or app so you can finish and pay there. Home will not enter card details.",
   "choiceCard.pickOne": "少なくとも1つ選んでください。",
   "choiceCard.answeredToast": "受け取りました。",
   "choiceCard.failed": "選択を送信できませんでした。",

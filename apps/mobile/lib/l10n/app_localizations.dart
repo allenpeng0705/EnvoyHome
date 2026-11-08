@@ -1206,6 +1206,12 @@ abstract class AppLocalizations {
   /// **'Web search'**
   String get connTabWebSearch;
 
+  /// No description provided for @connTabMcp.
+  ///
+  /// In en, this message translates to:
+  /// **'MCP'**
+  String get connTabMcp;
+
   /// No description provided for @connTabBrowser.
   ///
   /// In en, this message translates to:
@@ -2903,6 +2909,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Confirm'**
   String get choiceCardConfirm;
+
+  /// Open CTA for outbound_handoff.
+  String get choiceCardOpen;
+
+  /// Hint under handoff card.
+  String get choiceCardHandoffHint;
 
   /// No description provided for @choiceCardPickOne.
   ///

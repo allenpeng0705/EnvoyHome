@@ -1,0 +1,127 @@
+[
+  {
+    "id": "gen-compose-plan-readonly-then-read",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Investigate this household end-to-end: read the research notes under documents/ and summarize the multi-phase findings for me.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/research-a.md": "# Phase A — inventory\nBound lights: 12\nBound sensors: 8\n",
+        "documents/research-b.md": "# Phase B — gaps\nMissing: garage door binding, guest thermostat alias.\n"
+      }
+    },
+    "allowTools": ["session_plan", "read_file", "list_dir"],
+    "rounds": [
+      {
+        "reply": "Planning first.\n```envoyhome-tools\n[{\"tool\":\"session_plan\",\"args\":{\"entries\":[{\"content\":\"Read research notes under documents/\",\"status\":\"pending\",\"risk\":\"read\"},{\"content\":\"Summarize multi-phase findings\",\"status\":\"pending\",\"risk\":\"read\"}]}}]\n```"
+      },
+      {
+        "reply": "Reading notes.\n```envoyhome-tools\n[{\"tool\":\"read_file\",\"args\":{\"path\":\"documents/research-a.md\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"read_file\",\"args\":{\"path\":\"documents/research-b.md\"}}]\n```"
+      },
+      {
+        "reply": "Summary: 12 lights and 8 sensors bound; gaps include garage door binding and guest thermostat alias."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["session_plan", "read_file", "read_file"],
+      "minToolRounds": 3,
+      "finalMatching": "12 lights|garage door|thermostat"
+    }
+  },
+  {
+    "id": "gen-compose-plan-write-confirm-shape",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Make a multi-phase roadmap to overhaul our whole home routines and documents step by step, then write the summary file.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/routines-raw.md": "# Current routines\nMorning lights + coffee brief.\n"
+      }
+    },
+    "allowTools": ["session_plan", "read_file", "write_file"],
+    "rounds": [
+      {
+        "reply": "Checklist with a write step.\n```envoyhome-tools\n[{\"tool\":\"session_plan\",\"args\":{\"entries\":[{\"content\":\"Read current routines\",\"status\":\"pending\",\"risk\":\"read\"},{\"content\":\"Write documents/home-overhaul-plan.md\",\"status\":\"pending\",\"risk\":\"write\"}]}}]\n```"
+      },
+      {
+        "reply": "Plan saved — waiting for Implement before writing."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["session_plan"],
+      "minToolRounds": 1,
+      "finalMatching": "Implement|waiting|plan|Plan"
+    }
+  },
+  {
+    "id": "gen-live-plan-simple-no-plan",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "List the documents in my files folder. Keep it short — just list what is there.",
+    "setup": {
+      "seedFiles": {
+        "documents/readme.md": "# Notes\nhello\n"
+      }
+    },
+    "expect": {
+      "forbidTools": ["session_plan"],
+      "liveTools": ["list_dir", "search_files", "read_file"],
+      "honestyMatching": ["documents|readme|list|folder|files"]
+    }
+  },
+  {
+    "id": "gen-live-plan-complex-readonly",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "liveAnswer": {
+      "preferOptionId": "implement",
+      "preferOptionIndex": 0
+    },
+    "prompt": "Investigate this household end-to-end across every room and account: audit the seeded research docs under documents/, compare phase A vs phase B gaps, and produce a multi-phase step-by-step research summary for me. Do not write any files — read and synthesize only.",
+    "setup": {
+      "seedFiles": {
+        "documents/phase-a-inventory.md": "# Phase A inventory\nLights: kitchen, living, porch.\nSensors: motion-hall, temp-living.\n",
+        "documents/phase-b-gaps.md": "# Phase B gaps\nUnbound: garage door.\nAlias missing: guest thermostat.\nRisk: overnight porch light schedule drift.\n"
+      }
+    },
+    "expect": {
+      "liveSessionPlan": true,
+      "liveTools": ["session_plan", "read_file", "list_dir", "search_files"],
+      "honestyMatching": ["garage|thermostat|porch|phase|inventory|gap"]
+    }
+  },
+  {
+    "id": "gen-live-plan-complex-write",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "liveAnswer": {
+      "preferOptionId": "implement",
+      "preferOptionIndex": 0,
+      "approvalDecision": "allow"
+    },
+    "prompt": "Make a multi-phase roadmap to overhaul our whole home document routines end-to-end: read documents/routines-raw.md, design the checklist, then write a concise summary to documents/home-overhaul-summary.md and tell me the path when done.",
+    "setup": {
+      "seedFiles": {
+        "documents/routines-raw.md": "# Current routines\n1. Morning lights\n2. Coffee brief skill\n3. Night lock check\n"
+      }
+    },
+    "expect": {
+      "liveSessionPlan": true,
+      "liveTools": ["session_plan", "write_file", "read_file"],
+      "honestyMatching": ["home-overhaul-summary|documents/|wrote|written|summary"]
+    }
+  }
+]

@@ -1,0 +1,23 @@
+[
+  {
+    "id": "gen-compose-mcp-tool-round",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Use the household MCP ping tool once, then tell me it succeeded.",
+    "allowTools": ["mcp__demo__ping"],
+    "rounds": [
+      {
+        "reply": "Calling MCP.\n```envoyhome-tools\n[{\"tool\":\"mcp__demo__ping\",\"args\":{\"msg\":\"hi\"}}]\n```"
+      },
+      {
+        "reply": "MCP ping succeeded."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["mcp__demo__ping"],
+      "minToolRounds": 1,
+      "finalMatching": "succeeded|MCP|ping"
+    }
+  }
+]

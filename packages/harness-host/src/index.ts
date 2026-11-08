@@ -6,8 +6,11 @@ export { type TurnContext, type TurnOrigin } from "./context.js";
 export {
   BUILTIN_TOOLS,
   clearExtraToolSpecsForTests,
+  clearMcpToolSpecs,
   execPolicyAllows,
+  isRegisteredMcpTool,
   registerToolSpec,
+  unregisterToolSpec,
   requiresAttendedApproval,
   unattendedRequiresGrant,
   toolSpec,

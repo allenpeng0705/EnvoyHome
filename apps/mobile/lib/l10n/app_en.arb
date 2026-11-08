@@ -312,6 +312,7 @@
   "connTabMqtt": "MQTT",
   "connTabChannels": "Channels",
   "connTabWebSearch": "Web search",
+  "connTabMcp": "MCP",
   "connTabBrowser": "Browser",
   "browserControlLede": "Control managed Chromium, or attach personal Chrome / remote CDP. Off by default.",
   "browserControlEnabled": "Enable browser tool",
@@ -700,6 +701,8 @@
     }
   },
   "choiceCardConfirm": "Confirm",
+  "choiceCardOpen": "Open",
+  "choiceCardHandoffHint": "Opens in your browser or app so you can finish and pay there. Home will not enter card details.",
   "choiceCardPickOne": "Pick at least one option.",
   "choiceCardAnswered": "Got it.",
   "choiceCardFailed": "Could not send that choice: {error}",

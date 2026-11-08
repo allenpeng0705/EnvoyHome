@@ -548,6 +548,8 @@ test("V-CRON-12: agentTurn job fires with frozen prompt; missPolicy skip", async
     assert.equal(fires[0]!.prompt, frozen);
     // Fire uses stored spec — inventing a new WHEN at fire is impossible.
     assert.equal(fires[0]!.whenInstant, armedWhen);
+    // Design 2026-10-19j → enforced: stored maxToolRounds survives confirm/fire payload.
+    assert.equal(job.payload.maxToolRounds, 3);
   } finally {
     await svc.stop();
     await rm(stateDir, { recursive: true, force: true });

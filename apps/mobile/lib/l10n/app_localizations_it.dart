@@ -622,6 +622,8 @@ class AppLocalizationsIt extends AppLocalizations {
   String get connTabWebSearch => 'Web search';
 
   @override
+  String get connTabMcp => 'MCP';
+
   String get connTabBrowser => 'Browser';
 
   @override
@@ -1535,6 +1537,10 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get choiceCardConfirm => 'Conferma';
+  @override
+  String get choiceCardOpen => 'Open';
+  @override
+  String get choiceCardHandoffHint => 'Opens in your browser or app so you can finish and pay there. Home will not enter card details.';
 
   @override
   String get choiceCardPickOne => 'Seleziona almeno un\'opzione.';

@@ -33,7 +33,9 @@ const HOME_CHILD_MAX_ITERATIONS = 4;
  * Harness default is 50; home chat often needs multi-step tool rounds
  * (list → get_state → actuate / schedule / memory). 12 was too tight and
  * surfaced as "agent loop exceeded max iterations (12)" on ordinary turns.
- * Override with ENVOYHOME_PARENT_MAX_ITERATIONS (clamped 8…80).
+ * Default 48 (raised from 32 for long complex tasks). Override with
+ * ENVOYHOME_PARENT_MAX_ITERATIONS (clamped 8…80). Schedule/unattended
+ * agentTurn uses maxToolRounds (≤5) instead — never this default.
  */
 function resolveParentMaxIterations(): number {
   const raw = (process.env.ENVOYHOME_PARENT_MAX_ITERATIONS ?? "").trim();
@@ -41,9 +43,26 @@ function resolveParentMaxIterations(): number {
     const n = Number(raw);
     if (Number.isFinite(n) && n >= 8 && n <= 80) return Math.floor(n);
   }
-  return 32;
+  return 48;
 }
 const HOME_PARENT_MAX_ITERATIONS = resolveParentMaxIterations();
+
+/** Fail-closed default for schedule / unattended agentTurn when maxToolRounds omitted. */
+const HOME_SCHEDULE_MAX_TOOL_ROUNDS = 5;
+
+/** Clamp schedule agentTurn maxToolRounds to 1…HOME_SCHEDULE_MAX_TOOL_ROUNDS. */
+export function clampScheduleMaxToolRounds(n: number | undefined): number {
+  if (typeof n === "number" && Number.isFinite(n)) {
+    return Math.max(1, Math.min(HOME_SCHEDULE_MAX_TOOL_ROUNDS, Math.floor(n)));
+  }
+  return HOME_SCHEDULE_MAX_TOOL_ROUNDS;
+}
+
+/** Clamp interactive parent maxIterations to 1…80 (env override band). */
+export function clampParentMaxIterations(n: number): number {
+  if (!Number.isFinite(n)) return HOME_PARENT_MAX_ITERATIONS;
+  return Math.min(80, Math.max(1, Math.floor(n)));
+}
 
 /** Flexible args — Home tools validate further inside dispatch. */
 const FlexibleArgs = z.record(z.string(), z.unknown()).default({});
@@ -312,7 +331,7 @@ export function createHomeMeshSubmitter(
         `Capability tag: ${input.capabilityTag}`,
         `Objective: ${input.objective}`,
         `Allowed tools only: ${allowTools.join(", ") || "(none — answer from the objective)"}.`,
-        "Never call task, spawn_helper, exec, ha_*, mqtt_*, or browser.",
+        "Never call task, spawn_helper, exec, ha_*, mqtt_*, mcp__*, or browser.",
         "When you need a tool, emit a ```envoyhome-tools fence with JSON [{tool,args}].",
         "Prefer answering without tools when possible.",
       ]
@@ -357,4 +376,5 @@ export {
   HOME_CHILD_DEADLINE_MS,
   HOME_CHILD_MAX_ITERATIONS,
   HOME_PARENT_MAX_ITERATIONS,
+  HOME_SCHEDULE_MAX_TOOL_ROUNDS,
 };

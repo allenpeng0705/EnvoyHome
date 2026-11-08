@@ -131,7 +131,7 @@ function connect() {
 }
 
 const KNOWN_TOOLS =
-  "schedule|skills_list|skill_view|skill_propose|ask_user|web_search|write_file|read_file|edit_file|apply_patch|list_dir|search_files|export_document|extract_document|knowledge_search|knowyou_search|memory_recall|memory_remember|session_search|exec|http_fetch|ha_[a-z_]+|mqtt_[a-z_]+";
+  "schedule|skills_list|skill_view|skill_propose|ask_user|session_plan|web_search|write_file|read_file|edit_file|apply_patch|list_dir|search_files|export_document|extract_document|knowledge_search|knowyou_search|memory_recall|memory_remember|session_search|exec|http_fetch|ha_[a-z_]+|mqtt_[a-z_]+";
 
 async function applySetupSeedExports(accountId, setup) {
   const rows = setup?.seedExports;
@@ -184,10 +184,18 @@ function collectToolNames(eventsSlice) {
   if (/web_search|"provider"\s*:\s*"(duckduckgo|brave|tavily)"/i.test(blob)) {
     names.add("web_search");
   }
-  if (/"action"\s*:\s*"(navigate|snapshot|text|act)"|browser_control|"targetId"/i.test(blob)) {
+  if (
+    /"action"\s*:\s*"(navigate|snapshot|text|act|propose_form|wait|press)"|browser_control|"targetId"/i.test(
+      blob,
+    )
+  ) {
+    names.add("browser");
+  }
+  if (/propose_form|browser_form|selection"\s*:\s*"form"/i.test(blob)) {
     names.add("browser");
   }
   if (/ask_user|choice-needed|home:choice/i.test(blob)) names.add("ask_user");
+  if (/session_plan|"home:session-plan"/i.test(blob)) names.add("session_plan");
   if (/list_dir|"entries"\s*:\s*\[/i.test(blob)) names.add("list_dir");
   if (/read_file/i.test(blob)) names.add("read_file");
   if (/knowledge_search/i.test(blob)) names.add("knowledge_search");
@@ -288,6 +296,61 @@ async function applySetupDemoHa(client, accountId, setup) {
   }
 }
 
+/** Enable managed browser for live form / navigate cases (Owner-scope). */
+async function applySetupBrowser(client, setup) {
+  if (setup?.browserEnabled !== true && setup?.browserEnabled !== false) return;
+  const res = await client.rpc(
+    "home.setBrowserControlConfig",
+    { enabled: setup.browserEnabled === true },
+    30_000,
+  );
+  if (res?.error) {
+    throw new Error(`setBrowserControlConfig: ${JSON.stringify(res.error)}`);
+  }
+}
+
+/** Build fieldValues for a §9.5g.3 form choice from liveAnswer.formByKind / formDefault. */
+function fieldValuesForFormChoice(choice, liveAnswer) {
+  const fields = Array.isArray(choice.fields) ? choice.fields : [];
+  /** @type {Record<string, string|boolean>} */
+  const fieldValues = {};
+  const byKind =
+    liveAnswer.formByKind && typeof liveAnswer.formByKind === "object"
+      ? liveAnswer.formByKind
+      : {};
+  const formDefault =
+    typeof liveAnswer.formDefault === "string"
+      ? liveAnswer.formDefault
+      : typeof liveAnswer.textFallback === "string"
+        ? liveAnswer.textFallback
+        : "eval";
+  for (const f of fields) {
+    if (!f || typeof f !== "object") continue;
+    const id = typeof f.id === "string" ? f.id : "";
+    if (!id) continue;
+    const kind = typeof f.kind === "string" ? f.kind : "text";
+    if (Object.prototype.hasOwnProperty.call(byKind, kind)) {
+      fieldValues[id] = /** @type {string|boolean} */ (byKind[kind]);
+      continue;
+    }
+    if (kind === "checkbox") {
+      fieldValues[id] = false;
+      continue;
+    }
+    if (kind === "password" || kind === "otp") {
+      fieldValues[id] =
+        typeof byKind.password === "string" ? byKind.password : "eval-secret";
+      continue;
+    }
+    if (kind === "select" && Array.isArray(f.options) && f.options[0]?.value != null) {
+      fieldValues[id] = String(f.options[0].value);
+      continue;
+    }
+    fieldValues[id] = formDefault;
+  }
+  return fieldValues;
+}
+
 /** Optional live policy override (tool|auto|off) — Knowledge-RAG inject defaults. */
 async function applySetupKnowledgePolicy(client, accountId, setup) {
   const pol = setup?.knowledgePolicy;
@@ -358,17 +421,21 @@ if (enabled.length === 0) {
 await client.rpc("home.subscribe", {
   events: [
     "home:turn-finished",
+    "home:turn-started",
     "home:turn-delta",
     "home:approval-needed",
     "home:choice-needed",
+    "home:session-plan",
   ],
 });
 // Some hosts also accept Mesh-style `on` registrations.
 for (const ev of [
   "home:turn-finished",
+  "home:turn-started",
   "home:turn-delta",
   "home:approval-needed",
   "home:choice-needed",
+  "home:session-plan",
 ]) {
   await client.rpc("on", { event: ev }, 5_000).catch(() => undefined);
 }
@@ -386,6 +453,7 @@ for (const c of cases) {
     await applySetupReindexKnowledge(client, ACCOUNT, c.setup);
     await applySetupSeedKnowYou(client, ACCOUNT, c.setup);
     await applySetupDemoHa(client, ACCOUNT, c.setup);
+    await applySetupBrowser(client, c.setup);
   } catch (err) {
     fail++;
     console.log(`FAIL ${c.id}  seed: ${err instanceof Error ? err.message : String(err)}`);
@@ -442,75 +510,159 @@ for (const c of cases) {
   }
   const turnId = sent.result?.turnId;
   const liveAnswer = c.liveAnswer && typeof c.liveAnswer === "object" ? c.liveAnswer : null;
+  /** Cap follow-up turns after session_plan Implement / approvals (P2-E4). */
+  const MAX_FOLLOWUP_TURNS = 3;
+  const QUIET_MS = 1_500;
   try {
-    // Poll events: optionally auto-answer ask_user choices, then require turn-finished.
+    // Poll: answer choices/approvals; wait for first turn-finished; then drain
+    // follow-up turns started by Implement (session_plan does not park the turn).
     const deadline = Date.now() + 180_000;
     const answeredIds = new Set();
-    let finished = false;
-    while (!finished && Date.now() < deadline) {
-      const sliceNow = client.events.slice(before);
-      const done = sliceNow.find(
-        (e) =>
-          e.event === "home:turn-finished" &&
-          (!turnId || e.data?.turnId === turnId || e.data?.sessionId === sessionId),
-      );
-      if (done) {
-        finished = true;
-        break;
-      }
-      if (liveAnswer) {
-        for (const e of sliceNow) {
-          if (e.event === "home:choice-needed") {
-            const choice = e.data ?? {};
-            const choiceId = choice.id;
-            if (!choiceId || answeredIds.has(`choice:${choiceId}`)) continue;
-            if (sessionId && choice.sessionId && choice.sessionId !== sessionId) continue;
-            answeredIds.add(`choice:${choiceId}`);
-            const opts = Array.isArray(choice.options) ? choice.options : [];
+    const finishedTurnIds = new Set();
+    let firstFinished = false;
+    let followUps = 0;
+    let quietSince = 0;
+
+    const sessionEvent = (e) =>
+      !sessionId || !e.data?.sessionId || e.data.sessionId === sessionId;
+
+    const answerPending = async (sliceNow) => {
+      if (!liveAnswer) return;
+      for (const e of sliceNow) {
+        if (!sessionEvent(e)) continue;
+        if (e.event === "home:choice-needed") {
+          const choice = e.data ?? {};
+          const choiceId = choice.id;
+          if (!choiceId || answeredIds.has(`choice:${choiceId}`)) continue;
+          answeredIds.add(`choice:${choiceId}`);
+          const params = { accountId: ACCOUNT, id: String(choiceId) };
+          // §9.5g.3 — dynamic form card: Submit fieldValues (never echo secrets in logs).
+          if (
+            choice.selection === "form" ||
+            choice.purpose === "browser_form"
+          ) {
+            const fieldValues = fieldValuesForFormChoice(choice, liveAnswer);
+            if (Object.keys(fieldValues).length === 0) {
+              params.cancel = true;
+            } else {
+              params.fieldValues = fieldValues;
+            }
+            await client.rpc("home.answerChoice", params, 30_000);
+            quietSince = 0;
+            continue;
+          }
+          const opts = Array.isArray(choice.options) ? choice.options : [];
+          let option;
+          if (typeof liveAnswer.preferOptionId === "string") {
+            option = opts.find((o) => String(o?.id) === liveAnswer.preferOptionId);
+          }
+          if (!option && choice.purpose === "session_plan") {
+            option = opts.find((o) => String(o?.id) === "implement") ?? opts[0];
+          }
+          if (!option) {
             const preferIdx =
               typeof liveAnswer.preferOptionIndex === "number"
                 ? liveAnswer.preferOptionIndex
                 : 0;
-            const option = opts[preferIdx] ?? opts[0];
-            const params = { accountId: ACCOUNT, id: String(choiceId) };
-            if (option?.id) params.optionId = String(option.id);
-            else if (typeof liveAnswer.textFallback === "string") {
-              params.text = liveAnswer.textFallback;
-            } else if (typeof liveAnswer.text === "string") {
-              params.text = liveAnswer.text;
-            } else {
-              params.text = "tomorrow at 9:00";
-            }
-            await client.rpc("home.answerChoice", params, 30_000);
-            continue;
+            option = opts[preferIdx] ?? opts[0];
           }
-          if (e.event !== "home:approval-needed") continue;
-          const appr = e.data ?? {};
-          const apprId = appr.id;
-          if (!apprId || answeredIds.has(`appr:${apprId}`)) continue;
-          if (sessionId && appr.sessionId && appr.sessionId !== sessionId) continue;
-          const digest = appr.argsDigest;
-          if (typeof digest !== "string" || !digest) continue;
-          answeredIds.add(`appr:${apprId}`);
-          const decision =
-            liveAnswer.approvalDecision === "allow" || liveAnswer.decision === "allow"
-              ? "allow"
-              : "deny";
-          await client.rpc(
-            "home.answerApproval",
-            {
-              id: String(apprId),
-              decision,
-              scope: "once",
-              argsDigest: digest,
-            },
-            30_000,
-          );
+          if (option?.id) params.optionId = String(option.id);
+          else if (typeof liveAnswer.textFallback === "string") {
+            params.text = liveAnswer.textFallback;
+          } else if (typeof liveAnswer.text === "string") {
+            params.text = liveAnswer.text;
+          } else {
+            params.text = "tomorrow at 9:00";
+          }
+          await client.rpc("home.answerChoice", params, 30_000);
+          quietSince = 0;
+          continue;
+        }
+        if (e.event !== "home:approval-needed") continue;
+        const appr = e.data ?? {};
+        const apprId = appr.id;
+        if (!apprId || answeredIds.has(`appr:${apprId}`)) continue;
+        const digest = appr.argsDigest;
+        if (typeof digest !== "string" || !digest) continue;
+        answeredIds.add(`appr:${apprId}`);
+        const decision =
+          liveAnswer.approvalDecision === "allow" || liveAnswer.decision === "allow"
+            ? "allow"
+            : "deny";
+        await client.rpc(
+          "home.answerApproval",
+          {
+            id: String(apprId),
+            decision,
+            scope: "once",
+            argsDigest: digest,
+          },
+          30_000,
+        );
+        quietSince = 0;
+      }
+    };
+
+    while (Date.now() < deadline) {
+      const sliceNow = client.events.slice(before);
+      await answerPending(sliceNow);
+
+      for (const e of sliceNow) {
+        if (e.event !== "home:turn-finished" || !sessionEvent(e)) continue;
+        const tid = e.data?.turnId ? String(e.data.turnId) : "";
+        const key = tid || `idx:${client.events.indexOf(e)}`;
+        if (finishedTurnIds.has(key)) continue;
+        if (!firstFinished && turnId && tid && tid !== String(turnId)) continue;
+        finishedTurnIds.add(key);
+        if (!firstFinished) {
+          firstFinished = true;
+          quietSince = Date.now();
+        } else {
+          followUps += 1;
+          quietSince = Date.now();
         }
       }
+
+      if (!firstFinished) {
+        await new Promise((r) => setTimeout(r, 200));
+        continue;
+      }
+
+      // No liveAnswer → single-turn soft eval (legacy).
+      if (!liveAnswer) break;
+
+      const pendingChoice = sliceNow.some(
+        (e) =>
+          e.event === "home:choice-needed" &&
+          sessionEvent(e) &&
+          e.data?.id &&
+          !answeredIds.has(`choice:${e.data.id}`),
+      );
+      const pendingAppr = sliceNow.some(
+        (e) =>
+          e.event === "home:approval-needed" &&
+          sessionEvent(e) &&
+          e.data?.id &&
+          !answeredIds.has(`appr:${e.data.id}`),
+      );
+      const inFlight = sliceNow.some(
+        (e) =>
+          e.event === "home:turn-started" &&
+          sessionEvent(e) &&
+          e.data?.turnId &&
+          !finishedTurnIds.has(String(e.data.turnId)),
+      );
+
+      if (pendingChoice || pendingAppr || inFlight) {
+        quietSince = Date.now();
+        await new Promise((r) => setTimeout(r, 200));
+        continue;
+      }
+      if (followUps >= MAX_FOLLOWUP_TURNS) break;
+      if (quietSince && Date.now() - quietSince >= QUIET_MS) break;
       await new Promise((r) => setTimeout(r, 200));
     }
-    if (!finished) throw new Error("waitEvent timeout home:turn-finished");
+    if (!firstFinished) throw new Error("waitEvent timeout home:turn-finished");
   } catch (err) {
     fail++;
     console.log(`FAIL ${c.id}  ${err instanceof Error ? err.message : String(err)}`);
@@ -519,17 +671,21 @@ for (const c of cases) {
 
   const slice = client.events.slice(before);
   const toolNames = collectToolNames(slice);
+  const eventNames = [...new Set(slice.map((e) => e.event).filter(Boolean))];
   const transcript = await client.rpc("home.getTranscript", {
     accountId: ACCOUNT,
     sessionId,
   });
   const messages = transcript.result?.messages || [];
-  const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
-  const assistantText = String(lastAssistant?.content || lastAssistant?.text || "");
+  const assistantChunks = messages
+    .filter((m) => m.role === "assistant")
+    .map((m) => String(m.content || m.text || ""));
+  const assistantText = assistantChunks.join("\n");
 
   const verdict = softLiveExpect({
     toolNames,
     assistantText,
+    eventNames,
     expect: c.expect ?? {},
   });
   if (verdict.ok) {

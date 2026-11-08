@@ -422,6 +422,7 @@ class EnvoyHomeSession {
     String? optionId,
     List<String>? optionIds,
     String? text,
+    Map<String, dynamic>? fieldValues,
     bool cancel = false,
   }) {
     final params = <String, dynamic>{
@@ -439,6 +440,9 @@ class EnvoyHomeSession {
     }
     if (text != null && text.trim().isNotEmpty) {
       params['text'] = text.trim();
+    }
+    if (fieldValues != null && fieldValues.isNotEmpty) {
+      params['fieldValues'] = fieldValues;
     }
     return _call('home.answerChoice', params);
   }
@@ -653,7 +657,31 @@ class EnvoyHomeSession {
     return _call('home.setWebSearchConfig', params);
   }
 
-  /// Design §9.5g — household browser control (Owner-scope).
+  /// Design §9.5h — Owner MCP servers (Connections → MCP).
+  Future<Map<String, dynamic>> listMcpServers() =>
+      _call('home.listMcpServers', {});
+
+  Future<Map<String, dynamic>> upsertMcpServer(Map<String, dynamic> params) =>
+      _call('home.upsertMcpServer', params);
+
+  Future<Map<String, dynamic>> removeMcpServer({required String id}) =>
+      _call('home.removeMcpServer', {'id': id});
+
+  Future<Map<String, dynamic>> setMcpServerEnabled({
+    required String id,
+    required bool enabled,
+  }) =>
+      _call('home.setMcpServerEnabled', {'id': id, 'enabled': enabled});
+
+  Future<Map<String, dynamic>> testMcpServer({required String id}) =>
+      _call('home.testMcpServer', {'id': id});
+
+  Future<Map<String, dynamic>> listMcpTools({String? serverId}) {
+    final params = <String, dynamic>{};
+    if (serverId != null) params['serverId'] = serverId;
+    return _call('home.listMcpTools', params);
+  }
+
   Future<Map<String, dynamic>> getBrowserControlConfig() =>
       _call('home.getBrowserControlConfig', {});
 

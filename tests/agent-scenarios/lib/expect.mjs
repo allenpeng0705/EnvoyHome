@@ -27,16 +27,41 @@ export function objectIncludes(actual, partial) {
 
 /**
  * Soft live assert: pass if toolNames hit expectedTools OR honestyMatching matches text.
- * @param {{ toolNames?: string[]; assistantText?: string; expect: Record<string, unknown> }} input
+ * @param {{
+ *   toolNames?: string[];
+ *   assistantText?: string;
+ *   eventNames?: string[];
+ *   expect: Record<string, unknown>;
+ * }} input
  * @returns {{ ok: boolean; reason: string }}
  */
 export function softLiveExpect(input) {
   const { expect: exp } = input;
   const tools = input.toolNames ?? [];
   const text = input.assistantText ?? "";
+  const events = input.eventNames ?? [];
   const wantTools = /** @type {string[]|undefined} */ (exp.liveTools ?? exp.tools);
+  const forbidTools = /** @type {string[]|undefined} */ (exp.forbidTools);
   const honesty = /** @type {string|string[]|undefined} */ (exp.honestyMatching ?? exp.liveHonesty);
   const requireHonesty = Boolean(exp.requireHonesty || exp.liveRequireHonesty);
+  const wantSessionPlan = Boolean(exp.liveSessionPlan);
+
+  if (Array.isArray(forbidTools) && forbidTools.length > 0) {
+    const hit = forbidTools.filter((t) => tools.includes(t));
+    if (hit.length > 0) {
+      return { ok: false, reason: `forbidTools hit: ${hit.join(",")}` };
+    }
+  }
+
+  if (wantSessionPlan) {
+    const sawPlan = events.includes("home:session-plan");
+    if (!sawPlan && !tools.includes("session_plan")) {
+      return {
+        ok: false,
+        reason: "liveSessionPlan: no home:session-plan event and no session_plan tool",
+      };
+    }
+  }
 
   const toolsHit = Boolean(wantTools?.length && wantTools.some((t) => tools.includes(t)));
   const honestyHit = honesty != null && matchesAny(text, honesty);
@@ -63,6 +88,9 @@ export function softLiveExpect(input) {
 
   if (toolsHit) return { ok: true, reason: `tools: ${tools.join(",") || "(none)"}` };
   if (honestyHit) return { ok: true, reason: "honesty phrase" };
+  if (wantSessionPlan && (events.includes("home:session-plan") || tools.includes("session_plan"))) {
+    return { ok: true, reason: "session-plan event/tool" };
+  }
   if (wantTools?.length || honesty != null) {
     return {
       ok: false,

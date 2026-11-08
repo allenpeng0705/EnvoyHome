@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import '../l10n/app_localizations.dart';
 import '../state/session_controller.dart';
 
-/// Connections: Pairing | HA | MQTT | Channels | Web search | Browser.
+/// Connections: Pairing | HA | MQTT | Channels | Web search | Browser | MCP.
 class ConnectionsScreen extends StatelessWidget {
   const ConnectionsScreen({super.key, required this.session});
 
@@ -16,7 +16,7 @@ class ConnectionsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return DefaultTabController(
-      length: 6,
+      length: 7,
       child: Scaffold(
         appBar: AppBar(
           title: Text(l10n.navConnections),
@@ -29,6 +29,7 @@ class ConnectionsScreen extends StatelessWidget {
               Tab(text: l10n.connTabChannels),
               Tab(text: l10n.connTabWebSearch),
               Tab(text: l10n.connTabBrowser),
+              Tab(text: l10n.connTabMcp),
             ],
           ),
         ),
@@ -40,6 +41,7 @@ class ConnectionsScreen extends StatelessWidget {
             _ImChannelsTab(session: session),
             _WebSearchTab(session: session),
             _BrowserControlTab(session: session),
+            _McpServersTab(session: session),
           ],
         ),
       ),
@@ -1345,6 +1347,306 @@ class _BrowserControlTabState extends State<_BrowserControlTab> {
           child: Text(l10n.browserControlSave),
         ),
         ], // owner-only form
+      ],
+    );
+  }
+}
+
+/// Design §9.5h — Owner MCP servers: list, add stdio/http, Test, enable, remove.
+class _McpServersTab extends StatefulWidget {
+  const _McpServersTab({required this.session});
+
+  final SessionController session;
+
+  @override
+  State<_McpServersTab> createState() => _McpServersTabState();
+}
+
+class _McpServersTabState extends State<_McpServersTab> {
+  List<Map<String, dynamic>> _servers = [];
+  String? _error;
+  String? _testResult;
+  bool _busy = false;
+  final _labelCtrl = TextEditingController();
+  final _commandCtrl = TextEditingController();
+  final _argsCtrl = TextEditingController();
+  final _urlCtrl = TextEditingController();
+  final _envCtrl = TextEditingController();
+  final _authCtrl = TextEditingController();
+  String _transport = 'stdio';
+
+  @override
+  void initState() {
+    super.initState();
+    _reload();
+  }
+
+  @override
+  void dispose() {
+    _labelCtrl.dispose();
+    _commandCtrl.dispose();
+    _argsCtrl.dispose();
+    _urlCtrl.dispose();
+    _envCtrl.dispose();
+    _authCtrl.dispose();
+    super.dispose();
+  }
+
+  /// Parse `KEY=value` lines into an env map (blank → omit).
+  Map<String, String>? _parseEnvLines(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+    final out = <String, String>{};
+    for (final line in trimmed.split(RegExp(r'[\r\n]+'))) {
+      final t = line.trim();
+      if (t.isEmpty || t.startsWith('#')) continue;
+      final eq = t.indexOf('=');
+      if (eq <= 0) continue;
+      final k = t.substring(0, eq).trim();
+      final v = t.substring(eq + 1);
+      if (k.isEmpty) continue;
+      out[k] = v;
+    }
+    return out.isEmpty ? null : out;
+  }
+
+  List<String>? _parseArgs(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return null;
+    return trimmed
+        .split(RegExp(r'\s+'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+  }
+
+  Future<void> _reload() async {
+    final home = widget.session.home;
+    if (home == null) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final res = await home.listMcpServers();
+      final raw = res['servers'];
+      final list = raw is List
+          ? raw
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList()
+          : <Map<String, dynamic>>[];
+      if (mounted) {
+        setState(() {
+          _servers = list;
+          _busy = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _busy = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _add() async {
+    final home = widget.session.home;
+    if (home == null) return;
+    final label = _labelCtrl.text.trim();
+    if (label.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final params = <String, dynamic>{
+        'label': label,
+        'transport': _transport,
+      };
+      if (_transport == 'stdio') {
+        params['command'] = _commandCtrl.text.trim();
+        final args = _parseArgs(_argsCtrl.text);
+        if (args != null) params['args'] = args;
+      } else {
+        params['url'] = _urlCtrl.text.trim();
+        final auth = _authCtrl.text.trim();
+        if (auth.isNotEmpty) params['authToken'] = auth;
+      }
+      final env = _parseEnvLines(_envCtrl.text);
+      if (env != null) params['env'] = env;
+      await home.upsertMcpServer(params);
+      _labelCtrl.clear();
+      _commandCtrl.clear();
+      _argsCtrl.clear();
+      _urlCtrl.clear();
+      _envCtrl.clear();
+      _authCtrl.clear();
+      await _reload();
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _test(String id) async {
+    final home = widget.session.home;
+    if (home == null) return;
+    setState(() {
+      _busy = true;
+      _testResult = null;
+    });
+    try {
+      final res = await home.testMcpServer(id: id);
+      final ok = res['ok'] == true;
+      final tools = res['tools'];
+      final n = tools is List ? tools.length : 0;
+      final err = res['error']?.toString();
+      setState(() {
+        _testResult = ok
+            ? 'OK — $n tool(s). Enable when ready.'
+            : 'Failed: ${err ?? 'unknown'}';
+      });
+      await _reload();
+    } catch (e) {
+      if (mounted) setState(() => _testResult = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text(
+          'Add any MCP server you choose. Test connection before enable. '
+          'Stdio commands run as the daemon host user. Approvals still gate tool calls.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        ],
+        if (_testResult != null) ...[
+          const SizedBox(height: 8),
+          Text(_testResult!),
+        ],
+        const SizedBox(height: 12),
+        ..._servers.map((s) {
+          final id = s['id']?.toString() ?? '';
+          final label = s['label']?.toString() ?? id;
+          final ready = s['ready'] == true;
+          final enabled = s['enabled'] == true;
+          final transport = s['transport']?.toString() ?? '';
+          return Card(
+            child: ListTile(
+              title: Text(label),
+              subtitle: Text(
+                '$transport · ${ready ? 'Ready' : 'Not tested'} · '
+                '${s['toolCount'] ?? 0} tools',
+              ),
+              trailing: Wrap(
+                spacing: 4,
+                children: [
+                  TextButton(
+                    onPressed: _busy ? null : () => _test(id),
+                    child: const Text('Test'),
+                  ),
+                  Switch(
+                    value: enabled,
+                    onChanged: _busy || !ready
+                        ? null
+                        : (v) async {
+                            final home = widget.session.home;
+                            if (home == null) return;
+                            try {
+                              await home.setMcpServerEnabled(id: id, enabled: v);
+                              await _reload();
+                            } catch (e) {
+                              if (mounted) setState(() => _error = e.toString());
+                            }
+                          },
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: _busy
+                        ? null
+                        : () async {
+                            final home = widget.session.home;
+                            if (home == null) return;
+                            await home.removeMcpServer(id: id);
+                            await _reload();
+                          },
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+        const Divider(),
+        Text('Add server', style: Theme.of(context).textTheme.titleMedium),
+        DropdownButton<String>(
+          value: _transport,
+          items: const [
+            DropdownMenuItem(value: 'stdio', child: Text('stdio')),
+            DropdownMenuItem(value: 'http', child: Text('http')),
+            DropdownMenuItem(value: 'sse', child: Text('sse')),
+          ],
+          onChanged: _busy
+              ? null
+              : (v) {
+                  if (v != null) setState(() => _transport = v);
+                },
+        ),
+        TextField(
+          controller: _labelCtrl,
+          decoration: const InputDecoration(labelText: 'Label'),
+          enabled: !_busy,
+        ),
+        if (_transport == 'stdio') ...[
+          TextField(
+            controller: _commandCtrl,
+            decoration: const InputDecoration(labelText: 'Command'),
+            enabled: !_busy,
+          ),
+          TextField(
+            controller: _argsCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Args (space-separated, optional)',
+            ),
+            enabled: !_busy,
+          ),
+        ] else ...[
+          TextField(
+            controller: _urlCtrl,
+            decoration: const InputDecoration(labelText: 'URL'),
+            enabled: !_busy,
+          ),
+          TextField(
+            controller: _authCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Auth token (optional)',
+            ),
+            obscureText: true,
+            enabled: !_busy,
+          ),
+        ],
+        TextField(
+          controller: _envCtrl,
+          decoration: const InputDecoration(
+            labelText: 'Env (KEY=value per line, optional)',
+          ),
+          minLines: 2,
+          maxLines: 6,
+          enabled: !_busy,
+        ),
+        const SizedBox(height: 12),
+        FilledButton(
+          onPressed: _busy ? null : _add,
+          child: const Text('Save'),
+        ),
       ],
     );
   }

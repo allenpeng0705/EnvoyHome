@@ -167,7 +167,7 @@ const BUILTIN_META: Record<
   },
   browser: {
     summary:
-      "Control a managed Chromium tab (navigate / snapshot / act) — Design §9.5g",
+      "Control a managed Chromium tab (navigate / snapshot / act / propose_form / propose_handoff) — Design §9.5g / §9.5i",
     sampleArgs: { action: "navigate", url: "https://example.com/" },
   },
   schedule: {
@@ -996,6 +996,12 @@ export async function runExtendedWorkflowTool(input: {
     }
     if (!input.accountId) {
       throw new Error("envoyhome.bad_params: accountId required for browser");
+    }
+    // Design §9.5g.3 — apply_form is never agent-callable (secrets one-shot via form card).
+    if (input.args.action === "apply_form") {
+      throw new Error(
+        "envoyhome.bad_params: apply_form is daemon-internal — use propose_form + form card",
+      );
     }
     return input.browserControl.runTool(input.args, {
       accountId: input.accountId,

@@ -10,6 +10,7 @@ import {
   assertBrowserNavigateUrl,
   assertPersonalCdpEndpoint,
   browserDefaultProfileForOrigin,
+  detectBrowserBlocked,
   isElevatedProfile,
 } from "../dist/browser-control.js";
 import { __resetBrowserSerpGatesForTests } from "../dist/web-search-browser.js";
@@ -38,19 +39,25 @@ async function fresh() {
   return { svc, paths, stateDir };
 }
 
-function mockPage(url = "https://example.com/") {
+function mockPage(url = "https://example.com/", opts?: { title?: string; body?: string }) {
   let current = url;
-  const attrs = new Map<string, string>();
+  const stampedRefs = new Set<string>();
+  const title = opts?.title ?? "Example";
+  const body = opts?.body ?? "Hello body text";
   return {
     goto: async (u: string) => {
       current = u;
     },
     url: () => current,
-    title: async () => "Example",
+    title: async () => title,
     content: async () => "<html></html>",
-    innerText: async () => "Hello body text",
+    innerText: async () => body,
     locator: (sel: string) => ({
-      count: async () => (sel.includes("data-eh-ref") ? 1 : 0),
+      count: async () => {
+        const m = /data-eh-ref="([^"]+)"/.exec(sel);
+        if (m) return stampedRefs.has(m[1]!) ? 1 : 0;
+        return sel === "body" ? 1 : 0;
+      },
       nth: () => ({
         click: async () => undefined,
         fill: async () => undefined,
@@ -60,30 +67,45 @@ function mockPage(url = "https://example.com/") {
         screenshot: async () => Buffer.from([]),
       }),
     }),
-    evaluate: async <T>(fn: () => T) => {
-      // Simulate DOM query for snapshot
-      const fakeDoc = {
-        querySelectorAll: () => [
-          {
-            setAttribute: (k: string, v: string) => attrs.set(k, v),
-            innerText: "Go",
-            tagName: "BUTTON",
-            getAttribute: () => null,
-          },
-        ],
+    evaluate: async <T>(
+      fn: (() => T) | ((arg: unknown) => T),
+      arg?: unknown,
+    ) => {
+      stampedRefs.clear();
+      const fakeEl = {
+        setAttribute: (k: string, v: string) => {
+          if (k === "data-eh-ref") stampedRefs.add(v);
+        },
+        innerText: "Go",
+        tagName: "BUTTON",
+        getAttribute: (name: string) => (name === "role" ? "button" : null),
+        getBoundingClientRect: () => ({ width: 10, height: 10 }),
       };
-      // page.evaluate runs in browser; our mock invokes the function in Node —
-      // the real implementation uses document. Provide a shim.
-      const orig = (globalThis as { document?: unknown }).document;
+      const fakeDoc = {
+        querySelectorAll: () => [fakeEl],
+      };
+      const fakeWin = {
+        getComputedStyle: () => ({ display: "block", visibility: "visible" }),
+      };
+      const origDoc = (globalThis as { document?: unknown }).document;
+      const origWin = (globalThis as { window?: unknown }).window;
       (globalThis as { document: unknown }).document = fakeDoc;
+      (globalThis as { window: unknown }).window = fakeWin;
       try {
-        return fn();
+        if (arg !== undefined) return (fn as (a: unknown) => T)(arg);
+        return (fn as () => T)();
       } finally {
-        if (orig === undefined) delete (globalThis as { document?: unknown }).document;
-        else (globalThis as { document: unknown }).document = orig;
+        if (origDoc === undefined) delete (globalThis as { document?: unknown }).document;
+        else (globalThis as { document: unknown }).document = origDoc;
+        if (origWin === undefined) delete (globalThis as { window?: unknown }).window;
+        else (globalThis as { window: unknown }).window = origWin;
       }
     },
     screenshot: async () => Buffer.from([1, 2, 3]),
+    waitForLoadState: async () => undefined,
+    waitForSelector: async () => undefined,
+    waitForTimeout: async () => undefined,
+    keyboard: { press: async () => undefined },
     close: async () => undefined,
   };
 }
@@ -180,20 +202,28 @@ test("V-OUT-8: navigate + snapshot + act with mock page", async () => {
   ) as {
     action: string;
     targetId: string;
+    snapshotId: string;
     snapshot: { elements: Array<{ ref: string }> };
   };
   assert.equal(nav.action, "navigate");
   assert.ok(nav.targetId);
+  assert.ok(nav.snapshotId);
   assert.ok(nav.snapshot.elements.length >= 1);
 
   __resetBrowserSerpGatesForTests();
   const act = JSON.parse(
     await svc.runTool(
-      { action: "act", kind: "click", ref: nav.snapshot.elements[0]!.ref },
+      {
+        action: "act",
+        kind: "click",
+        ref: nav.snapshot.elements[0]!.ref,
+        snapshotId: nav.snapshotId,
+      },
       { accountId: "alice" },
     ),
-  ) as { ok?: boolean; error?: string };
+  ) as { ok?: boolean; error?: string; verify?: { mode?: string } };
   assert.equal(act.ok, true);
+  assert.equal(act.verify?.mode, "text");
 
   __resetBrowserSerpGatesForTests();
   const text = JSON.parse(
@@ -428,4 +458,315 @@ test("V-CRON-12: schedule/unattended forces managed default; elevated refused", 
   // Forced managed default (TurnService) is the only schedule-safe profile.
   assert.equal(browserDefaultProfileForOrigin("unattended", "personal"), "managed");
   assert.equal(browserDefaultProfileForOrigin("unattended", svc.resolveProfile({})), "managed");
+});
+
+test("V-OUT-11: act without matching snapshotId → stale_snapshot; no side effect", async () => {
+  __resetBrowserSerpGatesForTests();
+  const { svc } = await fresh();
+  await svc.setConfig({ enabled: true });
+  let clicks = 0;
+  svc.pageFactory = async () => {
+    const p = mockPage() as ReturnType<typeof mockPage> & {
+      locator: (sel: string) => {
+        count(): Promise<number>;
+        nth: () => { click: () => Promise<void> };
+      };
+    };
+    const base = p.locator;
+    p.locator = (sel: string) => {
+      const loc = base(sel);
+      return {
+        ...loc,
+        nth: () => ({
+          ...loc.nth(),
+          click: async () => {
+            clicks += 1;
+          },
+        }),
+      };
+    };
+    return p as never;
+  };
+  const nav = JSON.parse(
+    await svc.runTool(
+      { action: "navigate", url: "https://example.com/" },
+      { accountId: "alice" },
+    ),
+  ) as { snapshotId: string; snapshot: { elements: Array<{ ref: string }> } };
+  __resetBrowserSerpGatesForTests();
+  const missing = JSON.parse(
+    await svc.runTool(
+      { action: "act", kind: "click", ref: nav.snapshot.elements[0]!.ref },
+      { accountId: "alice" },
+    ),
+  ) as { error?: string };
+  assert.equal(missing.error, "stale_snapshot");
+  assert.equal(clicks, 0);
+  __resetBrowserSerpGatesForTests();
+  const wrong = JSON.parse(
+    await svc.runTool(
+      {
+        action: "act",
+        kind: "click",
+        ref: nav.snapshot.elements[0]!.ref,
+        snapshotId: "s-old",
+      },
+      { accountId: "alice" },
+    ),
+  ) as { error?: string };
+  assert.equal(wrong.error, "stale_snapshot");
+  assert.equal(clicks, 0);
+  void nav.snapshotId;
+});
+
+test("V-OUT-12: stale_ref + verify=text payload on success", async () => {
+  __resetBrowserSerpGatesForTests();
+  const { svc } = await fresh();
+  await svc.setConfig({ enabled: true });
+  svc.pageFactory = async () => mockPage() as never;
+  const nav = JSON.parse(
+    await svc.runTool(
+      { action: "navigate", url: "https://example.com/" },
+      { accountId: "alice" },
+    ),
+  ) as { snapshotId: string };
+  __resetBrowserSerpGatesForTests();
+  const stale = JSON.parse(
+    await svc.runTool(
+      { action: "act", kind: "click", ref: "999", snapshotId: nav.snapshotId },
+      { accountId: "alice" },
+    ),
+  ) as { error?: string };
+  assert.equal(stale.error, "stale_ref");
+  __resetBrowserSerpGatesForTests();
+  const snap = JSON.parse(
+    await svc.runTool({ action: "snapshot" }, { accountId: "alice" }),
+  ) as { snapshotId: string; snapshot: { elements: Array<{ ref: string; role?: string }> } };
+  assert.ok(snap.snapshot.elements[0]?.role);
+  __resetBrowserSerpGatesForTests();
+  const ok = JSON.parse(
+    await svc.runTool(
+      {
+        action: "act",
+        kind: "click",
+        ref: snap.snapshot.elements[0]!.ref,
+        snapshotId: snap.snapshotId,
+        verify: "text",
+      },
+      { accountId: "alice" },
+    ),
+  ) as { ok?: boolean; verify?: { mode?: string; text?: string } };
+  assert.equal(ok.ok, true);
+  assert.equal(ok.verify?.mode, "text");
+  assert.match(String(ok.verify?.text ?? ""), /Hello/);
+});
+
+test("V-OUT-13: wait respects ms cap; over-cap refused", async () => {
+  __resetBrowserSerpGatesForTests();
+  const { svc } = await fresh();
+  await svc.setConfig({ enabled: true });
+  svc.pageFactory = async () => mockPage() as never;
+  await svc.runTool(
+    { action: "navigate", url: "https://example.com/" },
+    { accountId: "alice" },
+  );
+  __resetBrowserSerpGatesForTests();
+  await assert.rejects(
+    () =>
+      svc.runTool(
+        { action: "wait", until: "timeout", ms: 20_000 },
+        { accountId: "alice" },
+      ),
+    /15|cap|bad_params/i,
+  );
+  __resetBrowserSerpGatesForTests();
+  const waited = JSON.parse(
+    await svc.runTool(
+      { action: "wait", until: "load", ms: 100 },
+      { accountId: "alice" },
+    ),
+  ) as { ok?: boolean; until?: string };
+  assert.equal(waited.ok, true);
+  assert.equal(waited.until, "load");
+  __resetBrowserSerpGatesForTests();
+  const pressed = JSON.parse(
+    await svc.runTool({ action: "press", key: "Enter" }, { accountId: "alice" }),
+  ) as { ok?: boolean; key?: string };
+  assert.equal(pressed.ok, true);
+  assert.equal(pressed.key, "Enter");
+});
+
+test("V-OUT-14: captcha heuristic returns blocked", async () => {
+  assert.equal(
+    detectBrowserBlocked({
+      url: "https://example.com/",
+      title: "Hi",
+      textSample: "please complete the recaptcha",
+      mode: "act",
+    })?.blocked,
+    "captcha",
+  );
+  // Footer "Sign in" must not hard-block act on normal sites.
+  assert.equal(
+    detectBrowserBlocked({
+      url: "https://shop.example/",
+      title: "Products",
+      textSample: "Welcome. Sign in · Cart · Help",
+      mode: "act",
+    }),
+    null,
+  );
+  assert.equal(
+    detectBrowserBlocked({
+      url: "https://shop.example/login",
+      title: "Sign in",
+      textSample: "Please sign in to continue",
+      mode: "advisory",
+    })?.blocked,
+    "login_wall",
+  );
+  __resetBrowserSerpGatesForTests();
+  const { svc } = await fresh();
+  await svc.setConfig({ enabled: true });
+  svc.pageFactory = async () =>
+    mockPage("https://example.com/challenge", {
+      title: "Just a moment...",
+      body: "Checking your browser before accessing. Cloudflare challenge.",
+    }) as never;
+  const nav = JSON.parse(
+    await svc.runTool(
+      { action: "navigate", url: "https://example.com/challenge" },
+      { accountId: "alice" },
+    ),
+  ) as { blocked?: string; message?: string };
+  assert.ok(nav.blocked === "captcha" || nav.blocked === "challenge");
+  assert.match(String(nav.message ?? ""), /hand off|Owner/i);
+});
+
+test("V-OUT-15: attended default verify=text; unattended default none; screenshot jail", async () => {
+  __resetBrowserSerpGatesForTests();
+  const { svc } = await fresh();
+  await svc.setConfig({ enabled: true, unattendedEnabled: true });
+  svc.pageFactory = async () => mockPage() as never;
+  const nav = JSON.parse(
+    await svc.runTool(
+      { action: "navigate", url: "https://example.com/" },
+      { accountId: "alice", origin: "attended" },
+    ),
+  ) as { snapshotId: string; snapshot: { elements: Array<{ ref: string }> } };
+  __resetBrowserSerpGatesForTests();
+  const attended = JSON.parse(
+    await svc.runTool(
+      {
+        action: "act",
+        kind: "click",
+        ref: nav.snapshot.elements[0]!.ref,
+        snapshotId: nav.snapshotId,
+      },
+      { accountId: "alice", origin: "attended" },
+    ),
+  ) as { verify?: { mode?: string } };
+  assert.equal(attended.verify?.mode, "text");
+
+  __resetBrowserSerpGatesForTests();
+  const snap2 = JSON.parse(
+    await svc.runTool({ action: "snapshot" }, { accountId: "alice", origin: "unattended" }),
+  ) as { snapshotId: string; snapshot: { elements: Array<{ ref: string }> } };
+  __resetBrowserSerpGatesForTests();
+  const unattended = JSON.parse(
+    await svc.runTool(
+      {
+        action: "act",
+        kind: "click",
+        ref: snap2.snapshot.elements[0]!.ref,
+        snapshotId: snap2.snapshotId,
+      },
+      { accountId: "alice", origin: "unattended" },
+    ),
+  ) as { verify?: { mode?: string } };
+  assert.equal(unattended.verify?.mode, "none");
+
+  __resetBrowserSerpGatesForTests();
+  const snap3 = JSON.parse(
+    await svc.runTool({ action: "snapshot" }, { accountId: "alice" }),
+  ) as { snapshotId: string; snapshot: { elements: Array<{ ref: string }> } };
+  __resetBrowserSerpGatesForTests();
+  const shot = JSON.parse(
+    await svc.runTool(
+      {
+        action: "act",
+        kind: "click",
+        ref: snap3.snapshot.elements[0]!.ref,
+        snapshotId: snap3.snapshotId,
+        verify: "screenshot",
+      },
+      { accountId: "alice" },
+    ),
+  ) as { verify?: { mode?: string; path?: string; bytes?: number } };
+  assert.equal(shot.verify?.mode, "screenshot");
+  assert.match(String(shot.verify?.path ?? ""), /^output\/browser\//);
+});
+
+test("P2-G: act with Sign-in footer still ok; snapshot consumed; close clears meta", async () => {
+  __resetBrowserSerpGatesForTests();
+  const { svc } = await fresh();
+  await svc.setConfig({ enabled: true });
+  svc.pageFactory = async () =>
+    mockPage("https://shop.example/", {
+      title: "Shop",
+      body: "Hello. Sign in · Cart. Click Go.",
+    }) as never;
+  const nav = JSON.parse(
+    await svc.runTool(
+      { action: "navigate", url: "https://shop.example/" },
+      { accountId: "alice" },
+    ),
+  ) as {
+    targetId: string;
+    snapshotId: string;
+    blocked?: string;
+    snapshot: { elements: Array<{ ref: string }> };
+  };
+  assert.equal(nav.blocked, undefined);
+  __resetBrowserSerpGatesForTests();
+  const first = JSON.parse(
+    await svc.runTool(
+      {
+        action: "act",
+        kind: "click",
+        ref: nav.snapshot.elements[0]!.ref,
+        snapshotId: nav.snapshotId,
+      },
+      { accountId: "alice" },
+    ),
+  ) as { ok?: boolean; snapshotConsumed?: boolean };
+  assert.equal(first.ok, true);
+  assert.equal(first.snapshotConsumed, true);
+  __resetBrowserSerpGatesForTests();
+  const reuse = JSON.parse(
+    await svc.runTool(
+      {
+        action: "act",
+        kind: "click",
+        ref: nav.snapshot.elements[0]!.ref,
+        snapshotId: nav.snapshotId,
+      },
+      { accountId: "alice" },
+    ),
+  ) as { error?: string };
+  assert.equal(reuse.error, "stale_snapshot");
+  __resetBrowserSerpGatesForTests();
+  await svc.runTool(
+    { action: "close", targetId: nav.targetId },
+    { accountId: "alice" },
+  );
+  __resetBrowserSerpGatesForTests();
+  // New navigate after close — prior snapshotId must not resurrect.
+  const again = JSON.parse(
+    await svc.runTool(
+      { action: "navigate", url: "https://shop.example/p/1" },
+      { accountId: "alice" },
+    ),
+  ) as { snapshotId: string };
+  assert.notEqual(again.snapshotId, nav.snapshotId);
 });
