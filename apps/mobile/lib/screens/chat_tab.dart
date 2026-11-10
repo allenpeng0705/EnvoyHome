@@ -22,6 +22,28 @@ import 'artifact_viewer_screen.dart';
 
 const _kChatAttachMaxFiles = 8;
 const _kChatAttachMaxBytes = 8 * 1024 * 1024;
+/** §9.5g.3 / P2-J — align daemon BROWSER_FORM_FILE_EXT_ALLOW. */
+const _kBrowserFormFileExtAllow = <String>{
+  '.pdf',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.txt',
+  '.csv',
+  '.doc',
+  '.docx',
+  '.xls',
+  '.xlsx',
+};
+
+bool _isAllowedBrowserFormFileName(String name) {
+  final lower = name.toLowerCase();
+  final dot = lower.lastIndexOf('.');
+  if (dot < 0) return false;
+  return _kBrowserFormFileExtAllow.contains(lower.substring(dot));
+}
 
 class _PendingAttach {
   _PendingAttach({
@@ -153,6 +175,9 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
   final Map<String, Map<String, TextEditingController>> _choiceFormCtrls = {};
   final Map<String, Map<String, bool>> _choiceFormChecks = {};
   final Map<String, Map<String, String>> _choiceFormSelects = {};
+  /** choiceId → fieldId → sandbox-relative uri after upload (P2-J file). */
+  final Map<String, Map<String, String>> _choiceFormFiles = {};
+  final Map<String, Map<String, String>> _choiceFormFileNames = {};
   /// P2-E4 attended session plan checklist (null when idle/done).
   Map<String, dynamic>? _sessionPlan;
   List<Map<String, dynamic>> _boundSources = [];
@@ -270,6 +295,8 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
     _choiceFormCtrls.clear();
     _choiceFormChecks.clear();
     _choiceFormSelects.clear();
+    _choiceFormFiles.clear();
+    _choiceFormFileNames.clear();
     super.dispose();
   }
 
@@ -669,6 +696,8 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
           }
           _choiceFormChecks.remove(id);
           _choiceFormSelects.remove(id);
+          _choiceFormFiles.remove(id);
+          _choiceFormFileNames.remove(id);
         }
       }
       setState(() {
@@ -1658,6 +1687,228 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
         SnackBar(content: Text(l10n.chatError('$e'))),
       );
     }
+  }
+
+  /// §9.5g.3 / P2-J — pick file(s), upload to jail, stash uri(s) on the form card.
+  Future<void> _pickFormFile({
+    required String choiceId,
+    required String fieldId,
+    String? accept,
+    bool multiple = false,
+  }) async {
+    final l10n = AppLocalizations.of(context);
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    if (home == null || accountId == null) return;
+    List<String>? allowedExts;
+    final acceptRaw = accept?.trim() ?? '';
+    if (acceptRaw.isNotEmpty) {
+      final parts = acceptRaw
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.startsWith('.') && !s.contains('/'))
+          .map((s) => s.substring(1).toLowerCase())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (parts.isNotEmpty) allowedExts = parts;
+    }
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: multiple,
+      withData: true,
+      type: allowedExts != null ? FileType.custom : FileType.any,
+      allowedExtensions: allowedExts,
+    );
+    if (result == null || !mounted) return;
+    final take = (multiple ? result.files : result.files.take(1)).take(8);
+    final uris = <String>[];
+    final names = <String>[];
+    for (final f in take) {
+      final bytes = f.bytes;
+      if (bytes == null) continue;
+      if (bytes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.choiceCardFileEmpty)),
+        );
+        return;
+      }
+      if (bytes.length > _kChatAttachMaxBytes) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              l10n.chatAttachTooLarge(
+                f.name,
+                '${_kChatAttachMaxBytes ~/ (1024 * 1024)}',
+              ),
+            ),
+          ),
+        );
+        return;
+      }
+      if (!_isAllowedBrowserFormFileName(f.name)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.choiceCardFileTypeRefused(f.name))),
+        );
+        return;
+      }
+      try {
+        final up = await home.uploadChatMedia(
+          accountId: accountId,
+          fileName: f.name,
+          contentBase64: base64Encode(bytes),
+          mimeType: f.extension != null ? _mimeFromExt(f.extension!) : null,
+        );
+        final uri = up['uri']?.toString() ?? '';
+        if (uri.isEmpty) throw Exception('missing uri');
+        uris.add(uri);
+        names.add(f.name);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.choiceCardFailed('$e'))),
+        );
+        return;
+      }
+    }
+    if (uris.isEmpty || !mounted) return;
+    setState(() {
+      _choiceFormFiles.putIfAbsent(choiceId, () => <String, String>{})[fieldId] =
+          uris.join('\n');
+      _choiceFormFileNames.putIfAbsent(choiceId, () => <String, String>{})[fieldId] =
+          names.length == 1 ? names.first : l10n.choiceCardFilesChosen(names.length);
+    });
+  }
+
+  /// §9.5g.3 — pick existing sandbox/workspace path(s) via listSandboxEntries.
+  Future<void> _browseJailFormFile({
+    required String choiceId,
+    required String fieldId,
+    bool multiple = false,
+  }) async {
+    final l10n = AppLocalizations.of(context);
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    if (home == null || accountId == null) return;
+    var path = '';
+    final picked = <String>[];
+    while (mounted) {
+      Map<String, dynamic> body;
+      try {
+        body = await home.listSandboxEntries(accountId: accountId, path: path);
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.choiceCardFailed('$e'))),
+        );
+        return;
+      }
+      if (!mounted) return;
+      final entriesRaw = body['entries'];
+      final entries = entriesRaw is List
+          ? entriesRaw
+              .whereType<Map>()
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList()
+          : <Map<String, dynamic>>[];
+      final parent = body['parent']?.toString();
+      final currentPath = body['path']?.toString() ?? path;
+      final selected = await showModalBottomSheet<Object?>(
+        context: context,
+        isScrollControlled: true,
+        builder: (ctx) {
+          return SafeArea(
+            child: SizedBox(
+              height: MediaQuery.of(ctx).size.height * 0.55,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ListTile(
+                    title: Text(l10n.choiceCardBrowseJail),
+                    subtitle: Text(currentPath.isEmpty ? '/' : currentPath),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx, null),
+                    ),
+                  ),
+                  if (parent != null)
+                    ListTile(
+                      leading: const Icon(Icons.arrow_upward),
+                      title: Text(l10n.choiceCardBrowseUp),
+                      onTap: () => Navigator.pop(ctx, {'up': parent}),
+                    ),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: entries.length,
+                      itemBuilder: (_, i) {
+                        final e = entries[i];
+                        final ep = e['path']?.toString() ?? '';
+                        final name = e['name']?.toString() ?? ep;
+                        final isDir = e['kind']?.toString() == 'dir';
+                        return ListTile(
+                          leading: Icon(isDir ? Icons.folder : Icons.insert_drive_file),
+                          title: Text(name),
+                          onTap: () => Navigator.pop(
+                            ctx,
+                            isDir ? {'dir': ep} : {'file': ep, 'name': name},
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  if (multiple)
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: FilledButton(
+                        onPressed: () => Navigator.pop(ctx, {'done': true}),
+                        child: Text(l10n.choiceCardConfirm),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+      if (selected == null) return;
+      if (selected is Map) {
+        if (selected['up'] != null) {
+          path = selected['up']?.toString() ?? '';
+          continue;
+        }
+        if (selected['dir'] != null) {
+          path = selected['dir']?.toString() ?? '';
+          continue;
+        }
+        if (selected['done'] == true) break;
+        final ep = selected['file']?.toString() ?? '';
+        final name = selected['name']?.toString() ?? ep;
+        if (ep.isEmpty) continue;
+        if (!_isAllowedBrowserFormFileName(name)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.choiceCardFileTypeRefused(name))),
+          );
+          continue;
+        }
+        if (!multiple) {
+          setState(() {
+            _choiceFormFiles.putIfAbsent(choiceId, () => <String, String>{})[fieldId] =
+                ep;
+            _choiceFormFileNames
+                .putIfAbsent(choiceId, () => <String, String>{})[fieldId] = name;
+          });
+          return;
+        }
+        if (!picked.contains(ep) && picked.length < 8) picked.add(ep);
+      }
+    }
+    if (!mounted || picked.isEmpty) return;
+    setState(() {
+      _choiceFormFiles.putIfAbsent(choiceId, () => <String, String>{})[fieldId] =
+          picked.join('\n');
+      _choiceFormFileNames.putIfAbsent(choiceId, () => <String, String>{})[fieldId] =
+          picked.length == 1
+              ? (picked.first.split('/').last)
+              : l10n.choiceCardFilesChosen(picked.length);
+    });
   }
 
   Future<void> _pickFiles() async {
@@ -2965,6 +3216,8 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
       final ctrls = _choiceFormCtrls.putIfAbsent(id, () => <String, TextEditingController>{});
       final checks = _choiceFormChecks.putIfAbsent(id, () => <String, bool>{});
       final selects = _choiceFormSelects.putIfAbsent(id, () => <String, String>{});
+      final files = _choiceFormFiles.putIfAbsent(id, () => <String, String>{});
+      final fileNames = _choiceFormFileNames.putIfAbsent(id, () => <String, String>{});
       body = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -3027,6 +3280,55 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
                   ),
                 );
               }
+              if (kind == 'file') {
+                final chosen = fileNames[fid];
+                final accept = f['accept']?.toString();
+                final multiple = f['multiple'] == true;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      labelText: label,
+                    ),
+                    child: Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        TextButton(
+                          onPressed: () => unawaited(
+                            _pickFormFile(
+                              choiceId: id,
+                              fieldId: fid,
+                              accept: accept,
+                              multiple: multiple,
+                            ),
+                          ),
+                          child: Text(l10n.choiceCardChooseFile),
+                        ),
+                        TextButton(
+                          onPressed: () => unawaited(
+                            _browseJailFormFile(
+                              choiceId: id,
+                              fieldId: fid,
+                              multiple: multiple,
+                            ),
+                          ),
+                          child: Text(l10n.choiceCardBrowseJail),
+                        ),
+                        Text(
+                          chosen?.isNotEmpty == true
+                              ? chosen!
+                              : l10n.choiceCardNoFile,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }
               final ctrl = ctrls.putIfAbsent(fid, TextEditingController.new);
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -3065,6 +3367,17 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
                     }
                     if (kind == 'select') {
                       final v = selects[fid] ?? '';
+                      if (v.isEmpty && required) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(l10n.choiceCardPickOne)),
+                        );
+                        return;
+                      }
+                      if (v.isNotEmpty) values[fid] = v;
+                      continue;
+                    }
+                    if (kind == 'file') {
+                      final v = files[fid] ?? '';
                       if (v.isEmpty && required) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(content: Text(l10n.choiceCardPickOne)),

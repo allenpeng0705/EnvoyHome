@@ -45,9 +45,9 @@ EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0
 **Next (after early-adopter ops):** Live HA checklist ([`docs/smart-home-live-checklist.md`](../docs/smart-home-live-checklist.md)); then **First-party IM live** (Telegram first) when Mesh phone path is solid  
 **Deferred from early-adopter claims:** Production IM zoo; Privacy Mode product toggle (`home.setPrivacyMode` stays Phase 2); agentskills.io conformance  
 
-**Active coding epic:** _(none)_ — Phase 2 board through **P2-I** shipped.
+**Active coding epic:** _(none)_ — Phase 2 board through **P2-J** shipped.
 
-**Last shipped:** P2-I Daily Outbound Assist (`2026-11-04d`); P2-H browser form assist (`2026-11-04c`); P2-G observe→act→verify (`2026-11-04`); P2-F MCP (`2026-11-03b`)
+**Last shipped:** P2-J browser form file upload (`2026-11-10`); P2-I Daily Outbound Assist (`2026-11-04d`); P2-H browser form assist (`2026-11-04c`); P2-G observe→act→verify (`2026-11-04`); P2-F MCP (`2026-11-03b`)
 
 ## Key Decisions
 
@@ -198,10 +198,11 @@ Design ground truth: **§19.9–§19.13** (**Accepted 2026-10-20**); **P2-F** §
 | **P2-G** Browser observe→act→verify | `[x]` | §9.5g.2 | Design `2026-11-04` | `snapshotId` freshness; `act.verify`; `wait`/`press`; richer snapshot; structured `blocked`; V-OUT-11…15 (`2026-11-04`) | V-OUT-11…V-OUT-15 |
 | **P2-H** Browser form assist | `[x]` | §9.5g.3 | Design `2026-11-04b` **Accepted** / Ship `2026-11-04c`; P2-G `[x]` | Dynamic form card from snapshot (`selection: form`); mobile/desktop fill; one Allow apply; secret one-shot | V-OUT-16…V-OUT-19 |
 | **P2-I** Daily Outbound Assist | `[x]` | §9.5i | Design Ship `2026-11-04d`; P2-H + P2-F `[x]` | Hard stop pay/OTP/CAPTCHA; MCP prefer; `blocked: payment`; `outbound_handoff` https Open card; skills + live scenarios | V-OUT-20…V-OUT-24 |
+| **P2-J** Browser form file upload | `[x]` | §9.5g.3 | Design Ship `2026-11-10`; P2-H `[x]` | `kind: file` + Choose file → jail path; `setInputFiles`; ≤8 MiB mime allow-list; unattended refuse file; mobile/desktop picker | V-OUT-25…V-OUT-27 |
 
-**Ship order:** P2-A → … → P2-F → P2-G → P2-H → **P2-I**.
+**Ship order:** P2-A → … → P2-F → P2-G → P2-H → P2-I → **P2-J**.
 
-**Package touch points (at code time):** `packages/harness-host` (policy + parse), `packages/daemon` (turn-service, choice-store, **browser-control** form/handoff + payment wall), `packages/protocol` (additive `outbound_handoff` / `openUrl` / `steps`), mobile/desktop chat choice UI, skills-samples, Doctor issues.
+**Package touch points (at code time):** `packages/harness-host` (policy + parse), `packages/daemon` (turn-service, choice-store, **browser-control** form/handoff + payment wall + file apply), `packages/protocol` (additive `kind: file` / `accept`), mobile/desktop chat choice UI, skills-samples, Doctor issues.
 
 **Soft risks (owning epic):**
 
@@ -228,6 +229,8 @@ Design ground truth: **§19.9–§19.13** (**Accepted 2026-10-20**); **P2-F** §
 | Malicious / SSRF openUrl | P2-I | https-only + same host refuse as browser navigate (V-OUT-23) |
 | Cart-sync honesty | P2-I | Handoff checklist; never claim daemon cart ≡ phone app (V-OUT-23) |
 | Browser thrash vs MCP | P2-I | Skill + live prefer-MCP case (V-OUT-20) |
+| Path escape / oversized file on form apply | P2-J | `safeJoin` + ≤8 MiB + mime allow-list; refuse executables (V-OUT-25/26) |
+| Unattended file upload | P2-J | Refuse any card with `file` field unattended (V-OUT-27) |
 | `message` spam / cross-account leak | P2-C | Bound target + same account only; grantable; Privacy Mode (V-P2-MSG-*) |
 | Patch path escape / huge diff | P2-A | Jail + size cap (V-P2-EDIT-1) |
 | Media generate egress / bill shock | P2-D2 | Owner opt-in; Privacy Mode; rate caps; attended default (V-P2-MEDIA-2) |
@@ -591,6 +594,9 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-OUT-22 | **P2-I** | OTP honesty — never invent/receive SMS; otp form only when Owner types |
 | V-OUT-23 | **P2-I** | `outbound_handoff` https `openUrl` (SSRF refuse); Open launches system URL; no cross-device cart claim |
 | V-OUT-24 | **P2-I** | multi-step form chain (2+ propose_form across pages) supported in live/tool scenarios |
+| V-OUT-25 | **P2-J** | `input[type=file]` → `kind: file` on form card; apply uses `setInputFiles` after jail resolve |
+| V-OUT-26 | **P2-J** | file apply refuses path escape / >8 MiB / disallowed mime; basename-only in transcript |
+| V-OUT-27 | **P2-J** | unattended refuses any form card that includes a `file` field |
 | V-MCP-1 | **P2-F** | Owner upsert MCP config; non-Owner denied |
 | V-MCP-2 | **P2-F** | testMcpServer = initialize+tools/list only (no mutating call) |
 | V-MCP-3 | **P2-F** | Remote MCP URL SSRF refused |
@@ -859,6 +865,8 @@ If you need to change the answer to "in what order we build," edit this doc and 
 
 | Date | Change |
 |------|--------|
+| 2026-11-10b | **P2-J follow-through:** magic/MIME refuse; `multiple` paths; jail browse UI; R3 mounts on file apply. Aligns Design `2026-11-10b`. |
+| 2026-11-10 | **P2-J shipped:** §9.5g.3 file upload — `kind: file`, jail path + `setInputFiles`, ≤8 MiB mime allow-list, unattended refuse; V-OUT-25…27. Aligns Design `2026-11-10`. |
 | 2026-11-04d | **P2-I shipped:** §9.5i Daily Outbound Assist — hard stop pay/OTP/CAPTCHA; MCP prefer; `outbound_handoff`; V-OUT-20…24. Aligns Design `2026-11-04d`. |
 | 2026-11-04c | **P2-H shipped:** §9.5g.3 form card + `propose_form`/`apply_form`; V-OUT-16…19. Aligns Design `2026-11-04c`. |
 | 2026-11-04b | **P2-H Normative board:** §9.5g.3 browser form assist (dynamic fields card; login ⊂ forms); epic `[ ]` pending Owner Accept; V-OUT-16…19. Aligns Design `2026-11-04b`. |

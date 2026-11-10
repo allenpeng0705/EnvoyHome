@@ -94,7 +94,7 @@ pnpm agent:eval:ask
 | Pack | Covers |
 |------|--------|
 | `browser-journeys.json` | navigate/text, SSRF refuse, mock + optional Chromium, live soft |
-| `browser-form-journeys.json` | P2-H `propose_form` / refuse agent `apply_form`; live httpbin form card + `liveAnswer.formByKind` |
+| `browser-form-journeys.json` | P2-H/P2-J `propose_form` / refuse agent `apply_form`; file mock (`browserFormFileMock`); live httpbin + file honesty |
 | `memory-journeys.json` | `memory_remember` / `memory_recall` / `session_search` (facade helpers until Design tools land), live standing inject |
 | `ask-user-multiturn.json` | compose auto-answer → schedule/write; live `liveAnswer` via `home.answerChoice` |
 | `knowledge-journeys.json` | Sandbox **`knowledge/`** Doc KB: `knowledge_search` / files / cite / export; standing wins vs guest notes |

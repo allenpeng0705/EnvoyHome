@@ -1520,6 +1520,20 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get choiceCardOpen => 'Open';
   @override
+  String get choiceCardChooseFile => 'Choose file';
+  @override
+  String get choiceCardBrowseJail => 'Browse files';
+  @override
+  String get choiceCardBrowseUp => 'Up';
+  @override
+  String choiceCardFilesChosen(int n) => '$n files chosen';
+  @override
+  String get choiceCardNoFile => 'No file chosen';
+  @override
+  String get choiceCardFileEmpty => 'That file is empty.';
+  @override
+  String choiceCardFileTypeRefused(String name) => '$name is not an allowed form upload type.';
+  @override
   String get choiceCardHandoffHint => 'Opens in your browser or app so you can finish and pay there. Home will not enter card details.';
 
   @override

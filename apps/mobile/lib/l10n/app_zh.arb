@@ -702,6 +702,25 @@
   "homeFolderNoSubfolders": "没有子文件夹",
   "choiceCardConfirm": "确认",
   "choiceCardOpen": "打开",
+  "choiceCardChooseFile": "选择文件",
+  "choiceCardBrowseJail": "浏览文件",
+  "choiceCardBrowseUp": "上级",
+  "choiceCardFilesChosen": "已选 {n} 个文件",
+  "@choiceCardFilesChosen": {
+    "placeholders": {
+      "n": { "type": "int" }
+    }
+  },
+  "choiceCardNoFile": "未选择文件",
+  "choiceCardFileEmpty": "文件为空。",
+  "choiceCardFileTypeRefused": "{name} 不是允许的表单上传类型。",
+  "@choiceCardFileTypeRefused": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "choiceCardHandoffHint": "将在浏览器或 App 中打开以便你完成并付款。Home 不会填写银行卡信息。",
   "choiceCardPickOne": "请至少选一项。",
   "choiceCardAnswered": "已收到。",

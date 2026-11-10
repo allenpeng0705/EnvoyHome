@@ -702,6 +702,25 @@
   "homeFolderNoSubfolders": "No subfolders",
   "choiceCardConfirm": "Conferma",
   "choiceCardOpen": "Open",
+  "choiceCardChooseFile": "Choose file",
+  "choiceCardBrowseJail": "Browse files",
+  "choiceCardBrowseUp": "Up",
+  "choiceCardFilesChosen": "{n} files chosen",
+  "@choiceCardFilesChosen": {
+    "placeholders": {
+      "n": { "type": "int" }
+    }
+  },
+  "choiceCardNoFile": "No file chosen",
+  "choiceCardFileEmpty": "That file is empty.",
+  "choiceCardFileTypeRefused": "{name} is not an allowed form upload type.",
+  "@choiceCardFileTypeRefused": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "choiceCardHandoffHint": "Opens in your browser or app so you can finish and pay there. Home will not enter card details.",
   "choiceCardPickOne": "Seleziona almeno un'opzione.",
   "choiceCardAnswered": "Ricevuto.",

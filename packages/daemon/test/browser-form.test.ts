@@ -116,14 +116,16 @@ test("V-OUT-19: captcha/challenge pages do not open form cards; choice store for
   }
 });
 
-function formMockPage(opts?: { withCheckbox?: boolean }) {
+function formMockPage(opts?: { withCheckbox?: boolean; withFile?: boolean; fileOnly?: boolean }) {
   let current = "https://example.com/login";
   const stamped = new Map<string, { tag: string; type?: string }>();
   const fills: Array<{ ref: string; value: string }> = [];
+  const fileSets: Array<{ ref: string; paths: string[] }> = [];
   const clicks: string[] = [];
   const checkedByRef = new Map<string, boolean>();
   return {
     fills,
+    fileSets,
     clicks,
     checkedByRef,
     goto: async (u: string) => {
@@ -146,6 +148,10 @@ function formMockPage(opts?: { withCheckbox?: boolean }) {
           },
           fill: async (text: string) => {
             fills.push({ ref, value: text });
+          },
+          setInputFiles: async (files: string | string[]) => {
+            const paths = Array.isArray(files) ? files : [files];
+            fileSets.push({ ref, paths });
           },
           selectOption: async () => undefined,
           dragTo: async () => undefined,
@@ -192,6 +198,7 @@ function formMockPage(opts?: { withCheckbox?: boolean }) {
             if (name === "name") return (attrs.name as string) ?? null;
             if (name === "aria-label") return (attrs["aria-label"] as string) ?? null;
             if (name === "autocomplete") return (attrs.autocomplete as string) ?? null;
+            if (name === "accept") return (attrs.accept as string) ?? null;
             if (name === "aria-required") return attrs.required ? "true" : null;
             return store[name] ?? null;
           },
@@ -201,38 +208,62 @@ function formMockPage(opts?: { withCheckbox?: boolean }) {
           type: (attrs.type as string) || "",
           value: "",
           options: [],
-          getBoundingClientRect: () => ({ width: 10, height: 10 }),
+          getBoundingClientRect: () =>
+            attrs.type === "file"
+              ? { width: 0, height: 0 }
+              : { width: 10, height: 10 },
         };
       };
-      const els = [
-        makeEl("INPUT", {
-          type: "email",
-          name: "email",
-          "aria-label": "Email",
-          required: true,
-        }),
-        makeEl("INPUT", {
-          type: "password",
-          name: "password",
-          "aria-label": "Password",
-          required: true,
-        }),
-        makeEl("INPUT", {
-          type: "text",
-          name: "notes",
-          "aria-label": "Booking notes",
-        }),
-        ...(opts?.withCheckbox
-          ? [
-              makeEl("INPUT", {
-                type: "checkbox",
-                name: "newsletter",
-                "aria-label": "Newsletter",
-              }),
-            ]
-          : []),
-        makeEl("BUTTON", { role: "button", "aria-label": "Sign in" }),
-      ];
+      const els = opts?.fileOnly
+        ? [
+            makeEl("INPUT", {
+              type: "file",
+              name: "resume",
+              "aria-label": "Resume",
+              accept: ".pdf,.png",
+              required: true,
+            }),
+            makeEl("BUTTON", { role: "button", "aria-label": "Upload" }),
+          ]
+        : [
+            makeEl("INPUT", {
+              type: "email",
+              name: "email",
+              "aria-label": "Email",
+              required: true,
+            }),
+            makeEl("INPUT", {
+              type: "password",
+              name: "password",
+              "aria-label": "Password",
+              required: true,
+            }),
+            makeEl("INPUT", {
+              type: "text",
+              name: "notes",
+              "aria-label": "Booking notes",
+            }),
+            ...(opts?.withCheckbox
+              ? [
+                  makeEl("INPUT", {
+                    type: "checkbox",
+                    name: "newsletter",
+                    "aria-label": "Newsletter",
+                  }),
+                ]
+              : []),
+            ...(opts?.withFile
+              ? [
+                  makeEl("INPUT", {
+                    type: "file",
+                    name: "resume",
+                    "aria-label": "Resume",
+                    accept: ".pdf,.png",
+                  }),
+                ]
+              : []),
+            makeEl("BUTTON", { role: "button", "aria-label": "Sign in" }),
+          ];
       const fakeDoc = { querySelectorAll: () => els };
       const fakeWin = {
         getComputedStyle: () => ({ display: "block", visibility: "visible" }),
@@ -494,4 +525,346 @@ test("V-OUT-17/19: apply_form refuses missing required fields", async () => {
   ) as Record<string, unknown>;
   assert.equal(denied.ok, false);
   assert.equal(denied.error, "field_required");
+});
+
+test("V-OUT-25: derive kind file + accept from input[type=file]", () => {
+  const derived = deriveBrowserFormFields([
+    {
+      ref: "0",
+      tag: "input",
+      role: "textbox",
+      inputType: "file",
+      name: "Resume",
+      nameAttr: "resume",
+      accept: ".pdf,.png",
+      required: true,
+      visible: false,
+    },
+    { ref: "1", tag: "button", role: "button", name: "Upload" },
+  ]);
+  assert.equal(derived.fields.length, 1);
+  assert.equal(derived.fields[0]!.kind, "file");
+  assert.equal(derived.fields[0]!.accept, ".pdf,.png");
+  assert.equal(derived.fields[0]!.sensitive, false);
+  assert.equal(derived.submitRef, "1");
+});
+
+test("V-OUT-25/26: multiple file derive + magic refuse PE renamed pdf", async () => {
+  const { isDeniedBrowserFormFileMagic, parseBrowserFormFilePaths } = await import(
+    "../dist/browser-form.js"
+  );
+  const multi = deriveBrowserFormFields([
+    {
+      ref: "0",
+      tag: "input",
+      inputType: "file",
+      name: "Photos",
+      accept: "image/*",
+      multiple: true,
+    },
+  ]);
+  assert.equal(multi.fields[0]!.multiple, true);
+  assert.deepEqual(parseBrowserFormFilePaths("uploads/a.png\nuploads/b.jpg"), [
+    "uploads/a.png",
+    "uploads/b.jpg",
+  ]);
+  assert.equal(isDeniedBrowserFormFileMagic(Buffer.from([0x4d, 0x5a, 0x90, 0x00])), true);
+  assert.equal(isDeniedBrowserFormFileMagic(Buffer.from("%PDF-1.4")), false);
+
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const stateDir = await mkdtemp(join(tmpdir(), "eh-form-magic-"));
+  dirs.push(stateDir);
+  const paths = homePaths(stateDir);
+  const svc = new BrowserControlService(paths);
+  await svc.load();
+  await svc.setConfig({ enabled: true });
+  const page = formMockPage({ fileOnly: true });
+  svc.pageFactory = async () => page as never;
+  const uploads = join(paths.accountFiles("alice"), "uploads");
+  await mkdir(uploads, { recursive: true });
+  // PE magic with .pdf extension
+  await writeFile(join(uploads, "evil.pdf"), Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0x03, 0x00]));
+
+  await svc.runTool(
+    { action: "navigate", url: "https://example.com/upload" },
+    { accountId: "alice" },
+  );
+  const proposed = JSON.parse(
+    await svc.runTool({ action: "propose_form" }, { accountId: "alice" }),
+  ) as Record<string, unknown>;
+  const fields = proposed.fields as Array<Record<string, unknown>>;
+  const fileField = fields.find((f) => f.kind === "file")!;
+  const denied = JSON.parse(
+    await svc.runTool(
+      {
+        action: "apply_form",
+        snapshotId: proposed.snapshotId,
+        targetId: proposed.targetId,
+        fields,
+        fieldValues: { [String(fileField.id)]: "uploads/evil.pdf" },
+      },
+      { accountId: "alice", internal: true },
+    ),
+  ) as Record<string, unknown>;
+  assert.equal(denied.ok, false);
+  assert.equal(denied.error, "file_mime");
+});
+
+test("V-OUT-25: apply_form setInputFiles accepts newline-separated multiple paths", async () => {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const stateDir = await mkdtemp(join(tmpdir(), "eh-form-multi-"));
+  dirs.push(stateDir);
+  const paths = homePaths(stateDir);
+  const svc = new BrowserControlService(paths);
+  await svc.load();
+  await svc.setConfig({ enabled: true });
+  const page = formMockPage({ fileOnly: true });
+  svc.pageFactory = async () => page as never;
+  const uploads = join(paths.accountFiles("alice"), "uploads");
+  await mkdir(uploads, { recursive: true });
+  await writeFile(join(uploads, "a.pdf"), "%PDF-a");
+  await writeFile(join(uploads, "b.pdf"), "%PDF-b");
+
+  await svc.runTool(
+    { action: "navigate", url: "https://example.com/upload" },
+    { accountId: "alice" },
+  );
+  const proposed = JSON.parse(
+    await svc.runTool({ action: "propose_form" }, { accountId: "alice" }),
+  ) as Record<string, unknown>;
+  const fields = (proposed.fields as Array<Record<string, unknown>>).map((f) =>
+    f.kind === "file" ? { ...f, multiple: true } : f,
+  );
+  const fileField = fields.find((f) => f.kind === "file")!;
+  const applied = JSON.parse(
+    await svc.runTool(
+      {
+        action: "apply_form",
+        snapshotId: proposed.snapshotId,
+        targetId: proposed.targetId,
+        fields,
+        fieldValues: {
+          [String(fileField.id)]: "uploads/a.pdf\nuploads/b.pdf",
+        },
+      },
+      { accountId: "alice", internal: true },
+    ),
+  ) as Record<string, unknown>;
+  assert.equal(applied.ok, true);
+  assert.equal(page.fileSets.length, 1);
+  assert.equal(page.fileSets[0]!.paths.length, 2);
+});
+
+test("V-OUT-25/26: apply_form setInputFiles after jail resolve; refuse escape/exe", async () => {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const stateDir = await mkdtemp(join(tmpdir(), "eh-form-file-"));
+  dirs.push(stateDir);
+  const paths = homePaths(stateDir);
+  const svc = new BrowserControlService(paths);
+  await svc.load();
+  await svc.setConfig({ enabled: true });
+  const page = formMockPage({ fileOnly: true });
+  svc.pageFactory = async () => page as never;
+
+  const uploads = join(paths.accountFiles("alice"), "uploads");
+  await mkdir(uploads, { recursive: true });
+  const rel = "uploads/resume.pdf";
+  await writeFile(join(paths.accountFiles("alice"), rel), "pdf-bytes");
+
+  await svc.runTool(
+    { action: "navigate", url: "https://example.com/upload" },
+    { accountId: "alice" },
+  );
+  const proposed = JSON.parse(
+    await svc.runTool({ action: "propose_form" }, { accountId: "alice" }),
+  ) as Record<string, unknown>;
+  assert.equal(proposed.ok, true);
+  const fields = proposed.fields as Array<Record<string, unknown>>;
+  assert.ok(fields.some((f) => f.kind === "file"));
+  const fileField = fields.find((f) => f.kind === "file")!;
+  assert.equal(fileField.accept, ".pdf,.png");
+
+  const applied = JSON.parse(
+    await svc.runTool(
+      {
+        action: "apply_form",
+        snapshotId: proposed.snapshotId,
+        targetId: proposed.targetId,
+        fields,
+        fieldValues: { [String(fileField.id)]: rel },
+        ...(proposed.submitRef ? { submitRef: proposed.submitRef } : {}),
+      },
+      { accountId: "alice", internal: true },
+    ),
+  ) as Record<string, unknown>;
+  assert.equal(applied.ok, true);
+  assert.equal(page.fileSets.length, 1);
+  assert.ok(page.fileSets[0]!.paths[0]!.includes("resume.pdf"));
+  assert.ok(!JSON.stringify(applied).includes(paths.accountFiles("alice")));
+
+  // Fresh propose for refuse cases
+  await svc.runTool({ action: "snapshot" }, { accountId: "alice" });
+  const proposed2 = JSON.parse(
+    await svc.runTool({ action: "propose_form" }, { accountId: "alice" }),
+  ) as Record<string, unknown>;
+  const fields2 = proposed2.fields as Array<Record<string, unknown>>;
+  const file2 = fields2.find((f) => f.kind === "file")!;
+
+  const escaped = JSON.parse(
+    await svc.runTool(
+      {
+        action: "apply_form",
+        snapshotId: proposed2.snapshotId,
+        targetId: proposed2.targetId,
+        fields: fields2,
+        fieldValues: { [String(file2.id)]: "/etc/passwd" },
+      },
+      { accountId: "alice", internal: true },
+    ),
+  ) as Record<string, unknown>;
+  assert.equal(escaped.ok, false);
+  assert.equal(escaped.error, "file_path");
+
+  const exe = JSON.parse(
+    await svc.runTool(
+      {
+        action: "apply_form",
+        snapshotId: proposed2.snapshotId,
+        targetId: proposed2.targetId,
+        fields: fields2,
+        fieldValues: { [String(file2.id)]: "uploads/evil.exe" },
+      },
+      { accountId: "alice", internal: true },
+    ),
+  ) as Record<string, unknown>;
+  assert.equal(exe.ok, false);
+  assert.equal(exe.error, "file_mime");
+});
+
+test("V-OUT-27: unattended refuses file form propose/apply", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "eh-form-file-unatt-"));
+  dirs.push(stateDir);
+  const paths = homePaths(stateDir);
+  const svc = new BrowserControlService(paths);
+  await svc.load();
+  await svc.setConfig({ enabled: true, unattendedEnabled: true });
+  const page = formMockPage({ fileOnly: true });
+  svc.pageFactory = async () => page as never;
+
+  await svc.runTool(
+    { action: "navigate", url: "https://example.com/upload" },
+    { accountId: "alice", origin: "attended" },
+  );
+  const proposed = JSON.parse(
+    await svc.runTool(
+      { action: "propose_form" },
+      { accountId: "alice", origin: "unattended" },
+    ),
+  ) as Record<string, unknown>;
+  assert.equal(proposed.ok, false);
+  assert.equal(proposed.error, "file_unattended");
+
+  // Attended propose then unattended apply
+  const attended = JSON.parse(
+    await svc.runTool(
+      { action: "propose_form" },
+      { accountId: "alice", origin: "attended" },
+    ),
+  ) as Record<string, unknown>;
+  assert.equal(attended.ok, true);
+  const fields = attended.fields as Array<Record<string, unknown>>;
+  const denied = JSON.parse(
+    await svc.runTool(
+      {
+        action: "apply_form",
+        snapshotId: attended.snapshotId,
+        targetId: attended.targetId,
+        fields,
+        fieldValues: { [String(fields[0]!.id)]: "uploads/x.pdf" },
+      },
+      { accountId: "alice", origin: "unattended", internal: true },
+    ),
+  ) as Record<string, unknown>;
+  assert.equal(denied.ok, false);
+  assert.equal(denied.error, "file_unattended");
+});
+
+test("V-OUT-25: apply_form resolves workspace/… via R3 mounts", async () => {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const stateDir = await mkdtemp(join(tmpdir(), "eh-form-file-ws-"));
+  dirs.push(stateDir);
+  const hostWs = await mkdtemp(join(tmpdir(), "eh-form-ws-host-"));
+  dirs.push(hostWs);
+  await writeFile(join(hostWs, "cv.pdf"), "workspace-pdf");
+
+  const paths = homePaths(stateDir);
+  const svc = new BrowserControlService(paths);
+  await svc.load();
+  await svc.setConfig({ enabled: true });
+  svc.workspaceMountsFor = async () => [
+    { id: "default", hostPath: hostWs, mode: "ro" as const },
+  ];
+  const page = formMockPage({ fileOnly: true });
+  svc.pageFactory = async () => page as never;
+
+  await svc.runTool(
+    { action: "navigate", url: "https://example.com/upload" },
+    { accountId: "alice" },
+  );
+  const proposed = JSON.parse(
+    await svc.runTool({ action: "propose_form" }, { accountId: "alice" }),
+  ) as Record<string, unknown>;
+  const fields = proposed.fields as Array<Record<string, unknown>>;
+  const fileField = fields.find((f) => f.kind === "file")!;
+  const applied = JSON.parse(
+    await svc.runTool(
+      {
+        action: "apply_form",
+        snapshotId: proposed.snapshotId,
+        targetId: proposed.targetId,
+        fields,
+        fieldValues: { [String(fileField.id)]: "workspace/cv.pdf" },
+      },
+      { accountId: "alice", internal: true },
+    ),
+  ) as Record<string, unknown>;
+  assert.equal(applied.ok, true);
+  assert.equal(page.fileSets.length, 1);
+  assert.ok(page.fileSets[0]!.paths[0]!.includes("cv.pdf"));
+});
+
+test("V-OUT-26: ChoiceStore file labels use basename only", async () => {
+  const root = await mkdtemp(join(tmpdir(), "eh-form-file-choice-"));
+  dirs.push(root);
+  const store = new ChoiceStore((id) => join(root, id));
+  const row = await store.create({
+    accountId: "alice",
+    sessionId: "s1",
+    question: "Attach resume",
+    options: [],
+    selection: "form",
+    purpose: "browser_form",
+    snapshotId: "s1",
+    targetId: "t1",
+    profile: "managed",
+    fields: [
+      {
+        id: "f0",
+        label: "Resume",
+        ref: "0",
+        kind: "file",
+        sensitive: false,
+        required: true,
+        accept: ".pdf",
+      },
+    ],
+  });
+  const ok = store.resolveAnswer(row, {
+    fieldValues: { f0: "uploads/uuid-secret-resume.pdf" },
+  });
+  assert.equal(ok.ok, true);
+  if (ok.ok) {
+    assert.ok(ok.labels.some((l) => l.includes("uuid-secret-resume.pdf")));
+    assert.ok(!ok.labels.some((l) => l.includes("uploads/")));
+  }
 });

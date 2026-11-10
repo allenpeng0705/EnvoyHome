@@ -3,7 +3,8 @@
 
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import { assertHandoffOpenUrl } from "./outbound-url.js";
 
 export type ChoiceSelection = "one" | "many" | "text" | "form";
 
@@ -19,7 +20,8 @@ export type ChoiceFormFieldKind =
   | "otp"
   | "textarea"
   | "select"
-  | "checkbox";
+  | "checkbox"
+  | "file";
 
 export type ChoiceFormField = {
   id: string;
@@ -28,6 +30,10 @@ export type ChoiceFormField = {
   kind: ChoiceFormFieldKind;
   required?: boolean;
   options?: { value: string; label: string }[];
+  /** §9.5g.3 — HTML accept hint for file fields. */
+  accept?: string;
+  /** §9.5g.3 — HTML multiple (newline-separated paths in fieldValues). */
+  multiple?: boolean;
   sensitive: boolean;
 };
 
@@ -106,12 +112,17 @@ function normalizeFormFields(raw: ChoiceFormField[] | undefined): ChoiceFormFiel
       kind !== "otp" &&
       kind !== "textarea" &&
       kind !== "select" &&
-      kind !== "checkbox"
+      kind !== "checkbox" &&
+      kind !== "file"
     ) {
       continue;
     }
     const sensitive =
       f.sensitive === true || kind === "password" || kind === "otp";
+    const accept =
+      kind === "file" && typeof f.accept === "string" && f.accept.trim()
+        ? f.accept.trim().slice(0, 200)
+        : undefined;
     out.push({
       id,
       label,
@@ -119,6 +130,8 @@ function normalizeFormFields(raw: ChoiceFormField[] | undefined): ChoiceFormFiel
       kind,
       sensitive,
       ...(f.required === true ? { required: true } : {}),
+      ...(accept ? { accept } : {}),
+      ...(kind === "file" && f.multiple === true ? { multiple: true } : {}),
       ...(kind === "select" && Array.isArray(f.options) && f.options.length
         ? {
             options: f.options.slice(0, 48).map((o) => ({
@@ -171,6 +184,7 @@ export class ChoiceStore {
         { code: "bad_params" },
       );
     }
+    let handoffOpenUrl: string | undefined;
     if (input.purpose === "outbound_handoff") {
       if (selection !== "one") {
         throw Object.assign(
@@ -178,11 +192,18 @@ export class ChoiceStore {
           { code: "bad_params" },
         );
       }
-      const openUrl = String(input.openUrl ?? "").trim();
-      if (!openUrl || !/^https:\/\//i.test(openUrl)) {
+      try {
+        // V-OUT-23 — same SSRF family as browser navigate (https-only + host refuse).
+        handoffOpenUrl = assertHandoffOpenUrl(String(input.openUrl ?? "")).href;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
         throw Object.assign(
-          new Error("envoyhome.bad_params: outbound_handoff requires https openUrl"),
-          { code: "bad_params" },
+          new Error(
+            msg.includes("openUrl") || msg.includes("https") || msg.includes("refused")
+              ? msg
+              : "envoyhome.bad_params: outbound_handoff requires https openUrl",
+          ),
+          { code: (e as { code?: string }).code ?? "bad_params" },
         );
       }
     }
@@ -229,8 +250,8 @@ export class ChoiceStore {
       (input.formOrigin === "attended" || input.formOrigin === "unattended")
         ? { formOrigin: input.formOrigin }
         : {}),
-      ...(input.purpose === "outbound_handoff" && input.openUrl?.trim()
-        ? { openUrl: input.openUrl.trim().slice(0, 2000) }
+      ...(input.purpose === "outbound_handoff" && handoffOpenUrl
+        ? { openUrl: handoffOpenUrl.slice(0, 2000) }
         : {}),
       ...(input.purpose === "outbound_handoff" &&
       Array.isArray(input.steps) &&
@@ -367,7 +388,19 @@ export class ChoiceStore {
         if (!s && f.required) return { ok: false, reason: `field required: ${f.id}` };
         if (!s) continue;
         fieldValues[f.id] = s;
-        labels.push(f.sensitive ? `${f.label}=••••` : `${f.label}=${s.slice(0, 40)}`);
+        if (f.sensitive) {
+          labels.push(`${f.label}=••••`);
+        } else if (f.kind === "file") {
+          // V-OUT-26 — basename only (multi = newline-separated paths).
+          const names = s
+            .split(/\r?\n+/)
+            .map((p) => basename(p.trim()))
+            .filter(Boolean)
+            .slice(0, 8);
+          labels.push(`${f.label}=${names.join(", ").slice(0, 120)}`);
+        } else {
+          labels.push(`${f.label}=${s.slice(0, 40)}`);
+        }
       }
       if (Object.keys(fieldValues).length === 0) {
         return { ok: false, reason: "fieldValues required" };

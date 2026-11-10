@@ -4,7 +4,7 @@
 
 Changelog `2026-11-04b` accepted **P2-H Browser form assist** (§9.5g.3). Implementation landed under Design Ship `2026-11-04c` with V-OUT-16…19 green.
 
-It does **not** reopen CAPTCHA solving, password vaults, file-upload fields, native apps, or device nodes.
+It does **not** reopen CAPTCHA solving, password vaults, native apps, or device nodes. File-upload fields landed later as **P2-J** (`2026-11-10`).
 
 ---
 
@@ -25,7 +25,8 @@ It does **not** reopen CAPTCHA solving, password vaults, file-upload fields, nat
 5. No form card on CAPTCHA/`blocked`. Prefer personal session when already logged in.  
 6. Cap ≤24 fields; no password vault in v1.
 
-**Out of scope (v1):** CAPTCHA; file upload; native apps; third-party password-manager autofill; computer-use.
+**Out of scope (P2-H):** CAPTCHA; native apps; third-party password-manager autofill; computer-use.  
+**(Superseded)** File upload → **P2-J** / Design `2026-11-10` / V-OUT-25…27.
 
 ---
 

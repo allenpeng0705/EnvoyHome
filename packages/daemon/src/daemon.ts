@@ -180,6 +180,9 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   await webSearch.load();
   const browserControl = new BrowserControlService(paths);
   await browserControl.load();
+  // §9.5g.3 / P2-J — form file apply may resolve workspace/… under R3 mounts.
+  browserControl.workspaceMountsFor = async (accountId) =>
+    accounts.getWorkspaceMountRefs(accountId, household.getOwnerAccountId());
   const mcpHub = new McpHub(paths);
   await mcpHub.load();
   const pushTokens = new PushTokenStore(paths);

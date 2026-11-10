@@ -1049,6 +1049,12 @@ function choiceCardHtml(c) {
             .join("");
           return `<label class="chat-choice-form-field"><span>${label}</span><select data-field-id="${fid}">${opts}</select></label>`;
         }
+        if (kind === "file") {
+          const accept = escapeHtml(f.accept || "");
+          const req = f.required === true ? ` data-required="1"` : "";
+          const multi = f.multiple === true ? ` data-multiple="1"` : "";
+          return `<div class="chat-choice-form-field chat-choice-form-file"><span>${label}</span><div class="chat-choice-file-row"><input type="hidden" data-field-id="${fid}" data-kind="file" value=""${req}${multi} /><button type="button" class="secondary" data-act="pick-file" data-field-id="${fid}"${accept ? ` data-accept="${accept}"` : ""}${multi}>${escapeHtml(t("choiceCard.chooseFile"))}</button><button type="button" class="secondary" data-act="browse-jail" data-field-id="${fid}"${multi}>${escapeHtml(t("choiceCard.browseJail"))}</button><span class="muted chat-choice-file-name" data-file-name-for="${fid}">${escapeHtml(t("choiceCard.noFile"))}</span></div></div>`;
+        }
         const inputType = sensitive ? "password" : kind === "textarea" ? null : "text";
         if (kind === "textarea") {
           return `<label class="chat-choice-form-field"><span>${label}</span><textarea data-field-id="${fid}" rows="3"></textarea></label>`;
@@ -1119,10 +1125,105 @@ function bindChoiceCardActions(root, onDone) {
       btn.addEventListener("click", async () => {
         const aid = accountId();
         if (!aid) return;
+        const act = btn.getAttribute("data-act");
+        // §9.5g.3 / P2-J — upload into jail then stash sandbox-relative path.
+        if (act === "pick-file" || act === "browse-jail") {
+          const fid = btn.getAttribute("data-field-id");
+          if (!fid) return;
+          const multiple = btn.getAttribute("data-multiple") === "1";
+          const esc =
+            typeof CSS !== "undefined" && typeof CSS.escape === "function"
+              ? CSS.escape(fid)
+              : fid.replace(/"/g, '\\"');
+          const setFileField = (uris, names) => {
+            const hidden = card.querySelector(
+              `input[data-field-id="${esc}"][data-kind="file"]`,
+            );
+            if (hidden && "value" in hidden) {
+              /** @type {HTMLInputElement} */ (hidden).value = uris.join("\n");
+            }
+            const nameEl = card.querySelector(`[data-file-name-for="${esc}"]`);
+            if (nameEl) {
+              nameEl.textContent =
+                names.length === 0
+                  ? t("choiceCard.noFile")
+                  : names.length === 1
+                    ? names[0]
+                    : t("choiceCard.filesChosen", { n: String(names.length) });
+            }
+          };
+          if (act === "browse-jail") {
+            btn.disabled = true;
+            try {
+              const paths = await browseJailFilesForForm({ multiple });
+              if (paths.length) {
+                setFileField(
+                  paths,
+                  paths.map((p) => p.split("/").pop() || p),
+                );
+              }
+            } finally {
+              btn.disabled = false;
+            }
+            return;
+          }
+          const accept = btn.getAttribute("data-accept") || "";
+          const input = document.createElement("input");
+          input.type = "file";
+          if (accept) input.accept = accept;
+          if (multiple) input.multiple = true;
+          input.style.display = "none";
+          document.body.appendChild(input);
+          input.addEventListener("change", async () => {
+            const files = input.files ? [...input.files] : [];
+            input.remove();
+            if (!files.length) return;
+            const take = multiple ? files.slice(0, 8) : files.slice(0, 1);
+            for (const file of take) {
+              const pre = browserFormFilePreflight(file);
+              if (!pre.ok) {
+                showToast(pre.message, "err");
+                return;
+              }
+            }
+            btn.disabled = true;
+            try {
+              /** @type {string[]} */
+              const uris = [];
+              /** @type {string[]} */
+              const names = [];
+              for (const file of take) {
+                const contentBase64 = await fileToBase64(file);
+                const up = await rpc(
+                  "home.uploadChatMedia",
+                  {
+                    accountId: aid,
+                    fileName: file.name,
+                    contentBase64,
+                    mimeType: file.type || undefined,
+                  },
+                  { timeoutMs: 60_000 },
+                );
+                if (up.error) throw new Error(errMsg(up) || t("chat.attachUploadFailed"));
+                const uri = String(up.result?.uri || "");
+                if (!uri) throw new Error(t("chat.attachUploadFailed"));
+                uris.push(uri);
+                names.push(file.name);
+              }
+              setFileField(uris, names);
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : t("choiceCard.failed"), "err");
+            } finally {
+              btn.disabled = false;
+            }
+          });
+          input.click();
+          return;
+        }
         btn.disabled = true;
         /** @type {Record<string, unknown>} */
         const params = { accountId: aid, id: choiceId };
-        if (btn.getAttribute("data-act") === "cancel") {
+        if (act === "cancel") {
           params.cancel = true;
         } else if (selection === "one") {
           const oid = btn.getAttribute("data-option-id");
@@ -1157,11 +1258,21 @@ function bindChoiceCardActions(root, onDone) {
         } else if (selection === "form") {
           /** @type {Record<string, string | boolean>} */
           const fieldValues = {};
+          let missingRequiredFile = false;
           card.querySelectorAll("[data-field-id]").forEach((el) => {
             const fid = el.getAttribute("data-field-id");
             if (!fid) return;
             if (el instanceof HTMLInputElement && el.type === "checkbox") {
               fieldValues[fid] = el.checked;
+              return;
+            }
+            if (
+              el instanceof HTMLInputElement &&
+              el.getAttribute("data-kind") === "file"
+            ) {
+              const val = String(el.value ?? "").trim();
+              if (val) fieldValues[fid] = val;
+              else if (el.getAttribute("data-required") === "1") missingRequiredFile = true;
               return;
             }
             const val =
@@ -1172,7 +1283,7 @@ function bindChoiceCardActions(root, onDone) {
                 : "";
             if (val) fieldValues[fid] = val;
           });
-          if (!Object.keys(fieldValues).length) {
+          if (missingRequiredFile || !Object.keys(fieldValues).length) {
             showToast(t("choiceCard.pickOne"), "err");
             btn.disabled = false;
             return;
@@ -1613,6 +1724,154 @@ let activeView = "chat";
 
 const CHAT_ATTACH_MAX_FILES = 8;
 const CHAT_ATTACH_MAX_BYTES = 8 * 1024 * 1024;
+/** §9.5g.3 / P2-J — align daemon BROWSER_FORM_FILE_EXT_ALLOW. */
+const BROWSER_FORM_FILE_EXT_ALLOW = new Set([
+  ".pdf",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".txt",
+  ".csv",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+]);
+
+/** @param {File} file */
+function browserFormFilePreflight(file) {
+  if (!file || !(file.size > 0)) {
+    return { ok: false, message: t("choiceCard.fileEmpty") };
+  }
+  if (file.size > CHAT_ATTACH_MAX_BYTES) {
+    return {
+      ok: false,
+      message: t("chat.attachTooLarge", {
+        name: file.name,
+        max: formatAttachSize(CHAT_ATTACH_MAX_BYTES),
+      }),
+    };
+  }
+  const lower = String(file.name || "").toLowerCase();
+  const dot = lower.lastIndexOf(".");
+  const ext = dot >= 0 ? lower.slice(dot) : "";
+  if (!BROWSER_FORM_FILE_EXT_ALLOW.has(ext)) {
+    return { ok: false, message: t("choiceCard.fileTypeRefused", { name: file.name }) };
+  }
+  const mime = String(file.type || "").toLowerCase().split(";")[0].trim();
+  if (
+    mime &&
+    /^(application\/x-msdownload|application\/x-executable|application\/x-dosexec|application\/javascript|text\/html|application\/x-sh)/i.test(
+      mime,
+    )
+  ) {
+    return { ok: false, message: t("choiceCard.fileTypeRefused", { name: file.name }) };
+  }
+  return { ok: true };
+}
+
+/**
+ * §9.5g.3 — pick an existing jail/workspace file via home.listSandboxEntries.
+ * @param {{ multiple?: boolean }} opts
+ * @returns {Promise<string[]>}
+ */
+function browseJailFilesForForm(opts = {}) {
+  const multiple = opts.multiple === true;
+  const aid = accountId();
+  if (!aid) return Promise.resolve([]);
+  return new Promise((resolve) => {
+    /** @type {string[]} */
+    const picked = [];
+    let path = "";
+    const overlay = document.createElement("div");
+    overlay.className = "chat-choice-jail-overlay";
+    overlay.innerHTML = `<div class="chat-choice-jail-modal" role="dialog" aria-modal="true">
+      <div class="chat-choice-jail-head">
+        <strong>${escapeHtml(t("choiceCard.browseJail"))}</strong>
+        <button type="button" class="secondary" data-jail-act="close">${escapeHtml(t("choiceCard.cancel"))}</button>
+      </div>
+      <p class="muted chat-choice-jail-path" data-jail-path></p>
+      <ul class="chat-choice-jail-list" data-jail-list></ul>
+      <div class="row chat-choice-jail-foot">
+        <button type="button" class="secondary" data-jail-act="up">${escapeHtml(t("choiceCard.browseUp"))}</button>
+        <button type="button" data-jail-act="done" ${multiple ? "" : "hidden"}>${escapeHtml(t("choiceCard.confirm"))}</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    const listEl = /** @type {HTMLElement} */ (overlay.querySelector("[data-jail-list]"));
+    const pathEl = /** @type {HTMLElement} */ (overlay.querySelector("[data-jail-path]"));
+    let parentPath = "";
+    const finish = (paths) => {
+      overlay.remove();
+      resolve(paths);
+    };
+    const render = async () => {
+      const body = await rpc("home.listSandboxEntries", { accountId: aid, path });
+      if (body.error) {
+        showToast(errMsg(body) || t("choiceCard.failed"), "err");
+        finish([]);
+        return;
+      }
+      const res = body.result || {};
+      path = String(res.path || "");
+      parentPath = res.parent != null ? String(res.parent) : "";
+      pathEl.textContent = path || "/";
+      const entries = Array.isArray(res.entries) ? res.entries : [];
+      listEl.innerHTML = entries
+        .map((e) => {
+          const kind = e.kind === "dir" ? "dir" : "file";
+          const name = escapeHtml(e.name || "");
+          const ep = escapeHtml(e.path || "");
+          return `<li><button type="button" data-jail-kind="${kind}" data-jail-path="${ep}">${kind === "dir" ? "📁 " : "📄 "}${name}</button></li>`;
+        })
+        .join("");
+    };
+    overlay.addEventListener("click", async (ev) => {
+      const tEl = /** @type {HTMLElement} */ (ev.target);
+      const act = tEl.getAttribute?.("data-jail-act");
+      if (act === "close") {
+        finish([]);
+        return;
+      }
+      if (act === "up") {
+        path = parentPath || "";
+        await render();
+        return;
+      }
+      if (act === "done") {
+        finish(picked.slice());
+        return;
+      }
+      const btn = tEl.closest?.("[data-jail-kind]");
+      if (!btn) return;
+      const kind = btn.getAttribute("data-jail-kind");
+      const ep = btn.getAttribute("data-jail-path") || "";
+      if (kind === "dir") {
+        path = ep;
+        await render();
+        return;
+      }
+      if (!ep) return;
+      const base = ep.split("/").pop() || ep;
+      const lower = base.toLowerCase();
+      const dot = lower.lastIndexOf(".");
+      const ext = dot >= 0 ? lower.slice(dot) : "";
+      if (!BROWSER_FORM_FILE_EXT_ALLOW.has(ext)) {
+        showToast(t("choiceCard.fileTypeRefused", { name: base }), "err");
+        return;
+      }
+      if (!multiple) {
+        finish([ep]);
+        return;
+      }
+      if (!picked.includes(ep) && picked.length < 8) picked.push(ep);
+      showToast(`${picked.length}: ${base}`, "ok");
+    });
+    void render();
+  });
+}
 
 function isChatSurface(view) {
   return view === "chat" || view === "homeChat" || view === "schedulesChat";

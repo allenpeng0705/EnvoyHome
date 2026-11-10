@@ -294,6 +294,58 @@ test("V-OUT-8: browser summary uses browserDefaultProfile when args omit profile
   }
 });
 
+test("V-OUT-25: browser propose_form approval summary names file fields (no paths)", async () => {
+  const root = await mkdtemp(join(tmpdir(), "eh-browser-form-file-sum-"));
+  try {
+    const store = new ApprovalStore((id) => join(root, id));
+    const ctx: TurnContext = {
+      account_id: "alice",
+      agent_id: "default",
+      session_id: "s1",
+      turn_id: "t-br-file",
+      sandbox_root: join(root, "alice", "files"),
+      origin: "attended",
+      policy_snapshot: { origin: "attended", tool_policy: "standard", model_mode: "cloud" },
+    };
+    let lastSummary = "";
+    const approval = new ApprovalSink({
+      store,
+      policy: ctx.policy_snapshot,
+      toolPolicy: "standard",
+      onApprovalNeeded: (row) => {
+        lastSummary = row.summary ?? "";
+      },
+      waitForAnswer: async () => "allow",
+    });
+    const res = await dispatchTool(
+      {
+        ctx,
+        provider: new ProviderHandle({ router: new MixRouter(undefined, undefined), mode: "cloud" }),
+        approval,
+        fs: { writeFile: async () => undefined, readFile: async () => "" },
+        extraToolImpl: async () => JSON.stringify({ ok: true }),
+      },
+      {
+        tool: "browser",
+        args: {
+          action: "propose_form",
+          profile: "managed",
+          fields: [
+            { id: "f0", label: "Name", ref: "0", kind: "text", sensitive: false },
+            { id: "f1", label: "Resume", ref: "1", kind: "file", sensitive: false },
+          ],
+        },
+      },
+    );
+    assert.equal(res.ok, true);
+    assert.match(lastSummary, /propose_form/);
+    assert.match(lastSummary, /files=Resume/);
+    assert.ok(!/uploads\//i.test(lastSummary));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("V-OUT-9: browser personal profile tagged in approval summary", async () => {
   const root = await mkdtemp(join(tmpdir(), "eh-browser-personal-sum-"));
   try {

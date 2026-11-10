@@ -20,7 +20,8 @@ export type BrowserFormFieldKind =
   | "otp"
   | "textarea"
   | "select"
-  | "checkbox";
+  | "checkbox"
+  | "file";
 
 export type BrowserFormField = {
   id: string;
@@ -29,8 +30,123 @@ export type BrowserFormField = {
   kind: BrowserFormFieldKind;
   required?: boolean;
   options?: { value: string; label: string }[];
+  /** HTML accept hint for `kind: file` (thin clients MAY filter). */
+  accept?: string;
+  /** HTML multiple — Owner MAY supply several jail paths (newline-separated). */
+  multiple?: boolean;
   sensitive: boolean;
 };
+
+/** Cap paths per file field when `multiple` (align chat attach). */
+export const BROWSER_FORM_FILE_MAX_COUNT = 8;
+
+/** §9.5g.3 / P2-J — images + common docs; refuse executables. */
+export const BROWSER_FORM_FILE_EXT_ALLOW = new Set([
+  ".pdf",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".webp",
+  ".txt",
+  ".csv",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+]);
+
+/** Declared MIME allow-list (clients); path apply also sniffs magic. */
+export const BROWSER_FORM_FILE_MIME_ALLOW = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "text/plain",
+  "text/csv",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/octet-stream", // unknown — still gated by ext + magic
+]);
+
+const BROWSER_FORM_FILE_MIME_DENY_RE = [
+  /^application\/x-msdownload$/i,
+  /^application\/x-msdos-program$/i,
+  /^application\/x-executable$/i,
+  /^application\/x-dosexec$/i,
+  /^application\/vnd\.microsoft\.portable-executable$/i,
+  /^application\/x-sh$/i,
+  /^application\/x-shellscript$/i,
+  /^application\/javascript$/i,
+  /^text\/html$/i,
+  /^application\/wasm$/i,
+];
+
+export function isAllowedBrowserFormFileExt(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  const dot = lower.lastIndexOf(".");
+  if (dot < 0) return false;
+  return BROWSER_FORM_FILE_EXT_ALLOW.has(lower.slice(dot));
+}
+
+/** Client-declared MIME gate (extension still required). */
+export function isAllowedBrowserFormFileMime(mimeType: string | undefined): boolean {
+  if (!mimeType || !String(mimeType).trim()) return true;
+  const m = String(mimeType).toLowerCase().split(";")[0]!.trim();
+  if (!m) return true;
+  if (BROWSER_FORM_FILE_MIME_DENY_RE.some((re) => re.test(m))) return false;
+  if (BROWSER_FORM_FILE_MIME_ALLOW.has(m)) return true;
+  if (m.startsWith("image/") && /^(image\/(png|jpeg|gif|webp))$/.test(m)) return true;
+  return false;
+}
+
+/**
+ * Split a file field value into jail-relative paths.
+ * Multiple files are newline-separated (wire stays string|boolean).
+ */
+export function parseBrowserFormFilePaths(raw: unknown): string[] {
+  const s = typeof raw === "boolean" ? "" : String(raw ?? "");
+  return s
+    .split(/\r?\n+/)
+    .map((p) => p.replace(/\\/g, "/").replace(/^\.\/+/, "").trim())
+    .filter(Boolean)
+    .slice(0, BROWSER_FORM_FILE_MAX_COUNT);
+}
+
+/** Magic-byte refuse for PE/ELF/Mach-O (ext allow-list is not enough). */
+export function isDeniedBrowserFormFileMagic(head: Uint8Array): boolean {
+  if (head.length < 2) return false;
+  // MZ — PE / DOS
+  if (head[0] === 0x4d && head[1] === 0x5a) return true;
+  // ELF
+  if (
+    head.length >= 4 &&
+    head[0] === 0x7f &&
+    head[1] === 0x45 &&
+    head[2] === 0x4c &&
+    head[3] === 0x46
+  ) {
+    return true;
+  }
+  // Mach-O (32/64, fat)
+  if (head.length >= 4) {
+    const b0 = head[0]!;
+    const b1 = head[1]!;
+    const b2 = head[2]!;
+    const b3 = head[3]!;
+    const be =
+      (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+    const le = (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
+    const magics = new Set([
+      0xfeedface, 0xcefaedfe, 0xfeedfacf, 0xcffaedfe, 0xcafebabe, 0xbebafeca,
+    ]);
+    if (magics.has(be >>> 0) || magics.has(le >>> 0)) return true;
+  }
+  return false;
+}
 
 const SECRET_LABEL_RE =
   /\b(password|passwd|passcode|pin|otp|2fa|mfa|verification\s*code|one[-\s]?time|secret|token)\b/i;
@@ -49,7 +165,6 @@ function isNavOnly(el: Record<string, unknown>): boolean {
     inputType === "button" ||
     inputType === "image" ||
     inputType === "reset" ||
-    inputType === "file" ||
     inputType === "hidden"
   ) {
     return true;
@@ -58,16 +173,26 @@ function isNavOnly(el: Record<string, unknown>): boolean {
 }
 
 function isFillable(el: Record<string, unknown>): boolean {
-  if (isNavOnly(el)) return false;
   const tag = String(el.tag ?? "").toLowerCase();
   const role = String(el.role ?? "").toLowerCase();
   const inputType = String(el.inputType ?? "").toLowerCase();
+  // File before nav check — snapshots may label file inputs with role=button.
+  if (tag === "input" && inputType === "file") return true;
+  if (isNavOnly(el)) return false;
   if (tag === "textarea" || role === "textbox") return true;
   if (tag === "select" || role === "combobox") return true;
   if (tag === "input") {
-    if (!inputType || inputType === "text" || inputType === "email" || inputType === "search" ||
-        inputType === "tel" || inputType === "url" || inputType === "number" ||
-        inputType === "password" || inputType === "checkbox") {
+    if (
+      !inputType ||
+      inputType === "text" ||
+      inputType === "email" ||
+      inputType === "search" ||
+      inputType === "tel" ||
+      inputType === "url" ||
+      inputType === "number" ||
+      inputType === "password" ||
+      inputType === "checkbox"
+    ) {
       return true;
     }
   }
@@ -86,6 +211,7 @@ function inferKind(el: Record<string, unknown>): BrowserFormFieldKind {
     String(el.autocomplete ?? ""),
   ].join(" ");
 
+  if (inputType === "file") return "file";
   if (tag === "select" || role === "combobox") return "select";
   if (tag === "textarea") return "textarea";
   if (inputType === "checkbox" || role === "checkbox") return "checkbox";
@@ -111,6 +237,7 @@ function inferLabel(el: Record<string, unknown>, kind: BrowserFormFieldKind, ind
   if (kind === "password") return `Password ${index + 1}`;
   if (kind === "otp") return `Code ${index + 1}`;
   if (kind === "checkbox") return `Option ${index + 1}`;
+  if (kind === "file") return `File ${index + 1}`;
   return `Field ${index + 1}`;
 }
 
@@ -173,7 +300,7 @@ function pickSubmitRef(
     if (inputType === "submit") return ref;
     if (
       (tag === "button" || role === "button") &&
-      /\b(submit|sign\s*in|log\s*in|continue|next|save|apply|confirm|send)\b/i.test(name)
+      /\b(submit|sign\s*in|log\s*in|continue|next|save|apply|confirm|send|upload)\b/i.test(name)
     ) {
       return ref;
     }
@@ -222,6 +349,11 @@ export function deriveBrowserFormFields(
       sensitive,
       ...(el.required === true ? { required: true } : {}),
     };
+    if (kind === "file") {
+      const accept = String(el.accept ?? "").trim().slice(0, 200);
+      if (accept) field.accept = accept;
+      if (el.multiple === true) field.multiple = true;
+    }
     if (kind === "select" && Array.isArray(el.selectOptions)) {
       const options = (el.selectOptions as Array<Record<string, unknown>>)
         .map((o) => ({

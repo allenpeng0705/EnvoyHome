@@ -241,8 +241,20 @@ export async function dispatchTool(
       if (typeof a.snapshotId === "string" && a.snapshotId.trim()) {
         bits.push(`snap=${a.snapshotId.trim()}`);
       }
-      if (Array.isArray(a.fields)) bits.push(`fields=${a.fields.length}`);
-      // Never put fieldValues / passwords into the approval summary.
+      if (Array.isArray(a.fields)) {
+        bits.push(`fields=${a.fields.length}`);
+        // §9.5g.3 / P2-J — name file fields only (no paths / values).
+        const fileLabels = a.fields
+          .filter(
+            (f): f is Record<string, unknown> =>
+              !!f && typeof f === "object" && !Array.isArray(f) && (f as { kind?: string }).kind === "file",
+          )
+          .map((f) => String((f as { label?: string }).label ?? (f as { id?: string }).id ?? "file").trim())
+          .filter(Boolean)
+          .slice(0, 6);
+        if (fileLabels.length) bits.push(`files=${fileLabels.join(",")}`);
+      }
+      // Never put fieldValues / passwords / file paths into the approval summary.
     }
     const extra = bits.length ? ` ${bits.join(" ")}` : "";
     summary = `browser ${action} [${profile}]${extra}`;

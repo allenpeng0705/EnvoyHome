@@ -2913,6 +2913,27 @@ abstract class AppLocalizations {
   /// Open CTA for outbound_handoff.
   String get choiceCardOpen;
 
+  /// Choose file button on browser form cards.
+  String get choiceCardChooseFile;
+
+  /// Browse sandbox/workspace for form file.
+  String get choiceCardBrowseJail;
+
+  /// Up one directory in jail browse.
+  String get choiceCardBrowseUp;
+
+  /// Multi-file form pick label.
+  String choiceCardFilesChosen(int n);
+
+  /// Placeholder when no form file selected.
+  String get choiceCardNoFile;
+
+  /// Empty form-file pick.
+  String get choiceCardFileEmpty;
+
+  /// Disallowed form-file extension.
+  String choiceCardFileTypeRefused(String name);
+
   /// Hint under handoff card.
   String get choiceCardHandoffHint;
 

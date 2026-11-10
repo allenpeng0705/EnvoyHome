@@ -346,6 +346,13 @@ function fieldValuesForFormChoice(choice, liveAnswer) {
       fieldValues[id] = String(f.options[0].value);
       continue;
     }
+    // P2-J — never invent host paths; only fill file when liveAnswer provides a jail path.
+    if (kind === "file") {
+      if (typeof byKind.file === "string" && byKind.file.trim()) {
+        fieldValues[id] = byKind.file.trim();
+      }
+      continue;
+    }
     fieldValues[id] = formDefault;
   }
   return fieldValues;

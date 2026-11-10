@@ -255,7 +255,7 @@ const choiceFormField = obj(
     id: str({ minLength: 1 }),
     label: str({ minLength: 1 }),
     ref: str({ minLength: 1 }),
-    kind: enumOf("text", "password", "otp", "textarea", "select", "checkbox"),
+    kind: enumOf("text", "password", "otp", "textarea", "select", "checkbox", "file"),
     required: bool(),
     options: arr(
       obj(
@@ -266,6 +266,8 @@ const choiceFormField = obj(
         ["value", "label"],
       ),
     ),
+    accept: str({ minLength: 1 }),
+    multiple: bool(),
     sensitive: bool(),
   },
   ["id", "label", "ref", "kind", "sensitive"],

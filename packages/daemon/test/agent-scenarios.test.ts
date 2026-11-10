@@ -123,7 +123,7 @@ async function chromiumFetchLocal(url: string, timeoutMs: number): Promise<strin
 /** Minimal page factory for browser tool scenarios (mirrors browser-control.test). */
 function mockBrowserPage(
   url = "https://example.com/",
-  opts?: { form?: boolean; payment?: boolean },
+  opts?: { form?: boolean; payment?: boolean; file?: boolean },
 ) {
   let current = url;
   const stamped = new Map<string, string>();
@@ -133,14 +133,22 @@ function mockBrowserPage(
     },
     url: () => current,
     title: async () =>
-      opts?.payment ? "Checkout — payment" : opts?.form ? "Customer form" : "Example",
+      opts?.payment
+        ? "Checkout — payment"
+        : opts?.file
+          ? "Upload resume"
+          : opts?.form
+            ? "Customer form"
+            : "Example",
     content: async () => "<html></html>",
     innerText: async () =>
       opts?.payment
         ? "Enter card details to place order. Credit card number and CVV. Apple Pay available."
-        : opts?.form
-          ? "Please fill out the form"
-          : "Hello body text",
+        : opts?.file
+          ? "Attach your resume to continue"
+          : opts?.form
+            ? "Please fill out the form"
+            : "Hello body text",
     locator: (sel: string) => {
       const m = /data-eh-ref="([^"]+)"/.exec(sel);
       const ref = m?.[1] ?? "";
@@ -149,6 +157,7 @@ function mockBrowserPage(
         nth: () => ({
           click: async () => undefined,
           fill: async () => undefined,
+          setInputFiles: async () => undefined,
           selectOption: async () => undefined,
           dragTo: async () => undefined,
           evaluate: async <T>(fn: (el: Element) => T) =>
@@ -174,6 +183,7 @@ function mockBrowserPage(
             if (name === "role") return (attrs.role as string) ?? null;
             if (name === "name") return (attrs.name as string) ?? null;
             if (name === "aria-label") return (attrs["aria-label"] as string) ?? null;
+            if (name === "accept") return (attrs.accept as string) ?? null;
             if (name === "aria-required") return attrs.required ? "true" : null;
             return store[name] ?? null;
           },
@@ -183,7 +193,10 @@ function mockBrowserPage(
           type: (attrs.type as string) || "",
           value: "",
           options: [],
-          getBoundingClientRect: () => ({ width: 10, height: 10 }),
+          getBoundingClientRect: () =>
+            attrs.type === "file"
+              ? { width: 0, height: 0 }
+              : { width: 10, height: 10 },
         };
       };
       const els = opts?.payment
@@ -202,39 +215,56 @@ function mockBrowserPage(
             }),
             makeEl("BUTTON", { role: "button", "aria-label": "Pay now" }),
           ]
-        : opts?.form
+        : opts?.file
           ? [
               makeEl("INPUT", {
                 type: "text",
-                name: "custname",
-                "aria-label": "Customer name",
+                name: "fullname",
+                "aria-label": "Full name",
                 required: true,
               }),
               makeEl("INPUT", {
-                type: "email",
-                name: "custemail",
-                "aria-label": "Email",
+                type: "file",
+                name: "resume",
+                "aria-label": "Resume",
+                accept: ".pdf,.png",
                 required: true,
               }),
-              makeEl("INPUT", {
-                type: "password",
-                name: "password",
-                "aria-label": "Password",
-                required: true,
-              }),
-              makeEl("TEXTAREA", {
-                name: "comments",
-                "aria-label": "Comments",
-              }),
-              makeEl("BUTTON", { role: "button", "aria-label": "Submit order" }),
+              makeEl("BUTTON", { role: "button", "aria-label": "Upload" }),
             ]
-          : [
-              makeEl("BUTTON", {
-                role: "button",
-                "aria-label": "Go",
-                label: "Go",
-              }),
-            ];
+          : opts?.form
+            ? [
+                makeEl("INPUT", {
+                  type: "text",
+                  name: "custname",
+                  "aria-label": "Customer name",
+                  required: true,
+                }),
+                makeEl("INPUT", {
+                  type: "email",
+                  name: "custemail",
+                  "aria-label": "Email",
+                  required: true,
+                }),
+                makeEl("INPUT", {
+                  type: "password",
+                  name: "password",
+                  "aria-label": "Password",
+                  required: true,
+                }),
+                makeEl("TEXTAREA", {
+                  name: "comments",
+                  "aria-label": "Comments",
+                }),
+                makeEl("BUTTON", { role: "button", "aria-label": "Submit order" }),
+              ]
+            : [
+                makeEl("BUTTON", {
+                  role: "button",
+                  "aria-label": "Go",
+                  label: "Go",
+                }),
+              ];
       const fakeDoc = { querySelectorAll: () => els };
       const fakeWin = {
         getComputedStyle: () => ({ display: "block", visibility: "visible" }),
@@ -268,19 +298,27 @@ async function applyBrowserSetup(
     await bc.setConfig({ enabled: false });
     return {};
   }
-  if (setup.browserMock || setup.browserFormMock || setup.browserPaymentMock) {
+  if (
+    setup.browserMock ||
+    setup.browserFormMock ||
+    setup.browserFormFileMock ||
+    setup.browserPaymentMock
+  ) {
     __resetBrowserSerpGatesForTests();
     await bc.setConfig({ enabled: true });
     const form = setup.browserFormMock === true;
+    const file = setup.browserFormFileMock === true;
     const payment = setup.browserPaymentMock === true;
     bc.pageFactory = async () =>
       mockBrowserPage(
         payment
           ? "https://shop.example/checkout/pay"
-          : form
-            ? "https://example.com/form"
-            : "https://example.com/",
-        { form, payment },
+          : file
+            ? "https://example.com/upload"
+            : form
+              ? "https://example.com/form"
+              : "https://example.com/",
+        { form, payment, file },
       ) as never;
     return {};
   }

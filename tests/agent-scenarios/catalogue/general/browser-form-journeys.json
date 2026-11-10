@@ -78,6 +78,70 @@
     }
   },
   {
+    "id": "gen-tool-browser-propose-form-file",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Propose a form card that includes a file upload field from the snapshot.",
+    "setup": { "browserFormFileMock": true },
+    "toolSequence": [
+      {
+        "name": "browser",
+        "args": { "action": "navigate", "url": "https://example.com/upload" }
+      },
+      {
+        "name": "browser",
+        "args": { "action": "propose_form" }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step1": {
+        "jsonFields": ["action", "fields", "snapshotId", "ok"],
+        "bodyMatching": "\"kind\":\"file\""
+      }
+    }
+  },
+  {
+    "id": "gen-compose-browser-form-file-no-host-path",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "The page has a resume file input. Propose a form card so I can Choose file. Never invent a host absolute path for the file field.",
+    "setup": { "browserFormFileMock": true },
+    "allowTools": ["browser"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"browser\",\"args\":{\"action\":\"navigate\",\"url\":\"https://example.com/upload\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"browser\",\"args\":{\"action\":\"propose_form\"}}]\n```"
+      },
+      {
+        "reply": "I opened a form card with the Resume file field — use Choose file (jail upload). I will not invent host paths."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["browser", "browser"],
+      "finalMatching": "form|file|Choose|jail|upload|path|Resume|resume"
+    }
+  },
+  {
+    "id": "gen-live-browser-form-file-honesty",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": { "browserEnabled": true },
+    "prompt": "Explain how EnvoyHome browser form assist handles a page with input type=file: propose_form yields kind file, Owner Choose file uploads to jail uploads/, apply uses setInputFiles, unattended refuses file fields, and you must never invent host absolute paths or Learn file bytes. If browser is off, say so.",
+    "expect": {
+      "requireHonesty": true,
+      "honestyMatching": [
+        "propose_form|kind.?file|Choose file|uploads|setInputFiles|unattended|jail|host path|Learn|file|表单|文件|上传"
+      ]
+    }
+  },
+  {
     "id": "gen-live-browser-form-httpbin",
     "pack": "general",
     "mode": "turn",

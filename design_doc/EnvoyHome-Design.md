@@ -5,7 +5,7 @@
 | **Document** | Single all-in-one design for EnvoyHome |
 | **Role** | Ground truth for **implementation** and **verification** |
 | **Status** | Living draft — refine in place; bump changelog |
-| **Last updated** | 2026-11-04d (P2-I Daily Outbound Assist shipped) |
+| **Last updated** | 2026-11-10b (P2-J file upload follow-through) |
 | **Not** | A port of HomeClaw; a clone of Hermes / OpenClaw / OpenHuman |
 
 **How to use this doc**
@@ -22,6 +22,8 @@
 
 | Date | Change |
 |------|--------|
+| 2026-11-10b | **P2-J follow-through:** MIME deny + PE/ELF/Mach-O magic refuse; HTML `multiple` (newline-separated paths, ≤8); jail browse via `home.listSandboxEntries` on form cards; R3 workspace mounts on apply. No `protocolApiVersion` bump. |
+| 2026-11-10 | **Ship (P2-J §9.5g.3 file upload):** Form card `kind: "file"` from `input[type=file]`; Owner picks a jail path (upload → `uploads/…` or existing sandbox/workspace path); apply via Playwright `setInputFiles`; ≤8 MiB; mime allow-list; unattended refuse file fields; never Learn file bytes. Lifts prior file-upload Defer. V-OUT-25…27. No `protocolApiVersion` bump. |
 | 2026-11-04d | **Ship (P2-I §9.5i Daily Outbound Assist):** Hard stop before pay/OTP-SMS/CAPTCHA/wallet; prefer Owner MCP over browser for commerce; multi-step form chain; `blocked: "payment"`; handoff choice `purpose: "outbound_handoff"` + https `openUrl` + `steps[]` (Open → system URL / Universal Links; never claim daemon cart ≡ phone app). V-OUT-20…24. No `protocolApiVersion` bump. |
 | 2026-11-04c | **Ship (P2-H §9.5g.3 browser form assist):** Dynamic form choice card (`selection: "form"`, `purpose: "browser_form"`) from snapshot fields; `browser` `propose_form` / `apply_form`; mobile + desktop cards; secrets one-shot + redact; unattended refuses sensitive; no card on captcha/challenge. V-OUT-16…19 green. No `protocolApiVersion` bump. |
 | 2026-11-04b | **Normative (§9.5g.3 browser form assist / P2-H):** Dynamic **form card** from the current page snapshot — not login-only; N fields derived from stamped refs (text/password/otp/select/checkbox/textarea). Additive choice `selection: "form"` + purpose `browser_form`; thin clients render fields dynamically. One Submit → daemon fills matching refs under matching `snapshotId` (+ optional submit click) with a single attended Allow; secrets one-shot (never standing Learn). Unattended refuses any `password`/`otp` field. CAPTCHA/`blocked` still hand off. Extends V-UX-14. V-OUT-16…19. No `protocolApiVersion` bump. |
@@ -2356,41 +2358,44 @@ When the agent needs human-supplied values for a **web form** (login, checkout d
 | `id` | Stable id within this card |
 | `label` | Human label (from `name` / aria / nearby text; daemon MAY shorten) |
 | `ref` | Snapshot `data-eh-ref` |
-| `kind` | `text` \| `password` \| `otp` \| `textarea` \| `select` \| `checkbox` |
+| `kind` | `text` \| `password` \| `otp` \| `textarea` \| `select` \| `checkbox` \| `file` |
 | `required?` | Hint for UI |
 | `options?` | For `select` — value/label pairs from the snapshot when available |
-| `sensitive` | `true` when `kind` ∈ {`password`,`otp`} **or** label/name heuristics say secret |
+| `accept?` | For `file` — optional HTML `accept` hint from the snapshot (thin clients MAY filter) |
+| `sensitive` | `true` when `kind` ∈ {`password`,`otp`} **or** label/name heuristics say secret; `file` is **not** auto-sensitive but **refuses unattended** |
 
 Card envelope MUST include: `snapshotId`, `targetId`, `profile`, `url?`, `title?`, `submitRef?` (button/link ref to click after fill), `fields[]` (cap ≤ **24** fields).
 
 **Derivation (Normative):**
-1. Prefer current tab `snapshot` elements with roles/tags that are fillable (`textbox`, `checkbox`, `combobox`, `textarea`, password inputs, etc.).
+1. Prefer current tab `snapshot` elements with roles/tags that are fillable (`textbox`, `checkbox`, `combobox`, `textarea`, password inputs, **`input[type=file]`**, etc.).
 2. Skip purely navigational controls (bare links) unless they are the explicit `submitRef`.
-3. If the page returns §9.5g.2 `blocked` (`captcha` / challenge), MUST NOT open a form card — hand off.
+3. If the page returns §9.5g.2 `blocked` (`captcha` / challenge / `payment`), MUST NOT open a form card — hand off.
 4. Stale page → new snapshot → **new** card (old card answers with mismatched `snapshotId` fail closed).
 
 **Thin-client UX (Normative):**
-1. Mobile and desktop MUST render `fields[]` dynamically (obscure `password` / `otp`; checkbox/select use native controls).
+1. Mobile and desktop MUST render `fields[]` dynamically (obscure `password` / `otp`; checkbox/select use native controls; **`file` → Choose file**).
 2. Primary action: **Submit** (apply). Secondary: Cancel (fail closed, same as choice cancel).
-3. MUST NOT echo `password`/`otp` values into the chat transcript bubble; may show “•••• submitted” / field count only.
+3. MUST NOT echo `password`/`otp` values into the chat transcript bubble; may show “•••• submitted” / field count only. File fields MAY show the chosen **file name** (not bytes).
 4. Push wake: treat like other interactive cards (`home:choice-needed` with form selection) — §11.3 interactive catalogue.
+5. **File pick (Normative — `2026-11-10` / P2-J):** Owner chooses a file; client MUST materialize it under the account jail (typically `home.uploadChatMedia` → `uploads/…`) **or** select an existing sandbox/workspace path already under the turn path jail (`home.listSandboxEntries` browse). `fieldValues[id]` is the **sandbox-relative path string** (never a host absolute path, never raw bytes on the choice wire). When the snapshot field has HTML `multiple`, values MAY be **newline-separated** paths (cap ≤ **8**).
 
 **Apply path (Normative):**
-1. `home.answerChoice` (or equivalent) returns `{ fieldValues: { [fieldId]: string\|boolean } }` — secrets in the answer payload only for that RPC.
+1. `home.answerChoice` (or equivalent) returns `{ fieldValues: { [fieldId]: string\|boolean } }` — secrets in the answer payload only for that RPC; file values are jail-relative paths (newline-separated when `multiple`).
 2. Daemon verifies card `snapshotId` still matches the tab; else `stale_snapshot` and re-prompt.
-3. Attended: **one** ApprovalSink ask summarizing `browser form [profile] <url> N fields` (+ submit if any). Allow → for each field, `act` type/select/checkbox on `ref` with that `snapshotId`; then optional click `submitRef`. Prefer a single internal apply that does not re-ask per field.
-4. After apply, consume `snapshotId` as §9.5g.2 mutating acts do; return structured verify when useful.
-5. Secrets: one-shot; MUST NOT enqueue PendingLearn / L1–L2 / KnowYou from field values. Logs/transcripts MUST redact password/otp.
+3. Attended: **one** ApprovalSink ask summarizing `browser form [profile] <url> N fields` (+ submit if any; file fields named in summary without path dump). Allow → for each field: type/select/checkbox as today; **`file` → Playwright `setInputFiles`** on the stamped ref after resolving each path through `safeJoin` / `resolveSandboxPath` (account files + R3-effective workspace mounts). Then optional click `submitRef`. Prefer a single internal apply that does not re-ask per field.
+4. File apply caps (Normative): ≤ **8 MiB** per file (align chat media); ≤ **8** files when `multiple`; extension allow-list (images + common docs: pdf/png/jpe?g/gif/webp/txt/csv/doc/docx/xls/xlsx); declared-MIME deny for executables/scripts; **magic-byte refuse** for PE/ELF/Mach-O; refuse empty / missing / path escape. Hidden `input[type=file]` MAY be targeted (Playwright visibility exempt). Dynamic chooser widgets without a file input → fail closed with structured error (honest handoff) — no OS dialog driving.
+5. After apply, consume `snapshotId` as §9.5g.2 mutating acts do; return structured verify when useful.
+6. Secrets / files: one-shot; MUST NOT enqueue PendingLearn / L1–L2 / KnowYou from field values or file bytes. Logs/transcripts MUST redact password/otp; file paths MAY appear as basename only.
 
 **Unattended (Normative):**
-- Any card containing a `sensitive` field → **refuse** unattended (no grant bypass).
-- Non-sensitive forms MAY run unattended only with matching grant + managed profile + `unattendedEnabled` (same family as §9.5g).
+- Any card containing a `sensitive` field **or any `file` field** → **refuse** unattended (no grant bypass for file in v1).
+- Non-sensitive, non-file forms MAY run unattended only with matching grant + managed profile + `unattendedEnabled` (same family as §9.5g).
 
-**Agent tool (Normative):** Catalogue MAY expose `browser` action `propose_form` (or a thin builtin `browser_form`) that, given optional field filter, builds the card from the current snapshot and parks via the choice store — models MUST NOT paste passwords into free-text `ask_user` when a form card is available.
+**Agent tool (Normative):** Catalogue MAY expose `browser` action `propose_form` (or a thin builtin `browser_form`) that, given optional field filter, builds the card from the current snapshot and parks via the choice store — models MUST NOT paste passwords into free-text `ask_user` when a form card is available; MUST NOT invent host file paths for `file` fields.
 
-**Non-goals:** CAPTCHA widgets; file-upload fields (Defer); native apps; storing site passwords as a vault (Defer — one-shot only in v1); autofill from third-party password managers.
+**Non-goals:** CAPTCHA widgets; native apps; storing site passwords as a vault (Defer — one-shot only in v1); autofill from third-party password managers; drag-drop / canvas / cloud-SDK uploaders without a file input; driving the **site’s** OS file dialog (Home uses Choose file / jail browse instead); unattended file apply.
 
-Verification: **V-OUT-16** … **V-OUT-19**.
+Verification: **V-OUT-16** … **V-OUT-19**; file upload **V-OUT-25** … **V-OUT-27**.
 
 ### 9.5h MCP servers (Normative — `2026-11-03b` / P2-F)
 
@@ -2538,6 +2543,9 @@ Canonical memory IDs live in [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Des
 | V-OUT-17 | §9.5g.3: Submit with mismatched/stale `snapshotId` fails closed; no fill |
 | V-OUT-18 | §9.5g.3: password/otp never LearnQueue/L1–L2; redacted in transcript; unattended refuses sensitive fields |
 | V-OUT-19 | §9.5g.3: one attended Allow applies all field fills (+ optional submit); CAPTCHA/`blocked` page does not open a form card |
+| V-OUT-25 | §9.5g.3: `input[type=file]` → `kind: file`; apply via `setInputFiles` after jail resolve |
+| V-OUT-26 | §9.5g.3: file apply refuses escape / >8 MiB / disallowed mime; basename-only in transcript |
+| V-OUT-27 | §9.5g.3: unattended refuses any form card that includes a `file` field |
 | V-MCP-1 | Owner upserts any MCP transport config; non-Owner denied (§9.5h) |
 | V-MCP-2 | `testMcpServer` lists tools via initialize+tools/list; does not invoke mutating `tools/call` |
 | V-MCP-3 | Remote MCP URL SSRF refused (link-local / metadata / non-http(s)) |

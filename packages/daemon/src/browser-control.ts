@@ -1,7 +1,7 @@
-// Built-in browser control — Design §9.5g / V-OUT-8 + §9.5g.1 / V-OUT-9/10 + §9.5g.2 / V-OUT-11…15 + §9.5g.3 / V-OUT-16…19 + §9.5i / V-OUT-20…24.
+// Built-in browser control — Design §9.5g / V-OUT-8 + §9.5g.1 / V-OUT-9/10 + §9.5g.2 / V-OUT-11…15 + §9.5g.3 / V-OUT-16…19 + §9.5i / V-OUT-20…24 + P2-J / V-OUT-25…27.
 
-import { mkdir, readFile, writeFile, unlink, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, open, readFile, writeFile, unlink, stat } from "node:fs/promises";
+import { basename, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { HomePaths } from "./home-paths.js";
 import {
@@ -11,16 +11,42 @@ import {
   releaseBrowserGate,
 } from "./web-search-browser.js";
 import { isBlockedHostname } from "./skill-remote.js";
+import { assertHandoffOpenUrl } from "./outbound-url.js";
+import {
+  resolveSandboxPath,
+  safeJoin,
+  type WorkspaceMode,
+  type WorkspaceMountRef,
+} from "./fs-jail.js";
+import { CHAT_MEDIA_MAX_BYTES } from "./chat-media.js";
 import {
   deriveBrowserFormFields,
   detectPaymentWall,
+  isAllowedBrowserFormFileExt,
+  isDeniedBrowserFormFileMagic,
+  isPaymentFieldElement,
+  parseBrowserFormFilePaths,
   type BrowserFormField,
 } from "./browser-form.js";
 
+/** Optional R3 workspace mounts for form file apply (§9.5g.3 / P2-J). */
+export type BrowserWorkspaceMountResolver = (
+  accountId: string,
+) => Promise<WorkspaceMountRef[]>;
+
+export { assertHandoffOpenUrl } from "./outbound-url.js";
 export {
   deriveBrowserFormFields,
   detectPaymentWall,
+  isAllowedBrowserFormFileExt,
+  isAllowedBrowserFormFileMime,
+  isDeniedBrowserFormFileMagic,
+  isPaymentFieldElement,
+  parseBrowserFormFilePaths,
   BROWSER_FORM_FIELD_CAP,
+  BROWSER_FORM_FILE_EXT_ALLOW,
+  BROWSER_FORM_FILE_MAX_COUNT,
+  BROWSER_FORM_FILE_MIME_ALLOW,
   type BrowserFormField,
   type BrowserFormFieldKind,
 } from "./browser-form.js";
@@ -153,6 +179,11 @@ type PageLike = {
       click(opts?: { timeout?: number }): Promise<void>;
       fill(text: string, opts?: { timeout?: number }): Promise<void>;
       selectOption(value: string | string[]): Promise<unknown>;
+      /** Playwright — set file input paths (§9.5g.3 / P2-J). */
+      setInputFiles?(
+        files: string | string[],
+        opts?: { timeout?: number },
+      ): Promise<void>;
       dragTo(target: { click(): Promise<void> }): Promise<void>;
       evaluate<T>(fn: (el: Element) => T): Promise<T>;
       screenshot(opts: { path: string; type?: string }): Promise<Buffer>;
@@ -320,34 +351,6 @@ export function assertBrowserNavigateUrl(raw: string): URL {
   return url;
 }
 
-/** §9.5i handoff openUrl — https only + SSRF host refuse (V-OUT-23). */
-export function assertHandoffOpenUrl(raw: string): URL {
-  let url: URL;
-  try {
-    url = new URL(String(raw).trim());
-  } catch {
-    throw Object.assign(new Error("envoyhome.bad_params: invalid openUrl"), {
-      code: "bad_params",
-    });
-  }
-  if (url.protocol !== "https:") {
-    throw Object.assign(new Error("envoyhome.unsafe: handoff openUrl must be https"), {
-      code: "unsafe",
-    });
-  }
-  if (url.username || url.password) {
-    throw Object.assign(new Error("envoyhome.unsafe: openUrl must not include credentials"), {
-      code: "unsafe",
-    });
-  }
-  if (isBlockedHostname(url.hostname)) {
-    throw Object.assign(new Error(`envoyhome.unsafe: openUrl host refused: ${url.hostname}`), {
-      code: "unsafe",
-    });
-  }
-  return url;
-}
-
 /** Allow data/blob/about; otherwise same as navigate SSRF (redirects + subresources). */
 export function assertBrowserNetworkUrl(raw: string): void {
   const s = String(raw);
@@ -441,7 +444,9 @@ export function detectBrowserBlocked(input: {
     };
   }
 
-  // §9.5i / V-OUT-21 — payment / wallet wall (hard stop; never fill card fields).
+  // §9.5i / V-OUT-21 — page-level payment / wallet wall (URL/title/body only).
+  // Per-ref payment fields are refused in runAct / runApplyForm via isPaymentFieldElement
+  // so a settings page with one card widget does not block typing into other fields.
   if (
     detectPaymentWall({
       url: input.url,
@@ -498,6 +503,11 @@ export class BrowserControlService {
   cdpConnect: BrowserCdpConnect | null = null;
   /** Soft CDP probe override for tests. */
   cdpProbe: ((endpoint: string) => Promise<boolean>) | null = null;
+  /**
+   * Optional R3 workspace mounts (Design §4.2.1) for `workspace/…` form file paths.
+   * Wired by the daemon from AccountStore; tests may inject.
+   */
+  workspaceMountsFor: BrowserWorkspaceMountResolver | null = null;
 
   constructor(private readonly paths: HomePaths) {}
 
@@ -1308,6 +1318,7 @@ export class BrowserControlService {
       });
     }
     const hasSensitive = derived.fields.some((f) => f.sensitive);
+    const hasFile = derived.fields.some((f) => f.kind === "file");
     if (origin === "unattended" && hasSensitive) {
       return JSON.stringify({
         action: "propose_form",
@@ -1315,6 +1326,20 @@ export class BrowserControlService {
         ok: false,
         error: "sensitive_unattended",
         message: "unattended refuses password/otp form fields",
+        targetId,
+        snapshotId,
+        url,
+        title,
+      });
+    }
+    // V-OUT-27 — unattended refuses any file field (no grant bypass in v1).
+    if (origin === "unattended" && hasFile) {
+      return JSON.stringify({
+        action: "propose_form",
+        profile,
+        ok: false,
+        error: "file_unattended",
+        message: "unattended refuses file form fields",
         targetId,
         snapshotId,
         url,
@@ -1375,10 +1400,15 @@ export class BrowserControlService {
         kind !== "otp" &&
         kind !== "textarea" &&
         kind !== "select" &&
-        kind !== "checkbox"
+        kind !== "checkbox" &&
+        kind !== "file"
       ) {
         continue;
       }
+      const accept =
+        kind === "file" && typeof rec.accept === "string" && rec.accept.trim()
+          ? rec.accept.trim().slice(0, 200)
+          : undefined;
       fields.push({
         id,
         label: typeof rec.label === "string" ? rec.label : id,
@@ -1386,6 +1416,8 @@ export class BrowserControlService {
         kind,
         sensitive: rec.sensitive === true || kind === "password" || kind === "otp",
         ...(rec.required === true ? { required: true } : {}),
+        ...(accept ? { accept } : {}),
+        ...(kind === "file" && rec.multiple === true ? { multiple: true } : {}),
       });
     }
     if (fields.length === 0) {
@@ -1413,17 +1445,36 @@ export class BrowserControlService {
         snapshotId: currentSnap,
       });
     }
+    // V-OUT-27
+    if (origin === "unattended" && fields.some((f) => f.kind === "file")) {
+      return JSON.stringify({
+        action: "apply_form",
+        profile,
+        ok: false,
+        error: "file_unattended",
+        message: "unattended refuses file form fields",
+        targetId,
+        snapshotId: currentSnap,
+      });
+    }
 
     const beforeUrl = page.url();
     const title = await page.title().catch(() => "");
     const textSample = await page.innerText("body").catch(() => "");
+    const stampedEls = session.elementsByTab.get(targetId) ?? [];
     const blocked = detectBrowserBlocked({
       url: beforeUrl,
       title,
       textSample: textSample.slice(0, 2_000),
       mode: "act",
     });
-    if (blocked && (blocked.blocked === "captcha" || blocked.blocked === "challenge")) {
+    // V-OUT-21 — refuse captcha/challenge/payment; never fill card fields.
+    if (
+      blocked &&
+      (blocked.blocked === "captcha" ||
+        blocked.blocked === "challenge" ||
+        blocked.blocked === "payment")
+    ) {
       return JSON.stringify({
         action: "apply_form",
         profile,
@@ -1434,6 +1485,23 @@ export class BrowserControlService {
         message: blocked.message,
         url: beforeUrl,
       });
+    }
+    for (const f of fields) {
+      const el = stampedEls.find((e) => String(e.ref ?? "") === String(f.ref ?? ""));
+      if (el && isPaymentFieldElement(el)) {
+        return JSON.stringify({
+          action: "apply_form",
+          profile,
+          ok: false,
+          targetId,
+          snapshotId: currentSnap,
+          blocked: "payment",
+          message:
+            "Payment / card field ref refused — use propose_handoff; Home will not fill card data.",
+          url: beforeUrl,
+          ref: f.ref,
+        });
+      }
     }
 
     // Enforce required before any mutation (ChoiceStore also checks; defense in depth).
@@ -1502,6 +1570,57 @@ export class BrowserControlService {
         }
       } else if (f.kind === "select") {
         await el.selectOption(String(v));
+      } else if (f.kind === "file") {
+        const relPaths = parseBrowserFormFilePaths(v);
+        if (relPaths.length === 0) continue;
+        if (!f.multiple && relPaths.length > 1) {
+          return JSON.stringify({
+            action: "apply_form",
+            profile,
+            ok: false,
+            error: "file_multiple",
+            message: "field does not allow multiple files",
+            targetId,
+            snapshotId: currentSnap,
+            filled,
+            fieldId: f.id,
+          });
+        }
+        const absolutes: string[] = [];
+        for (const rel of relPaths) {
+          const fileResult = await this.resolveFormFileAbsolute(accountId, rel);
+          if (!fileResult.ok) {
+            return JSON.stringify({
+              action: "apply_form",
+              profile,
+              ok: false,
+              error: fileResult.error,
+              message: fileResult.message,
+              targetId,
+              snapshotId: currentSnap,
+              filled,
+              fieldId: f.id,
+            });
+          }
+          absolutes.push(fileResult.absolute);
+        }
+        if (typeof el.setInputFiles !== "function") {
+          return JSON.stringify({
+            action: "apply_form",
+            profile,
+            ok: false,
+            error: "file_unsupported",
+            message: "page driver does not support setInputFiles",
+            targetId,
+            snapshotId: currentSnap,
+            filled,
+            fieldId: f.id,
+          });
+        }
+        await el.setInputFiles(
+          absolutes.length === 1 ? absolutes[0]! : absolutes,
+          { timeout: 10_000 },
+        );
       } else {
         await el.fill(String(v), { timeout: 10_000 });
       }
@@ -1558,6 +1677,130 @@ export class BrowserControlService {
       url: page.url(),
       ...(verify ? { verify } : {}),
     });
+  }
+
+  /**
+   * §9.5g.3 / V-OUT-25…26 — jail-resolve a sandbox-relative path for setInputFiles.
+   * Never accepts host absolute paths on the wire.
+   */
+  private async resolveFormFileAbsolute(
+    accountId: string,
+    relRaw: string,
+  ): Promise<
+    | { ok: true; absolute: string; basename: string }
+    | { ok: false; error: string; message: string }
+  > {
+    const rel = String(relRaw ?? "")
+      .replace(/\\/g, "/")
+      .replace(/^\.\/+/, "")
+      .trim();
+    if (!rel) {
+      return {
+        ok: false,
+        error: "file_path",
+        message: "file field requires a sandbox-relative path",
+      };
+    }
+    if (
+      rel.startsWith("/") ||
+      /^[a-zA-Z]:/.test(rel) ||
+      rel.includes("\0") ||
+      rel.includes("://")
+    ) {
+      return {
+        ok: false,
+        error: "file_path",
+        message: "host absolute / URL paths refused — use uploads/… jail path",
+      };
+    }
+    const base = basename(rel);
+    if (!base || base === "." || base === ".." || !isAllowedBrowserFormFileExt(base)) {
+      return {
+        ok: false,
+        error: "file_mime",
+        message: `disallowed file type for form upload: ${base || "(empty)"}`,
+      };
+    }
+    let absolute: string;
+    try {
+      const shareOrWs =
+        rel === "share" ||
+        rel.startsWith("share/") ||
+        rel === "workspace" ||
+        rel.startsWith("workspace/");
+      if (shareOrWs) {
+        const mounts = this.workspaceMountsFor
+          ? await this.workspaceMountsFor(accountId)
+          : [];
+        const primary = mounts[0] as
+          | { id: string; hostPath: string; mode: WorkspaceMode }
+          | undefined;
+        absolute = resolveSandboxPath({
+          accountFilesRoot: this.paths.accountFiles(accountId),
+          shareRoot: this.paths.shareDir,
+          path: rel,
+          write: false,
+          workspaceMounts: mounts,
+          workspaceRoot: primary?.hostPath ?? null,
+          workspaceMode: primary?.mode ?? null,
+        }).absolute;
+      } else {
+        absolute = safeJoin(this.paths.accountFiles(accountId), rel);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return {
+        ok: false,
+        error: "file_path",
+        message: `path jail refused: ${msg}`,
+      };
+    }
+    const st = await stat(absolute).catch(() => null);
+    if (!st || !st.isFile()) {
+      return {
+        ok: false,
+        error: "file_missing",
+        message: `file not found under jail: ${base}`,
+      };
+    }
+    if (st.size <= 0) {
+      return {
+        ok: false,
+        error: "file_empty",
+        message: `empty file refused: ${base}`,
+      };
+    }
+    if (st.size > CHAT_MEDIA_MAX_BYTES) {
+      return {
+        ok: false,
+        error: "file_too_large",
+        message: `file exceeds ${CHAT_MEDIA_MAX_BYTES} bytes: ${base}`,
+      };
+    }
+    // V-OUT-26 — magic-byte refuse for PE/ELF/Mach-O even if renamed .pdf.
+    try {
+      const fh = await open(absolute, "r");
+      try {
+        const buf = Buffer.alloc(16);
+        const { bytesRead } = await fh.read(buf, 0, 16, 0);
+        if (isDeniedBrowserFormFileMagic(buf.subarray(0, bytesRead))) {
+          return {
+            ok: false,
+            error: "file_mime",
+            message: `executable / binary magic refused: ${base}`,
+          };
+        }
+      } finally {
+        await fh.close();
+      }
+    } catch {
+      return {
+        ok: false,
+        error: "file_missing",
+        message: `file not readable under jail: ${base}`,
+      };
+    }
+    return { ok: true, absolute, basename: base };
   }
 
   private async writeScreenshot(
@@ -1745,6 +1988,7 @@ export class BrowserControlService {
     const beforeUrl = page.url();
     const title = await page.title().catch(() => "");
     const textSample = await page.innerText("body").catch(() => "");
+    const stampedEls = session.elementsByTab.get(targetId) ?? [];
     const blocked = detectBrowserBlocked({
       url: beforeUrl,
       title,
@@ -1769,6 +2013,27 @@ export class BrowserControlService {
     if (!ref) {
       throw Object.assign(new Error("envoyhome.bad_params: act requires ref"), {
         code: "bad_params",
+      });
+    }
+    // §9.5i / V-OUT-21 — refuse mutating acts on payment field refs even when page chrome is quiet.
+    const targetMeta = stampedEls.find((e) => String(e.ref ?? "") === ref);
+    if (
+      targetMeta &&
+      isPaymentFieldElement(targetMeta) &&
+      (kind === "type" || kind === "click" || kind === "select" || kind === "drag")
+    ) {
+      return JSON.stringify({
+        action: "act",
+        profile,
+        ok: false,
+        kind,
+        ref,
+        targetId,
+        snapshotId: currentSnap,
+        blocked: "payment",
+        message:
+          "Payment / card field refused — use propose_handoff (https Open); Home will not fill card data.",
+        url: beforeUrl,
       });
     }
     const selector = ref.startsWith("[data-eh-ref=") ? ref : `[data-eh-ref="${ref}"]`;
@@ -1899,13 +2164,15 @@ export class BrowserControlService {
         let i = 0;
         for (const el of Array.from(nodes)) {
           if (out.length >= opts.cap) break;
-          const visible = isVisible(el);
-          if (!opts.includeHidden && !visible) continue;
-          const ref = String(i++);
-          el.setAttribute("data-eh-ref", ref);
           const input = el as HTMLInputElement;
           const inputType =
             el.tagName === "INPUT" ? String(input.type || "text").toLowerCase() : "";
+          const isFileInput = el.tagName === "INPUT" && inputType === "file";
+          const visible = isVisible(el);
+          // File inputs are often visually hidden — still stamp them (P2-J).
+          if (!opts.includeHidden && !visible && !isFileInput) continue;
+          const ref = String(i++);
+          el.setAttribute("data-eh-ref", ref);
           const role =
             el.getAttribute("role") ||
             (el.tagName === "A"
@@ -1946,6 +2213,11 @@ export class BrowserControlService {
           if (placeholder) row.placeholder = String(placeholder).slice(0, 80);
           const autocomplete = el.getAttribute("autocomplete");
           if (autocomplete) row.autocomplete = autocomplete.slice(0, 80);
+          if (isFileInput) {
+            const accept = el.getAttribute("accept");
+            if (accept) row.accept = accept.slice(0, 200);
+            if ((el as HTMLInputElement).multiple === true) row.multiple = true;
+          }
           const hasRequired =
             (typeof (el as HTMLElement).hasAttribute === "function" &&
               (el as HTMLElement).hasAttribute("required")) ||

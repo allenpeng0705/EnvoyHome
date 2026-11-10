@@ -1506,6 +1506,20 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get choiceCardOpen => '打开';
   @override
+  String get choiceCardChooseFile => '选择文件';
+  @override
+  String get choiceCardBrowseJail => '浏览文件';
+  @override
+  String get choiceCardBrowseUp => '上级';
+  @override
+  String choiceCardFilesChosen(int n) => '已选 $n 个文件';
+  @override
+  String get choiceCardNoFile => '未选择文件';
+  @override
+  String get choiceCardFileEmpty => '文件为空。';
+  @override
+  String choiceCardFileTypeRefused(String name) => '$name 不是允许的表单上传类型。';
+  @override
   String get choiceCardHandoffHint => '将在浏览器或 App 中打开以便你完成并付款。Home 不会填写银行卡信息。';
 
   @override

@@ -17,7 +17,8 @@
  * @property {string[]} [allowTools] — compose allow-list
  * @property {Record<string, unknown>} [setup]
  * @property {Record<string, unknown>} [liveAnswer] — auto-answer ask_user / form cards in live eval
- *   (`preferOptionIndex`, `textFallback`, `approvalDecision`, `formByKind`, `formDefault`)
+ *   (`preferOptionIndex`, `textFallback`, `approvalDecision`, `formByKind`, `formDefault`;
+ *    for `kind: file` only fill when `formByKind.file` is a jail-relative path)
  * @property {Record<string, unknown>} expect
  */
 

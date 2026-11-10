@@ -4077,10 +4077,22 @@ ${lines.join("\n")}
     const url = typeof proposed.url === "string" ? proposed.url : "";
     const title = typeof proposed.title === "string" ? proposed.title : "";
     const n = fields.length;
+    // §9.5g.3 / P2-J — name file fields in the card (no paths).
+    const fileLabels = fields
+      .filter((f) => f?.kind === "file")
+      .map((f) => String(f.label || f.id || "file").trim())
+      .filter(Boolean)
+      .slice(0, 6);
     const questionZh = /[\u4e00-\u9fff]/.test(`${title}${url}`);
+    const fileHint =
+      fileLabels.length === 0
+        ? ""
+        : questionZh
+          ? `；文件：${fileLabels.join("、")}`
+          : `; files: ${fileLabels.join(", ")}`;
     const question = questionZh
-      ? `请填写网页表单（${n} 个字段）${title ? ` — ${title}` : ""}`
-      : `Fill the page form (${n} fields)${title ? ` — ${title}` : ""}`;
+      ? `请填写网页表单（${n} 个字段${fileHint}）${title ? ` — ${title}` : ""}`
+      : `Fill the page form (${n} fields${fileHint})${title ? ` — ${title}` : ""}`;
     const row = await this.createChoiceAndEmit({
       accountId: input.accountId,
       sessionId: input.sessionId,

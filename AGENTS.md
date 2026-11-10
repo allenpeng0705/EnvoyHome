@@ -40,13 +40,13 @@
 - Don't ship OpenClaw-shaped **shared interactive terminal/PTY**, **swarm-as-default** / **`sessions_spawn`**, a **Lobster-style** second workflow engine, or **device nodes** (`nodes` / camera/screen/computer-use as core tools) — Phase 2 uses path-jailed `edit_file`/`apply_patch`, ScheduleService heartbeat + standing orders, `spawn_helper`, and **`task`** (P2-E2/E3: envoy-harness `LocalMeshSubmitter`+`Agent` children; **parent** harness turns use `Agent.run` — `runTurn` is fallback/tests only; `ENVOYHOME_PARENT_AGENT=0` rollback) under Q10. Nodes stay Defer / mesh-first (Design §19.3 `2026-10-22`; §19.9–§19.13; `2026-10-20t`).
 - Don't refuse Owner-added MCP servers for “quality,” auto-install MCP from the agent, use Chrome DevTools MCP as the §9.5g browser backend, or inject sandbox/HA write credentials into MCP env by default — Owner-add + Test + Approvals (Design §9.5h / P2-F).
 - Don't invent a second browser tool, solve CAPTCHAs, or treat MCP as the §9.5g implementation — harden the builtin `browser` observe→act→verify loop (§9.5g.2 / P2-G); device nodes / computer-use stay Defer (§19.3).
-- Don't ship a static username/password login UI for browser assist — form cards MUST be dynamic from the page snapshot (Design §9.5g.3 / P2-H); don't Learn password/otp into standing memory.
+- Don't ship a static username/password login UI for browser assist — form cards MUST be dynamic from the page snapshot (Design §9.5g.3 / P2-H/P2-J); don't Learn password/otp/file bytes into standing memory; don't invent host paths for `kind: file`.
 
 ## Do
 
 - Read the Build Stage you're working on (`Plan §3 B0–B14`) before touching code.
 - For interactive `browser` work after P2-G Accept: require matching `snapshotId` on `act` (fail closed `stale_snapshot` / `stale_ref`); default attended `verify=text`; use `wait`/`press` for SPA races; return structured `blocked` on captcha/login walls — never solve (Design §9.5g.2; V-OUT-11…15).
-- For browser form assist after P2-H Accept: derive `fields[]` from snapshot; `selection: "form"` / `purpose: "browser_form"`; one Allow apply; redact secrets; unattended refuse sensitive fields (Design §9.5g.3; V-OUT-16…19).
+- For browser form assist after P2-H/P2-J Accept: derive `fields[]` from snapshot (incl. `kind: file`); `selection: "form"` / `purpose: "browser_form"`; one Allow apply; redact secrets; file via jail + `setInputFiles`; unattended refuse sensitive **or** file fields (Design §9.5g.3; V-OUT-16…19, V-OUT-25…27).
 - Map your change to **exactly one** owning stage via the verification ID in `Plan §4`. If an ID appears to need two stages, the table is wrong — fix the table.
 - For sandbox/path work, use the chokepoint resolvers — `safeJoin` for files, `homePaths(stateDir)` for every on-disk path, `resolveObject` for smart-home objects (all three land in B3/B14). Run the security corpus fixture (`packages/daemon/test/security-corpus.test.ts`, **lands in B3**) and the required-deny corpus (Design Appendix C.4) for anything touching actuation.
 - For harness/plugins work, follow the allow-list contract (conventions R2).
