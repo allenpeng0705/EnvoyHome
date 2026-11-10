@@ -72,6 +72,31 @@ test("fetchLibreOfficeAllowingRedirects: refuses non-TDF origin and http redirec
   );
 });
 
+test("fetchLibreOfficeAllowingRedirects: refuses private/link-local redirect hosts", async () => {
+  for (const target of [
+    "https://127.0.0.1/lo.dmg",
+    "https://10.0.0.5/lo.dmg",
+    "https://192.168.1.1/lo.dmg",
+    "https://169.254.169.254/latest/meta-data",
+    "https://localhost/lo.dmg",
+  ]) {
+    const fetchImpl = (async () =>
+      new Response(null, {
+        status: 302,
+        headers: { Location: target },
+      })) as typeof fetch;
+    await assert.rejects(
+      () =>
+        fetchLibreOfficeAllowingRedirects(
+          "https://download.documentfoundation.org/lo.dmg",
+          fetchImpl,
+          new AbortController().signal,
+        ),
+      /private|link-local|refused/,
+    );
+  }
+});
+
 test("resolveManagedSofficePath: jails .. and absolute paths", () => {
   const root = "/tmp/eh-lo-runtime";
   assert.equal(

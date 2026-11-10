@@ -25,6 +25,7 @@ import {
   type LibreOfficeCatalogEntry,
 } from "./libreoffice-catalog.js";
 import { clearLibreOfficeProbeCache } from "./document-export-lo.js";
+import { isBlockedHostname } from "./skill-remote.js";
 
 export type LibreOfficeRuntimeStatus =
   | "ready"
@@ -132,7 +133,8 @@ export function isAllowedLoOriginHost(host: string): boolean {
 /**
  * Manual redirects: start host must be TDF allow-list; each hop https.
  * Non-TDF redirect hosts are allowed only as MirrorBrain mirrors — content
- * MUST still match catalog sha256 after download.
+ * MUST still match catalog sha256 after download. Refuse loopback / RFC1918 /
+ * link-local / metadata hosts on every hop (defense-in-depth vs blind SSRF).
  */
 export async function fetchLibreOfficeAllowingRedirects(
   startUrl: string,
@@ -151,9 +153,10 @@ export async function fetchLibreOfficeAllowingRedirects(
         `envoyhome.libreoffice_bad_url: origin host ${parsed.hostname} refused`,
       );
     }
-    // Subsequent hops: https only (TDF MirrorBrain). Hash verifies content.
-    if (hop > 0 && parsed.protocol !== "https:") {
-      throw new Error("envoyhome.libreoffice_bad_url: redirect must be https");
+    if (isBlockedHostname(parsed.hostname)) {
+      throw new Error(
+        `envoyhome.libreoffice_bad_url: host ${parsed.hostname} refused (private/link-local)`,
+      );
     }
     const res = await fetchImpl(current, { redirect: "manual", signal });
     if (res.status >= 300 && res.status < 400) {
@@ -165,6 +168,11 @@ export async function fetchLibreOfficeAllowingRedirects(
       if (next.protocol !== "https:") {
         throw new Error(
           `envoyhome.libreoffice_bad_url: redirect to ${next.protocol} refused`,
+        );
+      }
+      if (isBlockedHostname(next.hostname)) {
+        throw new Error(
+          `envoyhome.libreoffice_bad_url: redirect host ${next.hostname} refused (private/link-local)`,
         );
       }
       current = next.toString();
