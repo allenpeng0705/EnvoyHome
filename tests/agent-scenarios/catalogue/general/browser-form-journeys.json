@@ -98,7 +98,7 @@
       "sequenceOk": true,
       "step1": {
         "jsonFields": ["action", "fields", "snapshotId", "ok"],
-        "bodyMatching": "\"kind\":\"file\""
+        "bodyMatching": "\"kind\":\"file\".*\"multiple\":true|\"multiple\":true.*\"kind\":\"file\""
       }
     }
   },

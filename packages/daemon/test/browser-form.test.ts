@@ -206,6 +206,7 @@ function formMockPage(opts?: { withCheckbox?: boolean; withFile?: boolean; fileO
           innerText: (attrs.label as string) || "",
           placeholder: (attrs.placeholder as string) || "",
           type: (attrs.type as string) || "",
+          multiple: attrs.multiple === true,
           value: "",
           options: [],
           getBoundingClientRect: () =>
@@ -222,6 +223,7 @@ function formMockPage(opts?: { withCheckbox?: boolean; withFile?: boolean; fileO
               "aria-label": "Resume",
               accept: ".pdf,.png",
               required: true,
+              multiple: true,
             }),
             makeEl("BUTTON", { role: "button", "aria-label": "Upload" }),
           ]
@@ -525,6 +527,17 @@ test("V-OUT-17/19: apply_form refuses missing required fields", async () => {
   ) as Record<string, unknown>;
   assert.equal(denied.ok, false);
   assert.equal(denied.error, "field_required");
+});
+
+test("V-OUT-26: MIME allow/deny helpers", async () => {
+  const { isAllowedBrowserFormFileMime } = await import("../dist/browser-form.js");
+  assert.equal(isAllowedBrowserFormFileMime(undefined), true);
+  assert.equal(isAllowedBrowserFormFileMime("application/pdf"), true);
+  assert.equal(isAllowedBrowserFormFileMime("image/png"), true);
+  assert.equal(isAllowedBrowserFormFileMime("application/octet-stream"), true);
+  assert.equal(isAllowedBrowserFormFileMime("application/x-msdownload"), false);
+  assert.equal(isAllowedBrowserFormFileMime("application/javascript"), false);
+  assert.equal(isAllowedBrowserFormFileMime("text/html"), false);
 });
 
 test("V-OUT-25: derive kind file + accept from input[type=file]", () => {

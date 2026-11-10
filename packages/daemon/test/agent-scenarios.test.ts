@@ -191,6 +191,7 @@ function mockBrowserPage(
           innerText: (attrs.label as string) || "",
           placeholder: "",
           type: (attrs.type as string) || "",
+          multiple: attrs.multiple === true,
           value: "",
           options: [],
           getBoundingClientRect: () =>
@@ -229,6 +230,7 @@ function mockBrowserPage(
                 "aria-label": "Resume",
                 accept: ".pdf,.png",
                 required: true,
+                multiple: true,
               }),
               makeEl("BUTTON", { role: "button", "aria-label": "Upload" }),
             ]

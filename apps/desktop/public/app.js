@@ -1824,7 +1824,7 @@ function browseJailFilesForForm(opts = {}) {
           const kind = e.kind === "dir" ? "dir" : "file";
           const name = escapeHtml(e.name || "");
           const ep = escapeHtml(e.path || "");
-          return `<li><button type="button" data-jail-kind="${kind}" data-jail-path="${ep}">${kind === "dir" ? "📁 " : "📄 "}${name}</button></li>`;
+          return `<li><button type="button" data-jail-kind="${kind}" data-jail-path="${ep}">${kind === "dir" ? "[dir] " : ""}${name}</button></li>`;
         })
         .join("");
     };
