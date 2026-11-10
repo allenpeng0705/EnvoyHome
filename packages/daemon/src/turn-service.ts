@@ -3520,12 +3520,17 @@ ${lines.join("\n")}
       const waiter = turn?.choiceWaiters.get(row.id);
       if (waiter) {
         turn!.choiceWaiters.delete(row.id);
+        // browser_form: apply already consumed raw fieldValues (incl. jail paths /
+        // secrets). Prefer formApplyResult only — never leave paths in the waiter.
         waiter({
           ...(resolved.optionIds[0] ? { optionId: resolved.optionIds[0] } : {}),
           ...(resolved.optionIds.length ? { optionIds: resolved.optionIds } : {}),
           ...(resolved.text !== undefined ? { text: resolved.text } : {}),
-          ...(resolved.fieldValues ? { fieldValues: resolved.fieldValues } : {}),
-          ...(formApplyResult ? { formApplyResult } : {}),
+          ...(formApplyResult
+            ? { formApplyResult }
+            : resolved.fieldValues
+              ? { fieldValues: resolved.fieldValues }
+              : {}),
         });
         return {
           ok: true,

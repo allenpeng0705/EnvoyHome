@@ -45,6 +45,70 @@ bool _isAllowedBrowserFormFileName(String name) {
   return _kBrowserFormFileExtAllow.contains(lower.substring(dot));
 }
 
+const _kBrowserFormFileExtMime = <String, String>{
+  '.pdf': 'application/pdf',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.txt': 'text/plain',
+  '.csv': 'text/csv',
+  '.doc': 'application/msword',
+  '.docx':
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xls': 'application/vnd.ms-excel',
+  '.xlsx':
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
+
+String? _mimeFromBrowserFormFileName(String name) {
+  final lower = name.toLowerCase();
+  final dot = lower.lastIndexOf('.');
+  if (dot < 0) return null;
+  return _kBrowserFormFileExtMime[lower.substring(dot)];
+}
+
+/// Align daemon `matchesBrowserFormFileAccept`.
+bool _matchesBrowserFormFileAccept(
+  String fileName, {
+  String? accept,
+  String? mimeHint,
+}) {
+  final raw = accept?.trim() ?? '';
+  if (raw.isEmpty) return true;
+  final lowerName = fileName.toLowerCase();
+  final dot = lowerName.lastIndexOf('.');
+  final ext = dot >= 0 ? lowerName.substring(dot) : '';
+  final mime = (mimeHint ?? _mimeFromBrowserFormFileName(fileName) ?? '')
+      .toLowerCase()
+      .split(';')
+      .first
+      .trim();
+  final tokens = raw
+      .split(',')
+      .map((t) => t.trim().toLowerCase())
+      .where((t) => t.isNotEmpty)
+      .toList();
+  if (tokens.isEmpty) return true;
+  for (final t in tokens) {
+    if (t.startsWith('.')) {
+      if (ext == t) return true;
+      continue;
+    }
+    if (t.endsWith('/*')) {
+      if (mime.startsWith(t.substring(0, t.length - 1))) return true;
+      continue;
+    }
+    if (t.contains('/')) {
+      if (mime == t) return true;
+      continue;
+    }
+    if (ext == '.$t') return true;
+  }
+  return false;
+}
+
 class _PendingAttach {
   _PendingAttach({
     required this.id,
@@ -1719,7 +1783,14 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
       allowedExtensions: allowedExts,
     );
     if (result == null || !mounted) return;
-    final take = (multiple ? result.files : result.files.take(1)).take(8);
+    if ((!multiple && result.files.length > 1) ||
+        result.files.length > _kChatAttachMaxFiles) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.chatAttachTooMany(_kChatAttachMaxFiles))),
+      );
+      return;
+    }
+    final take = multiple ? result.files : result.files.take(1);
     final uris = <String>[];
     final names = <String>[];
     for (final f in take) {
@@ -1745,6 +1816,18 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
         return;
       }
       if (!_isAllowedBrowserFormFileName(f.name)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.choiceCardFileTypeRefused(f.name))),
+        );
+        return;
+      }
+      final mimeHint =
+          f.extension != null ? _mimeFromExt(f.extension!) : null;
+      if (!_matchesBrowserFormFileAccept(
+        f.name,
+        accept: accept,
+        mimeHint: mimeHint,
+      )) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(l10n.choiceCardFileTypeRefused(f.name))),
         );
@@ -1782,6 +1865,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
   Future<void> _browseJailFormFile({
     required String choiceId,
     required String fieldId,
+    String? accept,
     bool multiple = false,
   }) async {
     final l10n = AppLocalizations.of(context);
@@ -1888,6 +1972,12 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
           );
           continue;
         }
+        if (!_matchesBrowserFormFileAccept(name, accept: accept)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.choiceCardFileTypeRefused(name))),
+          );
+          continue;
+        }
         if (!multiple) {
           setState(() {
             _choiceFormFiles.putIfAbsent(choiceId, () => <String, String>{})[fieldId] =
@@ -1897,7 +1987,13 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
           });
           return;
         }
-        if (!picked.contains(ep) && picked.length < 8) picked.add(ep);
+        if (picked.length >= _kChatAttachMaxFiles) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(l10n.chatAttachTooMany(_kChatAttachMaxFiles))),
+          );
+          continue;
+        }
+        if (!picked.contains(ep)) picked.add(ep);
       }
     }
     if (!mounted || picked.isEmpty) return;
@@ -3156,7 +3252,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
         ),
       );
     } else if (row['purpose']?.toString() == 'outbound_handoff' &&
-        (row['openUrl']?.toString() ?? '').startsWith('https://')) {
+        isSafeHandoffOpenUrl(row['openUrl']?.toString() ?? '')) {
       final openUrl = row['openUrl']!.toString();
       final stepsRaw = row['steps'];
       final steps = stepsRaw is List
@@ -3198,7 +3294,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
             children: [
               FilledButton(
                 onPressed: () {
-                  unawaited(openExternalUrl(openUrl));
+                  unawaited(openHandoffUrl(openUrl));
                   unawaited(_answerChoice(row, optionId: 'open'));
                 },
                 child: Text(l10n.choiceCardOpen),
@@ -3313,6 +3409,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
                             _browseJailFormFile(
                               choiceId: id,
                               fieldId: fid,
+                              accept: accept,
                               multiple: multiple,
                             ),
                           ),

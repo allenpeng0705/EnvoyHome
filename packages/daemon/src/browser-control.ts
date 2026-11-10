@@ -20,11 +20,15 @@ import {
 } from "./fs-jail.js";
 import { CHAT_MEDIA_MAX_BYTES } from "./chat-media.js";
 import {
+  BROWSER_FORM_FILE_MAX_COUNT,
   deriveBrowserFormFields,
   detectPaymentWall,
   isAllowedBrowserFormFileExt,
+  isAllowedBrowserFormFileMime,
   isDeniedBrowserFormFileMagic,
   isPaymentFieldElement,
+  matchesBrowserFormFileAccept,
+  mimeFromBrowserFormFileName,
   parseBrowserFormFilePaths,
   type BrowserFormField,
 } from "./browser-form.js";
@@ -42,9 +46,12 @@ export {
   isAllowedBrowserFormFileMime,
   isDeniedBrowserFormFileMagic,
   isPaymentFieldElement,
+  matchesBrowserFormFileAccept,
+  mimeFromBrowserFormFileName,
   parseBrowserFormFilePaths,
   BROWSER_FORM_FIELD_CAP,
   BROWSER_FORM_FILE_EXT_ALLOW,
+  BROWSER_FORM_FILE_EXT_MIME,
   BROWSER_FORM_FILE_MAX_COUNT,
   BROWSER_FORM_FILE_MIME_ALLOW,
   type BrowserFormField,
@@ -1573,6 +1580,19 @@ export class BrowserControlService {
       } else if (f.kind === "file") {
         const relPaths = parseBrowserFormFilePaths(v);
         if (relPaths.length === 0) continue;
+        if (relPaths.length > BROWSER_FORM_FILE_MAX_COUNT) {
+          return JSON.stringify({
+            action: "apply_form",
+            profile,
+            ok: false,
+            error: "file_too_many",
+            message: `at most ${BROWSER_FORM_FILE_MAX_COUNT} files per field`,
+            targetId,
+            snapshotId: currentSnap,
+            filled,
+            fieldId: f.id,
+          });
+        }
         if (!f.multiple && relPaths.length > 1) {
           return JSON.stringify({
             action: "apply_form",
@@ -1588,7 +1608,11 @@ export class BrowserControlService {
         }
         const absolutes: string[] = [];
         for (const rel of relPaths) {
-          const fileResult = await this.resolveFormFileAbsolute(accountId, rel);
+          const fileResult = await this.resolveFormFileAbsolute(
+            accountId,
+            rel,
+            f.accept ? { accept: f.accept } : undefined,
+          );
           if (!fileResult.ok) {
             return JSON.stringify({
               action: "apply_form",
@@ -1682,10 +1706,12 @@ export class BrowserControlService {
   /**
    * §9.5g.3 / V-OUT-25…26 — jail-resolve a sandbox-relative path for setInputFiles.
    * Never accepts host absolute paths on the wire.
+   * Enforces ext allow-list, inferred MIME, optional HTML `accept`, size, and magic.
    */
   private async resolveFormFileAbsolute(
     accountId: string,
     relRaw: string,
+    opts?: { accept?: string; mimeType?: string },
   ): Promise<
     | { ok: true; absolute: string; basename: string }
     | { ok: false; error: string; message: string }
@@ -1719,6 +1745,24 @@ export class BrowserControlService {
         ok: false,
         error: "file_mime",
         message: `disallowed file type for form upload: ${base || "(empty)"}`,
+      };
+    }
+    const mime =
+      (opts?.mimeType && String(opts.mimeType).trim()) ||
+      mimeFromBrowserFormFileName(base) ||
+      undefined;
+    if (!isAllowedBrowserFormFileMime(mime)) {
+      return {
+        ok: false,
+        error: "file_mime",
+        message: `disallowed MIME for form upload: ${base}`,
+      };
+    }
+    if (!matchesBrowserFormFileAccept(base, opts?.accept, mime)) {
+      return {
+        ok: false,
+        error: "file_accept",
+        message: `file does not match field accept (${opts?.accept ?? ""}): ${base}`,
       };
     }
     let absolute: string;

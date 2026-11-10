@@ -529,8 +529,13 @@ test("V-OUT-17/19: apply_form refuses missing required fields", async () => {
   assert.equal(denied.error, "field_required");
 });
 
-test("V-OUT-26: MIME allow/deny helpers", async () => {
-  const { isAllowedBrowserFormFileMime } = await import("../dist/browser-form.js");
+test("V-OUT-26: MIME allow/deny + accept helpers", async () => {
+  const {
+    isAllowedBrowserFormFileMime,
+    matchesBrowserFormFileAccept,
+    parseBrowserFormFilePaths,
+    BROWSER_FORM_FILE_MAX_COUNT,
+  } = await import("../dist/browser-form.js");
   assert.equal(isAllowedBrowserFormFileMime(undefined), true);
   assert.equal(isAllowedBrowserFormFileMime("application/pdf"), true);
   assert.equal(isAllowedBrowserFormFileMime("image/png"), true);
@@ -538,6 +543,18 @@ test("V-OUT-26: MIME allow/deny helpers", async () => {
   assert.equal(isAllowedBrowserFormFileMime("application/x-msdownload"), false);
   assert.equal(isAllowedBrowserFormFileMime("application/javascript"), false);
   assert.equal(isAllowedBrowserFormFileMime("text/html"), false);
+
+  assert.equal(matchesBrowserFormFileAccept("a.pdf", undefined), true);
+  assert.equal(matchesBrowserFormFileAccept("a.pdf", ".pdf,.png"), true);
+  assert.equal(matchesBrowserFormFileAccept("a.docx", ".pdf,.png"), false);
+  assert.equal(matchesBrowserFormFileAccept("a.png", "image/*"), true);
+  assert.equal(matchesBrowserFormFileAccept("a.pdf", "image/*"), false);
+  assert.equal(matchesBrowserFormFileAccept("a.pdf", "application/pdf"), true);
+
+  const nine = Array.from({ length: BROWSER_FORM_FILE_MAX_COUNT + 1 }, (_, i) =>
+    `uploads/f${i}.pdf`,
+  ).join("\n");
+  assert.equal(parseBrowserFormFilePaths(nine).length, BROWSER_FORM_FILE_MAX_COUNT + 1);
 });
 
 test("V-OUT-25: derive kind file + accept from input[type=file]", () => {
@@ -666,6 +683,78 @@ test("V-OUT-25: apply_form setInputFiles accepts newline-separated multiple path
   assert.equal(applied.ok, true);
   assert.equal(page.fileSets.length, 1);
   assert.equal(page.fileSets[0]!.paths.length, 2);
+});
+
+test("V-OUT-26: apply_form refuses accept mismatch and file_too_many", async () => {
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const { BROWSER_FORM_FILE_MAX_COUNT } = await import("../dist/browser-form.js");
+  const stateDir = await mkdtemp(join(tmpdir(), "eh-form-accept-"));
+  dirs.push(stateDir);
+  const paths = homePaths(stateDir);
+  const svc = new BrowserControlService(paths);
+  await svc.load();
+  await svc.setConfig({ enabled: true });
+  const page = formMockPage({ fileOnly: true });
+  svc.pageFactory = async () => page as never;
+  const uploads = join(paths.accountFiles("alice"), "uploads");
+  await mkdir(uploads, { recursive: true });
+  await writeFile(join(uploads, "cv.docx"), "PK-docx");
+  for (let i = 0; i < BROWSER_FORM_FILE_MAX_COUNT + 1; i++) {
+    await writeFile(join(uploads, `n${i}.pdf`), `%PDF-${i}`);
+  }
+
+  await svc.runTool(
+    { action: "navigate", url: "https://example.com/upload" },
+    { accountId: "alice" },
+  );
+  const proposed = JSON.parse(
+    await svc.runTool({ action: "propose_form" }, { accountId: "alice" }),
+  ) as Record<string, unknown>;
+  const fields = proposed.fields as Array<Record<string, unknown>>;
+  const fileField = fields.find((f) => f.kind === "file")!;
+  assert.equal(fileField.accept, ".pdf,.png");
+
+  const acceptDenied = JSON.parse(
+    await svc.runTool(
+      {
+        action: "apply_form",
+        snapshotId: proposed.snapshotId,
+        targetId: proposed.targetId,
+        fields,
+        fieldValues: { [String(fileField.id)]: "uploads/cv.docx" },
+      },
+      { accountId: "alice", internal: true },
+    ),
+  ) as Record<string, unknown>;
+  assert.equal(acceptDenied.ok, false);
+  assert.equal(acceptDenied.error, "file_accept");
+
+  await svc.runTool({ action: "snapshot" }, { accountId: "alice" });
+  const proposed2 = JSON.parse(
+    await svc.runTool({ action: "propose_form" }, { accountId: "alice" }),
+  ) as Record<string, unknown>;
+  const fields2 = (proposed2.fields as Array<Record<string, unknown>>).map((f) =>
+    f.kind === "file" ? { ...f, multiple: true } : f,
+  );
+  const file2 = fields2.find((f) => f.kind === "file")!;
+  const tooManyPaths = Array.from(
+    { length: BROWSER_FORM_FILE_MAX_COUNT + 1 },
+    (_, i) => `uploads/n${i}.pdf`,
+  ).join("\n");
+  const tooMany = JSON.parse(
+    await svc.runTool(
+      {
+        action: "apply_form",
+        snapshotId: proposed2.snapshotId,
+        targetId: proposed2.targetId,
+        fields: fields2,
+        fieldValues: { [String(file2.id)]: tooManyPaths },
+      },
+      { accountId: "alice", internal: true },
+    ),
+  ) as Record<string, unknown>;
+  assert.equal(tooMany.ok, false);
+  assert.equal(tooMany.error, "file_too_many");
 });
 
 test("V-OUT-25/26: apply_form setInputFiles after jail resolve; refuse escape/exe", async () => {

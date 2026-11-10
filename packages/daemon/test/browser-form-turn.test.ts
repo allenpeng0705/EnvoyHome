@@ -241,6 +241,9 @@ test("V-OUT-16…19: park → answer applies before formApplied; cancel; TTL", a
   assert.ok(woke && typeof woke === "object");
   assert.equal(woke.formApplyResult?.ok, true);
   assert.ok(!JSON.stringify(woke.formApplyResult).includes("secret-pw"));
+  // Raw fieldValues (secrets / jail paths) must not remain on the waiter payload.
+  assert.equal(woke.fieldValues, undefined);
+  assert.ok(!JSON.stringify(woke).includes("secret-pw"));
 
   // Stale snapshot → formApplied false (no false success)
   await daemon.browserControl.runTool({ action: "snapshot" }, { accountId: "alice" });

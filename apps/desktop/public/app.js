@@ -1053,7 +1053,7 @@ function choiceCardHtml(c) {
           const accept = escapeHtml(f.accept || "");
           const req = f.required === true ? ` data-required="1"` : "";
           const multi = f.multiple === true ? ` data-multiple="1"` : "";
-          return `<div class="chat-choice-form-field chat-choice-form-file"><span>${label}</span><div class="chat-choice-file-row"><input type="hidden" data-field-id="${fid}" data-kind="file" value=""${req}${multi} /><button type="button" class="secondary" data-act="pick-file" data-field-id="${fid}"${accept ? ` data-accept="${accept}"` : ""}${multi}>${escapeHtml(t("choiceCard.chooseFile"))}</button><button type="button" class="secondary" data-act="browse-jail" data-field-id="${fid}"${multi}>${escapeHtml(t("choiceCard.browseJail"))}</button><span class="muted chat-choice-file-name" data-file-name-for="${fid}">${escapeHtml(t("choiceCard.noFile"))}</span></div></div>`;
+          return `<div class="chat-choice-form-field chat-choice-form-file"><span>${label}</span><div class="chat-choice-file-row"><input type="hidden" data-field-id="${fid}" data-kind="file" value=""${req}${multi} /><button type="button" class="secondary" data-act="pick-file" data-field-id="${fid}"${accept ? ` data-accept="${accept}"` : ""}${multi}>${escapeHtml(t("choiceCard.chooseFile"))}</button><button type="button" class="secondary" data-act="browse-jail" data-field-id="${fid}"${accept ? ` data-accept="${accept}"` : ""}${multi}>${escapeHtml(t("choiceCard.browseJail"))}</button><span class="muted chat-choice-file-name" data-file-name-for="${fid}">${escapeHtml(t("choiceCard.noFile"))}</span></div></div>`;
         }
         const inputType = sensitive ? "password" : kind === "textarea" ? null : "text";
         if (kind === "textarea") {
@@ -1155,7 +1155,10 @@ function bindChoiceCardActions(root, onDone) {
           if (act === "browse-jail") {
             btn.disabled = true;
             try {
-              const paths = await browseJailFilesForForm({ multiple });
+              const paths = await browseJailFilesForForm({
+                multiple,
+                accept: btn.getAttribute("data-accept") || "",
+              });
               if (paths.length) {
                 setFileField(
                   paths,
@@ -1178,11 +1181,29 @@ function bindChoiceCardActions(root, onDone) {
             const files = input.files ? [...input.files] : [];
             input.remove();
             if (!files.length) return;
-            const take = multiple ? files.slice(0, 8) : files.slice(0, 1);
+            if (!multiple && files.length > 1) {
+              showToast(
+                t("chat.attachTooMany", { n: String(CHAT_ATTACH_MAX_FILES) }),
+                "err",
+              );
+              return;
+            }
+            if (files.length > CHAT_ATTACH_MAX_FILES) {
+              showToast(
+                t("chat.attachTooMany", { n: String(CHAT_ATTACH_MAX_FILES) }),
+                "err",
+              );
+              return;
+            }
+            const take = multiple ? files : files.slice(0, 1);
             for (const file of take) {
               const pre = browserFormFilePreflight(file);
               if (!pre.ok) {
                 showToast(pre.message, "err");
+                return;
+              }
+              if (!matchesBrowserFormFileAccept(file.name, accept, file.type)) {
+                showToast(t("choiceCard.fileTypeRefused", { name: file.name }), "err");
                 return;
               }
             }
@@ -1237,7 +1258,8 @@ function bindChoiceCardActions(root, onDone) {
             oid === "open"
           ) {
             const openUrl = card.getAttribute("data-open-url") || "";
-            if (/^https:\/\//i.test(openUrl)) {
+            // Parity with daemon assertHandoffOpenUrl (https + SSRF host refuse).
+            if (isSafeHandoffOpenUrl(openUrl)) {
               try {
                 window.open(openUrl, "_blank", "noopener,noreferrer");
               } catch {
@@ -1740,6 +1762,111 @@ const BROWSER_FORM_FILE_EXT_ALLOW = new Set([
   ".xlsx",
 ]);
 
+const BROWSER_FORM_FILE_EXT_MIME = {
+  ".pdf": "application/pdf",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".txt": "text/plain",
+  ".csv": "text/csv",
+  ".doc": "application/msword",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xls": "application/vnd.ms-excel",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
+/** @param {string} fileName */
+function mimeFromBrowserFormFileName(fileName) {
+  const lower = String(fileName || "").toLowerCase();
+  const dot = lower.lastIndexOf(".");
+  if (dot < 0) return "";
+  return BROWSER_FORM_FILE_EXT_MIME[lower.slice(dot)] || "";
+}
+
+/**
+ * Align daemon matchesBrowserFormFileAccept.
+ * @param {string} fileName
+ * @param {string} [accept]
+ * @param {string} [mimeHint]
+ */
+function matchesBrowserFormFileAccept(fileName, accept, mimeHint) {
+  const raw = String(accept || "").trim();
+  if (!raw) return true;
+  const lowerName = String(fileName || "").toLowerCase();
+  const dot = lowerName.lastIndexOf(".");
+  const ext = dot >= 0 ? lowerName.slice(dot) : "";
+  const mime = String(mimeHint || mimeFromBrowserFormFileName(fileName) || "")
+    .toLowerCase()
+    .split(";")[0]
+    .trim();
+  const tokens = raw
+    .split(",")
+    .map((tok) => tok.trim().toLowerCase())
+    .filter(Boolean);
+  if (!tokens.length) return true;
+  for (const tok of tokens) {
+    if (tok.startsWith(".")) {
+      if (ext === tok) return true;
+      continue;
+    }
+    if (tok.endsWith("/*")) {
+      if (mime.startsWith(tok.slice(0, -1))) return true;
+      continue;
+    }
+    if (tok.includes("/")) {
+      if (mime === tok) return true;
+      continue;
+    }
+    if (ext === `.${tok}`) return true;
+  }
+  return false;
+}
+
+/**
+ * §9.5i — parity with daemon assertHandoffOpenUrl / isBlockedHostname.
+ * @param {string} raw
+ */
+function isSafeHandoffOpenUrl(raw) {
+  let url;
+  try {
+    url = new URL(String(raw || "").trim());
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:") return false;
+  if (url.username || url.password) return false;
+  const h = String(url.hostname || "")
+    .toLowerCase()
+    .replace(/^\[|\]$/g, "");
+  if (
+    !h ||
+    h === "localhost" ||
+    h.endsWith(".localhost") ||
+    h === "0.0.0.0" ||
+    h === "::1" ||
+    h === "metadata.google.internal"
+  ) {
+    return false;
+  }
+  if (h.includes(":")) {
+    if (h === "::1" || h.startsWith("fc") || h.startsWith("fd") || h.startsWith("fe80")) {
+      return false;
+    }
+  }
+  const dotted = h.split(".");
+  if (dotted.length === 4 && dotted.every((p) => /^\d+$/.test(p))) {
+    const a = Number(dotted[0]);
+    const b = Number(dotted[1]);
+    if (a === 10 || a === 127 || a === 0) return false;
+    if (a === 169 && b === 254) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && b === 168) return false;
+  }
+  return true;
+}
+
 /** @param {File} file */
 function browserFormFilePreflight(file) {
   if (!file || !(file.size > 0)) {
@@ -1774,11 +1901,12 @@ function browserFormFilePreflight(file) {
 
 /**
  * §9.5g.3 — pick an existing jail/workspace file via home.listSandboxEntries.
- * @param {{ multiple?: boolean }} opts
+ * @param {{ multiple?: boolean, accept?: string }} opts
  * @returns {Promise<string[]>}
  */
 function browseJailFilesForForm(opts = {}) {
   const multiple = opts.multiple === true;
+  const accept = String(opts.accept || "");
   const aid = accountId();
   if (!aid) return Promise.resolve([]);
   return new Promise((resolve) => {
@@ -1841,6 +1969,13 @@ function browseJailFilesForForm(opts = {}) {
         return;
       }
       if (act === "done") {
+        if (picked.length > CHAT_ATTACH_MAX_FILES) {
+          showToast(
+            t("chat.attachTooMany", { n: String(CHAT_ATTACH_MAX_FILES) }),
+            "err",
+          );
+          return;
+        }
         finish(picked.slice());
         return;
       }
@@ -1862,11 +1997,22 @@ function browseJailFilesForForm(opts = {}) {
         showToast(t("choiceCard.fileTypeRefused", { name: base }), "err");
         return;
       }
+      if (!matchesBrowserFormFileAccept(base, accept)) {
+        showToast(t("choiceCard.fileTypeRefused", { name: base }), "err");
+        return;
+      }
       if (!multiple) {
         finish([ep]);
         return;
       }
-      if (!picked.includes(ep) && picked.length < 8) picked.push(ep);
+      if (picked.length >= CHAT_ATTACH_MAX_FILES) {
+        showToast(
+          t("chat.attachTooMany", { n: String(CHAT_ATTACH_MAX_FILES) }),
+          "err",
+        );
+        return;
+      }
+      if (!picked.includes(ep)) picked.push(ep);
       showToast(`${picked.length}: ${base}`, "ok");
     });
     void render();

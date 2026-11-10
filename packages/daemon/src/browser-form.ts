@@ -72,6 +72,22 @@ export const BROWSER_FORM_FILE_MIME_ALLOW = new Set([
   "application/octet-stream", // unknown — still gated by ext + magic
 ]);
 
+/** Ext → MIME for server apply when the client did not declare a type (jail browse). */
+export const BROWSER_FORM_FILE_EXT_MIME: Record<string, string> = {
+  ".pdf": "application/pdf",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".txt": "text/plain",
+  ".csv": "text/csv",
+  ".doc": "application/msword",
+  ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".xls": "application/vnd.ms-excel",
+  ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
 const BROWSER_FORM_FILE_MIME_DENY_RE = [
   /^application\/x-msdownload$/i,
   /^application\/x-msdos-program$/i,
@@ -92,6 +108,14 @@ export function isAllowedBrowserFormFileExt(fileName: string): boolean {
   return BROWSER_FORM_FILE_EXT_ALLOW.has(lower.slice(dot));
 }
 
+/** Infer MIME from an allow-listed extension (jail browse / server apply). */
+export function mimeFromBrowserFormFileName(fileName: string): string | undefined {
+  const lower = fileName.toLowerCase();
+  const dot = lower.lastIndexOf(".");
+  if (dot < 0) return undefined;
+  return BROWSER_FORM_FILE_EXT_MIME[lower.slice(dot)];
+}
+
 /** Client-declared MIME gate (extension still required). */
 export function isAllowedBrowserFormFileMime(mimeType: string | undefined): boolean {
   if (!mimeType || !String(mimeType).trim()) return true;
@@ -104,16 +128,59 @@ export function isAllowedBrowserFormFileMime(mimeType: string | undefined): bool
 }
 
 /**
+ * Enforce HTML `accept` against basename (+ optional MIME hint).
+ * Empty / missing accept → allow (ext + MIME gates still apply).
+ */
+export function matchesBrowserFormFileAccept(
+  fileName: string,
+  accept: string | undefined,
+  mimeHint?: string,
+): boolean {
+  const raw = String(accept ?? "").trim();
+  if (!raw) return true;
+  const lowerName = fileName.toLowerCase();
+  const dot = lowerName.lastIndexOf(".");
+  const ext = dot >= 0 ? lowerName.slice(dot) : "";
+  const mime = String(mimeHint ?? mimeFromBrowserFormFileName(fileName) ?? "")
+    .toLowerCase()
+    .split(";")[0]!
+    .trim();
+  const tokens = raw
+    .split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+  if (!tokens.length) return true;
+  for (const t of tokens) {
+    if (t.startsWith(".")) {
+      if (ext === t) return true;
+      continue;
+    }
+    if (t.endsWith("/*")) {
+      const prefix = t.slice(0, -1); // "image/"
+      if (mime.startsWith(prefix)) return true;
+      continue;
+    }
+    if (t.includes("/")) {
+      if (mime === t) return true;
+      continue;
+    }
+    // Bare token ("pdf") — treat as extension without the leading dot.
+    if (ext === `.${t}`) return true;
+  }
+  return false;
+}
+
+/**
  * Split a file field value into jail-relative paths.
  * Multiple files are newline-separated (wire stays string|boolean).
+ * Caller MUST fail closed when `length > BROWSER_FORM_FILE_MAX_COUNT` (`file_too_many`).
  */
 export function parseBrowserFormFilePaths(raw: unknown): string[] {
   const s = typeof raw === "boolean" ? "" : String(raw ?? "");
   return s
     .split(/\r?\n+/)
     .map((p) => p.replace(/\\/g, "/").replace(/^\.\/+/, "").trim())
-    .filter(Boolean)
-    .slice(0, BROWSER_FORM_FILE_MAX_COUNT);
+    .filter(Boolean);
 }
 
 /** Magic-byte refuse for PE/ELF/Mach-O (ext allow-list is not enough). */
