@@ -97,6 +97,8 @@ const resolvers = [
   ...listWorkspacePackageDirs(),
   repoRoot,
   resolve(repoRoot, "../EnvoyMesh"),
+  // Harness is a sibling link — resolve its deps (e.g. smol-toml) from the package root.
+  resolve(repoRoot, "../envoy-harness/packages/envoy-harness"),
   resolve(repoRoot, "../envoy-harness"),
   appDir,
 ]
@@ -226,10 +228,8 @@ function materializeNodeModules(metafile, out) {
   if (missing.length > 0) {
     const unique = [...new Set(missing)];
     // Optional / rarely-installed sidecars — daemon already degrades without them.
-    const optionalMissing = new Set([
-      "@deepseek-ai/node-addon-landlock-run",
-      "smol-toml",
-    ]);
+    // smol-toml is required by @envoymesh/envoy-harness (TOML config) — never optional.
+    const optionalMissing = new Set(["@deepseek-ai/node-addon-landlock-run"]);
     const hard = unique.filter(
       (n) => !optionalMissing.has(n) && !n.startsWith("@deepseek-ai/"),
     );

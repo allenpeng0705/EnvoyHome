@@ -1,6 +1,6 @@
 /**
- * Markdown → Office-ish export (Design §9.5b).
- * Pure JS: docx / exceljs / pdfkit — no Pandoc or LibreOffice.
+ * Markdown → Office-ish export (Design §9.5b / §9.5j / P2-K7).
+ * Pure JS writers always available; optional local LibreOffice for print quality.
  */
 
 import { randomBytes } from "node:crypto";
@@ -17,11 +17,36 @@ import {
   WidthType,
 } from "docx";
 import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import PDFDocument from "pdfkit";
+import PptxGenJS from "pptxgenjs";
 
-export type ExportFormat = "docx" | "xlsx" | "csv" | "pdf";
+export type ExportFormat =
+  | "docx"
+  | "xlsx"
+  | "csv"
+  | "pdf"
+  | "pptx"
+  | "md"
+  | "html"
+  | "rtf"
+  | "odt"
+  | "ods"
+  | "epub";
 
-export const EXPORT_FORMATS = ["docx", "xlsx", "csv", "pdf"] as const;
+export const EXPORT_FORMATS = [
+  "docx",
+  "xlsx",
+  "csv",
+  "pdf",
+  "pptx",
+  "md",
+  "html",
+  "rtf",
+  "odt",
+  "ods",
+  "epub",
+] as const;
 
 /** Sandbox-relative directory for exports (under account files/). */
 export const EXPORT_DOCUMENT_DIR = "output/exports";
@@ -47,6 +72,20 @@ export function exportMimeType(format: ExportFormat): string {
       return "text/csv; charset=utf-8";
     case "pdf":
       return "application/pdf";
+    case "pptx":
+      return "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+    case "md":
+      return "text/markdown; charset=utf-8";
+    case "html":
+      return "text/html; charset=utf-8";
+    case "rtf":
+      return "application/rtf";
+    case "odt":
+      return "application/vnd.oasis.opendocument.text";
+    case "ods":
+      return "application/vnd.oasis.opendocument.spreadsheet";
+    case "epub":
+      return "application/epub+zip";
   }
 }
 
@@ -89,6 +128,31 @@ export function assertOutputSize(buf: Buffer): void {
   }
 }
 
+export type ExportEnginePreference = "auto" | "js" | "libreoffice";
+export type ExportEngineUsed = "js" | "libreoffice";
+
+export interface ExportDocumentResult {
+  buffer: Buffer;
+  engine: ExportEngineUsed;
+}
+
+export function isExportEnginePreference(
+  value: unknown,
+): value is ExportEnginePreference {
+  return value === "auto" || value === "js" || value === "libreoffice";
+}
+
+/** Resolve tool/env engine preference (Design §9.5b). */
+export function resolveExportEnginePreference(
+  explicit: unknown,
+  env: NodeJS.ProcessEnv = process.env,
+): ExportEnginePreference {
+  if (isExportEnginePreference(explicit)) return explicit;
+  const fromEnv = (env.ENVOYHOME_EXPORT_ENGINE ?? "").trim().toLowerCase();
+  if (isExportEnginePreference(fromEnv)) return fromEnv;
+  return "auto";
+}
+
 type MdBlock =
   | { kind: "heading"; level: 1 | 2 | 3 | 4 | 5 | 6; text: string }
   | { kind: "paragraph"; text: string }
@@ -96,8 +160,8 @@ type MdBlock =
   | { kind: "table"; rows: string[][] }
   | { kind: "code"; text: string };
 
-/** Convert Markdown to the requested format. */
-export async function exportDocument(
+/** Pure-JS writers only (always available). */
+export async function exportDocumentJs(
   format: ExportFormat,
   markdown: string,
   opts?: { title?: string },
@@ -119,9 +183,94 @@ export async function exportDocument(
     case "pdf":
       buf = await exportPdf(blocks, title);
       break;
+    case "pptx":
+      buf = await exportPptx(blocks, title);
+      break;
+    case "md":
+      buf = Buffer.from(exportMarkdown(markdown, title), "utf8");
+      break;
+    case "html":
+      buf = Buffer.from(exportHtml(blocks, title), "utf8");
+      break;
+    case "rtf":
+      buf = Buffer.from(exportRtf(blocks, title), "utf8");
+      break;
+    case "odt":
+      buf = await exportOdt(blocks, title);
+      break;
+    case "ods":
+      buf = await exportOds(blocks, title);
+      break;
+    case "epub":
+      buf = await exportEpub(blocks, title);
+      break;
   }
   assertOutputSize(buf);
   return buf;
+}
+
+/**
+ * Convert Markdown to the requested format.
+ * `engine: "auto"` prefers LibreOffice when installed (non-md); falls back to JS.
+ * Forced `libreoffice` fails closed when LO is missing or convert fails.
+ */
+export async function exportDocument(
+  format: ExportFormat,
+  markdown: string,
+  opts?: { title?: string; engine?: ExportEnginePreference; env?: NodeJS.ProcessEnv },
+): Promise<ExportDocumentResult> {
+  const preference = opts?.engine ?? "auto";
+  const env = opts?.env ?? process.env;
+  const title = opts?.title?.trim() || undefined;
+  const titleOpt = title ? { title } : undefined;
+
+  if (format === "md" || preference === "js") {
+    const buffer = await exportDocumentJs(format, markdown, titleOpt);
+    return { buffer, engine: "js" };
+  }
+
+  const { probeLibreOffice, convertWithLibreOffice, intermediateKindForFormat } =
+    await import("./document-export-lo.js");
+  const probe = await probeLibreOffice(env);
+
+  if (!probe.available || !probe.binaryPath) {
+    if (preference === "libreoffice") {
+      throw new Error(
+        "envoyhome.libreoffice_unavailable: LibreOffice not installed (set ENVOYHOME_LIBREOFFICE or install soffice)",
+      );
+    }
+    const buffer = await exportDocumentJs(format, markdown, titleOpt);
+    return { buffer, engine: "js" };
+  }
+
+  try {
+    assertMarkdownSize(markdown);
+    const blocks = parseMarkdownBlocks(markdown);
+    const kind = intermediateKindForFormat(format);
+    let intermediate: Buffer;
+    let intermediateExt: ".html" | ".ods";
+    if (kind === "ods") {
+      intermediate = await exportOds(blocks, title);
+      intermediateExt = ".ods";
+    } else {
+      intermediate = Buffer.from(exportHtml(blocks, title), "utf8");
+      intermediateExt = ".html";
+    }
+    const buffer = await convertWithLibreOffice({
+      format,
+      intermediate,
+      intermediateExt,
+      binaryPath: probe.binaryPath,
+      env,
+    });
+    assertOutputSize(buffer);
+    return { buffer, engine: "libreoffice" };
+  } catch (err) {
+    if (preference === "libreoffice") throw err;
+    // auto: honest JS fallback on LO failure
+    const buffer = await exportDocumentJs(format, markdown, titleOpt);
+    return { buffer, engine: "js" };
+  }
 }
 
 function sanitizeStem(title: string | undefined): string {
@@ -177,7 +326,7 @@ export function parseMarkdownBlocks(markdown: string): MdBlock[] {
       const ordered = /^\s*\d+\.\s+/.test(line);
       const items: string[] = [];
       while (i < lines.length && /^\s*([-*+]|\d+\.)\s+/.test(lines[i] ?? "")) {
-        items.push(stripInline((lines[i] ?? "").replace(/^\s*([-*+]|\d+\.)\s+/, "")));
+        items.push((lines[i] ?? "").replace(/^\s*([-*+]|\d+\.)\s+/, "").trim());
         i++;
       }
       blocks.push({ kind: "list", ordered, items });
@@ -196,7 +345,8 @@ export function parseMarkdownBlocks(markdown: string): MdBlock[] {
       para.push(lines[i] ?? "");
       i++;
     }
-    blocks.push({ kind: "paragraph", text: stripInline(para.join(" ")) });
+    // Keep light inline markers for docx/html emphasis (V-OFFICE-3).
+    blocks.push({ kind: "paragraph", text: para.join(" ").trim() });
   }
   return blocks;
 }
@@ -256,7 +406,7 @@ async function exportDocx(blocks: MdBlock[], title?: string): Promise<Buffer> {
         }),
       );
     } else if (b.kind === "paragraph") {
-      children.push(new Paragraph({ children: [new TextRun(b.text)] }));
+      children.push(new Paragraph({ children: inlineRuns(b.text) }));
     } else if (b.kind === "code") {
       for (const line of b.text.split("\n")) {
         children.push(
@@ -267,11 +417,10 @@ async function exportDocx(blocks: MdBlock[], title?: string): Promise<Buffer> {
       }
     } else if (b.kind === "list") {
       b.items.forEach((item, idx) => {
+        const prefix = b.ordered ? `${idx + 1}. ` : "• ";
         children.push(
           new Paragraph({
-            children: [
-              new TextRun(b.ordered ? `${idx + 1}. ${item}` : `• ${item}`),
-            ],
+            children: [new TextRun(prefix), ...inlineRuns(item)],
           }),
         );
       });
@@ -328,9 +477,11 @@ async function exportXlsx(blocks: MdBlock[], title?: string): Promise<Buffer> {
       pendingRows = b.rows.map((r) => [...r]);
       flush();
     } else if (b.kind === "paragraph" || b.kind === "heading") {
-      pendingRows.push([b.kind === "heading" ? b.text : b.text]);
+      pendingRows.push([
+        b.kind === "heading" ? b.text : stripInline(b.text),
+      ]);
     } else if (b.kind === "list") {
-      for (const item of b.items) pendingRows.push([item]);
+      for (const item of b.items) pendingRows.push([stripInline(item)]);
     } else if (b.kind === "code") {
       for (const line of b.text.split("\n")) pendingRows.push([line]);
     }
@@ -384,6 +535,466 @@ export function exportCsv(blocks: MdBlock[]): string {
 function csvEscape(value: string): string {
   if (/[",\n\r]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
   return value;
+}
+
+/** Preserve light **bold** / *italic* in docx runs (structure fidelity). */
+function inlineRuns(text: string): TextRun[] {
+  const runs: TextRun[] = [];
+  const re = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|[^*`]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const part = m[1]!;
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      runs.push(new TextRun({ text: part.slice(2, -2), bold: true }));
+    } else if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
+      runs.push(new TextRun({ text: part.slice(1, -1), italics: true }));
+    } else if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
+      runs.push(new TextRun({ text: part.slice(1, -1), font: "Courier New" }));
+    } else if (part) {
+      runs.push(new TextRun(part));
+    }
+  }
+  return runs.length ? runs : [new TextRun("")];
+}
+
+/** H1/H2 start slides; body blocks fill the current slide (V-OFFICE-1). */
+async function exportPptx(blocks: MdBlock[], title?: string): Promise<Buffer> {
+  const pptx = new PptxGenJS();
+  pptx.author = "EnvoyHome";
+  if (title) pptx.title = title;
+
+  type SlideBody = {
+    title: string;
+    bullets: string[];
+    paras: string[];
+    tables: string[][];
+  };
+  const slides: SlideBody[] = [];
+  let cur: SlideBody | null = title
+    ? { title, bullets: [], paras: [], tables: [] }
+    : null;
+
+  const ensure = (t: string) => {
+    if (!cur) {
+      cur = { title: t || "Slide", bullets: [], paras: [], tables: [] };
+      slides.push(cur);
+    }
+  };
+  const pushSlide = (t: string) => {
+    cur = { title: t || "Slide", bullets: [], paras: [], tables: [] };
+    slides.push(cur);
+  };
+
+  for (const b of blocks) {
+    if (b.kind === "heading" && b.level <= 2) {
+      pushSlide(b.text);
+    } else if (b.kind === "heading") {
+      ensure(title || "Slide");
+      cur!.paras.push(b.text);
+    } else if (b.kind === "list") {
+      ensure(title || "Slide");
+      cur!.bullets.push(...b.items.map(stripInline));
+    } else if (b.kind === "table") {
+      ensure(title || "Slide");
+      cur!.tables.push(...b.rows);
+    } else if (b.kind === "paragraph" || b.kind === "code") {
+      ensure(title || "Slide");
+      cur!.paras.push(b.kind === "code" ? b.text : stripInline(b.text));
+    }
+  }
+  if (slides.length === 0) {
+    slides.push({ title: title || "Slide", bullets: [], paras: [""], tables: [] });
+  }
+
+  for (const s of slides) {
+    const slide = pptx.addSlide();
+    slide.addText(s.title, {
+      x: 0.5,
+      y: 0.3,
+      w: 9,
+      h: 0.8,
+      fontSize: 28,
+      bold: true,
+    });
+    let y = 1.2;
+    if (s.bullets.length) {
+      slide.addText(
+        s.bullets.map((t) => ({ text: t, options: { bullet: true } })),
+        { x: 0.5, y, w: 9, h: Math.min(4.5, 0.35 * s.bullets.length + 0.2), fontSize: 16 },
+      );
+      y += Math.min(4.5, 0.35 * s.bullets.length + 0.4);
+    }
+    for (const p of s.paras.slice(0, 8)) {
+      if (y > 5.2) break;
+      slide.addText(p, { x: 0.5, y, w: 9, h: 0.4, fontSize: 14 });
+      y += 0.4;
+    }
+    if (s.tables.length && y < 5) {
+      const cols = Math.max(...s.tables.map((r) => r.length), 1);
+      slide.addTable(
+        s.tables.map((row) =>
+          Array.from({ length: cols }, (_, i) => ({ text: row[i] ?? "" })),
+        ),
+        { x: 0.5, y, w: 9, colW: Array.from({ length: cols }, () => 9 / cols), fontSize: 12 },
+      );
+    }
+  }
+
+  const out = (await pptx.write({ outputType: "nodebuffer" })) as Buffer;
+  return Buffer.isBuffer(out) ? out : Buffer.from(out);
+}
+
+function exportMarkdown(markdown: string, title?: string): string {
+  const body = markdown.replace(/\r\n/g, "\n").trim();
+  if (title && !body.startsWith("# ")) {
+    return `# ${title}\n\n${body}\n`;
+  }
+  return body.endsWith("\n") ? body : `${body}\n`;
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Light GFM inline → HTML (bold/italic/code only). */
+function inlineHtml(text: string): string {
+  const parts: string[] = [];
+  const re = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|[^*`]+)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const part = m[1]!;
+    if (part.startsWith("**") && part.endsWith("**") && part.length > 4) {
+      parts.push(`<strong>${escapeHtml(part.slice(2, -2))}</strong>`);
+    } else if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
+      parts.push(`<em>${escapeHtml(part.slice(1, -1))}</em>`);
+    } else if (part.startsWith("`") && part.endsWith("`") && part.length > 2) {
+      parts.push(`<code>${escapeHtml(part.slice(1, -1))}</code>`);
+    } else if (part) {
+      parts.push(escapeHtml(part));
+    }
+  }
+  return parts.join("") || escapeHtml(text);
+}
+
+function exportHtml(blocks: MdBlock[], title?: string): string {
+  const parts: string[] = [
+    "<!DOCTYPE html>",
+    '<html lang="en"><head><meta charset="utf-8"/>',
+    `<title>${escapeHtml(title || "Export")}</title>`,
+    "<style>body{font-family:system-ui,sans-serif;max-width:48rem;margin:2rem auto;padding:0 1rem;line-height:1.5}table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.35rem .5rem}pre{background:#f4f4f4;padding:.75rem;overflow:auto}</style>",
+    "</head><body>",
+  ];
+  if (title) parts.push(`<h1>${escapeHtml(title)}</h1>`);
+  for (const b of blocks) {
+    if (b.kind === "heading") {
+      parts.push(`<h${b.level}>${escapeHtml(b.text)}</h${b.level}>`);
+    } else if (b.kind === "paragraph") {
+      parts.push(`<p>${inlineHtml(b.text)}</p>`);
+    } else if (b.kind === "code") {
+      parts.push(`<pre><code>${escapeHtml(b.text)}</code></pre>`);
+    } else if (b.kind === "list") {
+      const tag = b.ordered ? "ol" : "ul";
+      parts.push(
+        `<${tag}>${b.items.map((i) => `<li>${inlineHtml(i)}</li>`).join("")}</${tag}>`,
+      );
+    } else if (b.kind === "table") {
+      const [head, ...rest] = b.rows;
+      parts.push("<table>");
+      if (head) {
+        parts.push(
+          `<thead><tr>${head.map((c) => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead>`,
+        );
+      }
+      parts.push("<tbody>");
+      for (const row of rest) {
+        parts.push(`<tr>${row.map((c) => `<td>${escapeHtml(c)}</td>`).join("")}</tr>`);
+      }
+      parts.push("</tbody></table>");
+    }
+  }
+  parts.push("</body></html>\n");
+  return parts.join("\n");
+}
+
+function rtfEscape(s: string): string {
+  return s
+    .replace(/\\/g, "\\\\")
+    .replace(/\{/g, "\\{")
+    .replace(/\}/g, "\\}")
+    .replace(/\n/g, "\\line ");
+}
+
+function exportRtf(blocks: MdBlock[], title?: string): string {
+  const body: string[] = [String.raw`{\rtf1\ansi\deff0`, String.raw`{\fonttbl{\f0 Times New Roman;}}`, "\\f0\\fs22 "];
+  if (title) body.push(`\\b ${rtfEscape(title)}\\b0\\par\\par `);
+  for (const b of blocks) {
+    if (b.kind === "heading") {
+      body.push(`\\b ${rtfEscape(b.text)}\\b0\\par `);
+    } else if (b.kind === "paragraph") {
+      body.push(`${rtfEscape(b.text)}\\par `);
+    } else if (b.kind === "code") {
+      body.push(`\\f1 ${rtfEscape(b.text)}\\f0\\par `);
+    } else if (b.kind === "list") {
+      b.items.forEach((item, idx) => {
+        const bullet = b.ordered ? `${idx + 1}. ` : "\\bullet ";
+        body.push(`${bullet}${rtfEscape(item)}\\par `);
+      });
+    } else if (b.kind === "table") {
+      for (const row of b.rows) {
+        body.push(`${rtfEscape(row.join(" | "))}\\par `);
+      }
+    }
+  }
+  body.push("}");
+  return body.join("");
+}
+
+function xmlEscape(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Minimal ODF package: mimetype (STORE) + manifest + content.xml. */
+async function zipOdfPackage(input: {
+  mimetype: string;
+  contentXml: string;
+  rootPath: string;
+}): Promise<Buffer> {
+  const zip = new JSZip();
+  zip.file("mimetype", input.mimetype, { compression: "STORE" });
+  zip.file(
+    "META-INF/manifest.xml",
+    `<?xml version="1.0" encoding="UTF-8"?>
+<manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0" manifest:version="1.3">
+  <manifest:file-entry manifest:full-path="/" manifest:version="1.3" manifest:media-type="${xmlEscape(input.mimetype)}"/>
+  <manifest:file-entry manifest:full-path="${xmlEscape(input.rootPath)}" manifest:media-type="text/xml"/>
+</manifest:manifest>
+`,
+  );
+  zip.file(input.rootPath, input.contentXml);
+  const out = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  return Buffer.from(out);
+}
+
+function odtBodyXml(blocks: MdBlock[], title?: string): string {
+  const parts: string[] = [];
+  if (title) {
+    parts.push(`<text:h text:style-name="Heading_20_1" text:outline-level="1">${xmlEscape(title)}</text:h>`);
+  }
+  for (const b of blocks) {
+    if (b.kind === "heading") {
+      parts.push(
+        `<text:h text:style-name="Heading_20_${b.level}" text:outline-level="${b.level}">${xmlEscape(stripInline(b.text))}</text:h>`,
+      );
+    } else if (b.kind === "paragraph") {
+      parts.push(`<text:p>${xmlEscape(stripInline(b.text))}</text:p>`);
+    } else if (b.kind === "code") {
+      for (const line of b.text.split("\n")) {
+        parts.push(`<text:p text:style-name="Preformatted_20_Text">${xmlEscape(line || " ")}</text:p>`);
+      }
+    } else if (b.kind === "list") {
+      const tag = b.ordered ? "text:list" : "text:list";
+      parts.push(`<${tag}>`);
+      for (const item of b.items) {
+        parts.push(
+          `<text:list-item><text:p>${xmlEscape(stripInline(item))}</text:p></text:list-item>`,
+        );
+      }
+      parts.push(`</${tag}>`);
+    } else if (b.kind === "table") {
+      const cols = Math.max(...b.rows.map((r) => r.length), 1);
+      parts.push(`<table:table table:name="Table1">`);
+      parts.push(
+        Array.from({ length: cols }, () => `<table:table-column/>`).join(""),
+      );
+      for (const row of b.rows) {
+        parts.push("<table:table-row>");
+        for (let i = 0; i < cols; i++) {
+          parts.push(
+            `<table:table-cell office:value-type="string"><text:p>${xmlEscape(row[i] ?? "")}</text:p></table:table-cell>`,
+          );
+        }
+        parts.push("</table:table-row>");
+      }
+      parts.push("</table:table>");
+    }
+  }
+  if (!parts.length) parts.push("<text:p/>");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  office:version="1.3">
+  <office:body><office:text>
+${parts.join("\n")}
+  </office:text></office:body>
+</office:document-content>
+`;
+}
+
+async function exportOdt(blocks: MdBlock[], title?: string): Promise<Buffer> {
+  return zipOdfPackage({
+    mimetype: "application/vnd.oasis.opendocument.text",
+    rootPath: "content.xml",
+    contentXml: odtBodyXml(blocks, title),
+  });
+}
+
+function odsSheetsFromBlocks(
+  blocks: MdBlock[],
+  title?: string,
+): { name: string; rows: string[][] }[] {
+  const sheets: { name: string; rows: string[][] }[] = [];
+  let currentName = title?.slice(0, 31) || "Sheet1";
+  let pending: string[][] = [];
+  const flush = () => {
+    if (!pending.length) return;
+    sheets.push({ name: uniqueSheetName(sheets, currentName), rows: pending });
+    pending = [];
+  };
+  for (const b of blocks) {
+    if (b.kind === "heading" && b.level <= 2) {
+      flush();
+      currentName = stripInline(b.text).slice(0, 31) || currentName;
+    } else if (b.kind === "table") {
+      if (pending.length) flush();
+      pending = b.rows.map((r) => [...r]);
+      flush();
+    } else if (b.kind === "paragraph" || b.kind === "heading") {
+      pending.push([stripInline(b.text)]);
+    } else if (b.kind === "list") {
+      for (const item of b.items) pending.push([stripInline(item)]);
+    } else if (b.kind === "code") {
+      for (const line of b.text.split("\n")) pending.push([line]);
+    }
+  }
+  flush();
+  if (!sheets.length) sheets.push({ name: "Sheet1", rows: [[""]] });
+  return sheets;
+}
+
+function odsBodyXml(blocks: MdBlock[], title?: string): string {
+  const sheets = odsSheetsFromBlocks(blocks, title);
+  const tableXml = sheets
+    .map((sheet) => {
+      const cols = Math.max(...sheet.rows.map((r) => r.length), 1);
+      const rows = sheet.rows
+        .map((row) => {
+          const cells = Array.from({ length: cols }, (_, i) => {
+            const v = row[i] ?? "";
+            return `<table:table-cell office:value-type="string"><text:p>${xmlEscape(v)}</text:p></table:table-cell>`;
+          }).join("");
+          return `<table:table-row>${cells}</table:table-row>`;
+        })
+        .join("\n");
+      return `<table:table table:name="${xmlEscape(sheet.name)}">
+${Array.from({ length: cols }, () => "<table:table-column/>").join("")}
+${rows}
+</table:table>`;
+    })
+    .join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content
+  xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"
+  xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"
+  xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+  office:version="1.3">
+  <office:body><office:spreadsheet>
+${tableXml}
+  </office:spreadsheet></office:body>
+</office:document-content>
+`;
+}
+
+async function exportOds(blocks: MdBlock[], title?: string): Promise<Buffer> {
+  return zipOdfPackage({
+    mimetype: "application/vnd.oasis.opendocument.spreadsheet",
+    rootPath: "content.xml",
+    contentXml: odsBodyXml(blocks, title),
+  });
+}
+
+async function exportEpub(blocks: MdBlock[], title?: string): Promise<Buffer> {
+  const docTitle = title || "Export";
+  const htmlBody = exportHtml(blocks, docTitle);
+  // Strip doctype/html wrapper — EPUB wants XHTML fragment in a full XHTML doc.
+  const inner = htmlBody
+    .replace(/^[\s\S]*<body>/i, "")
+    .replace(/<\/body>[\s\S]*$/i, "")
+    .trim();
+  const xhtml = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>${xmlEscape(docTitle)}</title>
+  <style type="text/css">body{font-family:serif;line-height:1.5;max-width:40em;margin:1em auto;padding:0 1em}table{border-collapse:collapse}td,th{border:1px solid #999;padding:.25em .4em}pre{background:#f4f4f4;padding:.75em;overflow:auto}</style>
+</head>
+<body>
+${inner}
+</body>
+</html>
+`;
+  const zip = new JSZip();
+  zip.file("mimetype", "application/epub+zip", { compression: "STORE" });
+  zip.file(
+    "META-INF/container.xml",
+    `<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>
+`,
+  );
+  zip.file(
+    "OEBPS/content.opf",
+    `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="bookid" version="2.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>${xmlEscape(docTitle)}</dc:title>
+    <dc:language>en</dc:language>
+    <dc:identifier id="bookid">envoyhome-${randomBytes(4).toString("hex")}</dc:identifier>
+    <dc:creator>EnvoyHome</dc:creator>
+  </metadata>
+  <manifest>
+    <item id="chapter1" href="chapter1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="chapter1"/>
+  </spine>
+</package>
+`,
+  );
+  zip.file(
+    "OEBPS/toc.ncx",
+    `<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head>
+    <meta name="dtb:uid" content="envoyhome"/>
+  </head>
+  <docTitle><text>${xmlEscape(docTitle)}</text></docTitle>
+  <navMap>
+    <navPoint id="nav1" playOrder="1">
+      <navLabel><text>${xmlEscape(docTitle)}</text></navLabel>
+      <content src="chapter1.xhtml"/>
+    </navPoint>
+  </navMap>
+</ncx>
+`,
+  );
+  zip.file("OEBPS/chapter1.xhtml", xhtml);
+  const out = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  return Buffer.from(out);
 }
 
 async function exportPdf(blocks: MdBlock[], title?: string): Promise<Buffer> {

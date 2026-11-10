@@ -624,6 +624,7 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get connTabMcp => 'MCP';
 
+  @override
   String get connTabBrowser => 'Browser';
 
   @override
@@ -1157,6 +1158,17 @@ class AppLocalizationsIt extends AppLocalizations {
   String get chatOpenArtifact => 'Apri risposta completa';
 
   @override
+  String get chatPromoteKnowledge => 'Add to Knowledge';
+
+  @override
+  String chatPromotedKnowledge(String path) {
+    return 'Saved to $path';
+  }
+
+  @override
+  String get chatPromoteFailed => 'Could not add to Knowledge.';
+
+  @override
   String get chatRecents => 'Recenti';
 
   @override
@@ -1526,6 +1538,52 @@ class AppLocalizationsIt extends AppLocalizations {
   String get filesEmptyFolder => 'This folder is empty';
 
   @override
+  String get artifactsLoTitle => 'LibreOffice (home computer)';
+
+  @override
+  String get artifactsLoWhy =>
+      'Print-ready Word, Excel, PowerPoint, and PDF exports run on your home computer (~1 GB, stays local). Without it, exports still work with a simpler layout. Documents are never sent to the cloud for conversion.';
+
+  @override
+  String get artifactsLoReady => 'Ready';
+
+  @override
+  String get artifactsLoMissing => 'Not installed';
+
+  @override
+  String get artifactsLoDownloading => 'Downloading…';
+
+  @override
+  String get artifactsLoFailed => 'Install failed';
+
+  @override
+  String get artifactsLoInstall => 'Install on home computer';
+
+  @override
+  String get artifactsLoCancel => 'Cancel download';
+
+  @override
+  String get artifactsLoNotNow => 'Not now';
+
+  @override
+  String get artifactsLoRefresh => 'Refresh status';
+
+  @override
+  String artifactsLoProgress(String received, String total) {
+    return '$received / $total';
+  }
+
+  @override
+  String get artifactsLoHintCopied => 'Install hint copied';
+
+  @override
+  String get artifactsLoCopyHint => 'Copy manual install hint';
+
+  @override
+  String get artifactsLoInstallNote =>
+      'Managed install runs on the home daemon host — not on this phone.';
+
+  @override
   String chatOpenFile(String name) {
     return 'Apri $name';
   }
@@ -1537,24 +1595,38 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get choiceCardConfirm => 'Conferma';
+
   @override
   String get choiceCardOpen => 'Open';
+
   @override
   String get choiceCardChooseFile => 'Choose file';
+
   @override
   String get choiceCardBrowseJail => 'Browse files';
+
   @override
   String get choiceCardBrowseUp => 'Up';
+
   @override
-  String choiceCardFilesChosen(int n) => '$n files chosen';
+  String choiceCardFilesChosen(int n) {
+    return '$n files chosen';
+  }
+
   @override
   String get choiceCardNoFile => 'No file chosen';
+
   @override
   String get choiceCardFileEmpty => 'That file is empty.';
+
   @override
-  String choiceCardFileTypeRefused(String name) => '$name is not an allowed form upload type.';
+  String choiceCardFileTypeRefused(String name) {
+    return '$name is not an allowed form upload type.';
+  }
+
   @override
-  String get choiceCardHandoffHint => 'Opens in your browser or app so you can finish and pay there. Home will not enter card details.';
+  String get choiceCardHandoffHint =>
+      'Opens in your browser or app so you can finish and pay there. Home will not enter card details.';
 
   @override
   String get choiceCardPickOne => 'Seleziona almeno un\'opzione.';

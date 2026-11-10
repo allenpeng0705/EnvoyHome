@@ -613,6 +613,7 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get connTabMcp => 'MCP';
 
+  @override
   String get connTabBrowser => '浏览器';
 
   @override
@@ -1136,6 +1137,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatOpenArtifact => '打开完整回复';
 
   @override
+  String get chatPromoteKnowledge => 'Add to Knowledge';
+
+  @override
+  String chatPromotedKnowledge(String path) {
+    return 'Saved to $path';
+  }
+
+  @override
+  String get chatPromoteFailed => 'Could not add to Knowledge.';
+
+  @override
   String get chatRecents => '最近';
 
   @override
@@ -1492,6 +1504,51 @@ class AppLocalizationsZh extends AppLocalizations {
   String get filesEmptyFolder => '此文件夹为空';
 
   @override
+  String get artifactsLoTitle => 'LibreOffice（家庭电脑）';
+
+  @override
+  String get artifactsLoWhy =>
+      '打印级 Word / Excel / PowerPoint / PDF 导出在家庭电脑本地完成（约 1 GB，不出门）。未安装时仍可用较简布局导出。文档不会上传到云端转换。';
+
+  @override
+  String get artifactsLoReady => '已就绪';
+
+  @override
+  String get artifactsLoMissing => '未安装';
+
+  @override
+  String get artifactsLoDownloading => '下载中…';
+
+  @override
+  String get artifactsLoFailed => '安装失败';
+
+  @override
+  String get artifactsLoInstall => '在家庭电脑安装';
+
+  @override
+  String get artifactsLoCancel => '取消下载';
+
+  @override
+  String get artifactsLoNotNow => '暂不';
+
+  @override
+  String get artifactsLoRefresh => '刷新状态';
+
+  @override
+  String artifactsLoProgress(String received, String total) {
+    return '$received / $total';
+  }
+
+  @override
+  String get artifactsLoHintCopied => '已复制安装提示';
+
+  @override
+  String get artifactsLoCopyHint => '复制手动安装提示';
+
+  @override
+  String get artifactsLoInstallNote => '托管安装在家庭守护进程主机上执行，不在本手机上。';
+
+  @override
   String chatOpenFile(String name) {
     return '打开 $name';
   }
@@ -1503,22 +1560,35 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get choiceCardConfirm => '确认';
+
   @override
   String get choiceCardOpen => '打开';
+
   @override
   String get choiceCardChooseFile => '选择文件';
+
   @override
   String get choiceCardBrowseJail => '浏览文件';
+
   @override
   String get choiceCardBrowseUp => '上级';
+
   @override
-  String choiceCardFilesChosen(int n) => '已选 $n 个文件';
+  String choiceCardFilesChosen(int n) {
+    return '已选 $n 个文件';
+  }
+
   @override
   String get choiceCardNoFile => '未选择文件';
+
   @override
   String get choiceCardFileEmpty => '文件为空。';
+
   @override
-  String choiceCardFileTypeRefused(String name) => '$name 不是允许的表单上传类型。';
+  String choiceCardFileTypeRefused(String name) {
+    return '$name 不是允许的表单上传类型。';
+  }
+
   @override
   String get choiceCardHandoffHint => '将在浏览器或 App 中打开以便你完成并付款。Home 不会填写银行卡信息。';
 

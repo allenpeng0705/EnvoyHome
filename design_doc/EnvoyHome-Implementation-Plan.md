@@ -5,7 +5,7 @@ Living plan for **active** EnvoyHome build work. Style aligned with EnvoyMesh [`
 | Field | Value |
 |-------|-------|
 | **Role** | Subordinate to [`EnvoyHome-Design.md`](EnvoyHome-Design.md), [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Design.md), and [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md). **Design wins.** |
-| **Last updated** | 2026-11-04c |
+| **Last updated** | 2026-11-10g |
 | **Owner** | Allen Peng |
 | **G6** | **Accepted 2026-10-09** for Plan text matching Design `2026-10-08f` (with G1) |
 
@@ -45,9 +45,9 @@ EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0
 **Next (after early-adopter ops):** Live HA checklist ([`docs/smart-home-live-checklist.md`](../docs/smart-home-live-checklist.md)); then **First-party IM live** (Telegram first) when Mesh phone path is solid  
 **Deferred from early-adopter claims:** Production IM zoo; Privacy Mode product toggle (`home.setPrivacyMode` stays Phase 2); agentskills.io conformance  
 
-**Active coding epic:** _(none)_ — Phase 2 board through **P2-J** shipped.
+**Active coding epic:** _(none)_ — Phase 2 board through **P2-K** shipped.
 
-**Last shipped:** P2-J browser form file upload (`2026-11-10`); P2-I Daily Outbound Assist (`2026-11-04d`); P2-H browser form assist (`2026-11-04c`); P2-G observe→act→verify (`2026-11-04`); P2-F MCP (`2026-11-03b`)
+**Last shipped:** P2-K8 managed LibreOffice auto-install (`2026-11-10g`); LibreOffice install guidance (`2026-11-10f`); P2-K7 (`2026-11-10e`); P2-K Office File Pipeline (`2026-11-10c`…`d`)
 
 ## Key Decisions
 
@@ -199,10 +199,19 @@ Design ground truth: **§19.9–§19.13** (**Accepted 2026-10-20**); **P2-F** §
 | **P2-H** Browser form assist | `[x]` | §9.5g.3 | Design `2026-11-04b` **Accepted** / Ship `2026-11-04c`; P2-G `[x]` | Dynamic form card from snapshot (`selection: form`); mobile/desktop fill; one Allow apply; secret one-shot | V-OUT-16…V-OUT-19 |
 | **P2-I** Daily Outbound Assist | `[x]` | §9.5i | Design Ship `2026-11-04d`; P2-H + P2-F `[x]` | Hard stop pay/OTP/CAPTCHA; MCP prefer; `blocked: payment`; `outbound_handoff` https Open card; skills + live scenarios | V-OUT-20…V-OUT-24 |
 | **P2-J** Browser form file upload | `[x]` | §9.5g.3 | Design Ship `2026-11-10`; P2-H `[x]` | `kind: file` + Choose file → jail path; `setInputFiles`; ≤8 MiB mime allow-list; unattended refuse file; mobile/desktop picker | V-OUT-25…V-OUT-27 |
+| **P2-K0** Office Design umbrella | `[x]` | §9.5j | Design `2026-11-10c` | Format matrix + V-OFFICE IDs; MD pivot | V-OFFICE-* (index) |
+| **P2-K1** Generate pptx | `[x]` | §9.5b/j | K0 | `export_document` `pptx` via pptxgenjs | V-OFFICE-1 |
+| **P2-K2** Harden docx/xlsx + md | `[x]` | §9.5b/j | K1 | tables / multi-sheet; `format: md` | V-OFFICE-2, V-OFFICE-3 |
+| **P2-K3** Understand depth | `[x]` | §9.5c/j | K2 | `sheetName` / `slideIndex` / page slice; office skill | V-OFFICE-4, V-OFFICE-5 |
+| **P2-K4** More generate formats | `[x]` | §9.5b/j | K2 | `html` \| `rtf` (odt/epub stay Deferred) | V-OFFICE-2 |
+| **P2-K5** Product + Doc KB bridge | `[x]` | §9.5j | K3 | chips + `promote_knowledge` / `home.promoteKnowledgeFile` | V-OFFICE-6…V-OFFICE-8 |
+| **P2-K6** ODT/ODS/EPUB generate | `[x]` | §9.5b/j | K4 | `export_document` `odt`/`ods`/`epub` (pdf already shipped) | V-OFFICE-9 |
+| **P2-K7** LibreOffice export quality | `[x]` | §9.5b | K6 | Optional local `soffice` convert; JS fallback; Doctor; `engine` arg | V-OFFICE-10 |
+| **P2-K8** Managed LO auto-install | `[x]` | §9.5b | K7 | Silent first-boot download; one-click fallback; Setup/Files why-copy | V-OFFICE-12…14 |
 
-**Ship order:** P2-A → … → P2-F → P2-G → P2-H → P2-I → **P2-J**.
+**Ship order:** P2-A → … → P2-J → **P2-K0…K8**.
 
-**Package touch points (at code time):** `packages/harness-host` (policy + parse), `packages/daemon` (turn-service, choice-store, **browser-control** form/handoff + payment wall + file apply), `packages/protocol` (additive `kind: file` / `accept`), mobile/desktop chat choice UI, skills-samples, Doctor issues.
+**Package touch points (at code time):** `packages/harness-host` (policy + parse), `packages/daemon` (turn-service, choice-store, **browser-control** form/handoff + payment wall + file apply; **document-export** / **document-extract**; knowledge promote), `packages/protocol` (additive methods), mobile/desktop chat choice + artifact UI, skills-samples, Doctor issues.
 
 **Soft risks (owning epic):**
 
@@ -230,6 +239,9 @@ Design ground truth: **§19.9–§19.13** (**Accepted 2026-10-20**); **P2-F** §
 | Cart-sync honesty | P2-I | Handoff checklist; never claim daemon cart ≡ phone app (V-OUT-23) |
 | Browser thrash vs MCP | P2-I | Skill + live prefer-MCP case (V-OUT-20) |
 | Path escape / oversized file on form apply | P2-J | `safeJoin` + ≤8 MiB + mime allow-list; refuse executables (V-OUT-25/26) |
+| Oversized Office tables / pptx layout fantasy | P2-K | Caps 2 MiB MD / 8 MiB out; JS structure fidelity + optional LO; refuse upload overwrite (V-OFFICE-1…3, V-OFFICE-10) |
+| Silent LO download size / elevation / retry storm | P2-K8 | Managed under stateDir; one silent attempt; Owner retry; AUTO=0 / decline; JS forever (V-OFFICE-12…14) |
+| Promote non-md / Learn file bytes | P2-K | `promote_knowledge` Markdown-only; never Learn bytes (V-OFFICE-6/7) |
 | Unattended file upload | P2-J | Refuse any card with `file` field unattended (V-OUT-27) |
 | `message` spam / cross-account leak | P2-C | Bound target + same account only; grantable; Privacy Mode (V-P2-MSG-*) |
 | Patch path escape / huge diff | P2-A | Jail + size cap (V-P2-EDIT-1) |
@@ -597,6 +609,20 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-OUT-25 | **P2-J** | `input[type=file]` → `kind: file` on form card; apply uses `setInputFiles` after jail resolve |
 | V-OUT-26 | **P2-J** | file apply refuses path escape / >8 MiB / disallowed mime; basename-only in transcript |
 | V-OUT-27 | **P2-J** | unattended refuses any form card that includes a `file` field |
+| V-OFFICE-1 | **P2-K1** | `export_document` pptx under `output/exports/` |
+| V-OFFICE-2 | **P2-K2/K4** | `md` / `html` / `rtf` export; no upload overwrite |
+| V-OFFICE-3 | **P2-K2** | docx tables + xlsx multi-sheet from GFM |
+| V-OFFICE-4 | **P2-K3** | sheetName / slideIndex / page range slice |
+| V-OFFICE-5 | **P2-K3** | multi-attach extracts addressable via sidecars |
+| V-OFFICE-6 | **P2-K5** | promote Markdown → `knowledge/` + reindex |
+| V-OFFICE-7 | **P2-K5** | promote refuses non-md / path escape |
+| V-OFFICE-8 | **P2-K5** | thin-client export/extract chips + Promote |
+| V-OFFICE-9 | **P2-K6** | `export_document` odt/ods/epub under `output/exports/` |
+| V-OFFICE-10 | **P2-K7** | LO auto/fallback/forced; Doctor when missing |
+| V-OFFICE-11 | **P2-K7** | Settings Files LO card; export installHint; getDocumentExportStatus |
+| V-OFFICE-12 | **P2-K8** | Silent first-boot managed LO download; JS during download |
+| V-OFFICE-13 | **P2-K8** | Failed persists; Install retry; decline / AUTO=0 |
+| V-OFFICE-14 | **P2-K8** | Managed ready → print-quality export |
 | V-MCP-1 | **P2-F** | Owner upsert MCP config; non-Owner denied |
 | V-MCP-2 | **P2-F** | testMcpServer = initialize+tools/list only (no mutating call) |
 | V-MCP-3 | **P2-F** | Remote MCP URL SSRF refused |

@@ -86,6 +86,7 @@ export interface RunningDaemon {
   localEngine: LocalEngineService;
   embedEngine: import("./local-engine/embed-engine.js").EmbedEngineService;
   knowledge: KnowledgeService;
+  libreOfficeInstall: import("./libreoffice-install.js").LibreOfficeInstallService;
   mesh: MeshHostHandle;
   /** Live hosting peer when meshHostingEnabled (null when stub-only). */
   meshPeer: HomeMeshPeer | null;
@@ -647,6 +648,17 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     `daemon claim written (pid=${claim.pid} instanceId=${claim.instanceId} ws=${claim.port})`,
   );
   logger.info(`WS listening on ${ws.host.port} path=/ws`);
+
+  // P2-K8 — managed LibreOffice silent first-boot (non-blocking).
+  const { LibreOfficeInstallService } = await import("./libreoffice-install.js");
+  const libreOfficeInstall = new LibreOfficeInstallService(paths);
+  await libreOfficeInstall.load();
+  void libreOfficeInstall.maybeAutoInstall().catch((err) => {
+    logger.warn(
+      `libreoffice auto-install skipped: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  });
+
   return {
     config: { ...config, wsPort: ws.host.port, httpPort },
     logger,
@@ -676,6 +688,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     localEngine,
     embedEngine,
     knowledge,
+    libreOfficeInstall,
     mesh,
     meshPeer,
     subscriptions,

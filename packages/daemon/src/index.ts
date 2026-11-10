@@ -289,6 +289,8 @@ export {
   runSpawnHelperTool,
   runTaskTool,
   sliceExtractByPageRange,
+  sliceExtractBySheetName,
+  sliceExtractBySlideIndex,
   __resetPhase2ToolsForTests,
   SESSIONS_LIST_CAP,
   SESSIONS_HISTORY_CAP,
@@ -412,3 +414,36 @@ export {
   normalizeExtension,
   normalizeGfmMarkdown,
 } from "./document-extract.js";
+export { promoteKnowledgeFile } from "./promote-knowledge.js";
+export { canPromoteKnowledgePath } from "./promote-paths.js";
+export {
+  EXPORT_FORMATS,
+  exportDocument,
+  exportDocumentJs,
+  isExportEnginePreference,
+  isExportFormat,
+  parseMarkdownBlocks,
+  resolveExportEnginePreference,
+  type ExportDocumentResult,
+  type ExportEnginePreference,
+  type ExportEngineUsed,
+} from "./document-export.js";
+export {
+  getDocumentExportStatus,
+  libreOfficeInstallHint,
+  probeLibreOffice,
+  clearLibreOfficeProbeCache,
+  __resetLibreOfficeForTests,
+} from "./document-export-lo.js";
+export {
+  LibreOfficeInstallService,
+  getLibreOfficeInstallService,
+  __setLibreOfficeInstallHooksForTests,
+  __resetLibreOfficeInstallForTests,
+  type DocumentExportStatus,
+} from "./libreoffice-install.js";
+export {
+  LIBREOFFICE_WHY_TEXT,
+  LIBREOFFICE_CATALOG_VERSION,
+  libreOfficeCatalogEntryForHost,
+} from "./libreoffice-catalog.js";

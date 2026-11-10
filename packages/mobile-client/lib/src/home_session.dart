@@ -507,6 +507,43 @@ class EnvoyHomeSession {
         'path': path,
       });
 
+  /// Design §9.5j — copy jail Markdown into knowledge/ + reindex.
+  Future<Map<String, dynamic>> promoteKnowledgeFile({
+    required String accountId,
+    required String sourcePath,
+    bool overwrite = false,
+    String? destName,
+  }) {
+    final params = <String, dynamic>{
+      'accountId': accountId,
+      'sourcePath': sourcePath,
+      if (overwrite) 'overwrite': true,
+      if (destName != null && destName.isNotEmpty) 'destName': destName,
+    };
+    return _call('home.promoteKnowledgeFile', params);
+  }
+
+  /// LibreOffice on the **home** daemon host (Design §9.5b / V-OFFICE-11…14).
+  Future<Map<String, dynamic>> getDocumentExportStatus() =>
+      _call('home.getDocumentExportStatus', {});
+
+  Future<Map<String, dynamic>> installLibreOffice() =>
+      _call('home.installLibreOffice', {});
+
+  Future<Map<String, dynamic>> cancelLibreOfficeInstall() =>
+      _call('home.cancelLibreOfficeInstall', {});
+
+  Future<Map<String, dynamic>> setLibreOfficeInstallPreference({
+    bool? auto,
+    bool? declined,
+  }) {
+    final params = <String, dynamic>{
+      if (auto != null) 'auto': auto,
+      if (declined != null) 'declined': declined,
+    };
+    return _call('home.setLibreOfficeInstallPreference', params);
+  }
+
   Future<Map<String, dynamic>> listProviders({String? accountId}) async {
     final params = <String, dynamic>{};
     if (accountId != null && accountId.isNotEmpty) {

@@ -31,7 +31,9 @@ import {
   defaultExportUri,
   exportDocument,
   exportMimeType,
+  isExportEnginePreference,
   isExportFormat,
+  resolveExportEnginePreference,
 } from "./document-export.js";
 import { resolveSandboxPath, type WorkspaceMode } from "./fs-jail.js";
 import { isHomeAssistantReady, isMqttReady } from "./home-intent.js";
@@ -181,17 +183,27 @@ const BUILTIN_META: Record<
   },
   export_document: {
     summary:
-      "Export Markdown to Word/Excel/CSV/PDF under output/exports/ (Design §9.5b)",
+      "Export Markdown to docx/xlsx/csv/pdf/pptx/md/html/rtf/odt/ods/epub under output/exports/ (Design §9.5b/j); optional engine auto|js|libreoffice",
     sampleArgs: {
       format: "docx",
       markdown: "# Report\n\n| A | B |\n|---|---|\n| 1 | 2 |\n",
       title: "Report",
+      engine: "auto",
     },
   },
   extract_document: {
     summary:
-      "Extract Office/PDF/text in the sandbox to Markdown under output/extracts/ (Design §9.5c); optional startPage/endPage",
-    sampleArgs: { sourcePath: "documents/report.pdf", startPage: 1, endPage: 2 },
+      "Extract Office/PDF/text in the sandbox to Markdown under output/extracts/ (Design §9.5c/j); optional startPage/endPage, sheetName, slideIndex",
+    sampleArgs: {
+      sourcePath: "documents/report.pdf",
+      startPage: 1,
+      endPage: 2,
+    },
+  },
+  promote_knowledge: {
+    summary:
+      "Copy jail Markdown into knowledge/ and reindex Doc KB (Design §9.5j)",
+    sampleArgs: { sourcePath: "output/extracts/report-abc.md" },
   },
   message: {
     summary:
@@ -947,6 +959,9 @@ export async function runExtendedWorkflowTool(input: {
   if (tool === "extract_document") {
     return runExtractDocumentTool(input);
   }
+  if (tool === "promote_knowledge") {
+    return runPromoteKnowledgeTool(input);
+  }
   if (
     tool === "message" ||
     tool === "sessions_list" ||
@@ -1175,7 +1190,7 @@ export async function runExtendedWorkflowTool(input: {
   throw new Error(`envoyhome.bad_params: unknown tool ${tool}`);
 }
 
-/** Design §9.5b — Markdown → docx/xlsx/csv/pdf under output/exports/. */
+/** Design §9.5b/j — Markdown → office-ish under output/exports/. */
 async function runExportDocumentTool(input: {
   args: Record<string, unknown>;
   paths: HomePaths;
@@ -1190,7 +1205,7 @@ async function runExportDocumentTool(input: {
   const formatRaw = input.args.format;
   if (!isExportFormat(formatRaw)) {
     throw new Error(
-      "envoyhome.bad_params: format must be one of docx, xlsx, csv, pdf",
+      "envoyhome.bad_params: format must be one of docx, xlsx, csv, pdf, pptx, md, html, rtf, odt, ods, epub",
     );
   }
   const title =
@@ -1232,19 +1247,52 @@ async function runExportDocumentTool(input: {
     );
   }
 
-  const buf = await exportDocument(formatRaw, markdown, title ? { title } : undefined);
+  if (
+    input.args.engine !== undefined &&
+    !isExportEnginePreference(input.args.engine)
+  ) {
+    throw new Error(
+      'envoyhome.bad_params: engine must be "auto", "js", or "libreoffice"',
+    );
+  }
+  const enginePref = resolveExportEnginePreference(input.args.engine);
+  const exported = await exportDocument(formatRaw, markdown, {
+    ...(title ? { title } : {}),
+    engine: enginePref,
+  });
+  const buf = exported.buffer;
   const out = resolveSandboxPath(
     toolPathOpts(input.paths, input.accountId, input, true, uri),
   );
   await mkdir(dirname(out.absolute), { recursive: true });
   await writeFile(out.absolute, buf);
 
-  return JSON.stringify({
+  const quality = exported.engine === "libreoffice" ? "print" : "structure";
+  const result: Record<string, unknown> = {
     uri,
     bytes: buf.length,
     mimeType: exportMimeType(formatRaw),
     format: formatRaw,
-  });
+    engine: exported.engine,
+    quality,
+  };
+  // At-need guidance when structure-only (Design §9.5b / V-OFFICE-11).
+  if (quality === "structure" && formatRaw !== "md") {
+    const { getDocumentExportStatus } = await import("./document-export-lo.js");
+    const st = await getDocumentExportStatus();
+    if (
+      st.libreOfficeRuntime === "missing" ||
+      st.libreOfficeRuntime === "failed" ||
+      st.libreOfficeRuntime === "downloading"
+    ) {
+      result.installHint = st.libreOfficeInstallHint;
+      result.qualityNote =
+        st.whyText ||
+        "Structure fidelity only — install LibreOffice on the home computer (Settings → System → Files) for print-quality exports";
+    }
+  }
+
+  return JSON.stringify(result);
 }
 
 /** Design §9.5c — sandbox Office/PDF → GFM under output/extracts/. */
@@ -1288,7 +1336,11 @@ async function runExtractDocumentTool(input: {
     );
   }
 
-  const { sliceExtractByPageRange } = await import("./phase2-tools.js");
+  const {
+    sliceExtractByPageRange,
+    sliceExtractBySheetName,
+    sliceExtractBySlideIndex,
+  } = await import("./phase2-tools.js");
   const startPage =
     typeof input.args.startPage === "number"
       ? input.args.startPage
@@ -1305,6 +1357,22 @@ async function runExtractDocumentTool(input: {
   if (startPage !== undefined && endPage !== undefined) {
     gfm = sliceExtractByPageRange(gfm, startPage, endPage);
     pages = { start: Math.floor(startPage), end: Math.floor(endPage) };
+  }
+  const sheetName =
+    typeof input.args.sheetName === "string" && input.args.sheetName.trim()
+      ? input.args.sheetName.trim()
+      : undefined;
+  if (sheetName) {
+    gfm = sliceExtractBySheetName(gfm, sheetName);
+  }
+  const slideIndex =
+    typeof input.args.slideIndex === "number"
+      ? input.args.slideIndex
+      : typeof input.args.slide === "number"
+        ? input.args.slide
+        : undefined;
+  if (slideIndex !== undefined) {
+    gfm = sliceExtractBySlideIndex(gfm, slideIndex);
   }
 
   const uri =
@@ -1334,7 +1402,46 @@ async function runExtractDocumentTool(input: {
     text,
     ...(truncated ? { textTruncated: true } : {}),
     ...(pages ? { pages } : {}),
+    ...(sheetName ? { sheetName } : {}),
+    ...(slideIndex !== undefined ? { slideIndex: Math.floor(slideIndex) } : {}),
   });
+}
+
+/** Design §9.5j — copy jail Markdown into knowledge/ + reindex. */
+async function runPromoteKnowledgeTool(input: {
+  args: Record<string, unknown>;
+  paths: HomePaths;
+  accountId?: string;
+  workspaceRoot?: string | null;
+  workspaceMode?: WorkspaceMode | null;
+  workspaceMounts?: Array<{ id: string; hostPath: string; mode: WorkspaceMode }> | null;
+  knowledge?: import("./knowledge-service.js").KnowledgeService | null;
+}): Promise<string> {
+  if (!input.accountId) {
+    throw new Error("envoyhome.bad_params: accountId required for promote_knowledge");
+  }
+  const sourcePath =
+    typeof input.args.sourcePath === "string"
+      ? input.args.sourcePath.trim().replace(/\\/g, "/")
+      : "";
+  if (!sourcePath) {
+    throw new Error("envoyhome.bad_params: promote_knowledge requires sourcePath");
+  }
+  const { promoteKnowledgeFile } = await import("./promote-knowledge.js");
+  const result = await promoteKnowledgeFile({
+    accountId: input.accountId,
+    paths: input.paths,
+    sourcePath,
+    overwrite: input.args.overwrite === true,
+    ...(typeof input.args.destName === "string" && input.args.destName.trim()
+      ? { destName: input.args.destName.trim() }
+      : {}),
+    ...(input.knowledge ? { knowledge: input.knowledge } : { knowledge: null }),
+    ...(input.workspaceRoot != null ? { workspaceRoot: input.workspaceRoot } : {}),
+    ...(input.workspaceMode != null ? { workspaceMode: input.workspaceMode } : {}),
+    ...(input.workspaceMounts != null ? { workspaceMounts: input.workspaceMounts } : {}),
+  });
+  return JSON.stringify(result);
 }
 
 async function runPhase2Tool(

@@ -2226,6 +2226,24 @@ abstract class AppLocalizations {
   /// **'Open full reply'**
   String get chatOpenArtifact;
 
+  /// No description provided for @chatPromoteKnowledge.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to Knowledge'**
+  String get chatPromoteKnowledge;
+
+  /// No description provided for @chatPromotedKnowledge.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to {path}'**
+  String chatPromotedKnowledge(String path);
+
+  /// No description provided for @chatPromoteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not add to Knowledge.'**
+  String get chatPromoteFailed;
+
   /// No description provided for @chatRecents.
   ///
   /// In en, this message translates to:
@@ -2892,6 +2910,90 @@ abstract class AppLocalizations {
   /// **'This folder is empty'**
   String get filesEmptyFolder;
 
+  /// No description provided for @artifactsLoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'LibreOffice (home computer)'**
+  String get artifactsLoTitle;
+
+  /// No description provided for @artifactsLoWhy.
+  ///
+  /// In en, this message translates to:
+  /// **'Print-ready Word, Excel, PowerPoint, and PDF exports run on your home computer (~1 GB, stays local). Without it, exports still work with a simpler layout. Documents are never sent to the cloud for conversion.'**
+  String get artifactsLoWhy;
+
+  /// No description provided for @artifactsLoReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get artifactsLoReady;
+
+  /// No description provided for @artifactsLoMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Not installed'**
+  String get artifactsLoMissing;
+
+  /// No description provided for @artifactsLoDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading…'**
+  String get artifactsLoDownloading;
+
+  /// No description provided for @artifactsLoFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Install failed'**
+  String get artifactsLoFailed;
+
+  /// No description provided for @artifactsLoInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Install on home computer'**
+  String get artifactsLoInstall;
+
+  /// No description provided for @artifactsLoCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel download'**
+  String get artifactsLoCancel;
+
+  /// No description provided for @artifactsLoNotNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get artifactsLoNotNow;
+
+  /// No description provided for @artifactsLoRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh status'**
+  String get artifactsLoRefresh;
+
+  /// No description provided for @artifactsLoProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{received} / {total}'**
+  String artifactsLoProgress(String received, String total);
+
+  /// No description provided for @artifactsLoHintCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Install hint copied'**
+  String get artifactsLoHintCopied;
+
+  /// No description provided for @artifactsLoCopyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy manual install hint'**
+  String get artifactsLoCopyHint;
+
+  /// No description provided for @artifactsLoInstallNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Managed install runs on the home daemon host — not on this phone.'**
+  String get artifactsLoInstallNote;
+
   /// No description provided for @chatOpenFile.
   ///
   /// In en, this message translates to:
@@ -2910,31 +3012,58 @@ abstract class AppLocalizations {
   /// **'Confirm'**
   String get choiceCardConfirm;
 
-  /// Open CTA for outbound_handoff.
+  /// No description provided for @choiceCardOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
   String get choiceCardOpen;
 
-  /// Choose file button on browser form cards.
+  /// No description provided for @choiceCardChooseFile.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose file'**
   String get choiceCardChooseFile;
 
-  /// Browse sandbox/workspace for form file.
+  /// No description provided for @choiceCardBrowseJail.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse files'**
   String get choiceCardBrowseJail;
 
-  /// Up one directory in jail browse.
+  /// No description provided for @choiceCardBrowseUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Up'**
   String get choiceCardBrowseUp;
 
-  /// Multi-file form pick label.
+  /// No description provided for @choiceCardFilesChosen.
+  ///
+  /// In en, this message translates to:
+  /// **'{n} files chosen'**
   String choiceCardFilesChosen(int n);
 
-  /// Placeholder when no form file selected.
+  /// No description provided for @choiceCardNoFile.
+  ///
+  /// In en, this message translates to:
+  /// **'No file chosen'**
   String get choiceCardNoFile;
 
-  /// Empty form-file pick.
+  /// No description provided for @choiceCardFileEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'That file is empty.'**
   String get choiceCardFileEmpty;
 
-  /// Disallowed form-file extension.
+  /// No description provided for @choiceCardFileTypeRefused.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is not an allowed form upload type.'**
   String choiceCardFileTypeRefused(String name);
 
-  /// Hint under handoff card.
+  /// No description provided for @choiceCardHandoffHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Opens in your browser or app so you can finish and pay there. Home will not enter card details.'**
   String get choiceCardHandoffHint;
 
   /// No description provided for @choiceCardPickOne.

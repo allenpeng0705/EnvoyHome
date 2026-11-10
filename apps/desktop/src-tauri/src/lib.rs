@@ -41,16 +41,29 @@ fn resolve_daemon_js(app: &tauri::AppHandle) -> Option<PathBuf> {
       }
     }
   }
-  // Dev: checkout dist (tsc) or packaged dist-daemon before install staging.
+  // Dev / local: prefer the live workspace daemon so a stale apps/desktop/dist-daemon
+  // (installer payload) cannot mask missing npm deps like smol-toml.
+  // Packaged installs already hit resources/daemon above.
   if let Ok(cwd) = std::env::current_dir() {
-    for rel in [
-      "dist-daemon/main.mjs",
-      "../dist-daemon/main.mjs",
+    let workspace_first = [
       "packages/daemon/dist/bin/envoyhome-daemon.js",
       "../packages/daemon/dist/bin/envoyhome-daemon.js",
       "../../packages/daemon/dist/bin/envoyhome-daemon.js",
       "../../../packages/daemon/dist/bin/envoyhome-daemon.js",
-    ] {
+    ];
+    let packaged_local = ["dist-daemon/main.mjs", "../dist-daemon/main.mjs"];
+    let order: Vec<&str> = if cfg!(debug_assertions) {
+      workspace_first
+        .into_iter()
+        .chain(packaged_local)
+        .collect()
+    } else {
+      packaged_local
+        .into_iter()
+        .chain(workspace_first)
+        .collect()
+    };
+    for rel in order {
       let candidate = cwd.join(rel);
       if candidate.exists() {
         return Some(candidate.canonicalize().unwrap_or(candidate));

@@ -4563,6 +4563,113 @@ body[data-view="schedulesChat"] .schedules-pane-tabs {
   min-height: 0;
 }
 
+/* Chat + document pane side-by-side (Markdown / plan docs stay beside the thread). */
+.chat-layout.has-doc-pane {
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
+.chat-thread-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.chat-doc-pane {
+  flex: 0 0 min(42%, 26rem);
+  width: min(42%, 26rem);
+  max-width: 26rem;
+  min-width: 16rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  overflow: hidden;
+}
+
+.chat-doc-pane[hidden] {
+  display: none !important;
+}
+
+.chat-doc-pane-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-doc-pane-titles {
+  min-width: 0;
+  flex: 1;
+}
+
+.chat-doc-pane-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-doc-pane-path {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-doc-pane-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.chat-doc-pane-nudge {
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.chat-doc-pane-body {
+  flex: 1;
+  min-height: 12rem;
+  overflow: auto;
+  padding: 0.75rem 0.85rem 1rem;
+}
+
+.chat-doc-pane-body .artifact-viewer-md,
+.chat-doc-pane-body .artifact-viewer-pre {
+  margin: 0;
+}
+
+@media (max-width: 960px) {
+  .chat-layout.has-doc-pane {
+    flex-direction: column;
+  }
+
+  .chat-doc-pane {
+    flex: 0 0 auto;
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    max-height: min(42vh, 22rem);
+  }
+}
+
 .chat-log {
   flex: 1;
   max-height: none;

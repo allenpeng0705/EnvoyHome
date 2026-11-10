@@ -689,6 +689,26 @@
   "filesParent": "上级",
   "filesRoots": "根目录",
   "filesEmptyFolder": "此文件夹为空",
+  "artifactsLoTitle": "LibreOffice（家庭电脑）",
+  "artifactsLoWhy": "打印级 Word / Excel / PowerPoint / PDF 导出在家庭电脑本地完成（约 1 GB，不出门）。未安装时仍可用较简布局导出。文档不会上传到云端转换。",
+  "artifactsLoReady": "已就绪",
+  "artifactsLoMissing": "未安装",
+  "artifactsLoDownloading": "下载中…",
+  "artifactsLoFailed": "安装失败",
+  "artifactsLoInstall": "在家庭电脑安装",
+  "artifactsLoCancel": "取消下载",
+  "artifactsLoNotNow": "暂不",
+  "artifactsLoRefresh": "刷新状态",
+  "artifactsLoProgress": "{received} / {total}",
+  "@artifactsLoProgress": {
+    "placeholders": {
+      "received": { "type": "String" },
+      "total": { "type": "String" }
+    }
+  },
+  "artifactsLoHintCopied": "已复制安装提示",
+  "artifactsLoCopyHint": "复制手动安装提示",
+  "artifactsLoInstallNote": "托管安装在家庭守护进程主机上执行，不在本手机上。",
   "profilesWorkspaceBrowse": "浏览文件夹",
   "profilesWorkspaceBrowseHint": "点按浏览家庭电脑上的文件夹",
   "chatTabActive": "聊天",

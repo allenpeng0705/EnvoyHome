@@ -503,6 +503,14 @@
   "chatNewNeedName": "Enter a name, or choose Start without name.",
   "chatNewStart": "Start chat",
   "chatOpenArtifact": "Open full reply",
+  "chatPromoteKnowledge": "Add to Knowledge",
+  "chatPromotedKnowledge": "Saved to {path}",
+  "@chatPromotedKnowledge": {
+    "placeholders": {
+      "path": { "type": "String" }
+    }
+  },
+  "chatPromoteFailed": "Could not add to Knowledge.",
   "chatRecents": "Recents",
   "chatRecentsEmpty": "No earlier chats.",
   "chatSessionsEmpty": "No chats yet. Start a new one.",
@@ -670,6 +678,26 @@
   "filesParent": "Parent",
   "filesRoots": "Roots",
   "filesEmptyFolder": "This folder is empty",
+  "artifactsLoTitle": "LibreOffice (home computer)",
+  "artifactsLoWhy": "Print-ready Word, Excel, PowerPoint, and PDF exports run on your home computer (~1 GB, stays local). Without it, exports still work with a simpler layout. Documents are never sent to the cloud for conversion.",
+  "artifactsLoReady": "Ready",
+  "artifactsLoMissing": "Not installed",
+  "artifactsLoDownloading": "Downloading…",
+  "artifactsLoFailed": "Install failed",
+  "artifactsLoInstall": "Install on home computer",
+  "artifactsLoCancel": "Cancel download",
+  "artifactsLoNotNow": "Not now",
+  "artifactsLoRefresh": "Refresh status",
+  "artifactsLoProgress": "{received} / {total}",
+  "@artifactsLoProgress": {
+    "placeholders": {
+      "received": { "type": "String" },
+      "total": { "type": "String" }
+    }
+  },
+  "artifactsLoHintCopied": "Install hint copied",
+  "artifactsLoCopyHint": "Copy manual install hint",
+  "artifactsLoInstallNote": "Managed install runs on the home daemon host — not on this phone.",
   "@artifactsOpenFailed": {
     "placeholders": {
       "error": {

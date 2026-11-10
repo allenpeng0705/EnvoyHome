@@ -1344,6 +1344,49 @@ export function createDispatcher(deps: RouterDeps) {
       case "home.getBrowserControlConfig": {
         return await deps.browserControl.getPublicConfig();
       }
+      case "home.getDocumentExportStatus": {
+        const { getDocumentExportStatus } = await import("./document-export-lo.js");
+        return await getDocumentExportStatus();
+      }
+      case "home.installLibreOffice": {
+        const { getLibreOfficeInstallService } = await import("./libreoffice-install.js");
+        const svc = getLibreOfficeInstallService();
+        if (!svc) {
+          throwRpc(
+            TRANSPORT_CODE_BAD_PARAMS,
+            "bad_params",
+            "libreoffice install service unavailable",
+          );
+        }
+        return await svc.startInstall();
+      }
+      case "home.cancelLibreOfficeInstall": {
+        const { getLibreOfficeInstallService } = await import("./libreoffice-install.js");
+        const svc = getLibreOfficeInstallService();
+        if (!svc) {
+          throwRpc(
+            TRANSPORT_CODE_BAD_PARAMS,
+            "bad_params",
+            "libreoffice install service unavailable",
+          );
+        }
+        return await svc.cancelInstall();
+      }
+      case "home.setLibreOfficeInstallPreference": {
+        const { getLibreOfficeInstallService } = await import("./libreoffice-install.js");
+        const svc = getLibreOfficeInstallService();
+        if (!svc) {
+          throwRpc(
+            TRANSPORT_CODE_BAD_PARAMS,
+            "bad_params",
+            "libreoffice install service unavailable",
+          );
+        }
+        const patch: { auto?: boolean; declined?: boolean } = {};
+        if (typeof params.auto === "boolean") patch.auto = params.auto;
+        if (typeof params.declined === "boolean") patch.declined = params.declined;
+        return await svc.setPreference(patch);
+      }
       case "home.listMcpServers": {
         if (!deps.mcpHub) throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", "mcp hub unavailable");
         return { servers: await deps.mcpHub.listServers() };
@@ -2134,6 +2177,40 @@ export function createDispatcher(deps: RouterDeps) {
         try {
           const accountId = requireBoundAccount(method, caller, params);
           return await deps.knowledge.reindexKnowledge(accountId);
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.promoteKnowledgeFile": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          const sourcePath =
+            typeof params.sourcePath === "string" ? params.sourcePath.trim() : "";
+          if (!sourcePath) {
+            throw Object.assign(new Error("envoyhome.bad_params: sourcePath required"), {
+              code: "bad_params",
+            });
+          }
+          const { promoteKnowledgeFile } = await import("./promote-knowledge.js");
+          const { homePaths } = await import("./home-paths.js");
+          const paths = homePaths(deps.config.stateDir);
+          const mounts = await deps.accounts
+            .getWorkspaceMountRefs(accountId, ownerAccountId)
+            .catch(() => [] as Array<{ id: string; hostPath: string; mode: "ro" | "rw" }>);
+          const primary = mounts[0];
+          return await promoteKnowledgeFile({
+            accountId,
+            paths,
+            sourcePath,
+            overwrite: params.overwrite === true,
+            ...(typeof params.destName === "string" && params.destName.trim()
+              ? { destName: params.destName.trim() }
+              : {}),
+            ...(deps.knowledge ? { knowledge: deps.knowledge } : { knowledge: null }),
+            ...(mounts.length ? { workspaceMounts: mounts } : {}),
+            ...(primary?.hostPath ? { workspaceRoot: primary.hostPath } : {}),
+            ...(primary?.mode ? { workspaceMode: primary.mode } : {}),
+          });
         } catch (err) {
           mapStoreError(err);
         }

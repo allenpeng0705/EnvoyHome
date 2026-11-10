@@ -116,6 +116,7 @@ function isSandboxToolName(tool: string): boolean {
     tool === "knowyou_search" ||
     tool === "export_document" ||
     tool === "extract_document" ||
+    tool === "promote_knowledge" ||
     tool === "view_image"
   );
 }
@@ -496,6 +497,7 @@ export async function dispatchTool(
     if (
       req.tool === "export_document" ||
       req.tool === "extract_document" ||
+      req.tool === "promote_knowledge" ||
       req.tool === "web_search"
     ) {
       return {
@@ -873,6 +875,22 @@ export function formatSandboxToolResultLines(
         /* fall through */
       }
       lines.push(`extract_document → ${r.output.slice(0, 500)}`);
+    } else if (r.tool === "promote_knowledge") {
+      try {
+        const j = JSON.parse(r.output) as {
+          knowledgePath?: string;
+          sourcePath?: string;
+          bytes?: number;
+        };
+        if (typeof j.knowledgePath === "string" && j.knowledgePath) {
+          const bytes = typeof j.bytes === "number" ? `, ${j.bytes} bytes` : "";
+          lines.push(`Promoted to Doc KB: \`${j.knowledgePath}\`${bytes}`);
+          continue;
+        }
+      } catch {
+        /* fall through */
+      }
+      lines.push(`promote_knowledge → ${r.output.slice(0, 500)}`);
     } else if (r.tool === "write_file") {
       // Prefer echoed path (`Written: \`…\``) for chat Open chips.
       lines.push(

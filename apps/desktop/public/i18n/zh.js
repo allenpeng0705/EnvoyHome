@@ -172,7 +172,11 @@ export default {
   "setupGuide.stepPhoneBody":
     "显示配对二维码，让手机上的 EnvoyHome 通过局域网或 mesh/中继到达本机。",
   "setupGuide.stepPhoneCta": "打开配对",
-  "setupGuide.note": "聊天只需云或本地其一。手机配对可以稍后。",
+  "setupGuide.stepLoTitle": "印刷级文档导出",
+  "setupGuide.stepLoBody":
+    "EnvoyHome 可在本机安装 LibreOffice（约 1 GB，仅本地）以便 Word / Excel / PowerPoint / PDF 导出达到印刷级效果。未安装时仍可用更简单的排版导出——我们不会把文档送到云端转换。",
+  "setupGuide.stepLoCta": "打开文件（LibreOffice）",
+  "setupGuide.note": "聊天只需云或本地其一。手机配对与 LibreOffice 可以稍后。",
   "setupGuide.skipCta": "先看看",
   "setupGuide.doneCta": "知道了",
   "setupGuide.openCta": "显示设置指南",
@@ -316,6 +320,12 @@ export default {
   "chat.needTextOrAttach": "请输入消息或附加文件。",
   "chat.attachedOnly": "（已附加文件）",
   "chat.openArtifact": "打开完整回复",
+  "chat.openExport": "打开导出（{name}）",
+  "chat.openExtract": "打开提取（{name}）",
+  "chat.docPane": "文档",
+  "chat.promoteKnowledge": "加入知识库",
+  "chat.promotedKnowledge": "已保存到 {path}",
+  "chat.promoteFailed": "无法加入知识库。",
   "chat.openFile": "打开 {name}",
   "chat.voice": "语音",
   "chat.voiceListening": "正在聆听…",
@@ -1136,6 +1146,33 @@ export default {
   "artifacts.unnamed": "未命名文件",
   "artifacts.hint": "通过家庭连接在应用内打开（无需公网地址）。智能体生成文件前这里是空的。",
   "artifacts.none": "还没有共享文件。",
+  "artifacts.loTitle": "印刷级导出（LibreOffice）",
+  "artifacts.loReady": "LibreOffice 已就绪",
+  "artifacts.loMissing": "未安装 LibreOffice",
+  "artifacts.loDownloading": "正在下载 LibreOffice…",
+  "artifacts.loFailed": "LibreOffice 安装失败",
+  "artifacts.loReadyGeneric": "LibreOffice",
+  "artifacts.loWhy":
+    "EnvoyHome 可在本机安装 LibreOffice（约 1 GB，仅本地）以便 Word / Excel / PowerPoint / PDF 达到印刷级导出。未安装时仍可用更简单的排版。我们不会把文档送到云端转换。",
+  "artifacts.loReadyNote":
+    "{version} — 可用时 export_document 会使用印刷级排版。",
+  "artifacts.loMissingNote":
+    "导出仍可用更简单的排版。可在此安装 LibreOffice（推荐），或使用下方命令自行安装。",
+  "artifacts.loFailedNote":
+    "自动安装未完成。请重试，或用下方命令自行安装。",
+  "artifacts.loDownloadingNote":
+    "正在下载 — 可继续聊天。完成前导出会使用更简单的排版。",
+  "artifacts.loInstallNote":
+    "或在本机（不要在手机上）自行安装：",
+  "artifacts.loCopyHint": "复制安装命令",
+  "artifacts.loHintCopied": "已复制安装命令",
+  "artifacts.loRefresh": "刷新状态",
+  "artifacts.loInstall": "安装 LibreOffice",
+  "artifacts.loCancel": "取消下载",
+  "artifacts.loNotNow": "暂时不要",
+  "artifacts.loProgress": "{received} / {total}",
+  "artifacts.loOpenNudge":
+    "此导出为结构级排版。若要印刷级效果，请在家庭电脑的「系统 → 文件」安装 LibreOffice。",
   "smarthome.title": "智能家居",
   "smarthome.objectsTitle": "设备",
   "smarthome.health": "集成健康",

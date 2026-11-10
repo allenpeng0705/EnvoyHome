@@ -38,6 +38,23 @@ import { mountWorkflowCanvas } from "./workflow-canvas.js";
 
 const DEFAULT_WS = "ws://127.0.0.1:4780/ws";
 
+/** Align with packages/daemon/src/promote-paths.ts (Design §9.5j). */
+function canPromoteKnowledgePathClient(path) {
+  const p = String(path || "")
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/, "")
+    .trim();
+  if (!p || p.includes("..") || p.startsWith("/")) return false;
+  if (!/\.(md|markdown)$/i.test(p)) return false;
+  return (
+    p.startsWith("output/extracts/") ||
+    p.startsWith("uploads/") ||
+    p.startsWith("documents/") ||
+    p.startsWith("output/exports/") ||
+    /\.extract\.md$/i.test(p)
+  );
+}
+
 /** @type {Map<string, ReturnType<typeof mountWorkflowCanvas>>} */
 const wfDemoCanvases = new Map();
 /** Live demo test-run correlation (Settings Workflows). */
@@ -1740,6 +1757,11 @@ let chatPendingFiles = [];
 let homeChatPendingFiles = [];
 /** @type {Array<{ id: string, file: File, name: string, mimeType: string, size: number }>} */
 let schedulesChatPendingFiles = [];
+/**
+ * Chat right-side document pane (Markdown / text beside the thread).
+ * @type {{ accountId: string, path: string } | null}
+ */
+let chatDocPane = null;
 /** Home Assistant ready for Home chat nav (V-UX-8). */
 let haHomeChatReady = false;
 let activeView = "chat";
@@ -2387,9 +2409,23 @@ function formatAssistantHtml(text, format, artifactPath, artifactUrl) {
   }
   for (const p of mentioned) {
     const name = p.includes("/") ? p.slice(p.lastIndexOf("/") + 1) : p;
+    const isExport = /^output\/exports\//i.test(p);
+    const isExtract =
+      /^output\/extracts\//i.test(p) || /\.extract\.md$/i.test(p);
+    const openLabel = isExport
+      ? t("chat.openExport", { name })
+      : isExtract
+        ? t("chat.openExtract", { name })
+        : t("chat.openFile", { name });
     links.push(
-      `<button type="button" class="chat-artifact-open" data-artifact-path="${escapeHtml(p)}">${escapeHtml(t("chat.openFile", { name }))}</button>`,
+      `<button type="button" class="chat-artifact-open" data-artifact-path="${escapeHtml(p)}">${escapeHtml(openLabel)}</button>`,
     );
+    // Align with Design §9.5j / packages/daemon/src/promote-paths.ts
+    if (canPromoteKnowledgePathClient(p)) {
+      links.push(
+        `<button type="button" class="chat-artifact-promote" data-promote-path="${escapeHtml(p)}">${escapeHtml(t("chat.promoteKnowledge"))}</button>`,
+      );
+    }
   }
   if (links.length === 0) return body;
   return `${body}<p class="chat-artifact-link">${links.join(" ")}</p>`;
@@ -3109,7 +3145,11 @@ function clearStoredChatSessionIds(aid) {
 
 function setAccountId(id) {
   const prev = localStorage.getItem("envoyhome.accountId") || "";
-  if (prev && prev !== id) clearStoredChatSessionIds(prev);
+  if (prev && prev !== id) {
+    clearStoredChatSessionIds(prev);
+    // Do not keep another profile's document open in the Chat pane.
+    closeChatDocPane();
+  }
   localStorage.setItem("envoyhome.accountId", id);
   chatSessionId = "";
   homeChatSessionId = "";
@@ -4181,6 +4221,13 @@ async function openSetupGuide(opts = {}) {
         t("setupGuide.stepPhoneCta"),
         "pairing",
       )}
+      ${step(
+        4,
+        t("setupGuide.stepLoTitle"),
+        t("setupGuide.stepLoBody"),
+        t("setupGuide.stepLoCta"),
+        "system",
+      )}
     </div>
     <p class="muted setup-guide-note">${escapeHtml(t("setupGuide.note"))}</p>
     <div class="setup-guide-actions">
@@ -4198,6 +4245,7 @@ async function openSetupGuide(opts = {}) {
   body.querySelectorAll("[data-setup-go]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const go = btn.getAttribute("data-setup-go");
+      if (go === "system") systemTab = "files";
       void finish(go || null);
     });
   });
@@ -5452,6 +5500,10 @@ async function showView(id) {
     systemTab = "machine";
     id = "system";
   }
+  // Leaving Chat surfaces: drop the doc pane listener (state kept if returning to chat).
+  if (!isChatSurface(id)) {
+    document.removeEventListener("keydown", onChatDocPaneKey, true);
+  }
   activeView = id;
   document.body.dataset.view = id;
   renderNav(id);
@@ -5584,13 +5636,33 @@ async function showView(id) {
           ${
             showSchedulesHistories
               ? `<div class="schedules-histories-wrap" id="schedules-histories">${historiesBody}</div>`
-              : `<div class="chat-layout">
-            <div class="chat-log" id="chat-log">${chatThreadHtml(log, chatPendingApprovals, emptyKey)}</div>
-            <form id="chat-form" class="chat-composer">
-              <div class="chat-composer-main">
-                ${attachControls}
+              : `<div class="chat-layout${chatDocPane ? " has-doc-pane" : ""}">
+            <div class="chat-thread-col">
+              <div class="chat-log" id="chat-log">${chatThreadHtml(log, chatPendingApprovals, emptyKey)}</div>
+              <form id="chat-form" class="chat-composer">
+                <div class="chat-composer-main">
+                  ${attachControls}
+                </div>
+              </form>
+            </div>
+            <aside class="chat-doc-pane" id="chat-doc-pane" ${chatDocPane ? "" : "hidden"} aria-label="${escapeHtml(t("chat.docPane"))}">
+              <div class="chat-doc-pane-head">
+                <div class="chat-doc-pane-titles">
+                  <h2 class="chat-doc-pane-title" data-doc-title></h2>
+                  <p class="muted chat-doc-pane-path" data-doc-path></p>
+                </div>
+                <div class="chat-doc-pane-actions">
+                  <button type="button" class="ghost" data-doc-copy hidden>${escapeHtml(t("artifacts.copy"))}</button>
+                  <button type="button" class="ghost" data-doc-download hidden>${escapeHtml(t("artifacts.download"))}</button>
+                  <button type="button" class="ghost" data-doc-promote hidden>${escapeHtml(t("chat.promoteKnowledge"))}</button>
+                  <button type="button" class="secondary" data-doc-close>${escapeHtml(t("artifacts.close"))}</button>
+                </div>
               </div>
-            </form>
+              <div class="muted chat-doc-pane-nudge" data-doc-lo-nudge hidden></div>
+              <div class="chat-doc-pane-body" data-doc-body>
+                <p class="muted">${escapeHtml(t("artifacts.loading"))}</p>
+              </div>
+            </aside>
           </div>`
           }
         </div>
@@ -5660,6 +5732,24 @@ async function showView(id) {
         logEl.addEventListener("click", async (ev) => {
           const raw = /** @type {EventTarget | null} */ (ev.target);
           const el = raw instanceof Element ? raw : raw?.parentElement;
+          const promoteBtn = el?.closest?.("[data-promote-path]");
+          if (promoteBtn) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const path = promoteBtn.getAttribute("data-promote-path");
+            if (!path || !aid) return;
+            const ans = await rpc("home.promoteKnowledgeFile", {
+              accountId: aid,
+              sourcePath: path,
+            });
+            if (ans.error) {
+              showToast(errMsg(ans) || t("chat.promoteFailed"), "err");
+            } else {
+              const kp = String(ans.result?.knowledgePath || "knowledge/");
+              showToast(t("chat.promotedKnowledge", { path: kp }), "ok");
+            }
+            return;
+          }
           const artBtn = el?.closest?.("[data-artifact-path]");
           if (artBtn) {
             ev.preventDefault();
@@ -5710,6 +5800,12 @@ async function showView(id) {
             showToast(String(err?.message || err), "err");
           }
         });
+      }
+      // Restore Chat document pane after full chat re-render.
+      if (chatDocPane?.accountId === aid && chatDocPane.path) {
+        void fillChatDocPane(chatDocPane);
+      } else {
+        bindChatDocPaneChrome();
       }
       document.getElementById("chat-new")?.addEventListener("click", async () => {
         if (!aid || isHome) return;
@@ -12293,7 +12389,10 @@ async function showView(id) {
           wireTabs();
           return;
         }
-        const body = await rpc("home.listArtifacts", { accountId: aid });
+        const [body, exportSt] = await Promise.all([
+          rpc("home.listArtifacts", { accountId: aid }),
+          rpc("home.getDocumentExportStatus", {}).catch(() => null),
+        ]);
         if (body.error) {
           el.innerHTML = shell(
             `<p class="muted">${escapeHtml(t("artifacts.hint"))}</p><p class="le-error">${escapeHtml(errMsg(body) || t("artifacts.loadFailed"))}</p>`,
@@ -12302,6 +12401,75 @@ async function showView(id) {
           return;
         }
         const arts = body.result?.artifacts || [];
+        const lo = exportSt?.result || {};
+        const loRuntime = lo.libreOfficeRuntime || "missing";
+        const loReady = loRuntime === "ready";
+        const loDownloading = loRuntime === "downloading";
+        const loFailed = loRuntime === "failed";
+        const loHint =
+          lo.libreOfficeInstallHint ||
+          "brew install --cask libreoffice   # or download https://www.libreoffice.org/download/";
+        const loBadge = loReady
+          ? `<span class="pill ok">${escapeHtml(t("artifacts.loReady"))}</span>`
+          : loDownloading
+            ? `<span class="pill warn">${escapeHtml(t("artifacts.loDownloading"))}</span>`
+            : loFailed
+              ? `<span class="pill warn">${escapeHtml(t("artifacts.loFailed"))}</span>`
+              : `<span class="pill warn">${escapeHtml(t("artifacts.loMissing"))}</span>`;
+        const loStatusNote = loReady
+          ? t("artifacts.loReadyNote", {
+              version: lo.versionLine || t("artifacts.loReadyGeneric"),
+            })
+          : loDownloading
+            ? t("artifacts.loDownloadingNote")
+            : loFailed
+              ? t("artifacts.loFailedNote")
+              : t("artifacts.loMissingNote");
+        const dl = lo.download || {};
+        const recv = Number(dl.bytesReceived) || 0;
+        const tot = Number(dl.bytesTotal) || Number(lo.approxBytes) || 0;
+        const fmtBytes = (n) => {
+          if (!n || n < 1024) return `${n || 0} B`;
+          if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+          return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+        };
+        const progressLine =
+          loDownloading && tot > 0
+            ? `<p class="muted" id="artifacts-lo-progress">${escapeHtml(
+                t("artifacts.loProgress", {
+                  received: fmtBytes(recv),
+                  total: fmtBytes(tot),
+                }),
+              )}</p>`
+            : loDownloading
+              ? `<p class="muted" id="artifacts-lo-progress">${escapeHtml(fmtBytes(recv))}…</p>`
+              : "";
+        const actionBtns = loReady
+          ? `<button type="button" class="ghost" id="artifacts-lo-refresh">${escapeHtml(t("artifacts.loRefresh"))}</button>`
+          : loDownloading
+            ? `<button type="button" class="secondary" id="artifacts-lo-cancel">${escapeHtml(t("artifacts.loCancel"))}</button>
+               <button type="button" class="ghost" id="artifacts-lo-refresh" style="margin-left:0.5rem">${escapeHtml(t("artifacts.loRefresh"))}</button>`
+            : `<button type="button" class="primary" id="artifacts-lo-install">${escapeHtml(t("artifacts.loInstall"))}</button>
+               <button type="button" class="ghost" id="artifacts-lo-notnow" style="margin-left:0.5rem">${escapeHtml(t("artifacts.loNotNow"))}</button>
+               <button type="button" class="ghost" id="artifacts-lo-refresh" style="margin-left:0.5rem">${escapeHtml(t("artifacts.loRefresh"))}</button>`;
+        const loCard = `<div class="card" id="artifacts-lo-card" style="margin:0.75rem 0 1.25rem">
+            <div class="card-row" style="align-items:center;gap:0.75rem;margin-bottom:0.5rem">
+              <strong>${escapeHtml(t("artifacts.loTitle"))}</strong>
+              ${loBadge}
+            </div>
+            <p class="muted" style="margin:0 0 0.5rem">${escapeHtml(lo.whyText || t("artifacts.loWhy"))}</p>
+            <p class="muted" style="margin:0 0 0.5rem">${escapeHtml(loStatusNote)}</p>
+            ${lo.lastError && loFailed ? `<p class="le-error" style="margin:0 0 0.5rem">${escapeHtml(String(lo.lastError).slice(0, 240))}</p>` : ""}
+            ${progressLine}
+            <div class="row" style="margin:0.5rem 0">${actionBtns}</div>
+            ${
+              loReady
+                ? ""
+                : `<p class="muted" style="margin:0.75rem 0 0.5rem">${escapeHtml(t("artifacts.loInstallNote"))}</p>
+            <code id="artifacts-lo-hint" style="display:block;user-select:all;word-break:break-all">${escapeHtml(loHint)}</code>
+            <button type="button" class="ghost" id="artifacts-lo-copy" style="margin-top:0.5rem">${escapeHtml(t("artifacts.loCopyHint"))}</button>`
+            }
+          </div>`;
         const formatWhen = (iso) => {
           if (!iso) return "";
           const d = new Date(iso);
@@ -12331,16 +12499,49 @@ async function showView(id) {
         el.innerHTML = shell(`
           <h3>${escapeHtml(t("artifacts.title"))}</h3>
           <p class="muted">${escapeHtml(t("artifacts.hint"))}</p>
+          ${loCard}
           ${rows}
           <div id="art-url" class="sys-link-panel" hidden></div>`);
         wireTabs();
+        document.getElementById("artifacts-lo-copy")?.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(loHint);
+            showToast(t("artifacts.loHintCopied"), "ok");
+          } catch {
+            showToast(t("artifacts.copyFailed"), "err");
+          }
+        });
+        document.getElementById("artifacts-lo-refresh")?.addEventListener("click", async () => {
+          await showView("system");
+        });
+        document.getElementById("artifacts-lo-install")?.addEventListener("click", async () => {
+          const ans = await rpc("home.installLibreOffice", {});
+          if (ans.error) {
+            showToast(errMsg(ans) || t("artifacts.loadFailed"), "err");
+            return;
+          }
+          await showView("system");
+        });
+        document.getElementById("artifacts-lo-cancel")?.addEventListener("click", async () => {
+          await rpc("home.cancelLibreOfficeInstall", {});
+          await showView("system");
+        });
+        document.getElementById("artifacts-lo-notnow")?.addEventListener("click", async () => {
+          await rpc("home.setLibreOfficeInstallPreference", { declined: true, auto: false });
+          await showView("system");
+        });
+        if (loDownloading) {
+          setTimeout(() => {
+            if (systemTab === "files") void showView("system");
+          }, 2000);
+        }
         el.querySelectorAll("[data-path]").forEach((btn) => {
           btn.addEventListener("click", async () => {
             const path = btn.getAttribute("data-path");
             if (!path) return;
             // Mesh-first: open over home.* in-app (EnvoyMesh libraryRead peer).
             // Signed HTTP URL is optional (LAN/tunnel) — not required for open.
-            await openArtifactViewer({ accountId: aid, path });
+            await openArtifactViewer({ accountId: aid, path, forceModal: true });
           });
         });
         return;
@@ -12793,19 +12994,247 @@ function isReachablePublicArtifactUrl(url) {
   }
 }
 
+function artifactFileTitle(path) {
+  const p = String(path || "");
+  const slash = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+  return slash >= 0 ? p.slice(slash + 1) : p || t("artifacts.unnamed");
+}
+
+function closeChatDocPane() {
+  chatDocPane = null;
+  const pane = document.getElementById("chat-doc-pane");
+  const layout = document.querySelector(".chat-layout");
+  if (pane) {
+    pane.hidden = true;
+    const body = pane.querySelector("[data-doc-body]");
+    if (body) body.innerHTML = "";
+  }
+  layout?.classList.remove("has-doc-pane");
+  document.removeEventListener("keydown", onChatDocPaneKey, true);
+}
+
+function onChatDocPaneKey(ev) {
+  if (ev.key !== "Escape" || !chatDocPane) return;
+  // Don't steal Escape from modals / choice overlays.
+  if (document.querySelector(".modal-backdrop")) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  closeChatDocPane();
+}
+
+function bindChatDocPaneChrome() {
+  const pane = document.getElementById("chat-doc-pane");
+  if (!pane || pane.dataset.chromeBound === "1") return;
+  pane.dataset.chromeBound = "1";
+  pane.querySelector("[data-doc-close]")?.addEventListener("click", () => {
+    closeChatDocPane();
+  });
+}
+
 /**
- * In-app artifact open over home.getArtifactContent (Design §9.5 mesh-first).
- * Peer: EnvoyMesh Feed Browser + libraryRead — no publicBaseUrl required.
- * Binary exports: Download button (paired path — no publicBaseUrl).
- * Optional Copy link when publicBaseUrl is reachable (sandbox paths only).
+ * Fill Chat right-side document pane (Design §9.5d — stay in conversation).
  * @param {{ accountId: string, path: string }} opts
  */
+async function fillChatDocPane(opts) {
+  const pathNorm = String(opts.path || "").replace(/\\/g, "/");
+  const title = artifactFileTitle(pathNorm);
+  chatDocPane = { accountId: opts.accountId, path: pathNorm };
+  const pane = document.getElementById("chat-doc-pane");
+  const layout = document.querySelector(".chat-layout");
+  if (!pane || !layout) {
+    await openArtifactViewerModal(opts);
+    return;
+  }
+  bindChatDocPaneChrome();
+  layout.classList.add("has-doc-pane");
+  pane.hidden = false;
+  document.addEventListener("keydown", onChatDocPaneKey, true);
+
+  const titleEl = pane.querySelector("[data-doc-title]");
+  const pathEl = pane.querySelector("[data-doc-path]");
+  const bodyEl = pane.querySelector("[data-doc-body]");
+  const dlBtn = /** @type {HTMLButtonElement | null} */ (pane.querySelector("[data-doc-download]"));
+  const copyBtn = /** @type {HTMLButtonElement | null} */ (pane.querySelector("[data-doc-copy]"));
+  const promoteBtn = /** @type {HTMLButtonElement | null} */ (pane.querySelector("[data-doc-promote]"));
+  const nudge = pane.querySelector("[data-doc-lo-nudge]");
+  if (titleEl) titleEl.textContent = title;
+  if (pathEl) pathEl.textContent = pathNorm;
+  if (bodyEl) bodyEl.innerHTML = `<p class="muted">${escapeHtml(t("artifacts.loading"))}</p>`;
+  if (dlBtn) {
+    dlBtn.hidden = true;
+    dlBtn.onclick = null;
+  }
+  if (copyBtn) {
+    copyBtn.hidden = true;
+    copyBtn.onclick = null;
+  }
+  if (promoteBtn) {
+    promoteBtn.hidden = true;
+    promoteBtn.onclick = null;
+  }
+  if (nudge) {
+    nudge.hidden = true;
+    nudge.textContent = "";
+  }
+
+  if (/^output\/exports\//i.test(pathNorm) && !/\.(md|markdown|txt|html|csv)$/i.test(pathNorm)) {
+    void rpc("home.getDocumentExportStatus", {})
+      .then((ans) => {
+        const st = ans?.result;
+        if (!st || st.libreOfficeRuntime === "ready" || !nudge) return;
+        if (chatDocPane?.path !== pathNorm) return;
+        nudge.hidden = false;
+        nudge.textContent = t("artifacts.loOpenNudge");
+      })
+      .catch(() => undefined);
+  }
+
+  if (canPromoteKnowledgePathClient(pathNorm) && promoteBtn) {
+    promoteBtn.hidden = false;
+    promoteBtn.onclick = async () => {
+      const ans = await rpc("home.promoteKnowledgeFile", {
+        accountId: opts.accountId,
+        sourcePath: pathNorm,
+      });
+      if (ans.error) {
+        showToast(errMsg(ans) || t("chat.promoteFailed"), "err");
+      } else {
+        showToast(
+          t("chat.promotedKnowledge", {
+            path: String(ans.result?.knowledgePath || "knowledge/"),
+          }),
+          "ok",
+        );
+      }
+    };
+  }
+
+  await loadArtifactContentInto({
+    accountId: opts.accountId,
+    path: pathNorm,
+    title,
+    bodyEl,
+    dlBtn,
+    copyBtn,
+    canMintLink: !pathNorm.startsWith("workspace/"),
+    paneToken: true,
+  });
+}
+
+/**
+ * Shared content fill for modal or Chat doc pane.
+ * @param {{
+ *   accountId: string,
+ *   path: string,
+ *   title: string,
+ *   bodyEl: Element | null,
+ *   dlBtn: HTMLButtonElement | null,
+ *   copyBtn: HTMLButtonElement | null,
+ *   canMintLink: boolean,
+ * }} ctx
+ */
+async function loadArtifactContentInto(ctx) {
+  const { accountId, path, title, bodyEl, dlBtn, copyBtn, canMintLink } = ctx;
+  if (!bodyEl) return;
+  const stillCurrent = () =>
+    !ctx.paneToken ||
+    (chatDocPane?.accountId === accountId && chatDocPane?.path === path);
+  try {
+    const ans = await rpc("home.getArtifactContent", { accountId, path });
+    if (!stillCurrent()) return;
+    if (ans.error) {
+      const msg = errMsg(ans) || t("artifacts.openFailed");
+      const tooLarge = /8 MiB|exceeds .*bytes/i.test(msg);
+      bodyEl.innerHTML = `<p class="le-error">${escapeHtml(
+        tooLarge ? t("artifacts.tooLarge") : msg,
+      )}</p>`;
+      return;
+    }
+    const mime = String(ans.result?.mimeType || "application/octet-stream").toLowerCase();
+    const encoding = ans.result?.encoding;
+    /** @type {(() => void) | null} */
+    let onDownload = null;
+    if (encoding === "utf8" && typeof ans.result?.text === "string") {
+      const text = ans.result.text;
+      onDownload = () => downloadArtifactLocal(title, mime, "utf8", text);
+      if (
+        mime.includes("markdown") ||
+        /\.(md|markdown)$/i.test(path) ||
+        mime.includes("html")
+      ) {
+        bodyEl.innerHTML = `<div class="chat-md artifact-viewer-md">${renderChatMarkdown(text)}</div>`;
+      } else {
+        bodyEl.innerHTML = `<pre class="artifact-viewer-pre">${escapeHtml(text)}</pre>`;
+      }
+    } else if (encoding === "base64" && typeof ans.result?.base64 === "string") {
+      const b64 = ans.result.base64;
+      onDownload = () => downloadArtifactLocal(title, mime, "base64", b64);
+      if (mime.startsWith("image/")) {
+        bodyEl.innerHTML = `<div class="artifact-viewer-img"><img alt="" src="data:${escapeHtml(mime)};base64,${b64}" /></div>`;
+      } else {
+        bodyEl.innerHTML = `<p class="muted">${escapeHtml(t("artifacts.binaryHint"))}</p>
+          <p><button type="button" class="primary" data-artifact-download-inline>${escapeHtml(t("artifacts.download"))}</button></p>`;
+        bodyEl
+          .querySelector("[data-artifact-download-inline]")
+          ?.addEventListener("click", () => onDownload?.());
+      }
+    } else {
+      bodyEl.innerHTML = `<p class="muted">${escapeHtml(t("artifacts.binaryHint"))}</p>`;
+    }
+    if (!stillCurrent()) return;
+    if (onDownload && dlBtn) {
+      dlBtn.hidden = false;
+      dlBtn.onclick = () => onDownload?.();
+    }
+    if (canMintLink && copyBtn) {
+      const minted = await rpc("home.getArtifactUrl", { accountId, path });
+      if (!stillCurrent()) return;
+      const link = minted.result?.url ? String(minted.result.url) : "";
+      if (!minted.error && isReachablePublicArtifactUrl(link)) {
+        copyBtn.hidden = false;
+        copyBtn.onclick = async () => {
+          try {
+            if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(link);
+            else throw new Error("clipboard unavailable");
+            showToast(t("artifacts.copied"));
+          } catch {
+            showToast(t("artifacts.copyFailed"), "err");
+          }
+        };
+      }
+    }
+  } catch (err) {
+    if (!stillCurrent()) return;
+    const raw = String(err?.message || err);
+    const tooLarge = /8 MiB|exceeds .*bytes/i.test(raw);
+    bodyEl.innerHTML = `<p class="le-error">${escapeHtml(
+      tooLarge ? t("artifacts.tooLarge") : raw,
+    )}</p>`;
+  }
+}
+
+/**
+ * In-app artifact open over home.getArtifactContent (Design §9.5 mesh-first).
+ * Chat: right-side document pane (conversation stays visible).
+ * Files / forceModal: modal overlay.
+ * @param {{ accountId: string, path: string, forceModal?: boolean }} opts
+ */
 async function openArtifactViewer(opts) {
-  const title = (() => {
-    const p = String(opts.path || "");
-    const slash = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
-    return slash >= 0 ? p.slice(slash + 1) : p || t("artifacts.unnamed");
-  })();
+  const pathNorm = String(opts.path || "").replace(/\\/g, "/");
+  const preferPane =
+    !opts.forceModal &&
+    isChatSurface(activeView) &&
+    !!document.getElementById("chat-doc-pane");
+  if (preferPane) {
+    await fillChatDocPane({ accountId: opts.accountId, path: pathNorm });
+    return;
+  }
+  await openArtifactViewerModal({ accountId: opts.accountId, path: pathNorm });
+}
+
+/** Modal fallback (System → Files, or Chat pane unavailable). */
+async function openArtifactViewerModal(opts) {
+  const title = artifactFileTitle(opts.path);
   const pathNorm = String(opts.path || "").replace(/\\/g, "/");
   const canMintLink = !pathNorm.startsWith("workspace/");
   const backdrop = document.createElement("div");
@@ -12818,10 +13247,12 @@ async function openArtifactViewer(opts) {
         <div class="artifact-viewer-actions">
           <button type="button" class="secondary" data-artifact-copy hidden>${escapeHtml(t("artifacts.copy"))}</button>
           <button type="button" class="secondary" data-artifact-download hidden>${escapeHtml(t("artifacts.download"))}</button>
+          <button type="button" class="secondary" data-artifact-promote hidden>${escapeHtml(t("chat.promoteKnowledge"))}</button>
           <button type="button" class="secondary" data-artifact-close>${escapeHtml(t("artifacts.close"))}</button>
         </div>
       </div>
-      <p class="muted artifact-viewer-path">${escapeHtml(opts.path)}</p>
+      <p class="muted artifact-viewer-path">${escapeHtml(pathNorm)}</p>
+      <div class="artifact-lo-nudge muted" data-artifact-lo-nudge hidden></div>
       <div class="artifact-viewer-body" data-artifact-body>
         <p class="muted">${escapeHtml(t("artifacts.loading"))}</p>
       </div>
@@ -12843,6 +13274,18 @@ async function openArtifactViewer(opts) {
   });
   document.addEventListener("keydown", onKey, true);
   document.body.appendChild(backdrop);
+  if (/^output\/exports\//i.test(pathNorm) && !/\.(md|markdown|txt|html|csv)$/i.test(pathNorm)) {
+    void rpc("home.getDocumentExportStatus", {})
+      .then((ans) => {
+        const st = ans?.result;
+        if (!st || st.libreOfficeRuntime === "ready") return;
+        const nudge = backdrop.querySelector("[data-artifact-lo-nudge]");
+        if (!nudge) return;
+        nudge.hidden = false;
+        nudge.textContent = t("artifacts.loOpenNudge");
+      })
+      .catch(() => undefined);
+  }
   const bodyEl = backdrop.querySelector("[data-artifact-body]");
   const dlBtn = /** @type {HTMLButtonElement | null} */ (
     backdrop.querySelector("[data-artifact-download]")
@@ -12850,79 +13293,37 @@ async function openArtifactViewer(opts) {
   const copyBtn = /** @type {HTMLButtonElement | null} */ (
     backdrop.querySelector("[data-artifact-copy]")
   );
-  try {
-    const ans = await rpc("home.getArtifactContent", {
-      accountId: opts.accountId,
-      path: opts.path,
-    });
-    if (!bodyEl) return;
-    if (ans.error) {
-      const msg = errMsg(ans) || t("artifacts.openFailed");
-      const tooLarge = /8 MiB|exceeds .*bytes/i.test(msg);
-      bodyEl.innerHTML = `<p class="le-error">${escapeHtml(
-        tooLarge ? t("artifacts.tooLarge") : msg,
-      )}</p>`;
-      return;
-    }
-    const mime = String(ans.result?.mimeType || "application/octet-stream").toLowerCase();
-    const encoding = ans.result?.encoding;
-    /** @type {(() => void) | null} */
-    let onDownload = null;
-    if (encoding === "utf8" && typeof ans.result?.text === "string") {
-      const text = ans.result.text;
-      onDownload = () => downloadArtifactLocal(title, mime, "utf8", text);
-      if (mime.includes("markdown") || /\.md$/i.test(opts.path)) {
-        bodyEl.innerHTML = `<div class="chat-md artifact-viewer-md">${renderChatMarkdown(text)}</div>`;
-      } else {
-        bodyEl.innerHTML = `<pre class="artifact-viewer-pre">${escapeHtml(text)}</pre>`;
-      }
-    } else if (encoding === "base64" && typeof ans.result?.base64 === "string") {
-      const b64 = ans.result.base64;
-      onDownload = () => downloadArtifactLocal(title, mime, "base64", b64);
-      if (mime.startsWith("image/")) {
-        bodyEl.innerHTML = `<div class="artifact-viewer-img"><img alt="" src="data:${escapeHtml(mime)};base64,${b64}" /></div>`;
-      } else {
-        bodyEl.innerHTML = `<p class="muted">${escapeHtml(t("artifacts.binaryHint"))}</p>
-          <p><button type="button" class="primary" data-artifact-download-inline>${escapeHtml(t("artifacts.download"))}</button></p>`;
-        bodyEl
-          .querySelector("[data-artifact-download-inline]")
-          ?.addEventListener("click", () => onDownload?.());
-      }
-    } else {
-      bodyEl.innerHTML = `<p class="muted">${escapeHtml(t("artifacts.binaryHint"))}</p>`;
-    }
-    if (onDownload && dlBtn) {
-      dlBtn.hidden = false;
-      dlBtn.addEventListener("click", () => onDownload?.());
-    }
-    if (canMintLink && copyBtn) {
-      const minted = await rpc("home.getArtifactUrl", {
+  const promoteBtn = /** @type {HTMLButtonElement | null} */ (
+    backdrop.querySelector("[data-artifact-promote]")
+  );
+  if (canPromoteKnowledgePathClient(pathNorm) && promoteBtn) {
+    promoteBtn.hidden = false;
+    promoteBtn.addEventListener("click", async () => {
+      const ans = await rpc("home.promoteKnowledgeFile", {
         accountId: opts.accountId,
-        path: opts.path,
+        sourcePath: pathNorm,
       });
-      const link = minted.result?.url ? String(minted.result.url) : "";
-      if (!minted.error && isReachablePublicArtifactUrl(link)) {
-        copyBtn.hidden = false;
-        copyBtn.addEventListener("click", async () => {
-          try {
-            if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(link);
-            else throw new Error("clipboard unavailable");
-            showToast(t("artifacts.copied"));
-          } catch {
-            showToast(t("artifacts.copyFailed"), "err");
-          }
-        });
+      if (ans.error) {
+        showToast(errMsg(ans) || t("chat.promoteFailed"), "err");
+      } else {
+        showToast(
+          t("chat.promotedKnowledge", {
+            path: String(ans.result?.knowledgePath || "knowledge/"),
+          }),
+          "ok",
+        );
       }
-    }
-  } catch (err) {
-    if (bodyEl) {
-      const raw = String(err?.message || err);
-      const tooLarge = /8 MiB|exceeds .*bytes/i.test(raw);
-      bodyEl.innerHTML = `<p class="le-error">${escapeHtml(
-        tooLarge ? t("artifacts.tooLarge") : raw,
-      )}</p>`;
-    }
+    });
   }
+  await loadArtifactContentInto({
+    accountId: opts.accountId,
+    path: pathNorm,
+    title,
+    bodyEl,
+    dlBtn,
+    copyBtn,
+    canMintLink,
+  });
 }
 
 /**

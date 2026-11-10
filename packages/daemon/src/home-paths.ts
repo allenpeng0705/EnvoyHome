@@ -29,6 +29,11 @@ export interface HomePaths {
   readonly localEngineRuntimeDir: string;
   readonly localEngineModelsDir: string;
   readonly localEngineConfigJson: string;
+  /** Managed LibreOffice runtime (Design §9.5b / P2-K8). */
+  readonly libreOfficeDir: string;
+  readonly libreOfficeRuntimeDir: string;
+  readonly libreOfficeDownloadsDir: string;
+  readonly libreOfficeInstallJson: string;
   /** `accounts/<accountId>/` */
   accountRoot(accountId: string): string;
   /** Sandbox root: `accounts/<accountId>/files/` */
@@ -68,6 +73,10 @@ export function homePaths(stateDir: string): HomePaths {
     localEngineRuntimeDir: join(stateDir, "local-engine", "runtime"),
     localEngineModelsDir: join(stateDir, "local-engine", "models"),
     localEngineConfigJson: join(stateDir, "local-engine", "config.json"),
+    libreOfficeDir: join(stateDir, "libreoffice"),
+    libreOfficeRuntimeDir: join(stateDir, "libreoffice", "runtime"),
+    libreOfficeDownloadsDir: join(stateDir, "libreoffice", "downloads"),
+    libreOfficeInstallJson: join(stateDir, "libreoffice", "install.json"),
     accountRoot(accountId: string): string {
       return join(accountsDir, accountId);
     },

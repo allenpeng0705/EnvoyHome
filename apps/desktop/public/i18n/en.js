@@ -192,8 +192,12 @@ export default {
   "setupGuide.stepPhoneBody":
     "Show a pairing QR so EnvoyHome on your phone can reach this desktop over LAN or mesh/relays.",
   "setupGuide.stepPhoneCta": "Open Pairing",
+  "setupGuide.stepLoTitle": "Print-quality document exports",
+  "setupGuide.stepLoBody":
+    "EnvoyHome can install LibreOffice on this home computer (~1 GB, stays local) so Word, Excel, PowerPoint, and PDF exports look print-ready. Without it, exports still work with a simpler layout — we never send your documents to the cloud for conversion.",
+  "setupGuide.stepLoCta": "Open Files (LibreOffice)",
   "setupGuide.note":
-    "You only need one of cloud or local to chat. Phone pairing can wait.",
+    "You only need one of cloud or local to chat. Phone pairing and LibreOffice can wait.",
   "setupGuide.skipCta": "Explore first",
   "setupGuide.doneCta": "Got it",
   "setupGuide.openCta": "Show setup guide",
@@ -347,6 +351,12 @@ export default {
   "chat.needTextOrAttach": "Type a message or attach a file.",
   "chat.attachedOnly": "(attached files)",
   "chat.openArtifact": "Open full reply",
+  "chat.openExport": "Open export ({name})",
+  "chat.openExtract": "Open extract ({name})",
+  "chat.docPane": "Document",
+  "chat.promoteKnowledge": "Add to Knowledge",
+  "chat.promotedKnowledge": "Saved to {path}",
+  "chat.promoteFailed": "Could not add to Knowledge.",
   "chat.openFile": "Open {name}",
   "chat.voice": "Voice",
   "chat.voiceListening": "Listening…",
@@ -1292,6 +1302,33 @@ export default {
   "artifacts.hint":
     "Opens in-app over your home connection (no public URL needed). Empty until the agent produces a file.",
   "artifacts.none": "No shared files yet.",
+  "artifacts.loTitle": "Print-quality exports (LibreOffice)",
+  "artifacts.loReady": "LibreOffice ready",
+  "artifacts.loMissing": "LibreOffice not installed",
+  "artifacts.loDownloading": "Downloading LibreOffice…",
+  "artifacts.loFailed": "LibreOffice install failed",
+  "artifacts.loReadyGeneric": "LibreOffice",
+  "artifacts.loWhy":
+    "EnvoyHome can make Word, Excel, PowerPoint, and PDF exports print-ready by installing LibreOffice on this home computer (~1 GB, stays local). Without it, exports still work with a simpler layout. We never send your documents to the cloud for conversion.",
+  "artifacts.loReadyNote":
+    "{version} — export_document uses print-quality layout when available.",
+  "artifacts.loMissingNote":
+    "Exports still work with a simpler layout. Install LibreOffice here (recommended) or with the command below.",
+  "artifacts.loFailedNote":
+    "Automatic install did not finish. Retry below, or install LibreOffice yourself with the command.",
+  "artifacts.loDownloadingNote":
+    "Download in progress — you can keep chatting. Exports use a simpler layout until this finishes.",
+  "artifacts.loInstallNote":
+    "Or install yourself on this home computer (not on your phone):",
+  "artifacts.loCopyHint": "Copy install command",
+  "artifacts.loHintCopied": "Install command copied",
+  "artifacts.loRefresh": "Refresh status",
+  "artifacts.loInstall": "Install LibreOffice",
+  "artifacts.loCancel": "Cancel download",
+  "artifacts.loNotNow": "Not now",
+  "artifacts.loProgress": "{received} / {total}",
+  "artifacts.loOpenNudge":
+    "This export used structure-only layout. For print quality, install LibreOffice under System → Files on the home computer.",
   "smarthome.title": "Smart home",
   "smarthome.objectsTitle": "Devices",
   "smarthome.health": "Integration health",

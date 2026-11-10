@@ -43,10 +43,12 @@ export const BUILTIN_TOOLS: Readonly<Record<string, ToolSpec>> = {
   knowledge_search: { name: "knowledge_search", risk: "read", grantable: false },
   /** Knowledge-RAG KnowYou episodic search. */
   knowyou_search: { name: "knowyou_search", risk: "read", grantable: false },
-  /** Design §9.5b — Markdown → docx/xlsx/csv/pdf under output/exports/. */
+  /** Design §9.5b/j — Markdown → office-ish under output/exports/ (incl. odt/ods/epub). */
   export_document: { name: "export_document", risk: "write", grantable: true },
   /** Design §9.5c — sandbox Office/PDF → GFM under output/extracts/. */
   extract_document: { name: "extract_document", risk: "write", grantable: true },
+  /** Design §9.5j — copy Markdown into knowledge/ + reindex Doc KB. */
+  promote_knowledge: { name: "promote_knowledge", risk: "write", grantable: true },
   exec: { name: "exec", risk: "exec", grantable: true },
   http_fetch: { name: "http_fetch", risk: "network", grantable: true },
   /** Design §9.5f — household web search (attendedAllow when enabled). */

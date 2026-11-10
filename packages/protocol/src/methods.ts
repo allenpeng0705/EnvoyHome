@@ -3245,6 +3245,152 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     params: obj({ id: str({ minLength: 1 }) }, ["id"]),
     result: obj({ ok: bool() }, ["ok"]),
   },
+  "home.getDocumentExportStatus": {
+    group: "artifacts",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary:
+      "LibreOffice runtime for print-quality export_document (ready|missing|downloading|failed) — Design §9.5b / P2-K8",
+    params: emptyParams,
+    result: obj(
+      {
+        libreOfficeRuntime: enumOf("ready", "missing", "downloading", "failed"),
+        libreOfficeInstallHint: str(),
+        whyText: str(),
+        versionLine: str(),
+        installSource: enumOf("system", "managed", "env"),
+        download: obj(
+          {
+            bytesReceived: int({ minimum: 0 }),
+            bytesTotal: int({ minimum: 0 }),
+            phase: enumOf("download", "extract", "idle"),
+          },
+          ["bytesReceived", "phase"],
+        ),
+        lastError: str(),
+        autoInstall: obj(
+          {
+            attempted: bool(),
+            declined: bool(),
+            enabled: bool(),
+          },
+          ["attempted", "declined", "enabled"],
+        ),
+        approxBytes: int({ minimum: 0 }),
+        needsManualInstall: bool(),
+      },
+      ["libreOfficeRuntime", "libreOfficeInstallHint", "whyText", "autoInstall"],
+    ),
+  },
+  "home.installLibreOffice": {
+    group: "artifacts",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary: "Start or retry managed LibreOffice download+install — Design §9.5b / P2-K8",
+    params: emptyParams,
+    result: obj(
+      {
+        libreOfficeRuntime: enumOf("ready", "missing", "downloading", "failed"),
+        libreOfficeInstallHint: str(),
+        whyText: str(),
+        versionLine: str(),
+        installSource: enumOf("system", "managed", "env"),
+        download: obj(
+          {
+            bytesReceived: int({ minimum: 0 }),
+            bytesTotal: int({ minimum: 0 }),
+            phase: enumOf("download", "extract", "idle"),
+          },
+          ["bytesReceived", "phase"],
+        ),
+        lastError: str(),
+        autoInstall: obj(
+          {
+            attempted: bool(),
+            declined: bool(),
+            enabled: bool(),
+          },
+          ["attempted", "declined", "enabled"],
+        ),
+        approxBytes: int({ minimum: 0 }),
+        needsManualInstall: bool(),
+      },
+      ["libreOfficeRuntime", "libreOfficeInstallHint", "whyText", "autoInstall"],
+    ),
+  },
+  "home.cancelLibreOfficeInstall": {
+    group: "artifacts",
+    scope: "owner-scope",
+    paramsOptional: true,
+    summary: "Cancel in-flight managed LibreOffice download — Design §9.5b / P2-K8",
+    params: emptyParams,
+    result: obj(
+      {
+        libreOfficeRuntime: enumOf("ready", "missing", "downloading", "failed"),
+        libreOfficeInstallHint: str(),
+        whyText: str(),
+        versionLine: str(),
+        installSource: enumOf("system", "managed", "env"),
+        download: obj(
+          {
+            bytesReceived: int({ minimum: 0 }),
+            bytesTotal: int({ minimum: 0 }),
+            phase: enumOf("download", "extract", "idle"),
+          },
+          ["bytesReceived", "phase"],
+        ),
+        lastError: str(),
+        autoInstall: obj(
+          {
+            attempted: bool(),
+            declined: bool(),
+            enabled: bool(),
+          },
+          ["attempted", "declined", "enabled"],
+        ),
+        approxBytes: int({ minimum: 0 }),
+        needsManualInstall: bool(),
+      },
+      ["libreOfficeRuntime", "libreOfficeInstallHint", "whyText", "autoInstall"],
+    ),
+  },
+  "home.setLibreOfficeInstallPreference": {
+    group: "artifacts",
+    scope: "owner-scope",
+    paramsOptional: false,
+    summary:
+      "Persist LibreOffice auto-install preference (declined stops silent) — Design §9.5b / P2-K8",
+    params: obj({ auto: bool(), declined: bool() }, []),
+    result: obj(
+      {
+        libreOfficeRuntime: enumOf("ready", "missing", "downloading", "failed"),
+        libreOfficeInstallHint: str(),
+        whyText: str(),
+        versionLine: str(),
+        installSource: enumOf("system", "managed", "env"),
+        download: obj(
+          {
+            bytesReceived: int({ minimum: 0 }),
+            bytesTotal: int({ minimum: 0 }),
+            phase: enumOf("download", "extract", "idle"),
+          },
+          ["bytesReceived", "phase"],
+        ),
+        lastError: str(),
+        autoInstall: obj(
+          {
+            attempted: bool(),
+            declined: bool(),
+            enabled: bool(),
+          },
+          ["attempted", "declined", "enabled"],
+        ),
+        approxBytes: int({ minimum: 0 }),
+        needsManualInstall: bool(),
+      },
+      ["libreOfficeRuntime", "libreOfficeInstallHint", "whyText", "autoInstall"],
+    ),
+  },
   "home.listArtifacts": {
     group: "artifacts",
     scope: "account-scoped",
@@ -3572,6 +3718,38 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     result: obj(
       { sectionCount: int({ minimum: 0 }), paths: int({ minimum: 0 }) },
       ["sectionCount", "paths"],
+    ),
+  },
+  "home.promoteKnowledgeFile": {
+    group: "memory",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary:
+      "Copy jail Markdown into knowledge/ and reindex Doc KB (Design §9.5j)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        sourcePath: str({ minLength: 1 }),
+        overwrite: bool(),
+        destName: str({ minLength: 1 }),
+      },
+      ["accountId", "sourcePath"],
+    ),
+    result: obj(
+      {
+        ok: bool(),
+        sourcePath: str({ minLength: 1 }),
+        knowledgePath: str({ minLength: 1 }),
+        bytes: int({ minimum: 0 }),
+        reindexed: obj(
+          {
+            sectionCount: int({ minimum: 0 }),
+            paths: int({ minimum: 0 }),
+          },
+          ["sectionCount", "paths"],
+        ),
+      },
+      ["ok", "sourcePath", "knowledgePath", "bytes"],
     ),
   },
   "home.getKnowledgeStatus": {

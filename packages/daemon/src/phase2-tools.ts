@@ -661,6 +661,49 @@ export function sliceExtractByPageRange(
   return selected.join("\n\n").trim() || gfm;
 }
 
+/**
+ * Slice GFM by sheet-like H1/H2 headings (Excel/ODS extracts — V-OFFICE-4).
+ * Case-insensitive exact match on heading text; falls back to full GFM + note.
+ */
+export function sliceExtractBySheetName(gfm: string, sheetName: string): string {
+  const want = sheetName.trim().toLowerCase();
+  if (!want) return gfm;
+  const lines = gfm.replace(/\r\n/g, "\n").split("\n");
+  const sections: { name: string; start: number; end: number }[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = /^(#{1,2})\s+(.+)$/.exec(lines[i] ?? "");
+    if (!m) continue;
+    if (sections.length) sections[sections.length - 1]!.end = i;
+    sections.push({ name: m[2]!.trim(), start: i, end: lines.length });
+  }
+  const hit = sections.find((s) => s.name.toLowerCase() === want);
+  if (!hit) {
+    return `${gfm.trim()}\n\n<!-- envoyhome: sheetName "${sheetName}" not found; full extract returned -->\n`;
+  }
+  return lines.slice(hit.start, hit.end).join("\n").trim() || gfm;
+}
+
+/**
+ * 1-based slide index by H1/H2 sections (PPT extracts — V-OFFICE-4).
+ */
+export function sliceExtractBySlideIndex(gfm: string, slideIndex: number): string {
+  const idx = Math.max(1, Math.floor(slideIndex));
+  const lines = gfm.replace(/\r\n/g, "\n").split("\n");
+  const starts: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (/^#{1,2}\s+/.test(lines[i] ?? "")) starts.push(i);
+  }
+  if (starts.length === 0) {
+    return `${gfm.trim()}\n\n<!-- envoyhome: no slide headings; full extract returned -->\n`;
+  }
+  if (idx > starts.length) {
+    return `${gfm.trim()}\n\n<!-- envoyhome: slideIndex ${idx} out of range (1..${starts.length}); full extract returned -->\n`;
+  }
+  const start = starts[idx - 1]!;
+  const end = idx < starts.length ? starts[idx]! : lines.length;
+  return lines.slice(start, end).join("\n").trim() || gfm;
+}
+
 export async function runExtractDocumentWithPages(input: {
   args: Record<string, unknown>;
   accountId: string;

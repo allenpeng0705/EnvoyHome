@@ -5,7 +5,7 @@
 | **Document** | Single all-in-one design for EnvoyHome |
 | **Role** | Ground truth for **implementation** and **verification** |
 | **Status** | Living draft — refine in place; bump changelog |
-| **Last updated** | 2026-11-10b (P2-J file upload follow-through) |
+| **Last updated** | 2026-11-10i (Chat document pane) |
 | **Not** | A port of HomeClaw; a clone of Hermes / OpenClaw / OpenHuman |
 
 **How to use this doc**
@@ -22,6 +22,13 @@
 
 | Date | Change |
 |------|--------|
+| 2026-11-10i | **Product (§9.5d / §9.5j):** Desktop Chat opens sandbox paths in a **right-side document pane** (Markdown rendered; conversation stays visible). System → Files keeps the modal viewer. Escape / Close dismisses the pane. No wire bump. |
+| 2026-11-10h | **Hygiene (P2-K8):** Managed LO download — TDF origin + manual https redirects, pinned catalog `sha256`, size cap, `safeJoin` managed `sofficeRelPath`, sync install lock, Windows `pathToFileURL` UserInstallation. Shared promote-path predicate (desktop+mobile). Mobile System → Files LO status/install. Appendix A: `home.promoteKnowledgeFile` wire block; `autoInstall` required on LO status. No wire bump. |
+| 2026-11-10g | **Ship (P2-K8 / §9.5b):** Managed LibreOffice under `stateDir/libreoffice/`. **Silent first-boot** auto-download when missing (non-blocking); on failure/decline → Setup + System → Files one-click with why-copy. `ENVOYHOME_LIBREOFFICE_AUTO=0` disables silent. JS writers always remain. RPCs: expand `home.getDocumentExportStatus`; add `home.installLibreOffice` / `home.cancelLibreOfficeInstall` / `home.setLibreOfficeInstallPreference`. V-OFFICE-12…14. No wire bump. |
+| 2026-11-10f | **Ship (§9.5b guidance):** Owner Settings **System → Files** shows LibreOffice ready/missing + copyable install hint (daemon host). Additive `home.getDocumentExportStatus`. When `export_document` falls back to JS, result includes `quality: "structure"` + `installHint` / `qualityNote` so the agent and UI can guide at need. Doctor message includes the same hint. V-OFFICE-11. No wire bump. |
+| 2026-11-10e | **Ship (P2-K7 / §9.5b):** Optional **local LibreOffice** (`soffice`) headless convert for print-quality `export_document` when installed; pure-JS writers remain the **always-available fallback**. Default `engine: "auto"`; tool/env may force `js` \| `libreoffice`. Never cloud convert; serialize LO runs; Doctor warns when LO absent. V-OFFICE-10. No wire bump. |
+| 2026-11-10d | **Ship (P2-K6):** `export_document` adds `odt` \| `ods` \| `epub` (pure JS / JSZip; structure fidelity). **PDF generate already Normative** (`pdf` via pdfkit since §9.5b). Lifts prior odt/epub Deferred for generate. V-OFFICE-9. No wire bump. |
+| 2026-11-10c | **Normative + Ship (P2-K Office File Pipeline / §9.5j):** Markdown remains the only interop pivot. Expand `export_document` formats: `pptx` \| `md` \| `html` \| `rtf` (plus existing docx/xlsx/csv/pdf). Harden docx/xlsx (tables / multi-sheet). Targeted extract (`sheetName` / `slideIndex` / page range). Builtin `promote_knowledge` (+ `home.promoteKnowledgeFile`) copies jail Markdown into `knowledge/` and reindexes Doc KB. Thin-client chips for exports/extracts. V-OFFICE-1…8. No `protocolApiVersion` bump. |
 | 2026-11-10b | **P2-J follow-through:** MIME deny + PE/ELF/Mach-O magic refuse; HTML `multiple` (newline-separated paths, ≤8); jail browse via `home.listSandboxEntries` on form cards; R3 workspace mounts on apply. No `protocolApiVersion` bump. |
 | 2026-11-10 | **Ship (P2-J §9.5g.3 file upload):** Form card `kind: "file"` from `input[type=file]`; Owner picks a jail path (upload → `uploads/…` or existing sandbox/workspace path); apply via Playwright `setInputFiles`; ≤8 MiB; mime allow-list; unattended refuse file fields; never Learn file bytes. Lifts prior file-upload Defer. V-OUT-25…27. No `protocolApiVersion` bump. |
 | 2026-11-04d | **Ship (P2-I §9.5i Daily Outbound Assist):** Hard stop before pay/OTP-SMS/CAPTCHA/wallet; prefer Owner MCP over browser for commerce; multi-step form chain; `blocked: "payment"`; handoff choice `purpose: "outbound_handoff"` + https `openUrl` + `steps[]` (Open → system URL / Universal Links; never claim daemon cart ≡ phone app). V-OUT-20…24. No `protocolApiVersion` bump. |
@@ -489,10 +496,10 @@ Three transports carry `home.*`: the local/LAN WebSocket host (reuse-host), the 
 | **Static workflows** | `home.listWorkflows`, `home.getWorkflow`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.runWorkflow`, `home.listWorkflowTools`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.listWorkflowStepTemplates`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate` | DAG procedures (linear `steps[]` = single path); §7 |
 | **Schedules** | `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.cancelScheduleProposal`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts`, `home.getHeartbeatConfig`, `home.setHeartbeatConfig`, `home.listStandingOrders`, `home.putStandingOrder`, `home.removeStandingOrder`, `home.setStandingOrderEnabled` | Daemon clock jobs (§7.4); NL propose→confirm + structured put; run history; §19.10 heartbeat + standing orders |
 | **Skills** | `home.listSkills`, `home.searchClawHubSkills`, `home.installSkill`, `home.removeSkill`, `home.verifySkill` | AgentSkills / ClawHub path |
-| **Profile / memory** | `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.recall`, `home.forget`, `home.listMemory`, `home.setMemorySettings`, `home.compactMemory`, `home.searchKnowledge`, `home.reindexKnowledge`, `home.getKnowledgeStatus`, `home.searchKnowYou`, `home.updateKnowYou`, `home.getKnowledgePolicy`, `home.setKnowledgePolicy` | Account-scoped |
+| **Profile / memory** | `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.recall`, `home.forget`, `home.listMemory`, `home.setMemorySettings`, `home.compactMemory`, `home.searchKnowledge`, `home.reindexKnowledge`, `home.promoteKnowledgeFile`, `home.getKnowledgeStatus`, `home.searchKnowYou`, `home.updateKnowYou`, `home.getKnowledgePolicy`, `home.setKnowledgePolicy` | Account-scoped |
 | **Home embed** | `home.getEmbedEngineStatus`, `home.enableEmbedEngine`, `home.disableEmbedEngine`, `home.downloadEmbedModel`, `home.cancelEmbedModelDownload`, `home.resumeEmbedModelDownload` | Owner-scope (:18793; Knowledge-RAG) |
 | **Learning** | `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn` | Gated skill/memory patches (§9.3) |
-| **Artifacts** | `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getMediaGenerateConfig`, `home.setMediaGenerateConfig` | Mesh-first bytes + folder browse + optional signed HTTP (§9.5 / §4.1b); image_generate Owner config (§19.12 D2) |
+| **Artifacts** | `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getDocumentExportStatus`, `home.installLibreOffice`, `home.cancelLibreOfficeInstall`, `home.setLibreOfficeInstallPreference`, `home.getMediaGenerateConfig`, `home.setMediaGenerateConfig` | Mesh-first bytes + folder browse + optional signed HTTP (§9.5 / §4.1b); LibreOffice export status + managed install (§9.5b); image_generate Owner config (§19.12 D2) |
 | **Doctor** | `home.doctor`, `home.doctorFix` | Config migrations |
 
 ### 3.5 Events (Normative initial set)
@@ -806,8 +813,8 @@ Verification: V-SEC-13, V-SEC-14, V-SEC-20; Settings on `account.detail` (§10.1
 | Scope | Methods | Rule |
 |-------|---------|------|
 | **loopback-owner** | `home.getDaemonLog`, `home.shutdown`, `home.getServiceStatus`, `home.installService`, `home.uninstallService`, `home.restartService` | Only from the home machine Settings window — never over mesh, never from a paired device. Host OS / process lifecycle. |
-| **owner-scope** | `home.mintPairing`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts`, `home.listPairedDevices`, `home.sendTestPush`, `home.transferHouseholdOwner`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig`, `home.listMcpServers`, `home.upsertMcpServer`, `home.removeMcpServer`, `home.setMcpServerEnabled`, `home.testMcpServer`, `home.listMcpTools`, `home.setBinding`, `home.removeBinding`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations`, `home.createAccount`, `home.deleteAccount`, `home.enableChannel`, `home.disableChannel`, `home.setChannelConfig`, `home.stopDemoHa`, `home.stopDemoMqtt`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.getEmbedEngineStatus`, `home.enableEmbedEngine`, `home.disableEmbedEngine`, `home.downloadEmbedModel`, `home.cancelEmbedModelDownload`, `home.resumeEmbedModelDownload`, `home.searchClawHubSkills`, `home.installSkill`, `home.verifySkill`, `home.removeSkill`, `home.setHarness`, `home.doctorFix`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate` | **`isHouseholdOwner(caller)`** (§4.1.1): loopback **or** device with `accountIds = [ownerAccountId]`. Mobile OK. `setWorkspace` filesystem root only for Owner seat (R3). |
-| **account-scoped** | bootstrap/negotiation: `home.hello`, `home.health`, `home.subscribe`, `home.meshStatus`, `home.registerPushToken`, `home.unregisterPushToken`. Reads of shared catalogs: `home.listAccounts`, `home.listChannels`, `home.getChannelStatus`, `home.listHarnesses`, `home.listProviders`, `home.listWorkflows`, `home.getWorkflow`, `home.listSkills`, `home.doctor`, `home.listWorkflowStepTemplates`, `home.getDemoHaStatus`, `home.getDemoMqttStatus`, `home.listSources` (household object registry — Design `2026-10-16l`), `home.getHouseholdOwner`. Seat-or-Owner (§4.1.1 `mayActForSeat`): `home.listGrants`, `home.revokeGrant`, `home.listBindings`, `home.updateAccount` (field rules: `toolPolicy` still Owner-only), `home.getWorkspace`. Own-account data: `home.getUsage`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getMediaGenerateConfig`, `home.setMediaGenerateConfig`, `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.listMemory`, `home.setMemorySettings`, `home.recall`, `home.forget`, `home.compactMemory`, `home.searchKnowledge`, `home.reindexKnowledge`, `home.getKnowledgeStatus`, `home.searchKnowYou`, `home.updateKnowYou`, `home.getKnowledgePolicy`, `home.setKnowledgePolicy`, `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.clearTranscript`, `home.deleteTranscriptMessages`, `home.archiveSession`, `home.unarchiveSession`, `home.removeSession`, `home.renameSession`, `home.listChoices`, `home.answerChoice`, `home.listSessions`, `home.listApprovals`, `home.answerApproval`, `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.cancelScheduleProposal`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts`, `home.getHeartbeatConfig`, `home.setHeartbeatConfig`, `home.listStandingOrders`, `home.putStandingOrder`, `home.removeStandingOrder`, `home.setStandingOrderEnabled`, `home.runWorkflow`, `home.listWorkflowTools`, `home.startDemoHa`, `home.startDemoMqtt` | Default: device bound to that account (§4.1). **Seat-or-Owner** as §4.1.1. Zero-binding devices may still call bootstrap methods including push register/unregister. A method that appears in **none** of the three rows is a spec bug — `scripts/docs-lint.mjs` fails the build if a catalogued method is missing here. |
+| **owner-scope** | `home.mintPairing`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts`, `home.listPairedDevices`, `home.sendTestPush`, `home.transferHouseholdOwner`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig`, `home.getDocumentExportStatus`, `home.installLibreOffice`, `home.cancelLibreOfficeInstall`, `home.setLibreOfficeInstallPreference`, `home.listMcpServers`, `home.upsertMcpServer`, `home.removeMcpServer`, `home.setMcpServerEnabled`, `home.testMcpServer`, `home.listMcpTools`, `home.setBinding`, `home.removeBinding`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations`, `home.createAccount`, `home.deleteAccount`, `home.enableChannel`, `home.disableChannel`, `home.setChannelConfig`, `home.stopDemoHa`, `home.stopDemoMqtt`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.getEmbedEngineStatus`, `home.enableEmbedEngine`, `home.disableEmbedEngine`, `home.downloadEmbedModel`, `home.cancelEmbedModelDownload`, `home.resumeEmbedModelDownload`, `home.searchClawHubSkills`, `home.installSkill`, `home.verifySkill`, `home.removeSkill`, `home.setHarness`, `home.doctorFix`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate` | **`isHouseholdOwner(caller)`** (§4.1.1): loopback **or** device with `accountIds = [ownerAccountId]`. Mobile OK. `setWorkspace` filesystem root only for Owner seat (R3). |
+| **account-scoped** | bootstrap/negotiation: `home.hello`, `home.health`, `home.subscribe`, `home.meshStatus`, `home.registerPushToken`, `home.unregisterPushToken`. Reads of shared catalogs: `home.listAccounts`, `home.listChannels`, `home.getChannelStatus`, `home.listHarnesses`, `home.listProviders`, `home.listWorkflows`, `home.getWorkflow`, `home.listSkills`, `home.doctor`, `home.listWorkflowStepTemplates`, `home.getDemoHaStatus`, `home.getDemoMqttStatus`, `home.listSources` (household object registry — Design `2026-10-16l`), `home.getHouseholdOwner`. Seat-or-Owner (§4.1.1 `mayActForSeat`): `home.listGrants`, `home.revokeGrant`, `home.listBindings`, `home.updateAccount` (field rules: `toolPolicy` still Owner-only), `home.getWorkspace`. Own-account data: `home.getUsage`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getMediaGenerateConfig`, `home.setMediaGenerateConfig`, `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.listMemory`, `home.setMemorySettings`, `home.recall`, `home.forget`, `home.compactMemory`, `home.searchKnowledge`, `home.reindexKnowledge`, `home.promoteKnowledgeFile`, `home.getKnowledgeStatus`, `home.searchKnowYou`, `home.updateKnowYou`, `home.getKnowledgePolicy`, `home.setKnowledgePolicy`, `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.clearTranscript`, `home.deleteTranscriptMessages`, `home.archiveSession`, `home.unarchiveSession`, `home.removeSession`, `home.renameSession`, `home.listChoices`, `home.answerChoice`, `home.listSessions`, `home.listApprovals`, `home.answerApproval`, `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.cancelScheduleProposal`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts`, `home.getHeartbeatConfig`, `home.setHeartbeatConfig`, `home.listStandingOrders`, `home.putStandingOrder`, `home.removeStandingOrder`, `home.setStandingOrderEnabled`, `home.runWorkflow`, `home.listWorkflowTools`, `home.startDemoHa`, `home.startDemoMqtt` | Default: device bound to that account (§4.1). **Seat-or-Owner** as §4.1.1. Zero-binding devices may still call bootstrap methods including push register/unregister. A method that appears in **none** of the three rows is a spec bug — `scripts/docs-lint.mjs` fails the build if a catalogued method is missing here. |
 
 A method's scope is **transport-independent** (§3.3.1), except loopback-owner methods which are refused on both remote transports. Owner-scope over mesh requires an **exclusive** Owner-bound device.
 
@@ -2101,13 +2108,15 @@ Office / spreadsheet / presentation / PDF / EPUB attachments are **not** friendl
 |-------|--------|
 | **Tool** | `export_document` |
 | **Risk** | `write`, `grantable: true` (same class as `write_file`) |
-| **v1 `format`** | `docx` \| `xlsx` \| `csv` \| `pdf` |
-| **Input** | Inline `markdown` **or** sandbox-relative `sourcePath` (`.md` / `.txt`) |
-| **Output** | Under `accounts/<id>/files/output/exports/` only (default `output/exports/<stem>-<id>.<ext>`); result `{ uri, bytes, mimeType, format }` |
-| **Engine** | Pure JS (`docx` / `exceljs` / `pdfkit`) — **no** Pandoc, LibreOffice, or cloud OCR |
-| **Caps** | Markdown ≤ 2 MiB; output ≤ 8 MiB |
+| **`format`** | `docx` \| `xlsx` \| `csv` \| `pdf` \| `pptx` \| `md` \| `html` \| `rtf` \| `odt` \| `ods` \| `epub` |
+| **Input** | Inline `markdown` **or** sandbox-relative `sourcePath` (`.md` / `.txt`); optional `engine`: `"auto"` \| `"js"` \| `"libreoffice"` (default `"auto"`) |
+| **Output** | Under `accounts/<id>/files/output/exports/` only (default `output/exports/<stem>-<id>.<ext>`); result `{ uri, bytes, mimeType, format, engine, quality, installHint?, qualityNote? }` |
+| **Engine (dual)** | **(1) Pure JS** always available (`docx` / `exceljs` / `pdfkit` / `pptxgenjs` / JSZip ODF+EPUB + md/html/rtf). **(2) Local LibreOffice** — PATH / `ENVOYHOME_LIBREOFFICE` / **managed** `stateDir/libreoffice/runtime` — headless convert for print quality when `engine` is `auto` or `libreoffice`. **Never** cloud convert; **never** require LO to boot the daemon or to export. |
+| **Caps** | Markdown ≤ 2 MiB; output ≤ 8 MiB; LO convert timeout ≤ 60 s; LO concurrency 1 |
+| **Managed install (P2-K8)** | If no usable `soffice` at boot and auto is enabled (`ENVOYHOME_LIBREOFFICE_AUTO` not `0`, Owner not declined), start **one** background download+install into `stateDir/libreoffice/` (non-blocking; sync-locked). Catalog start URL is TDF https; MirrorBrain https redirects allowed; archive **sha256** + size cap verified before extract; managed `soffice` path is `safeJoin`-jailed. Persist `install.json` so silent does **not** retry every restart after failure. Owner **Setup** + **System → Files** (desktop + mobile) one-click Install / Not now / Cancel. Why-copy: print-ready exports stay local; without LO, simpler layout still works. |
+| **Guidance** | `home.getDocumentExportStatus` returns `libreOfficeRuntime` ∈ `ready`\|`missing`\|`downloading`\|`failed` + hint + progress + whyText. When export uses JS because LO is missing/downloading/failed, include `quality: "structure"` plus `installHint` / `qualityNote`. Doctor: downloading=info; failed=warn. |
 
-Fidelity is **content/structure** (headings, lists, tables, emphasis) — not print-perfect layout. Deferred: `pptx`, `odt`, `epub`, legacy `.doc`/`.xls`. Do **not** overwrite the original upload in place. Skills may teach *when* to call the tool; the converter itself stays core.
+**Fidelity:** With LibreOffice present + `auto`/`libreoffice`, exports SHOULD use LO for print-oriented quality and return `quality: "print"`. With JS-only (or `engine: "js"`, or LO missing/downloading/fail), fidelity remains **content/structure** (`quality: "structure"` — honest fallback — never fail solely because LO is absent, except when `engine: "libreoffice"` was forced). `md` is always JS. Deferred: legacy binary `.doc`/`.xls` **generate**; cloud OCR; Owner template packs. Do **not** overwrite the original upload in place. See **§9.5j**.
 
 ### 9.5c Document extract tool (Normative)
 
@@ -2117,14 +2126,39 @@ Fidelity is **content/structure** (headings, lists, tables, emphasis) — not pr
 |-------|--------|
 | **Tool** | `extract_document` |
 | **Risk** | `write`, `grantable: true` (writes GFM; same class as `export_document`) |
-| **Input** | Sandbox-relative `sourcePath` with an extractable extension (§9.5a anydoc + native text) |
-| **Output** | Under `accounts/<id>/files/output/extracts/` only (default `output/extracts/<stem>-<id>.md`); result `{ uri, extractChars, extractor, sourcePath }` |
+| **Input** | Sandbox-relative `sourcePath` with an extractable extension (§9.5a anydoc + native text); optional `startPage`/`endPage`, `sheetName`, `slideIndex` (1-based) |
+| **Output** | Under `accounts/<id>/files/output/extracts/` only (default `output/extracts/<stem>-<id>.md`); result `{ uri, extractChars, extractor, sourcePath, pages?, sheetName?, slideIndex? }` |
 | **Engine** | Same as §9.5a (`extractDocumentText` / `anydoc-v1`) — **no** cloud OCR |
 | **Caps** | Source ≤ 8 MiB; refuse non-extractable types |
 
-Chat-upload sidecars under `uploads/*.extract.md` stay as specified in §9.5a. Pair with §9.5b: extract → edit in Markdown → export. Fence-safe on every chat turn (with `read_file` / `write_file` / `list_dir` / `search_files` / `export_document`).
+Targeted slice (Normative): when `sheetName` / `slideIndex` / page range is set, the daemon slices the GFM by heading / page markers after extract (best-effort; if markers are absent, return full GFM with a note — never invent content).
 
-**Workflows:** both tools appear in `home.listWorkflowTools`. Typical chain — `extract_document` → `llm_summarize` with `{{step.extract.text}}` → optional `export_document` via `args_from: { markdown: step.summarize }` (§7 prompt templates). Result JSON includes capped `text` for the LLM step; full GFM remains at `uri`.
+Chat-upload sidecars under `uploads/*.extract.md` stay as specified in §9.5a. Pair with §9.5b: extract → edit in Markdown → export. Fence-safe on every chat turn (with `read_file` / `write_file` / `list_dir` / `search_files` / `export_document` / `promote_knowledge`).
+
+**Workflows:** document tools appear in `home.listWorkflowTools`. Typical chain — `extract_document` → `llm_summarize` with `{{step.extract.text}}` → optional `export_document` via `args_from: { markdown: step.summarize }` (§7 prompt templates). Result JSON includes capped `text` for the LLM step; full GFM remains at `uri`.
+
+### 9.5j Office work loop (Normative — `2026-11-10c` / P2-K)
+
+Real office asks are **parse → understand → generate**. EnvoyHome keeps **Markdown (GFM) as the only interop pivot** — never a second Office object model in core.
+
+```
+upload / sandbox Office  →  extract (§9.5a/c)  →  GFM on disk
+                         →  model understand / edit
+                         →  export_document (§9.5b)  →  output/exports/
+                         →  optional promote_knowledge → knowledge/ (Doc KB)
+```
+
+| Layer | Normative |
+|-------|-----------|
+| **Parse (in)** | Full anydoc set + native text (§9.5a) |
+| **Understand** | Model reads capped GFM (+ `read_file`); targeted `sheetName` / `slideIndex` / page range; multi-attach prologue; never Learn file bytes / passwords |
+| **Generate (out)** | `export_document` formats in §9.5b; JS always; optional local LibreOffice for print quality |
+| **Doc KB bridge** | Builtin `promote_knowledge` + RPC `home.promoteKnowledgeFile` — copy **Markdown** from jail (`uploads/*.extract.md`, `output/extracts/`, `documents/`, …) into `knowledge/<stem>.md` then reindex; Owner/attended ask; refuse non-`.md`/`.markdown`; never overwrite without `overwrite: true` |
+| **Thin clients** | Artifact chips for `output/exports/` and `output/extracts/`; Download / Open; Promote-to-Knowledge affordance for Markdown extracts |
+
+**Invariants:** pure-JS writers always available; optional/managed local LibreOffice (never required to boot or export, never cloud); no Pandoc; no cloud OCR in core; originals kept; no silent overwrite of uploads; opaque binary `.dat` is **not** an Office format (structured siblings = `md`/`json`/`csv`/`html`/`rtf`).
+
+Verification: **V-OFFICE-1** … **V-OFFICE-14**.
 
 ### 9.5e Sandbox list / search tools (Normative)
 
@@ -2486,7 +2520,7 @@ Exported / extracted / spilled files live under the account sandbox (`output/exp
 | **`home.getArtifactUrl`** | Signed HTTP mint is **sandbox-only** — refuse `workspace/…` (and `share/`). Thin UI Copy link / Open in browser only when path is sandbox and `publicBaseUrl` is reachable / non-loopback |
 | **EnvoyHome mobile** | System → **Files** folder browser (`listSandboxEntries`) + chat path chips → in-app viewer; **Share / Save**; **Open in browser** when signed URL available (sandbox only) |
 | **EnvoyHome desktop** | Same mesh open; **Download** from fetched bytes; optional Copy signed link via `home.getArtifactUrl` for sandbox paths only. Folder browser UI deferred (RPC ready) |
-| **Chat UI** | When assistant text mentions `output/…`, `documents/…`, `knowledge/…`, `uploads/…`, or `workspace/…` (prefer backtick paths; Unicode OK), thin clients show an **Open** chip → `home.getArtifactContent` |
+| **Chat UI** | When assistant text mentions `output/…`, `documents/…`, `knowledge/…`, `uploads/…`, or `workspace/…` (prefer backtick paths; Unicode OK), thin clients show an **Open** chip → `home.getArtifactContent`. **Desktop Chat:** open in a **right-side document pane** (Markdown preview beside the thread; Escape/Close). **Desktop System → Files** and surfaces without Chat layout: modal viewer. Mobile: full-screen viewer |
 | **`write_file` handoff** | Tool results MUST echo a **chip-ready** path in backticks (normalize: strip leading `./` and `/`, unify `\` → `/`, collapse `//`) so Open chips fire; catalogue samples use `documents/` or `output/` (`2026-10-18ad`) |
 
 IM channel plugins stay on §9.5 audience split — they never receive home HTTPS artifact links. Pairing with the home daemon is how the phone gets the file.
@@ -2546,6 +2580,20 @@ Canonical memory IDs live in [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Des
 | V-OUT-25 | §9.5g.3: `input[type=file]` → `kind: file`; apply via `setInputFiles` after jail resolve |
 | V-OUT-26 | §9.5g.3: file apply refuses escape / >8 MiB / disallowed mime; basename-only in transcript |
 | V-OUT-27 | §9.5g.3: unattended refuses any form card that includes a `file` field |
+| V-OFFICE-1 | §9.5j/b: `export_document` `format: pptx` writes OOXML under `output/exports/` |
+| V-OFFICE-2 | §9.5j/b: `format: md` \| `html` \| `rtf` export; refuse overwrite of uploads |
+| V-OFFICE-3 | §9.5j/b: docx tables + xlsx multi-sheet from GFM tables/headings |
+| V-OFFICE-4 | §9.5c: `sheetName` / `slideIndex` / page range slice extract GFM |
+| V-OFFICE-5 | §9.5j: multi-attach extracts remain independently addressable via sidecar paths |
+| V-OFFICE-6 | §9.5j: `promote_knowledge` / `home.promoteKnowledgeFile` copies Markdown → `knowledge/` + reindex |
+| V-OFFICE-7 | §9.5j: promote refuses non-Markdown and path escape; no Learn of file bytes |
+| V-OFFICE-8 | §9.5j: thin-client chips open/download exports/extracts; Promote affordance for `.md` extracts |
+| V-OFFICE-9 | §9.5b: `export_document` `odt` \| `ods` \| `epub` write under `output/exports/` (structure fidelity) |
+| V-OFFICE-10 | §9.5b: when LibreOffice present, `auto` uses LO for non-`md` formats and returns `engine: "libreoffice"`; when absent, JS fallback succeeds; forced `libreoffice` without binary fails closed; Doctor warns if LO missing |
+| V-OFFICE-11 | §9.5b: Settings System → Files (desktop + mobile) shows LO status + install hint; `export_document` JS fallback includes `installHint`; `home.getDocumentExportStatus` returns ready\|missing\|downloading\|failed |
+| V-OFFICE-12 | §9.5b/P2-K8: first boot with no LO starts managed download when auto enabled; daemon healthy; export still JS during download |
+| V-OFFICE-13 | §9.5b/P2-K8: failed install persists (no silent retry storm); Install retries; decline / `ENVOYHOME_LIBREOFFICE_AUTO=0` stops auto |
+| V-OFFICE-14 | §9.5b/P2-K8: managed runtime ready → `export_document` `engine: "libreoffice"` / `quality: "print"` |
 | V-MCP-1 | Owner upserts any MCP transport config; non-Owner denied (§9.5h) |
 | V-MCP-2 | `testMcpServer` lists tools via initialize+tools/list; does not invoke mutating `tools/call` |
 | V-MCP-3 | Remote MCP URL SSRF refused (link-local / metadata / non-http(s)) |
@@ -3732,6 +3780,11 @@ Returns the household object registry for callers on this EnvoyHome (Design `202
 **`home.verifySkill`** params `{ "id" }` → `{ "ok": true, "findings": [] }`  
 **`home.removeSkill`** params `{ "id" }` → `{ "ok": true }`
 
+**`home.getDocumentExportStatus`** → `{ "libreOfficeRuntime": "ready"|"missing"|"downloading"|"failed", "libreOfficeInstallHint", "whyText", "autoInstall": { "attempted", "declined", "enabled" }, "versionLine?", "installSource?": "system"|"managed"|"env", "download?", "lastError?", "approxBytes?", "needsManualInstall?" }` — owner-scope; Settings / Setup / Doctor / mobile Files (§9.5b / V-OFFICE-11…14). Managed download: TDF https origin, MirrorBrain https redirects, pinned catalog sha256 + size cap before extract.  
+**`home.installLibreOffice`** → same status shape — owner-scope; start/retry managed download+install (sync-locked; one in flight)  
+**`home.cancelLibreOfficeInstall`** → same status shape — owner-scope; abort in-flight download  
+**`home.setLibreOfficeInstallPreference`** params `{ "auto?", "declined?" }` → same status shape — owner-scope; persist preference (`declined: true` stops silent auto)  
+
 **`home.listArtifacts`** params `{ "accountId", "sessionId?" }` → `{ "artifacts": [{ "id", "path", "createdAt" }] }` — recursive under `output/` / `documents/` / `knowledge/` / `uploads/` only; `sessionId` ignored (§9.5d)  
 **`home.listSandboxEntries`** params `{ "accountId", "path?" }` → `{ "path", "parent?", "entries": [{ "name", "kind": "dir"|"file", "path", "size?", "modifiedAt?" }], "roots": ["documents", …] }` — File Explore one-level browse; empty `path` → synthetic roots; refuse `share/` / inactive `workspace/` (§9.5d / V-OUT-4)  
 **`home.getArtifactContent`** params `{ "accountId", "path" }` → `{ "path", "mimeType", "encoding": "utf8"|"base64", "text?", "base64?", "bytes" }` — mesh/paired open for sandbox **or** `workspace/…` (R3-effective jail); refuse `share/`; 8 MiB stat-before-read (§9.5 / §9.5d); no `publicBaseUrl` required; Office MIME on common export extensions  
@@ -3905,7 +3958,18 @@ Profile document (`accounts/<id>/profile.json`) — **supersede-by-key**:
 }
 ```
 
-**`home.searchKnowledge`** / **`home.reindexKnowledge`** / **`home.getKnowledgeStatus`** / **`home.searchKnowYou`** / **`home.updateKnowYou`** / **`home.getKnowledgePolicy`** / **`home.setKnowledgePolicy`** — account-scoped; Doc KB + KnowYou (Knowledge-RAG Design).  
+**`home.searchKnowledge`** / **`home.reindexKnowledge`** / **`home.getKnowledgeStatus`** / **`home.searchKnowYou`** / **`home.updateKnowYou`** / **`home.getKnowledgePolicy`** / **`home.setKnowledgePolicy`** — account-scoped; Doc KB + KnowYou (Knowledge-RAG Design).
+
+**`home.promoteKnowledgeFile`** (§9.5j / V-OFFICE-6…7) — account-scoped; copy jail Markdown into `knowledge/` then reindex.
+
+```json
+// params
+{ "accountId": "alice", "sourcePath": "output/extracts/note.md", "overwrite?": false, "destName?": "note.md" }
+// result
+{ "ok": true, "sourcePath": "output/extracts/note.md", "knowledgePath": "knowledge/note.md", "bytes": 120, "reindexed?": { "sectionCount": 1, "paths": 1 } }
+```
+
+Daemon `promoteKnowledgeFile` / `promote_knowledge` MUST enforce `canPromoteKnowledgePath` (`uploads/`, `output/extracts/`, `documents/`, `output/exports/`, `*.extract.md`). Thin-client Promote chips match the same predicate. Refuse non-`.md`/`.markdown` and path escape.  
 **`home.getEmbedEngineStatus`** / **`home.enableEmbedEngine`** / **`home.disableEmbedEngine`** / **`home.downloadEmbedModel`** / **`home.cancelEmbedModelDownload`** / **`home.resumeEmbedModelDownload`** — owner-scope; Home embed `:18793` (never Mesh `:18791`).
 
 `injectBudgetMode` / `caps` are **additive** (Memory Design §4.2.1). Omitting them leaves existing policy values. Under `custom`, missing asset keys fall back to baseline for that asset; Settings SHOULD seed Custom from the cloud derived package.

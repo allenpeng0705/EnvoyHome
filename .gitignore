@@ -57,6 +57,7 @@ apps/desktop/target/
 apps/desktop/src-tauri/target/
 apps/desktop/dist/
 apps/desktop/dist-daemon/
+apps/desktop/dist-daemon.stale-*/
 apps/desktop/ui-dist/
 apps/desktop/src-tauri/resources/daemon/
 apps/desktop/src-tauri/resources/node-runtime/

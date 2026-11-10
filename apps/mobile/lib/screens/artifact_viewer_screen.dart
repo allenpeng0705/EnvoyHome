@@ -10,6 +10,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
+import '../promote_paths.dart';
 import '../state/session_controller.dart';
 
 /// In-app artifact open — peer EnvoyMesh Feed `BrowserScreen` + `libraryRead`.
@@ -56,6 +57,8 @@ class _ArtifactViewerScreenState extends State<ArtifactViewerScreen> {
       !_loading && _error == null && _signedUrl != null && _signedUrl!.isNotEmpty;
 
   bool get _canOpenInBrowser => _canCopyLink;
+
+  bool get _canPromote => canPromoteKnowledgePath(widget.path);
 
   bool _isReachablePublicUrl(String url) {
     try {
@@ -165,6 +168,29 @@ class _ArtifactViewerScreenState extends State<ArtifactViewerScreen> {
     }
   }
 
+  Future<void> _promoteKnowledge() async {
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    final l10n = AppLocalizations.of(context);
+    if (home == null || accountId == null) return;
+    try {
+      final body = await home.promoteKnowledgeFile(
+        accountId: accountId,
+        sourcePath: widget.path.replaceAll(r'\', '/'),
+      );
+      if (!mounted) return;
+      final kp = body['knowledgePath']?.toString() ?? 'knowledge/';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.chatPromotedKnowledge(kp))),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.chatPromoteFailed)),
+      );
+    }
+  }
+
   Future<void> _openInBrowser() async {
     final url = _signedUrl;
     if (url == null || url.isEmpty || _openingBrowser) return;
@@ -252,6 +278,12 @@ class _ArtifactViewerScreenState extends State<ArtifactViewerScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   : const Icon(Icons.share_outlined),
+            ),
+          if (_canPromote && !_loading && _error == null)
+            IconButton(
+              tooltip: l10n.chatPromoteKnowledge,
+              onPressed: () => unawaited(_promoteKnowledge()),
+              icon: const Icon(Icons.library_add_outlined),
             ),
           IconButton(
             tooltip: l10n.artifactsRefresh,

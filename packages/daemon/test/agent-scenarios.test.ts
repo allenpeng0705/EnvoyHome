@@ -777,7 +777,10 @@ async function prepareSandbox(
       const markdown = String(raw.markdown ?? "");
       const title =
         typeof raw.title === "string" && raw.title.trim() ? raw.title.trim() : undefined;
-      const buf = await exportDocument(format, markdown, title ? { title } : undefined);
+      const { buffer: buf } = await exportDocument(format, markdown, {
+        ...(title ? { title } : {}),
+        engine: "js",
+      });
       const abs = safeJoin(filesRoot, rel);
       await mkdir(dirname(abs), { recursive: true });
       await writeFile(abs, buf);
@@ -1330,6 +1333,7 @@ describe("V-AGENT-SCENARIO-1 agent catalogue", async () => {
         "search_files",
         "export_document",
         "extract_document",
+        "promote_knowledge",
         "web_search",
         "browser",
         "memory_recall",

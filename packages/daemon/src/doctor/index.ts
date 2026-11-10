@@ -361,5 +361,37 @@ export async function collectDoctorIssues(
     });
   }
 
+  // Design §9.5b / V-OFFICE-10…14 — LibreOffice for print-quality export.
+  {
+    const { getDocumentExportStatus } = await import("../document-export-lo.js");
+    const lo = await getDocumentExportStatus(options.env ?? process.env);
+    if (lo.libreOfficeRuntime === "downloading") {
+      issues.push({
+        id: "office.libreoffice_downloading",
+        severity: "info",
+        message:
+          "LibreOffice is downloading for print-quality exports — exports still work with a simpler layout until ready",
+        fixable: false,
+      });
+    } else if (lo.libreOfficeRuntime === "failed") {
+      issues.push({
+        id: "office.libreoffice_missing",
+        severity: "warn",
+        message: `LibreOffice install failed — ${lo.lastError ?? "unknown"}. ${lo.whyText} Open System → Files to retry, or: ${lo.libreOfficeInstallHint}`,
+        fixable: false,
+      });
+    } else if (lo.libreOfficeRuntime === "missing") {
+      const declined = lo.autoInstall?.declined
+        ? " (auto-install declined — use System → Files to install)"
+        : "";
+      issues.push({
+        id: "office.libreoffice_missing",
+        severity: lo.autoInstall?.declined ? "info" : "warn",
+        message: `LibreOffice not found — exports use structure-only JS writers.${declined} ${lo.whyText} Install: ${lo.libreOfficeInstallHint}`,
+        fixable: false,
+      });
+    }
+  }
+
   return issues;
 }
