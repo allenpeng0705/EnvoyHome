@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="Apache 2.0" />
+  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT" />
   <img src="https://img.shields.io/badge/node-%3E%3D22-green.svg" alt="Node.js" />
   <img src="https://img.shields.io/badge/pnpm-workspace-orange.svg" alt="pnpm" />
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows%20%7C%20iOS%20%7C%20Android-lightgrey.svg" alt="Platforms" />
@@ -157,27 +157,57 @@ parent/
 
 **Hands-on walkthrough:** [`QuickStart.md`](QuickStart.md).
 
+### Install
+
 ```bash
 # Fail-closed sibling check (or set ENVOYHOME_PEERS_GIT_BASE and ./scripts/fetch-peers.sh)
 ./scripts/peers-check.sh
 
 # Never install with CI=true (pnpm strict-mode trap — conventions R9)
 env -u CI pnpm install
-
-./scripts/ci.sh                   # docs-lint → peers → install → build → test → lint
-pnpm desktop:dev                  # build daemon if needed → Tauri Settings
-pnpm version:desktop -- 0.1.0     # bump desktop VERSION (see scripts/README.md)
-./scripts/build-desktop.sh macos  # DMG → release/ (Linux: linux; Windows: .\scripts\build-desktop.ps1)
+pnpm -r build                     # packages (daemon binary under packages/daemon/dist/)
 ```
 
-Ports (Design §2.4): WebSocket `4780` at `/ws`, HTTP `4781` (`GET /health`).
+### Run in the terminal
 
-Mobile:
+Daemon alone (home agent on loopback — useful for phones, smoke, or a separate UI):
+
+```bash
+pnpm run dev:daemon
+# equivalent: pnpm --filter @envoyhome/daemon run dev
+```
+
+| Endpoint | URL |
+|----------|-----|
+| WebSocket | `ws://127.0.0.1:4780/ws` |
+| Health | `http://127.0.0.1:4781/health` |
+
+Desktop Settings (builds the daemon if needed, then Tauri; Tauri may supervise the daemon):
+
+```bash
+pnpm desktop:dev                  # or: ./scripts/desktop-dev.sh
+```
+
+Mobile thin client (pair to a running daemon via desktop Pairing QR / `host:port` / SSH hop):
 
 ```bash
 cd apps/mobile
 flutter pub get
-flutter run    # pair via desktop Pairing QR / host:port / SSH hop
+flutter run
+```
+
+Useful checks:
+
+```bash
+./scripts/ci.sh                   # docs-lint → peers → install → build → test → lint
+curl -s http://127.0.0.1:4781/health
+```
+
+### Package (optional)
+
+```bash
+pnpm version:desktop -- 0.1.0     # bump desktop VERSION (see scripts/README.md)
+./scripts/build-desktop.sh macos  # DMG → release/ (Linux: linux; Windows: .\scripts\build-desktop.ps1)
 ```
 
 ---
@@ -249,4 +279,4 @@ Branding / store pack: [`apps/branding/store/README.md`](apps/branding/store/REA
 
 ## License
 
-[Apache License 2.0](LICENSE)
+[MIT License](LICENSE)

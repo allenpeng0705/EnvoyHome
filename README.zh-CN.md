@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="Apache 2.0" />
+  <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT" />
   <img src="https://img.shields.io/badge/node-%3E%3D22-green.svg" alt="Node.js" />
   <img src="https://img.shields.io/badge/pnpm-workspace-orange.svg" alt="pnpm" />
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows%20%7C%20iOS%20%7C%20Android-lightgrey.svg" alt="Platforms" />
@@ -157,27 +157,57 @@ parent/
 
 **动手步骤：** [`QuickStart.md`](QuickStart.md)。
 
+### 安装
+
 ```bash
 # 失败即退出的并列仓库检查（或设置 ENVOYHOME_PEERS_GIT_BASE 后 ./scripts/fetch-peers.sh）
 ./scripts/peers-check.sh
 
 # 切勿在 CI=true 下安装（pnpm 严格模式陷阱 — 约定 R9）
 env -u CI pnpm install
-
-./scripts/ci.sh                   # docs-lint → peers → install → build → test → lint
-pnpm desktop:dev                  # 必要时构建守护进程 → Tauri Settings
-pnpm version:desktop -- 0.1.0     # bump 桌面 VERSION（见 scripts/README.md）
-./scripts/build-desktop.sh macos  # DMG → release/（Linux: linux；Windows: .\scripts\build-desktop.ps1）
+pnpm -r build                     # 各包（守护进程产物在 packages/daemon/dist/）
 ```
 
-端口（设计 §2.4）：WebSocket `4780` 路径 `/ws`，HTTP `4781`（`GET /health`）。
+### 在终端里跑
 
-手机：
+单独跑守护进程（环回上的家庭智能体 — 方便配对手机、冒烟，或另开 UI）：
+
+```bash
+pnpm run dev:daemon
+# 等价：pnpm --filter @envoyhome/daemon run dev
+```
+
+| 端点 | URL |
+|------|-----|
+| WebSocket | `ws://127.0.0.1:4780/ws` |
+| Health | `http://127.0.0.1:4781/health` |
+
+桌面 Settings（必要时先构建守护进程，再启 Tauri；Tauri 可托管守护进程）：
+
+```bash
+pnpm desktop:dev                  # 或：./scripts/desktop-dev.sh
+```
+
+手机轻客户端（经桌面「配对」扫码 / `host:port` / SSH 跳板，连上正在跑的守护进程）：
 
 ```bash
 cd apps/mobile
 flutter pub get
-flutter run    # 经桌面「配对」扫码 / host:port / SSH 跳板
+flutter run
+```
+
+常用检查：
+
+```bash
+./scripts/ci.sh                   # docs-lint → peers → install → build → test → lint
+curl -s http://127.0.0.1:4781/health
+```
+
+### 打包（可选）
+
+```bash
+pnpm version:desktop -- 0.1.0     # bump 桌面 VERSION（见 scripts/README.md）
+./scripts/build-desktop.sh macos  # DMG → release/（Linux: linux；Windows: .\scripts\build-desktop.ps1）
 ```
 
 ---
@@ -249,4 +279,4 @@ EnvoyHome/
 
 ## 许可证
 
-[Apache License 2.0](LICENSE)
+[MIT License](LICENSE)

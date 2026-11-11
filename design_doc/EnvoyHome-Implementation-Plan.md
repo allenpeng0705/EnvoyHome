@@ -280,7 +280,7 @@ EnvoyHome/
   pnpm-lock.yaml                      # committed
   tsconfig.base.json                  # extended by every package tsconfig.json
   AGENTS.md                           # project-local instructions for AI agents
-  LICENSE                             # Apache-2.0 (Q6 closed)
+  LICENSE                             # MIT (Q6 closed)
   README.md
 ```
 

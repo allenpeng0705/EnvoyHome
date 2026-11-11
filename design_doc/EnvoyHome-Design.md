@@ -5,7 +5,7 @@
 | **Document** | Single all-in-one design for EnvoyHome |
 | **Role** | Ground truth for **implementation** and **verification** |
 | **Status** | Living draft — refine in place; bump changelog |
-| **Last updated** | 2026-11-11f (workflow catalogue MCP + web-clip sample) |
+| **Last updated** | 2026-11-11h (Q6 license → MIT) |
 | **Not** | A port of HomeClaw; a clone of Hermes / OpenClaw / OpenHuman |
 
 **How to use this doc**
@@ -22,6 +22,7 @@
 
 | Date | Change |
 |------|--------|
+| 2026-11-11h | **Normative (Q6 / §15.1):** Product license **MIT** (repo root `LICENSE`); was Apache-2.0. Dependencies still keep their own licenses; third-party skills still need separate review. No wire bump. |
 | 2026-11-11g | **Fix (§7 workflows catalogue UI + wire):** Appendix / `@envoyhome/protocol` `home.listWorkflowTools` `source` enum includes **`mcp`**. Settings tool browse groups + summary count MCP; `export_document` format choices stay tied to `EXPORT_FORMATS`; `browser`/`schedule`/`message` expose fuller `argChoices`. Web-clip howto layout is sequential (save → promote). Mobile insert uses canonical `name:`. No wire bump. |
 | 2026-11-11f | **Ship (§7 workflows + new tools):** `home.listWorkflowTools` includes Test-ok Owner **MCP** tools (`source: "mcp"`, `mcp__…`); put/validate/draft/schedules use the same set. `export_document` / `browser` expose `argChoices`. AI draft prompt teaches web_extract / web_research / promote pipelines. Settings howto adds **Web clip** sample (`web_extract` → summarize → `write_file` → `promote_knowledge`). Runtime already dispatched MCP via the harness path. No wire bump. |
 | 2026-11-11e | **Normative + Ship (Stage E — Obscura-first auto):** Config `extractBackend` / `serpBrowserEngine` / `managedEngine` add **`auto`** (new household **defaults**). Runtime prefer Obscura when ready, else fetch (dig) or Chromium (SERP/managed); `personal`/`remote` never Obscura. Public getConfig adds `effectiveExtractBackend` / `effectiveSerpBrowserEngine` / `effectiveManagedEngine`. Appendix C.5: auto-with-fallback is the Normative default; hard Obscura-only still needs parity scores. V-OUT-34. No wire bump. |
@@ -2968,7 +2969,7 @@ We do **not** copy products. Each idea is fitness-checked. Detail analysis: `ana
 | Q3 | Typed triage shipping | **Optional plugin/provider**; core = rules + default | §8.3 |
 | Q4 | Workflows scope | **Global + per-account overlay** (same id replaces) | §7.2 |
 | Q5 | HomeClaw migrate v1 | **Accounts, bindings draft, profile, files, skills, workflows; optional chat; no federation** | §12, Appendix B |
-| Q6 | Licensing | **Apache-2.0** (matches repo `LICENSE`); keep EnvoyMesh deps’ licenses respected | §15.1 |
+| Q6 | Licensing | **MIT** (matches repo `LICENSE`); keep EnvoyMesh deps’ licenses respected | §15.1 |
 | Q7 | Mesh attach timing | **Superseded/aligned by P2-Q4:** v1 = hosting + WS required; attach = optional dual (EnvoyCoder-same), never phone route | §2.3 |
 | Q8 | Default WS / HTTP ports | **Closed — 4780 / 4781** | §2.4 |
 | Q9 | Artifact signing | **Closed — HMAC-SHA256** token scheme | §4.1b |
@@ -2978,9 +2979,9 @@ We do **not** copy products. Each idea is fitness-checked. Detail analysis: `ana
 
 ### 15.1 Licensing (Q6 — Normative)
 
-- EnvoyHome product code and this design: **Apache License 2.0** (see repo root `LICENSE`).  
+- EnvoyHome product code and this design: **MIT License** (see repo root `LICENSE`).  
 - Dependencies (`@envoymesh/*`, envoy-harness, etc.): comply with their licenses; do not re-license upstream.  
-- Third-party skills: separate trust/license review at install time (not Apache by implication).
+- Third-party skills: separate trust/license review at install time (not MIT by implication).
 
 ### 15.2 Status after G1/G6
 

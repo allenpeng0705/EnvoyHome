@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "EnvoyHome — self-hosted home agent. Workspace root (B0).",
+  "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "engines": {
