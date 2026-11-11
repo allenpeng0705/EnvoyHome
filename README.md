@@ -25,21 +25,23 @@
 
 **A security-first home agent you run on your own computer.**
 
-EnvoyHome is the **household brain** in the [EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh) apps group: chat, memory, static workflows, skills, Approvals, and a **smart-home surface** (Home Assistant + MQTT) — without becoming a hub itself, and without shipping EnvoyMesh Social feeds.
+EnvoyHome is the **household agent** in the [EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh) apps group. The core is the **agent loop** itself: **envoy-harness**, **static workflows**, **memory**, **Approvals**, and a rich **tool catalogue** the agent can use — files, web, browser, office docs, skills, schedules, MCP, and more. Thin clients (desktop + phone) are windows onto that agent; they do not run it.
 
-- **Your home computer runs the daemon** — thin clients (desktop Settings shell + Flutter phone) dial `home.*` over the EnvoyMesh super channel.
-- **Family multi-account** — one agent, isolated profiles (memory, files, policy); phones pair to the house, not to a cloud account.
-- **Approvals & grants** — durable ask/TTL/fail-closed; actuation is `admin`; safety-class objects never ride a grant.
-- **Smart home is Core** — enhance AI for Home Assistant / MQTT; integrate with hubs, do not replace them.
-- **Local-first models** — cloud providers or EnvoyHome Local / Ollama; Home chat `:18792`, Home embed `:18793` (never Mesh Local attach).
-- **Same family as EnvoyDev** — pairing / dial ladder patterns from [EnvoyCoder](https://github.com/allenpeng0705/EnvoyCoder); coding IDE stays EnvoyDev’s job.
+Smart home (Home Assistant / MQTT) is **one tool surface** among those capabilities — useful when you connect a hub, not the definition of the product. EnvoyHome is not a hub, and it does not ship EnvoyMesh Social.
+
+- **Daemon + envoy-harness** — every chat/workflow turn runs through the home daemon with the only shipped harness.
+- **Workflows + tools** — Diagram \| YAML procedures; the same catalogue powers chat turns, schedules, and workflow nodes.
+- **Memory that learns carefully** — standing notes, Doc KB, KnowYou; writes go through PendingLearn / Approvals where required.
+- **Family multi-account** — one agent, isolated profiles; phones pair to the house over `home.*`.
+- **Optional smart home** — bind HA/MQTT objects when you want actuation; safety-class gates still apply.
+- **Same family as EnvoyDev** — pairing / dial ladder from [EnvoyCoder](https://github.com/allenpeng0705/EnvoyCoder); coding IDE stays EnvoyDev’s job.
 
 📖 **[QuickStart.md](QuickStart.md)** — daemon, desktop, and phone in minutes.
 
 <p align="center">
-  <img src="docs/screens/envoyhome-architecture.svg" alt="EnvoyHome architecture — thin clients, daemon, Home Assistant and MQTT" width="900" />
+  <img src="docs/screens/envoyhome-architecture.svg" alt="EnvoyHome architecture — thin clients, agent daemon, tools, optional hubs" width="900" />
 </p>
-<p align="center"><em>Desktop Settings + phone dial the home daemon over <code>home.*</code>; smart-home hubs stay external.</em></p>
+<p align="center"><em>Thin clients dial the home agent over <code>home.*</code>. The center is harness + workflows + tools; hubs are optional.</em></p>
 
 ---
 
@@ -59,55 +61,65 @@ EnvoyHome is the **household brain** in the [EnvoyMesh](https://github.com/allen
 
 ## What can it do?
 
+### Core — the agent
+
+| Piece | What it is |
+|-------|------------|
+| **Daemon** (`packages/daemon`) | Owns turns, policy, Approvals, memory, and tool dispatch (`home.*` on WS `:4780/ws`) |
+| **envoy-harness** | Only shipped harness — agent loop / tool calls / sub-agents (`task`, `spawn_helper`) |
+| **Workflows** | Static DAGs (Diagram \| YAML); NL draft; same tools as chat |
+| **Tool catalogue** | Builtins + verified skills + Owner MCP (`mcp__…`) + optional HA/MQTT when connected |
+| **Memory** | L1–L3 standing, Doc KB (`knowledge/`), KnowYou; gated PendingLearn |
+| **Approvals / grants** | Durable ask · TTL · fail-closed — the agent is not an approval bypass |
+
+### Agent tools (examples)
+
+- **Files & jail** — `read_file` / `write_file` / `edit_file` / `apply_patch` / `list_dir` / `search_files`
+- **Knowledge** — `knowledge_search` / `knowyou_search` / `promote_knowledge`
+- **Web & browser** — `web_search` / `web_extract` / `web_research` / `browser` (form cards; never solve CAPTCHAs)
+- **Office** — `extract_document` / `export_document` (optional LibreOffice for print quality)
+- **Skills & schedules** — `skills_list` / `skill_view` / `skill_propose` / `schedule`
+- **Sessions & helpers** — `message` / session tools / `task` / `spawn_helper`
+- **Owner MCP** — Test-ok + enabled servers appear as `mcp__…` in the catalogue
+- **Smart home (optional)** — `ha_*` / `mqtt_*` when those channels are ready
+
 ### Surfaces
 
 | Surface | Path | Role |
 |---------|------|------|
-| **Daemon** | `packages/daemon` | Home agent daemon — WS `:4780/ws`, HTTP `:4781` |
-| **Desktop** | `apps/desktop` | Tauri Settings shell (Chat, Pairing, Approvals, Models, Local, Connections, Skills / Workflows / Schedules, …) |
+| **Daemon** | `packages/daemon` | Home agent — WS `:4780/ws`, HTTP `:4781` |
+| **Desktop** | `apps/desktop` | Tauri Settings shell (Chat, Approvals, Models, Workflows, Skills, Schedules, Connections, …) |
 | **Mobile** | `apps/mobile` | Flutter thin client — QR / `host:port` / SSH hop into the same `home.*` channel |
 | **Branding** | `apps/branding` | Product mark + store icon pack |
 
-Product order for live demos: **desktop → phone → optional IM last**.
+### Optional — smart home
 
-### Home agent
+Connect Home Assistant or MQTT under **Connections** when you want the agent to observe or actuate bound objects. EnvoyHome enhances AI for those hubs; it does not replace them.
 
-- **Chat with memory** — standing L1–L3, gated PendingLearn, Doc KB (`knowledge/`) + KnowYou; path-jailed files and artifacts.
-- **Static workflows** — Diagram \| YAML dual editor, NL draft, tool catalogue (builtins, skills, HA/MQTT, Owner MCP `mcp__…`).
-- **Schedules** — NL WHEN → propose → confirm; reminders and workflow/tool payloads.
-- **Skills** — verify-then-enable packs; progressive disclosure tools (`skills_list` / `skill_view` / `skill_propose`).
-- **Web & browser** — `web_search` / `web_extract` / `web_research`, managed Chromium / Obscura, form cards (never solve CAPTCHAs).
-- **Office pipeline** — `extract_document` / `export_document` / `promote_knowledge` (optional LibreOffice for print quality).
-
-### Smart home
-
-- **Home Assistant + MQTT** — bind objects, resolve through `objectId`, journaled actuation.
-- **Safety-first** — data-driven safety **class** (unknown ⇒ deny); unlock / garage / valve / disarm never grant-covered.
 - Guides: [`docs/smart-home.md`](docs/smart-home.md) · [`docs/homeassistant-setup.md`](docs/homeassistant-setup.md) · [`docs/mqtt-setup.md`](docs/mqtt-setup.md)
-
-⚠️ Actuation tools (`ha_call_service`, `mqtt_publish`) are **`admin`**. Unattended runs need a grant. Presence-revealing state does not auto-enter standing memory.
+- Actuation (`ha_call_service`, `mqtt_publish`) is **`admin`**; unattended needs a grant; safety-class objects never ride a grant.
 
 ---
 
 ## How it works
 
 ```
-  Desktop Settings                 EnvoyHome daemon                    Phone
-  ┌──────────────┐   home.*       ┌────────────────────┐  home.*    ┌──────────────┐
-  │ Tauri shell  │◀──────────────▶│ Approvals · Memory │◀──────────▶│ Flutter thin │
-  │ Chat / Ops   │  WS :4780/ws   │ Workflows · Models │  pair QR   │ client       │
-  └──────────────┘                │ Smart-home tools   │            └──────────────┘
-                                  └─────────┬──────────┘
-                                            │ objectId + journal
-                               ┌────────────┴────────────┐
-                               ▼                         ▼
-                        Home Assistant                  MQTT
-                        (aggregator hub)           (event-source)
+  Desktop / Phone              EnvoyHome daemon                         Models
+  ┌──────────────┐  home.*    ┌─────────────────────────────┐         ┌──────────┐
+  │ Thin client  │◀──────────▶│ envoy-harness · workflows   │────────▶│ Cloud /  │
+  │ Chat · Ops   │  :4780/ws  │ memory · Approvals          │         │ Local    │
+  └──────────────┘            │ tool catalogue              │         └──────────┘
+                              └──────────────┬──────────────┘
+                     files · web · browser · office · skills · MCP · …
+                                             │
+                                             ▼  (optional)
+                                      HA / MQTT hubs
 ```
 
-- **Peers on the wire** speak `home.*` JSON-RPC (EnvoyMesh-hosted envelope). Relays / mesh help reachability; the household agent loop lives in **this** daemon.
-- **Thin clients** never hold provider keys, HA tokens, or the agent brain — pair once, then remote the Settings / Chat UI.
-- **Hubs stay hubs** — EnvoyHome resolves bound objects and gates actuation; it does not replace HA’s device graph.
+- **The agent lives on the home computer** — harness, tools, keys, and sandboxes stay there.
+- **Thin clients** speak `home.*` (EnvoyMesh-hosted envelope); pair once, then remote Chat / Settings.
+- **Workflows reuse the same tools** as attended chat; they are not a second engine and not an approval bypass.
+- **Smart-home tools** only appear when a hub is configured; everything else works without them.
 
 Full diagram: [`docs/screens/envoyhome-architecture.svg`](docs/screens/envoyhome-architecture.svg).
 
@@ -126,7 +138,7 @@ EnvoyHome reuses EnvoyMesh transport and EnvoyDev-style thin-client patterns —
 |---------|-----|-------|
 | **[EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)** | Mesh identity, bonds, Social, optional Ext Agent | Does not own EnvoyHome’s agent loop |
 | **[EnvoyDev](https://github.com/allenpeng0705/EnvoyCoder)** | Coding-agent control plane (many harnesses) | Coding agents / envoy-harness + CLIs |
-| **EnvoyHome** (this repo) | Self-hosted home agent: chat, memory, workflows, smart home, multi-account | **Own daemon** + **envoy-harness** only |
+| **EnvoyHome** (this repo) | Self-hosted home agent: harness, workflows, tools, memory | **Own daemon** + **envoy-harness** only |
 | **EnvoyGo / thin clients** | Phone / paired UI | Dial product daemon — no brain on the phone |
 
 Sibling layout (linked with `link:`, not npm):
@@ -186,11 +198,11 @@ EnvoyHome/
 │   ├── workflows/
 │   ├── providers/
 │   ├── channel-api/
-│   ├── smarthome/    # HA + MQTT tools
+│   ├── smarthome/    # optional HA + MQTT tools
 │   └── …
 ├── plugins/         # Chat + event-source channel plugins
 ├── design_doc/      # Design + Memory + Knowledge-RAG + Implementation Plan
-├── docs/            # Operator guides (smart home, mobile, …)
+├── docs/            # Operator guides
 ├── QuickStart.md
 └── AGENTS.md
 ```
@@ -216,7 +228,7 @@ Spine **B0–B14** is on `main`. Design gate **G1** and plan gate **G6** are acc
 
 [`design_doc/reviews/2026-10-22-early-adopter-claims.md`](design_doc/reviews/2026-10-22-early-adopter-claims.md)
 
-Preview posture: desktop + phone + HA/MQTT **demo/fixture**. Do **not** claim Privacy Mode as a finished product toggle, a production IM zoo, or agentskills.io conformance until those bars close. Mobile live verify: [`docs/mobile-live-verify.md`](docs/mobile-live-verify.md).
+Preview posture: desktop + phone; optional HA/MQTT **demo/fixture**. Do **not** claim Privacy Mode as a finished product toggle, a production IM zoo, or agentskills.io conformance until those bars close. Mobile live verify: [`docs/mobile-live-verify.md`](docs/mobile-live-verify.md).
 
 Branding / store pack: [`apps/branding/store/README.md`](apps/branding/store/README.md).
 
@@ -226,10 +238,11 @@ Branding / store pack: [`apps/branding/store/README.md`](apps/branding/store/REA
 
 - **Start here:** [`QuickStart.md`](QuickStart.md)
 - **Diagrams:** [`docs/screens/`](docs/screens/) (logo · architecture · family)
-- **Smart home:** [`docs/smart-home.md`](docs/smart-home.md) · HA · MQTT · [live checklist](docs/smart-home-live-checklist.md)
+- **Harness:** [envoy-harness](https://github.com/allenpeng0705/envoy-harness)
+- **Smart home (optional):** [`docs/smart-home.md`](docs/smart-home.md) · HA · MQTT · [live checklist](docs/smart-home-live-checklist.md)
 - **Mobile:** [`apps/mobile/README.md`](apps/mobile/README.md) · [`docs/mobile-live-verify.md`](docs/mobile-live-verify.md) · [iOS/Android setup](docs/mobile-ios-android-setup.md)
 - **Desktop:** [`apps/desktop/README.md`](apps/desktop/README.md) · [`scripts/README.md`](scripts/README.md)
-- **Family peers:** [EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh) · [EnvoyDev / EnvoyCoder](https://github.com/allenpeng0705/EnvoyCoder) · [envoy-harness](https://github.com/allenpeng0705/envoy-harness)
+- **Family peers:** [EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh) · [EnvoyDev / EnvoyCoder](https://github.com/allenpeng0705/EnvoyCoder)
 - **Website (family):** [www.envoymesh.cn](https://www.envoymesh.cn)
 
 ---

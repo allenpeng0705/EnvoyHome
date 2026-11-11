@@ -25,21 +25,23 @@
 
 **跑在你家电脑上的、安全优先的家庭智能体。**
 
-EnvoyHome 是 [EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh) 应用族里的**家庭大脑**：聊天、记忆、静态工作流、技能、审批，以及 **智能家居面**（Home Assistant + MQTT）——自己不当网关，也不承载 EnvoyMesh Social 动态流。
+EnvoyHome 是 [EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh) 应用族里的**家庭智能体**。核心是**智能体循环本身**：**envoy-harness**、**静态工作流**、**记忆**、**审批**，以及智能体可用的一整套**工具目录**——文件、网页、浏览器、办公文档、技能、计划任务、MCP 等。桌面 / 手机轻客户端只是窗口，并不跑智能体。
 
-- **家用电脑跑守护进程** — 轻客户端（桌面 Settings 壳 + Flutter 手机）通过 EnvoyMesh 超级通道拨入 `home.*`。
-- **家庭多账号** — 一套智能体、隔离的档案（记忆 / 文件 / 策略）；手机配对的是「这套家」，不是云账号。
-- **审批与授权** — 持久 ask / TTL / 失败即拒绝；致动为 `admin`；安全类对象永不被 grant 覆盖。
-- **智能家居是 Core** — 增强 HA / MQTT 上的 AI；对接网关，不替代网关。
-- **本地优先模型** — 云厂商或 EnvoyHome Local / Ollama；Home 聊天 `:18792`、Home 向量 `:18793`（永不 attach Mesh Local）。
+智能家居（Home Assistant / MQTT）是这些能力里的**一个工具面**——接上网关时很有用，但不是产品定义。EnvoyHome 不当网关，也不交付 EnvoyMesh Social。
+
+- **守护进程 + envoy-harness** — 每次聊天 / 工作流回合都经家用守护进程，且仅交付这一套 harness。
+- **工作流 + 工具** — 图解 \| YAML 流程；同一目录服务聊天、计划任务与工作流节点。
+- **谨慎学习的记忆** — 常驻笔记、Doc KB、KnowYou；需写时常经 PendingLearn / 审批。
+- **家庭多账号** — 一套智能体、隔离档案；手机经 `home.*` 配对到「这套家」。
+- **可选智能家居** — 需要致动时再绑定 HA/MQTT；安全 class 闸门仍在。
 - **与 EnvoyDev 同族** — 配对 / 拨号阶梯参考 [EnvoyCoder](https://github.com/allenpeng0705/EnvoyCoder)；编程 IDE 仍归 EnvoyDev。
 
 📖 **[QuickStart.md](QuickStart.md)** — 几分钟跑起守护进程、桌面与手机。
 
 <p align="center">
-  <img src="docs/screens/envoyhome-architecture-zh.svg" alt="EnvoyHome 架构 — 轻客户端、守护进程、Home Assistant 与 MQTT" width="900" />
+  <img src="docs/screens/envoyhome-architecture-zh.svg" alt="EnvoyHome 架构 — 轻客户端、智能体守护进程、工具、可选网关" width="900" />
 </p>
-<p align="center"><em>桌面 Settings + 手机通过 <code>home.*</code> 拨入家用守护进程；智能家居网关仍在外部。</em></p>
+<p align="center"><em>轻客户端经 <code>home.*</code> 拨入家用智能体。中心是 harness + 工作流 + 工具；网关可选。</em></p>
 
 ---
 
@@ -59,55 +61,65 @@ EnvoyHome 是 [EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh) 应用族�
 
 ## 能做什么？
 
+### 核心 — 智能体
+
+| 部分 | 是什么 |
+|------|--------|
+| **守护进程**（`packages/daemon`） | 拥有回合、策略、审批、记忆与工具调度（`home.*`，WS `:4780/ws`） |
+| **envoy-harness** | 唯一交付的 harness — 智能体循环 / 工具调用 / 子智能体（`task`、`spawn_helper`） |
+| **工作流** | 静态 DAG（图解 \| YAML）；自然语言草稿；与聊天共用工具 |
+| **工具目录** | 内置 + 已验证技能 + Owner MCP（`mcp__…`）+ 可选 HA/MQTT（接通后） |
+| **记忆** | L1–L3 常驻、Doc KB（`knowledge/`）、KnowYou；门控 PendingLearn |
+| **审批 / 授权** | 持久 ask · TTL · 失败即拒绝 — 工作流不是审批旁路 |
+
+### 智能体工具（示例）
+
+- **文件与沙箱** — `read_file` / `write_file` / `edit_file` / `apply_patch` / `list_dir` / `search_files`
+- **知识** — `knowledge_search` / `knowyou_search` / `promote_knowledge`
+- **网页与浏览器** — `web_search` / `web_extract` / `web_research` / `browser`（表单卡片；永不破解验证码）
+- **办公** — `extract_document` / `export_document`（可选 LibreOffice 打印级）
+- **技能与计划** — `skills_list` / `skill_view` / `skill_propose` / `schedule`
+- **会话与助手** — `message` / 会话工具 / `task` / `spawn_helper`
+- **Owner MCP** — 测试成功且启用的服务器以 `mcp__…` 进入目录
+- **智能家居（可选）** — 频道就绪时的 `ha_*` / `mqtt_*`
+
 ### 产品面
 
 | 面 | 路径 | 职责 |
 |----|------|------|
-| **守护进程** | `packages/daemon` | 家庭智能体守护进程 — WS `:4780/ws`，HTTP `:4781` |
-| **桌面** | `apps/desktop` | Tauri Settings 壳（聊天、配对、审批、模型、Local、连接、技能 / 工作流 / 计划任务…） |
+| **守护进程** | `packages/daemon` | 家庭智能体 — WS `:4780/ws`，HTTP `:4781` |
+| **桌面** | `apps/desktop` | Tauri Settings 壳（聊天、审批、模型、工作流、技能、计划、连接…） |
 | **手机** | `apps/mobile` | Flutter 轻客户端 — 扫码 / `host:port` / SSH 跳板进入同一 `home.*` |
 | **品牌** | `apps/branding` | 产品标识与商店图标包 |
 
-现场演示顺序：**桌面 → 手机 → 可选 IM 最后**。
+### 可选 — 智能家居
 
-### 家庭智能体
+需要观察或致动已绑定对象时，再在 **连接** 里配置 Home Assistant 或 MQTT。EnvoyHome 增强这些网关上的 AI，并不替代网关。
 
-- **带记忆的聊天** — 常驻 L1–L3、门控 PendingLearn、Doc KB（`knowledge/`）+ KnowYou；路径沙箱与产物。
-- **静态工作流** — 图解 \| YAML 双模编辑、自然语言草稿、工具目录（内置、技能、HA/MQTT、Owner MCP `mcp__…`）。
-- **计划任务** — 自然语言 WHEN → 提议 → 确认；提醒与工作流 / 工具载荷。
-- **技能** — 先校验再启用；渐进披露工具（`skills_list` / `skill_view` / `skill_propose`）。
-- **网页与浏览器** — `web_search` / `web_extract` / `web_research`，托管 Chromium / Obscura，表单卡片（永不破解验证码）。
-- **办公管线** — `extract_document` / `export_document` / `promote_knowledge`（可选 LibreOffice 打印级导出）。
-
-### 智能家居
-
-- **Home Assistant + MQTT** — 绑定对象、经 `objectId` 解析、有日记的致动。
-- **安全优先** — 数据驱动的安全 **class**（未知即拒绝）；开锁 / 车库 / 阀门 / 撤防等永不被 grant 覆盖。
 - 指南：[`docs/smart-home.md`](docs/smart-home.md) · [`docs/homeassistant-setup.md`](docs/homeassistant-setup.md) · [`docs/mqtt-setup.md`](docs/mqtt-setup.md)
-
-⚠️ 致动工具（`ha_call_service`、`mqtt_publish`）为 **`admin`**。无人值守需 grant。暴露存在感的状态不会自动进入常驻记忆。
+- 致动（`ha_call_service`、`mqtt_publish`）为 **`admin`**；无人值守需 grant；安全类对象永不被 grant 覆盖。
 
 ---
 
 ## 工作原理
 
 ```
-  桌面 Settings                    EnvoyHome 守护进程                    手机
-  ┌──────────────┐   home.*       ┌────────────────────┐  home.*    ┌──────────────┐
-  │ Tauri 壳     │◀──────────────▶│ 审批 · 记忆        │◀──────────▶│ Flutter 轻   │
-  │ 聊天 / 运维  │  WS :4780/ws   │ 工作流 · 模型      │  扫码配对  │ 客户端       │
-  └──────────────┘                │ 智能家居工具       │            └──────────────┘
-                                  └─────────┬──────────┘
-                                            │ objectId + 日记
-                               ┌────────────┴────────────┐
-                               ▼                         ▼
-                        Home Assistant                  MQTT
-                        （聚合网关）                   （事件源）
+  桌面 / 手机                    EnvoyHome 守护进程                       模型
+  ┌──────────────┐  home.*    ┌─────────────────────────────┐         ┌──────────┐
+  │ 轻客户端     │◀──────────▶│ envoy-harness · 工作流      │────────▶│ 云 /     │
+  │ 聊天 · 运维  │  :4780/ws  │ 记忆 · 审批                 │         │ Local    │
+  └──────────────┘            │ 工具目录                    │         └──────────┘
+                              └──────────────┬──────────────┘
+                     文件 · 网页 · 浏览器 · 办公 · 技能 · MCP · …
+                                             │
+                                             ▼  （可选）
+                                      HA / MQTT 网关
 ```
 
-- **线路上的对等方**讲 `home.*` JSON-RPC（由 EnvoyMesh 托管信封）。中继 / mesh 帮助可达性；家庭智能体循环落在**本**守护进程。
-- **轻客户端**从不持有厂商密钥、HA token 或智能体大脑 — 配对一次，即可远程 Settings / 聊天 UI。
-- **网关仍是网关** — EnvoyHome 解析已绑定对象并闸门致动；不替代 HA 的设备图。
+- **智能体住在家用电脑上** — harness、工具、密钥与沙箱都留在那里。
+- **轻客户端**讲 `home.*`（EnvoyMesh 托管信封）；配对一次即可远程聊天 / Settings。
+- **工作流复用同一套工具**；不是第二引擎，也不是审批旁路。
+- **智能家居工具**仅在配置网关后出现；没有网关时其余能力照常可用。
 
 完整图：[`docs/screens/envoyhome-architecture-zh.svg`](docs/screens/envoyhome-architecture-zh.svg)。
 
@@ -126,7 +138,7 @@ EnvoyHome 复用 EnvoyMesh 传输与 EnvoyDev 风格的轻客户端模式——*
 |------|------|----------|
 | **[EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)** | Mesh 身份、建联、Social、可选 Ext Agent | 不拥有 EnvoyHome 的智能体循环 |
 | **[EnvoyDev](https://github.com/allenpeng0705/EnvoyCoder)** | 编程代理控制平面（多种 harness） | 编程代理 / envoy-harness + CLI |
-| **EnvoyHome**（本仓库） | 自托管家庭智能体：聊天、记忆、工作流、智能家居、多账号 | **自有守护进程** + 仅 **envoy-harness** |
+| **EnvoyHome**（本仓库） | 自托管家庭智能体：harness、工作流、工具、记忆 | **自有守护进程** + 仅 **envoy-harness** |
 | **EnvoyGo / 轻客户端** | 手机 / 已配对 UI | 拨入产品守护进程 — 手机上无大脑 |
 
 并列目录（`link:` 链接，不上 npm）：
@@ -186,11 +198,11 @@ EnvoyHome/
 │   ├── workflows/
 │   ├── providers/
 │   ├── channel-api/
-│   ├── smarthome/    # HA + MQTT 工具
+│   ├── smarthome/    # 可选 HA + MQTT 工具
 │   └── …
 ├── plugins/         # 聊天与事件源通道插件
 ├── design_doc/      # 设计 + 记忆 + Knowledge-RAG + 实施计划
-├── docs/            # 运维指南（智能家居、手机…）
+├── docs/            # 运维指南
 ├── QuickStart.md
 └── AGENTS.md
 ```
@@ -216,7 +228,7 @@ EnvoyHome/
 
 [`design_doc/reviews/2026-10-22-early-adopter-claims.md`](design_doc/reviews/2026-10-22-early-adopter-claims.md)
 
-预览姿态：桌面 + 手机 + HA/MQTT **演示 / 夹具**。在对应门槛关闭前，**不要**宣称 Privacy Mode 为成品开关、生产级 IM 动物园，或 agentskills.io 符合性。手机实地验证：[`docs/mobile-live-verify.md`](docs/mobile-live-verify.md)。
+预览姿态：桌面 + 手机；可选 HA/MQTT **演示 / 夹具**。在对应门槛关闭前，**不要**宣称 Privacy Mode 为成品开关、生产级 IM 动物园，或 agentskills.io 符合性。手机实地验证：[`docs/mobile-live-verify.md`](docs/mobile-live-verify.md)。
 
 品牌 / 商店包：[`apps/branding/store/README.md`](apps/branding/store/README.md)。
 
@@ -226,10 +238,11 @@ EnvoyHome/
 
 - **从这里开始：** [`QuickStart.md`](QuickStart.md)
 - **图示：** [`docs/screens/`](docs/screens/)（标识 · 架构 · 应用族）
-- **智能家居：** [`docs/smart-home.md`](docs/smart-home.md) · HA · MQTT · [实地清单](docs/smart-home-live-checklist.md)
+- **Harness：** [envoy-harness](https://github.com/allenpeng0705/envoy-harness)
+- **智能家居（可选）：** [`docs/smart-home.md`](docs/smart-home.md) · HA · MQTT · [实地清单](docs/smart-home-live-checklist.md)
 - **手机：** [`apps/mobile/README.md`](apps/mobile/README.md) · [`docs/mobile-live-verify.md`](docs/mobile-live-verify.md) · [iOS/Android 配置](docs/mobile-ios-android-setup.md)
 - **桌面：** [`apps/desktop/README.md`](apps/desktop/README.md) · [`scripts/README.md`](scripts/README.md)
-- **同族仓库：** [EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh) · [EnvoyDev / EnvoyCoder](https://github.com/allenpeng0705/EnvoyCoder) · [envoy-harness](https://github.com/allenpeng0705/envoy-harness)
+- **同族仓库：** [EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh) · [EnvoyDev / EnvoyCoder](https://github.com/allenpeng0705/EnvoyCoder)
 - **官网（应用族）：** [www.envoymesh.cn](https://www.envoymesh.cn)
 
 ---

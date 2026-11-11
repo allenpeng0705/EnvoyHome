@@ -34,7 +34,7 @@
     <rect width="260" height="150" rx="12" fill="#211962" fill-opacity="0.55" stroke="#a5b4fc" stroke-width="2.5"/>
     <text x="130" y="32" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="14" font-weight="700" fill="#eef2ff">EnvoyHome</text>
     <text x="130" y="56" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#c7d2fe">&#33258;&#25176;&#31649;&#23478;&#24237;&#26234;&#33021;&#20307;</text>
-    <text x="130" y="88" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#e0e7ff">&#32842;&#22825; &#183; &#35760;&#24518; &#183; HA/MQTT</text>
+    <text x="130" y="88" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#e0e7ff">Harness / &#24037;&#20316;&#27969; / &#24037;&#20855;</text>
     <text x="130" y="110" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#e0e7ff">&#26700;&#38754; + &#25163;&#26426;&#36731;&#23458;&#25143;&#31471;</text>
     <text x="130" y="132" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#a5b4fc">&#33258;&#26377;&#23432;&#25252;&#36827;&#31243; &#183; &#20165; envoy-harness</text>
   </g>
