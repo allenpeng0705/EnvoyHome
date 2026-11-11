@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>EnvoyHome — 自托管家庭智能体控制平面</strong>
+  <strong>EnvoyHome — 自托管家庭智能体</strong>
 </p>
 
 <p align="center">
@@ -63,7 +63,7 @@ EnvoyHome 是 [EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh) 应用族�
 
 | 面 | 路径 | 职责 |
 |----|------|------|
-| **守护进程** | `packages/daemon` | 控制平面 — WS `:4780/ws`，HTTP `:4781` |
+| **守护进程** | `packages/daemon` | 家庭智能体守护进程 — WS `:4780/ws`，HTTP `:4781` |
 | **桌面** | `apps/desktop` | Tauri Settings 壳（聊天、配对、审批、模型、Local、连接、技能 / 工作流 / 计划任务…） |
 | **手机** | `apps/mobile` | Flutter 轻客户端 — 扫码 / `host:port` / SSH 跳板进入同一 `home.*` |
 | **品牌** | `apps/branding` | 产品标识与商店图标包 |
@@ -125,8 +125,8 @@ EnvoyHome 复用 EnvoyMesh 传输与 EnvoyDev 风格的轻客户端模式——*
 | 产品 | 职责 | 「大脑」 |
 |------|------|----------|
 | **[EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)** | Mesh 身份、建联、Social、可选 Ext Agent | 不拥有 EnvoyHome 的智能体循环 |
-| **[EnvoyDev](https://github.com/allenpeng0705/EnvoyCoder)** | 编程代理控制平面 | 编程代理 / envoy-harness |
-| **EnvoyHome**（本仓库） | 家庭助手：聊天、记忆、工作流、智能家居、多账号 | **自有守护进程** + harness 插件 |
+| **[EnvoyDev](https://github.com/allenpeng0705/EnvoyCoder)** | 编程代理控制平面（多种 harness） | 编程代理 / envoy-harness + CLI |
+| **EnvoyHome**（本仓库） | 自托管家庭智能体：聊天、记忆、工作流、智能家居、多账号 | **自有守护进程** + 仅 **envoy-harness** |
 | **EnvoyGo / 轻客户端** | 手机 / 已配对 UI | 拨入产品守护进程 — 手机上无大脑 |
 
 并列目录（`link:` 链接，不上 npm）：
@@ -135,7 +135,7 @@ EnvoyHome 复用 EnvoyMesh 传输与 EnvoyDev 风格的轻客户端模式——*
 parent/
   EnvoyHome/       ← 本仓库
   EnvoyMesh/       ← @envoymesh/*（必需）
-  envoy-harness/   ← 默认 harness（桌面可按 pin 拉取）
+  envoy-harness/   ← 唯一交付的 harness（桌面可按 pin 拉取）
   EnvoyCoder/      ← 仅参考模式（可选）
 ```
 
@@ -179,7 +179,7 @@ EnvoyHome/
 │   ├── mobile/      # Flutter 轻客户端
 │   └── branding/    # 标识与商店图标
 ├── packages/
-│   ├── daemon/      # 控制平面（home.*）
+│   ├── daemon/      # 家庭智能体守护进程（home.*）
 │   ├── protocol/    # @envoyhome/protocol
 │   ├── harness-host/
 │   ├── memory/

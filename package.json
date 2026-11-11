@@ -2,7 +2,7 @@
   "name": "envoyhome",
   "version": "0.1.0",
   "private": true,
-  "description": "EnvoyHome — self-hosted home agent control plane. Workspace root (B0).",
+  "description": "EnvoyHome — self-hosted home agent. Workspace root (B0).",
   "type": "module",
   "packageManager": "pnpm@10.33.0",
   "engines": {

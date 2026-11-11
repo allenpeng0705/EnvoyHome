@@ -3,7 +3,7 @@
 </p>
 
 <p align="center">
-  <strong>EnvoyHome — Self-hosted home agent control plane</strong>
+  <strong>EnvoyHome — Self-hosted home agent</strong>
 </p>
 
 <p align="center">
@@ -63,7 +63,7 @@ EnvoyHome is the **household brain** in the [EnvoyMesh](https://github.com/allen
 
 | Surface | Path | Role |
 |---------|------|------|
-| **Daemon** | `packages/daemon` | Control plane — WS `:4780/ws`, HTTP `:4781` |
+| **Daemon** | `packages/daemon` | Home agent daemon — WS `:4780/ws`, HTTP `:4781` |
 | **Desktop** | `apps/desktop` | Tauri Settings shell (Chat, Pairing, Approvals, Models, Local, Connections, Skills / Workflows / Schedules, …) |
 | **Mobile** | `apps/mobile` | Flutter thin client — QR / `host:port` / SSH hop into the same `home.*` channel |
 | **Branding** | `apps/branding` | Product mark + store icon pack |
@@ -125,8 +125,8 @@ EnvoyHome reuses EnvoyMesh transport and EnvoyDev-style thin-client patterns —
 | Product | Job | Brain |
 |---------|-----|-------|
 | **[EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh)** | Mesh identity, bonds, Social, optional Ext Agent | Does not own EnvoyHome’s agent loop |
-| **[EnvoyDev](https://github.com/allenpeng0705/EnvoyCoder)** | Coding-agent control plane | Coding agents / envoy-harness |
-| **EnvoyHome** (this repo) | Home assistant: chat, memory, workflows, smart home, multi-account | **Own daemon** + harness plugins |
+| **[EnvoyDev](https://github.com/allenpeng0705/EnvoyCoder)** | Coding-agent control plane (many harnesses) | Coding agents / envoy-harness + CLIs |
+| **EnvoyHome** (this repo) | Self-hosted home agent: chat, memory, workflows, smart home, multi-account | **Own daemon** + **envoy-harness** only |
 | **EnvoyGo / thin clients** | Phone / paired UI | Dial product daemon — no brain on the phone |
 
 Sibling layout (linked with `link:`, not npm):
@@ -135,7 +135,7 @@ Sibling layout (linked with `link:`, not npm):
 parent/
   EnvoyHome/       ← this repo
   EnvoyMesh/       ← @envoymesh/* (required)
-  envoy-harness/   ← default harness (desktop may pin-fetch)
+  envoy-harness/   ← only shipped harness (desktop may pin-fetch)
   EnvoyCoder/      ← reference patterns only (optional)
 ```
 
@@ -179,7 +179,7 @@ EnvoyHome/
 │   ├── mobile/      # Flutter thin client
 │   └── branding/    # Mark + store icons
 ├── packages/
-│   ├── daemon/      # Control plane (home.*)
+│   ├── daemon/      # Home agent daemon (home.*)
 │   ├── protocol/    # @envoyhome/protocol
 │   ├── harness-host/
 │   ├── memory/

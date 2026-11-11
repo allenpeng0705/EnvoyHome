@@ -1,6 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 280" role="img" aria-label="Envoy family placement">
   <title>Envoy family placement</title>
-  <desc>EnvoyMesh provides mesh and Social; EnvoyDev is the coding control plane; EnvoyHome is the household agent brain with thin clients.</desc>
+  <desc>EnvoyMesh provides mesh and Social; EnvoyDev is the coding control plane; EnvoyHome is the self-hosted home agent.</desc>
   <defs>
     <linearGradient id="fbg" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#0f1224"/>
@@ -9,12 +10,12 @@
   </defs>
   <rect width="900" height="280" rx="14" fill="url(#fbg)"/>
   <text x="450" y="32" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="16" font-weight="700" fill="#f8fafc">In the Envoy family</text>
-  <text x="450" y="52" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#94a3b8">Shared transport &amp; pairing · separate product brains</text>
+  <text x="450" y="52" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#94a3b8">Shared transport &amp; pairing Â· separate product brains</text>
 
   <g transform="translate(30,78)">
     <rect width="260" height="150" rx="12" fill="#1e1b36" stroke="#818cf8" stroke-width="2"/>
     <text x="130" y="32" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="14" font-weight="700" fill="#a5b4fc">EnvoyMesh</text>
-    <text x="130" y="56" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#94a3b8">Mesh · Social · identity</text>
+    <text x="130" y="56" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#94a3b8">Mesh Â· Social Â· identity</text>
     <text x="130" y="88" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#c7d2fe">libp2p + bonds</text>
     <text x="130" y="110" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#c7d2fe">EnvoyGo phone</text>
     <text x="130" y="132" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#64748b">Does not own Home loop</text>
@@ -24,7 +25,7 @@
     <rect width="260" height="150" rx="12" fill="#1e1b36" stroke="#c084fc" stroke-width="2"/>
     <text x="130" y="32" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="14" font-weight="700" fill="#e9d5ff">EnvoyDev</text>
     <text x="130" y="56" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#94a3b8">Coding control plane</text>
-    <text x="130" y="88" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#e9d5ff">Projects · tasks · CLIs</text>
+    <text x="130" y="88" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#e9d5ff">Projects Â· tasks Â· many CLIs</text>
     <text x="130" y="110" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#e9d5ff">EnvoyDev Mobile</text>
     <text x="130" y="132" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#64748b">Repo: EnvoyCoder</text>
   </g>
@@ -32,11 +33,11 @@
   <g transform="translate(610,78)">
     <rect width="260" height="150" rx="12" fill="#211962" fill-opacity="0.55" stroke="#a5b4fc" stroke-width="2.5"/>
     <text x="130" y="32" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="14" font-weight="700" fill="#eef2ff">EnvoyHome</text>
-    <text x="130" y="56" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#c7d2fe">Household agent brain</text>
-    <text x="130" y="88" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#e0e7ff">Chat · memory · HA/MQTT</text>
+    <text x="130" y="56" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#c7d2fe">Self-hosted home agent</text>
+    <text x="130" y="88" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#e0e7ff">Chat Â· memory Â· HA/MQTT</text>
     <text x="130" y="110" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#e0e7ff">Desktop + phone thin clients</text>
-    <text x="130" y="132" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#a5b4fc">Own daemon · home.*</text>
+    <text x="130" y="132" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#a5b4fc">Own daemon Â· envoy-harness only</text>
   </g>
 
-  <text x="450" y="260" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#64748b">Phones are windows  agents, keys, and smart-home credentials stay on the home computer</text>
+  <text x="450" y="260" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#64748b">Phones are windows â€” agents, keys, and smart-home credentials stay on the home computer</text>
 </svg>

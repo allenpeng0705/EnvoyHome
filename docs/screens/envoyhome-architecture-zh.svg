@@ -1,6 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" role="img" aria-label="EnvoyHome ∂Ñ">
-  <title>EnvoyHome ∂Ñ</title>
-  <desc>Lb Settings K:{¢7Ô« home.* Ëe EnvoyHome à§€à§€ﬁ•!ãÂ∆Â\AÂ  Home Assistant / MQTT Qs</desc>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" role="img" aria-label="EnvoyHome &#26550;&#26500;">
+  <title>EnvoyHome &#26550;&#26500;</title>
+  <desc>&#26700;&#38754; Settings and phone thin clients dial the EnvoyHome &#23432;&#25252;&#36827;&#31243; over home.*; the daemon talks to models, knowledge, workflows, and Home Assistant / MQTT hubs.</desc>
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#0f1224"/>
@@ -35,60 +36,60 @@
   <circle cx="160" cy="120" r="140" fill="none" stroke="#4f46e5" stroke-opacity="0.12" stroke-width="2"/>
   <circle cx="800" cy="460" r="160" fill="none" stroke="#22d3ee" stroke-opacity="0.1" stroke-width="2"/>
 
-  <text x="480" y="36" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="18" font-weight="700" fill="#f8fafc">EnvoyHome ∂Ñ</text>
-  <text x="480" y="58" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#94a3b8">{¢7Ô ∑ home.* ß6sb ∑ z˝∂EQs  ÍÒSQs</text>
+  <text x="480" y="36" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="18" font-weight="700" fill="#f8fafc">EnvoyHome &#26550;&#26500;</text>
+  <text x="480" y="58" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#94a3b8">&#36731;&#23458;&#25143;&#31471; &#183; home.* &#23432;&#25252;&#36827;&#31243; &#183; &#26234;&#33021;&#23478;&#23621;&#32593;&#20851; &#8212; &#33258;&#24049;&#19981;&#24403;&#32593;&#20851;</text>
   <line x1="120" y1="72" x2="840" y2="72" stroke="#334155" stroke-width="1.5" stroke-dasharray="4 6"/>
 
   <g transform="translate(40,110)" filter="url(#soft)">
     <rect width="200" height="220" rx="14" fill="#1e1b36" stroke="#818cf8" stroke-width="2"/>
-    <text x="100" y="28" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="14" font-weight="700" fill="#a5b4fc">Lb Settings</text>
-    <text x="100" y="48" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#94a3b8">Tauri {Û</text>
+    <text x="100" y="28" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="14" font-weight="700" fill="#a5b4fc">&#26700;&#38754; Settings</text>
+    <text x="100" y="48" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#94a3b8">Tauri &#36731;&#22771;</text>
     <rect x="20" y="66" width="160" height="36" rx="8" fill="rgba(129,140,248,0.18)" stroke="#818cf8" stroke-width="1"/>
-    <text x="100" y="88" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#c7d2fe">J) ∑ °y</text>
+    <text x="100" y="88" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#c7d2fe">&#32842;&#22825; &#183; &#23457;&#25209;</text>
     <rect x="20" y="112" width="160" height="36" rx="8" fill="rgba(129,140,248,0.12)" stroke="#6366f1" stroke-width="1"/>
-    <text x="100" y="134" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#c7d2fe">!ã ∑ Local</text>
+    <text x="100" y="134" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#c7d2fe">&#27169;&#22411; &#183; Local</text>
     <rect x="20" y="158" width="160" height="36" rx="8" fill="rgba(129,140,248,0.12)" stroke="#6366f1" stroke-width="1"/>
-    <text x="100" y="180" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#c7d2fe">Â\A ∑ Ä˝</text>
-    <text x="100" y="208" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="10" fill="#64748b">M˘åÙ / host:port</text>
+    <text x="100" y="180" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#c7d2fe">&#24037;&#20316;&#27969; &#183; &#25216;&#33021;</text>
+    <text x="100" y="208" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="10" fill="#64748b">&#37197;&#23545;&#20108;&#32500;&#30721; / host:port</text>
   </g>
 
   <g transform="translate(720,110)" filter="url(#soft)">
     <rect width="200" height="220" rx="14" fill="#1e1b36" stroke="#22d3ee" stroke-width="2"/>
-    <text x="100" y="28" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="14" font-weight="700" fill="#67e8f9">K:</text>
-    <text x="100" y="48" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#94a3b8">Flutter {¢7Ô</text>
+    <text x="100" y="28" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="14" font-weight="700" fill="#67e8f9">&#25163;&#26426;</text>
+    <text x="100" y="48" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#94a3b8">Flutter &#36731;&#23458;&#25143;&#31471;</text>
     <rect x="20" y="66" width="160" height="36" rx="8" fill="rgba(34,211,238,0.16)" stroke="#22d3ee" stroke-width="1"/>
-    <text x="100" y="88" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#a5f3fc">J) ∑ ∂</text>
+    <text x="100" y="88" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#a5f3fc">&#32842;&#22825; &#183; &#23478;</text>
     <rect x="20" y="112" width="160" height="36" rx="8" fill="rgba(34,211,238,0.1)" stroke="#0891b2" stroke-width="1"/>
-    <text x="100" y="134" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#a5f3fc">æn-¢</text>
+    <text x="100" y="134" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#a5f3fc">&#35774;&#32622;&#20013;&#26530;</text>
     <rect x="20" y="158" width="160" height="36" rx="8" fill="rgba(34,211,238,0.1)" stroke="#0891b2" stroke-width="1"/>
-    <text x="100" y="180" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#a5f3fc">ßi ∑ ®</text>
-    <text x="100" y="208" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="10" fill="#64748b">‡∆• / ‡z˝S'</text>
+    <text x="100" y="180" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#a5f3fc">&#20135;&#29289; &#183; &#25512;&#36865;</text>
+    <text x="100" y="208" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="10" fill="#64748b">&#26080;&#23494;&#38053; / &#26080;&#26234;&#33021;&#20307;&#22823;&#33041;</text>
   </g>
 
   <g transform="translate(300,100)" filter="url(#soft)">
     <rect width="360" height="250" rx="16" fill="url(#homeGrad)" stroke="#a5b4fc" stroke-width="2.5"/>
-    <text x="180" y="30" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="16" font-weight="700" fill="#eef2ff">EnvoyHome à§€</text>
-    <text x="180" y="50" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#c7d2fe">home.* ∑ WS :4780/ws ∑ HTTP :4781</text>
+    <text x="180" y="30" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="16" font-weight="700" fill="#eef2ff">EnvoyHome &#23432;&#25252;&#36827;&#31243;</text>
+    <text x="180" y="50" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#c7d2fe">home.* ¬∑ WS :4780/ws ¬∑ HTTP :4781</text>
     <line x1="28" y1="62" x2="332" y2="62" stroke="#6366f1" stroke-opacity="0.5" stroke-width="1"/>
 
     <rect x="24" y="78" width="150" height="48" rx="8" fill="rgba(15,18,36,0.55)" stroke="#818cf8" stroke-width="1"/>
-    <text x="99" y="98" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" font-weight="600" fill="#c7d2fe">°y / àC</text>
-    <text x="99" y="114" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="10" fill="#94a3b8">ask ∑ TTL ∑ 1%s“›</text>
+    <text x="99" y="98" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" font-weight="600" fill="#c7d2fe">&#23457;&#25209; / &#25480;&#26435;</text>
+    <text x="99" y="114" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="10" fill="#94a3b8">ask &#183; TTL &#183; &#22833;&#36133;&#21363;&#25298;&#32477;</text>
 
     <rect x="186" y="78" width="150" height="48" rx="8" fill="rgba(15,18,36,0.55)" stroke="#818cf8" stroke-width="1"/>
-    <text x="261" y="98" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" font-weight="600" fill="#c7d2fe">∞∆ + Â∆ì</text>
-    <text x="261" y="114" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="10" fill="#94a3b8">L1L3 ∑ KnowYou ∑ knowledge/</text>
+    <text x="261" y="98" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" font-weight="600" fill="#c7d2fe">&#35760;&#24518; + &#30693;&#35782;&#24211;</text>
+    <text x="261" y="114" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="10" fill="#94a3b8">L1‚ÄìL3 ¬∑ KnowYou ¬∑ knowledge/</text>
 
     <rect x="24" y="140" width="150" height="48" rx="8" fill="rgba(15,18,36,0.55)" stroke="#4ade80" stroke-width="1"/>
-    <text x="99" y="160" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" font-weight="600" fill="#bbf7d0">Â\A / Ä˝</text>
-    <text x="99" y="176" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="10" fill="#94a3b8">Y DAG ∑ MCP ÓU</text>
+    <text x="99" y="160" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" font-weight="600" fill="#bbf7d0">&#24037;&#20316;&#27969; / &#25216;&#33021;</text>
+    <text x="99" y="176" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="10" fill="#94a3b8">&#38745;&#24577; DAG &#183; MCP &#30446;&#24405;</text>
 
     <rect x="186" y="140" width="150" height="48" rx="8" fill="rgba(15,18,36,0.55)" stroke="#c084fc" stroke-width="1"/>
-    <text x="261" y="160" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" font-weight="600" fill="#e9d5ff">Harness + !ã</text>
-    <text x="261" y="176" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="10" fill="#94a3b8">envoy-harness ∑ Local :18792</text>
+    <text x="261" y="160" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" font-weight="600" fill="#e9d5ff">envoy-harness + &#27169;&#22411;</text>
+    <text x="261" y="176" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="10" fill="#94a3b8">&#21807;&#19968; harness &#183; Local :18792</text>
 
     <rect x="24" y="202" width="312" height="32" rx="8" fill="rgba(15,18,36,0.65)" stroke="#fbbf24" stroke-width="1"/>
-    <text x="180" y="222" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" font-weight="600" fill="#fde68a">z˝∂EÂw ∑ resolveObject ∑ Ù®Â∞</text>
+    <text x="180" y="222" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" font-weight="600" fill="#fde68a">&#26234;&#33021;&#23478;&#23621;&#24037;&#20855; &#183; resolveObject &#183; &#33268;&#21160;&#26085;&#35760;</text>
   </g>
 
   <path d="M240,210 C270,210 275,210 300,210" fill="none" stroke="#818cf8" stroke-width="2.5" marker-end="url(#arrIndigo)"/>
@@ -98,26 +99,26 @@
 
   <g transform="translate(120,400)" filter="url(#soft)">
     <rect width="280" height="110" rx="14" fill="#1e1b36" stroke="#fbbf24" stroke-width="2"/>
-    <text x="140" y="28" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="14" font-weight="700" fill="#fcd34d">Home Assistant</text>
-    <text x="140" y="50" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#94a3b8">ZQs  EnvoyHome û: AI</text>
+    <text x="140" y="28" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="14" font-weight="700" fill="#fcd34d">Home Assistant</text>
+    <text x="140" y="50" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#94a3b8">&#32858;&#21512;&#32593;&#20851; &#8212; EnvoyHome &#22686;&#24378; AI</text>
     <rect x="24" y="66" width="110" height="28" rx="6" fill="rgba(251,191,36,0.12)" stroke="#f59e0b" stroke-width="1"/>
-    <text x="79" y="84" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#fde68a">Ú—ö˘a</text>
+    <text x="79" y="84" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#fde68a">&#24050;&#32465;&#23450;&#23545;&#35937;</text>
     <rect x="146" y="66" width="110" height="28" rx="6" fill="rgba(251,191,36,0.12)" stroke="#f59e0b" stroke-width="1"/>
-    <text x="201" y="84" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#fde68a">admin Ù®</text>
+    <text x="201" y="84" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#fde68a">admin &#33268;&#21160;</text>
   </g>
 
   <g transform="translate(560,400)" filter="url(#soft)">
     <rect width="280" height="110" rx="14" fill="#1e1b36" stroke="#4ade80" stroke-width="2"/>
     <text x="140" y="28" text-anchor="middle" font-family="system-ui,sans-serif" font-size="14" font-weight="700" fill="#86efac">MQTT</text>
-    <text x="140" y="50" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#94a3b8">ãˆê + —A∏h	</text>
+    <text x="140" y="50" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#94a3b8">&#20107;&#20214;&#28304; + &#21457;&#24067;&#65288;&#20801;&#35768;&#21015;&#34920;&#65289;</text>
     <rect x="24" y="66" width="110" height="28" rx="6" fill="rgba(74,222,128,0.12)" stroke="#22c55e" stroke-width="1"/>
-    <text x="79" y="84" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#bbf7d0">;ò / ˘a</text>
+    <text x="79" y="84" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#bbf7d0">&#20027;&#39064; / &#23545;&#35937;</text>
     <rect x="146" y="66" width="110" height="28" rx="6" fill="rgba(74,222,128,0.12)" stroke="#22c55e" stroke-width="1"/>
-    <text x="201" y="84" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#bbf7d0">âh class</text>
+    <text x="201" y="84" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#bbf7d0">&#23433;&#20840; class</text>
   </g>
 
   <path d="M420,350 C380,370 320,385 260,400" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrAmber)"/>
   <path d="M540,350 C580,370 640,385 700,400" fill="none" stroke="#4ade80" stroke-width="2" marker-end="url(#arrGreen)"/>
 
-  <text x="480" y="545" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#64748b">∂≠&˜ ∑ °y¯Ë›§iL ∑ Mesh Social Õ( EnvoyMesh</text>
+  <text x="480" y="545" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#64748b">&#23478;&#24237;&#22810;&#36134;&#21495; &#183; &#23457;&#25209;&#38392;&#38376;&#20445;&#25252;&#29289;&#29702;&#19990;&#30028; &#183; Mesh Social &#20173;&#22312; EnvoyMesh</text>
 </svg>

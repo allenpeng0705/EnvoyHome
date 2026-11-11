@@ -1,6 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 280" role="img" aria-label="Envoy ”(ÏMn">
-  <title>Envoy ”(ÏMn</title>
-  <desc>EnvoyMesh Ð› mesh  SocialEnvoyDev /§6sbEnvoyHome /¶­zýS'{¢7ï</desc>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 280" role="img" aria-label="Envoy family placement">
+  <title>Envoy family placement</title>
+  <desc>EnvoyMesh provides mesh and Social; EnvoyDev is the coding control plane; EnvoyHome is the self-hosted home agent.</desc>
   <defs>
     <linearGradient id="fbg" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#0f1224"/>
@@ -8,36 +9,35 @@
     </linearGradient>
   </defs>
   <rect width="900" height="280" rx="14" fill="url(#fbg)"/>
-  <text x="450" y="32" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="16" font-weight="700" fill="#f8fafc">( Envoy ”(Ï-</text>
-  <text x="450" y="52" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#94a3b8">q« “Mù · §Á'êìË</text>
+  <text x="450" y="32" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="16" font-weight="700" fill="#f8fafc">&#22312; Envoy &#24212;&#29992;&#26063;&#20013;</text>
+  <text x="450" y="52" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#94a3b8">&#20849;&#20139;&#20256;&#36755;&#19982;&#37197;&#23545; &#183; &#20135;&#21697;&#22823;&#33041;&#21508;&#33258;&#29420;&#31435;</text>
 
   <g transform="translate(30,78)">
     <rect width="260" height="150" rx="12" fill="#1e1b36" stroke="#818cf8" stroke-width="2"/>
-    <text x="130" y="32" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="14" font-weight="700" fill="#a5b4fc">EnvoyMesh</text>
-    <text x="130" y="56" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#94a3b8">Mesh · Social · «ý</text>
-    <text x="130" y="88" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#c7d2fe">libp2p + úT</text>
-    <text x="130" y="110" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#c7d2fe">EnvoyGo K:</text>
-    <text x="130" y="132" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#64748b">å	 Home ª¯</text>
+    <text x="130" y="32" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="14" font-weight="700" fill="#a5b4fc">EnvoyMesh</text>
+    <text x="130" y="56" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#94a3b8">Mesh &#183; Social &#183; &#36523;&#20221;</text>
+    <text x="130" y="88" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#c7d2fe">libp2p + &#24314;&#32852;</text>
+    <text x="130" y="110" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#c7d2fe">EnvoyGo &#25163;&#26426;</text>
+    <text x="130" y="132" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#64748b">&#19981;&#25345;&#26377; Home &#24490;&#29615;</text>
   </g>
 
   <g transform="translate(320,78)">
     <rect width="260" height="150" rx="12" fill="#1e1b36" stroke="#c084fc" stroke-width="2"/>
-    <text x="130" y="32" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="14" font-weight="700" fill="#e9d5ff">EnvoyDev</text>
-    <text x="130" y="56" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#94a3b8">§6sb</text>
-    <text x="130" y="88" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#e9d5ff">yî · û¡ · CLI</text>
-    <text x="130" y="110" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#e9d5ff">EnvoyDev Mobile</text>
-    <text x="130" y="132" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#64748b">Ó“EnvoyCoder</text>
+    <text x="130" y="32" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="14" font-weight="700" fill="#e9d5ff">EnvoyDev</text>
+    <text x="130" y="56" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#94a3b8">&#32534;&#31243;&#25511;&#21046;&#24179;&#38754;</text>
+    <text x="130" y="88" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#e9d5ff">&#39033;&#30446; &#183; &#20219;&#21153; &#183; &#22810;&#31181; CLI</text>
+    <text x="130" y="110" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#e9d5ff">EnvoyDev Mobile</text>
+    <text x="130" y="132" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#64748b">&#20179;&#24211;&#65306;EnvoyCoder</text>
   </g>
 
   <g transform="translate(610,78)">
     <rect width="260" height="150" rx="12" fill="#211962" fill-opacity="0.55" stroke="#a5b4fc" stroke-width="2.5"/>
-    <text x="130" y="32" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="14" font-weight="700" fill="#eef2ff">EnvoyHome</text>
-    <text x="130" y="56" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#c7d2fe">¶­zýS'</text>
-    <text x="130" y="88" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#e0e7ff">J) · °Æ · HA/MQTT</text>
-    <text x="130" y="110" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#e0e7ff">Lb + K:{¢7ï</text>
-    <text x="130" y="132" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#a5b4fc">ê	ˆ¤Û · home.*</text>
+    <text x="130" y="32" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="14" font-weight="700" fill="#eef2ff">EnvoyHome</text>
+    <text x="130" y="56" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#c7d2fe">&#33258;&#25176;&#31649;&#23478;&#24237;&#26234;&#33021;&#20307;</text>
+    <text x="130" y="88" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#e0e7ff">&#32842;&#22825; &#183; &#35760;&#24518; &#183; HA/MQTT</text>
+    <text x="130" y="110" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#e0e7ff">&#26700;&#38754; + &#25163;&#26426;&#36731;&#23458;&#25143;&#31471;</text>
+    <text x="130" y="132" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#a5b4fc">&#33258;&#26377;&#23432;&#25252;&#36827;&#31243; &#183; &#20165; envoy-harness</text>
   </g>
 
-  <text x="450" y="260" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#64748b">K:/—ã  zýSÆ¥zý¶EínY(¶(5
-</text>
+  <text x="450" y="260" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#64748b">&#25163;&#26426;&#26159;&#31383;&#21475; &#8212; &#26234;&#33021;&#20307;&#12289;&#23494;&#38053;&#19982;&#26234;&#33021;&#23478;&#23621;&#20973;&#25454;&#30041;&#22312;&#23478;&#29992;&#30005;&#33041;&#19978;</text>
 </svg>
