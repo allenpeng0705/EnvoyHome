@@ -1,0 +1,130 @@
+[
+  {
+    "id": "gen-compose-complex-edit-export-schedule",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Edit the draft, export PDF, then propose a reminder to send it.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/cx-draft.md": "# Draft\n\nStatus: WIP\nToken: cx-draft-wip\n"
+      }
+    },
+    "allowTools": ["read_file", "edit_file", "export_document", "schedule"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"read_file\",\"args\":{\"path\":\"documents/cx-draft.md\"}},{\"tool\":\"edit_file\",\"args\":{\"path\":\"documents/cx-draft.md\",\"oldString\":\"Status: WIP\\nToken: cx-draft-wip\",\"newString\":\"Status: Ready\\nToken: cx-draft-ready\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"export_document\",\"args\":{\"format\":\"pdf\",\"sourcePath\":\"documents/cx-draft.md\",\"title\":\"Draft\"}},{\"tool\":\"schedule\",\"args\":{\"action\":\"propose\",\"text\":\"tomorrow at 15:00 send the draft PDF\"}}]\n```"
+      },
+      {
+        "reply": "Updated to Ready (cx-draft-ready), exported PDF, proposed 15:00 reminder — confirm when ready."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["read_file", "edit_file", "export_document", "schedule"],
+      "finalMatching": "cx-draft-ready|Ready|export|PDF|15:00|propos|confirm"
+    }
+  },
+  {
+    "id": "gen-compose-complex-knowledge-remember-schedule",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Remember a fact, search knowledge, then schedule a follow-up.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "knowledge/cx-plants.md": "# Plants\n\nWater the fern every 5 days. Token: cx-fern-5\n"
+      },
+      "reindexKnowledge": true
+    },
+    "allowTools": ["memory_remember", "knowledge_search", "schedule"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"memory_remember\",\"args\":{\"text\":\"Fern lives by the east window\",\"target\":\"l2\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"knowledge_search\",\"args\":{\"query\":\"fern water\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"schedule\",\"args\":{\"action\":\"propose\",\"text\":\"in 5 days at 8:00 water the fern\"}}]\n```"
+      },
+      {
+        "reply": "Noted east-window fern. Knowledge says every 5 days (cx-fern-5). Proposed an 8:00 reminder."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["memory_remember", "knowledge_search", "schedule"],
+      "finalMatching": "cx-fern-5|fern|5 day|8:00|propos|east"
+    }
+  },
+  {
+    "id": "gen-compose-complex-search-read-write-schedule",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Find the quote file, read it, write a decision, propose a reminder.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/quotes/cx-vendor.md": "# Vendor\nSouth\nToken: cx-search-77\n"
+      }
+    },
+    "allowTools": ["search_files", "read_file", "write_file", "schedule"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"search_files\",\"args\":{\"pattern\":\"*.md\",\"path\":\"documents\"}},{\"tool\":\"read_file\",\"args\":{\"path\":\"documents/quotes/cx-vendor.md\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"write_file\",\"args\":{\"path\":\"documents/cx-search-decision.md\",\"content\":\"# Decision\\n\\nPick South. Token: cx-search-77\\n\"}},{\"tool\":\"schedule\",\"args\":{\"action\":\"propose\",\"text\":\"in 2 days at 10:00 revisit cx-search-decision.md\"}}]\n```"
+      },
+      {
+        "reply": "Found South (cx-search-77), wrote the decision, proposed a 10:00 follow-up."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["search_files", "read_file", "write_file", "schedule"],
+      "finalMatching": "cx-search-77|South|decision|10:00|propos"
+    }
+  },
+  {
+    "id": "gen-live-complex-edit-export-tell",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/cx-live-draft.md": "# Live draft\n\nMarker: REPLACE_ME\nToken: cx-live-edit-1\n"
+      }
+    },
+    "prompt": "In documents/cx-live-draft.md, use edit_file to replace REPLACE_ME with DONE. Then export_document that file as PDF. Tell me the token from the file and that you exported a PDF.",
+    "expect": {
+      "liveTools": ["edit_file", "read_file", "export_document"],
+      "requireHonesty": true,
+      "honestyMatching": ["DONE|cx-live-edit-1|export_document|pdf|PDF|output/"]
+    }
+  },
+  {
+    "id": "gen-live-complex-kb-memory-schedule",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "knowledge/cx-live-battery.md": "# Battery\n\nSwap smoke-alarm batteries every October. Token: cx-batt-oct\n"
+      },
+      "reindexKnowledge": true
+    },
+    "prompt": "Remember that the kitchen smoke alarm is model Nest Protect. Search knowledge for how often to swap batteries. Propose a reminder next October 1 at 10:00. Quote the token and confirm the schedule proposal.",
+    "expect": {
+      "liveTools": ["memory_remember", "knowledge_search", "read_file", "schedule"],
+      "requireHonesty": true,
+      "honestyMatching": ["cx-batt-oct|October|Nest|schedule|propos|10:00|battery"]
+    }
+  }
+]

@@ -3131,7 +3131,24 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
               ),
               onTapLink: (text, href, title) {
                 if (href == null || href.isEmpty) return;
-                unawaited(launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication));
+                // Design §9.5d — sandbox/workspace href → mesh open (no public URL).
+                final sandbox = parseSandboxArtifactHref(href);
+                if (sandbox != null) {
+                  unawaited(
+                    Navigator.of(context).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => ArtifactViewerScreen(
+                          session: widget.session,
+                          path: sandbox,
+                        ),
+                      ),
+                    ),
+                  );
+                  return;
+                }
+                unawaited(
+                  launchUrl(Uri.parse(href), mode: LaunchMode.externalApplication),
+                );
               },
             ),
           );

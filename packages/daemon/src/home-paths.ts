@@ -34,6 +34,11 @@ export interface HomePaths {
   readonly libreOfficeRuntimeDir: string;
   readonly libreOfficeDownloadsDir: string;
   readonly libreOfficeInstallJson: string;
+  /** Managed Obscura runtime (Design §9.5f Stage D). */
+  readonly obscuraDir: string;
+  readonly obscuraRuntimeDir: string;
+  readonly obscuraDownloadsDir: string;
+  readonly obscuraInstallJson: string;
   /** `accounts/<accountId>/` */
   accountRoot(accountId: string): string;
   /** Sandbox root: `accounts/<accountId>/files/` */
@@ -77,6 +82,10 @@ export function homePaths(stateDir: string): HomePaths {
     libreOfficeRuntimeDir: join(stateDir, "libreoffice", "runtime"),
     libreOfficeDownloadsDir: join(stateDir, "libreoffice", "downloads"),
     libreOfficeInstallJson: join(stateDir, "libreoffice", "install.json"),
+    obscuraDir: join(stateDir, "obscura"),
+    obscuraRuntimeDir: join(stateDir, "obscura", "runtime"),
+    obscuraDownloadsDir: join(stateDir, "obscura", "downloads"),
+    obscuraInstallJson: join(stateDir, "obscura", "install.json"),
     accountRoot(accountId: string): string {
       return join(accountsDir, accountId);
     },

@@ -69,9 +69,10 @@ class _WorkflowEditorPageState extends State<WorkflowEditorPage> {
   }
 
   void _insertTool(String name) {
+    // Canonical wire field is `name:` (loader still accepts legacy `tool:`).
     final snippet = '\n  - id: step_${_steps.length + 1}\n'
         '    type: tool\n'
-        '    tool: $name\n';
+        '    name: $name\n';
     _yamlCtrl.text = '${_yamlCtrl.text.trimRight()}$snippet';
     _parseSteps(_yamlCtrl.text);
     setState(() {});
@@ -111,8 +112,11 @@ class _WorkflowEditorPageState extends State<WorkflowEditorPage> {
         continue;
       } else if (curId != null && t.startsWith('type:')) {
         curType = t.substring(5).trim();
-      } else if (curId != null && t.startsWith('tool:')) {
+      } else if (curId != null && t.startsWith('name:')) {
         curTool = t.substring(5).trim();
+      } else if (curId != null && t.startsWith('tool:')) {
+        // Legacy alias — prefer name: when both appear.
+        curTool ??= t.substring(5).trim();
       } else if (t.startsWith('- id:') == false &&
           t.startsWith('- ') &&
           indent <= 2 &&
@@ -317,7 +321,9 @@ class _WorkflowEditorPageState extends State<WorkflowEditorPage> {
                 spacing: 6,
                 runSpacing: 6,
                 children: [
-                  for (final t in _tools.take(24))
+                  for (final t in _tools
+                      .where((row) => row['available'] != false)
+                      .take(24))
                     ActionChip(
                       label: Text(
                         t['name']?.toString() ?? t['id']?.toString() ?? '?',

@@ -62,6 +62,8 @@ apps/desktop/ui-dist/
 apps/desktop/src-tauri/resources/daemon/
 apps/desktop/src-tauri/resources/node-runtime/
 apps/desktop/src-tauri/resources/push/
+apps/desktop/src-tauri/resources/obscura/
+vendor/obscura/
 # Legacy staging name (removed; keep ignore so old trees stay untracked)
 apps/desktop/src-tauri/resources/envoyhome-daemon.js
 

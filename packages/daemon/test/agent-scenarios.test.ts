@@ -73,6 +73,11 @@ type WebSearchRunExtras = {
   origin?: "attended" | "unattended";
   authorizeBrowserFallback?: (detail: { engines: string[] }) => Promise<boolean>;
   browserFetchHtml?: (url: string, timeoutMs: number) => Promise<string>;
+  /** Injected HTTPS fetch for web_extract / web_research dig (tests). */
+  extractFetch?: (
+    url: string,
+    init: { signal: AbortSignal; headers: Record<string, string> },
+  ) => Promise<Response>;
 };
 
 type PreparedSandbox = {
@@ -517,6 +522,43 @@ async function applyWebSearchSetup(
     }) as typeof fetch;
   }
 
+  // Design §9.5f.3 / V-OUT-30 — Owner opt-in web_research + extractBackend.
+  if (
+    typeof setup.webResearchEnabled === "boolean" ||
+    setup.digDepth != null ||
+    setup.extractBackend === "fetch" ||
+    setup.extractBackend === "obscura"
+  ) {
+    await ws.setConfig({
+      ...(typeof setup.webResearchEnabled === "boolean"
+        ? { researchEnabled: setup.webResearchEnabled === true }
+        : {}),
+      ...(setup.digDepth != null ? { digDepth: Number(setup.digDepth) } : {}),
+      ...(setup.extractBackend === "fetch" || setup.extractBackend === "obscura"
+        ? { extractBackend: setup.extractBackend }
+        : {}),
+    });
+  }
+
+  const mockExtract = setup.mockWebExtract as
+    | { pages?: Record<string, string>; defaultHtml?: string }
+    | undefined;
+  let extractFetch: WebSearchRunExtras["extractFetch"];
+  if (mockExtract) {
+    const pages = mockExtract.pages ?? {};
+    const fallbackHtml =
+      typeof mockExtract.defaultHtml === "string"
+        ? mockExtract.defaultHtml
+        : "<html><body><article><p>Default mock extract body for tests.</p></article></body></html>";
+    extractFetch = async (url) => {
+      const body = pages[url] ?? fallbackHtml;
+      return new Response(body, {
+        status: 200,
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      });
+    };
+  }
+
   const fb = setup.webSearchBrowserFallback as
     | {
         approve?: boolean;
@@ -528,7 +570,9 @@ async function applyWebSearchSetup(
         unattendedBrowser?: boolean;
       }
     | undefined;
-  if (!fb) return {};
+  if (!fb) {
+    return extractFetch ? { webSearchExtras: { extractFetch } } : {};
+  }
 
   __resetBrowserSerpGatesForTests();
   if (fb.useChromium) {
@@ -566,6 +610,7 @@ async function applyWebSearchSetup(
         if (useChromium) return chromiumFetchLocal(fixture.url, timeoutMs);
         return html;
       },
+      ...(extractFetch ? { extractFetch } : {}),
     },
     cleanupExtra: async () => {
       await fixture.close();
@@ -702,14 +747,42 @@ async function runSandboxOrWorkflowTool(input: {
     });
     return JSON.stringify(out);
   }
-  if (name === "web_search") {
+  if (name === "web_search" || name === "web_research") {
+    // Match runExtendedWorkflowTool / turn-service Privacy Mode gate (V-P2-PRIV-1).
+    const store = daemon.channels.getPrivacyMode();
+    if (store) {
+      const privacy = await store.get("alice");
+      if (privacy.enabled) {
+        throw new Error(`envoyhome.privacy_mode: ${name} blocked`);
+      }
+    }
     const extras = input.webSearchExtras ?? {};
-    return daemon.webSearch.runSearch(args, {
-      origin: extras.origin ?? "attended",
+    const runOpts = {
+      origin: extras.origin ?? ("attended" as const),
       ...(extras.authorizeBrowserFallback
         ? { authorizeBrowserFallback: extras.authorizeBrowserFallback }
         : {}),
       ...(extras.browserFetchHtml ? { browserFetchHtml: extras.browserFetchHtml } : {}),
+      ...(extras.extractFetch ? { extractFetch: extras.extractFetch } : {}),
+    };
+    if (name === "web_research") {
+      return daemon.webSearch.runResearch(args, runOpts);
+    }
+    return daemon.webSearch.runSearch(args, runOpts);
+  }
+  if (name === "web_extract") {
+    const store = daemon.channels.getPrivacyMode();
+    if (store) {
+      const privacy = await store.get("alice");
+      if (privacy.enabled) {
+        throw new Error("envoyhome.privacy_mode: web_extract blocked");
+      }
+    }
+    const { runWebExtract } = await import("../dist/web-extract.js");
+    const extras = input.webSearchExtras ?? {};
+    return runWebExtract(args, {
+      backend: daemon.webSearch.extractBackend(),
+      ...(extras.extractFetch ? { fetchImpl: extras.extractFetch } : {}),
     });
   }
   if (name === "browser") {
@@ -833,6 +906,29 @@ async function prepareSandbox(
         ? setup.heartbeatEveryMs
         : 60 * 60_000;
     await daemon.schedules.ensureHeartbeatJob("alice", { everyMs });
+  }
+  // Design §19.4 / V-P2-PRIV-* — optional Privacy Mode for catalogue journeys.
+  if (setup.privacyMode && typeof setup.privacyMode === "object") {
+    const pm = setup.privacyMode as {
+      enabled?: boolean;
+      blockSmartHomeEgress?: boolean;
+    };
+    await daemon.turns.privacyMode.set("alice", {
+      enabled: pm.enabled === true,
+      blockSmartHomeEgress: pm.blockSmartHomeEgress !== false,
+    });
+  }
+  if (setup.enableMqtt) {
+    await daemon.channels.setChannelConfig("mqtt", { brokerUrl: "mqtt://127.0.0.1:18883" }, {});
+    await daemon.channels.enableChannel("mqtt");
+  }
+  if (setup.enableHaChannel) {
+    await daemon.channels.setChannelConfig(
+      "homeassistant",
+      { baseUrl: "http://127.0.0.1:18123" },
+      { accessToken: "t" },
+    );
+    await daemon.channels.enableChannel("homeassistant");
   }
   if (setup.demoHa) {
     const started = await daemonRpc(daemon.config.wsPort, "home.startDemoHa", {
@@ -1335,6 +1431,8 @@ describe("V-AGENT-SCENARIO-1 agent catalogue", async () => {
         "extract_document",
         "promote_knowledge",
         "web_search",
+        "web_extract",
+        "web_research",
         "browser",
         "memory_recall",
         "memory_remember",

@@ -97,6 +97,31 @@ fn resolve_node_exe(app: &tauri::AppHandle) -> PathBuf {
   PathBuf::from("node")
 }
 
+/// Staged Obscura CLI from `scripts/fetch-obscura.mjs` / stage-desktop-bundle.
+/// Daemon prefers this via `ENVOYHOME_OBSCURA_BUNDLE` (Design §9.5f Stage D).
+fn resolve_obscura_bundle(app: &tauri::AppHandle) -> Option<PathBuf> {
+  if let Ok(explicit) = std::env::var("ENVOYHOME_OBSCURA_BUNDLE") {
+    let p = PathBuf::from(explicit.trim());
+    if p.is_file() {
+      return Some(p);
+    }
+  }
+  if let Ok(resource) = app.path().resource_dir() {
+    for rel in [
+      "obscura/obscura",
+      "obscura/obscura.exe",
+      "resources/obscura/obscura",
+      "resources/obscura/obscura.exe",
+    ] {
+      let candidate = resource.join(rel);
+      if candidate.is_file() {
+        return Some(candidate);
+      }
+    }
+  }
+  None
+}
+
 /// Staged `resources/push/push-config.json` from `stage-desktop-bundle.mjs`.
 /// The daemon loads it via `ENVOYHOME_PUSH_CONFIG` and resolves AuthKey / FCM
 /// paths relative to that file's directory.
@@ -321,6 +346,10 @@ fn spawn_daemon(app: &tauri::AppHandle) -> Result<(), String> {
   // Packaged push credentials (APNs + FCM) — see scripts/stage-desktop-bundle.mjs.
   if let Some(push_config) = resolve_push_config(app) {
     cmd.env("ENVOYHOME_PUSH_CONFIG", &push_config);
+  }
+  // Packaged Obscura binary (Stage D) — prefer over PATH / managed download.
+  if let Some(obscura) = resolve_obscura_bundle(app) {
+    cmd.env("ENVOYHOME_OBSCURA_BUNDLE", &obscura);
   }
   let child = cmd
     .spawn()

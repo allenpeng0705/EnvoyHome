@@ -31,6 +31,29 @@ test("LiveDevicePresence recent activity window", () => {
   assert.equal(live.isRecentlyActive("d1", PUSH_LIVE_IDLE_MS, t0 + 1_000), false);
 });
 
+test("soft disconnect clears live presence but keeps push token (Design 2026-10-22f)", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "eh-push-soft-"));
+  try {
+    const store = new PushTokenStore(homePaths(stateDir));
+    const live = new LiveDevicePresence();
+    const deviceId = "phone-soft";
+    await store.register({
+      deviceId,
+      platform: "ios",
+      token: "aabbccddeeff0011",
+      accountIds: ["alice"],
+    });
+    live.touch(deviceId, Date.now());
+    assert.equal(live.isRecentlyActive(deviceId, PUSH_LIVE_IDLE_MS), true);
+    // Soft Disconnect / kill-app: onAuthenticatedClose → clear live only (daemon.ts).
+    live.clear(deviceId);
+    assert.equal(live.isRecentlyActive(deviceId, PUSH_LIVE_IDLE_MS), false);
+    assert.ok(await store.get(deviceId), "token must survive soft disconnect");
+  } finally {
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
 test("suppressIfLive skips recently active device; always does not", async () => {
   const stateDir = await mkdtemp(join(tmpdir(), "eh-push-wake-"));
   try {

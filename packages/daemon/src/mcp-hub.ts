@@ -638,6 +638,11 @@ export class McpHub {
     return this.store.servers.find((s) => s.id === id)?.label;
   }
 
+  /** Transport for Privacy Mode remote-MCP refuse (V-P2-PRIV-1). */
+  getServerTransport(id: string): McpTransport | undefined {
+    return this.store.servers.find((s) => s.id === id)?.transport;
+  }
+
   async setEnabled(id: string, enabled: boolean): Promise<McpServerRecord> {
     const row = this.store.servers.find((s) => s.id === id);
     if (!row) {

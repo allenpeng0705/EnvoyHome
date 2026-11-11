@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 280" role="img" aria-label="Envoy ”(ÏMn">
+  <title>Envoy ”(ÏMn</title>
+  <desc>EnvoyMesh Ð› mesh  SocialEnvoyDev /§6sbEnvoyHome /¶­zýS'{¢7ï</desc>
+  <defs>
+    <linearGradient id="fbg" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0f1224"/>
+      <stop offset="100%" stop-color="#17133a"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="280" rx="14" fill="url(#fbg)"/>
+  <text x="450" y="32" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="16" font-weight="700" fill="#f8fafc">( Envoy ”(Ï-</text>
+  <text x="450" y="52" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#94a3b8">q« “Mù · §Á'êìË</text>
+
+  <g transform="translate(30,78)">
+    <rect width="260" height="150" rx="12" fill="#1e1b36" stroke="#818cf8" stroke-width="2"/>
+    <text x="130" y="32" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="14" font-weight="700" fill="#a5b4fc">EnvoyMesh</text>
+    <text x="130" y="56" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#94a3b8">Mesh · Social · «ý</text>
+    <text x="130" y="88" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#c7d2fe">libp2p + úT</text>
+    <text x="130" y="110" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#c7d2fe">EnvoyGo K:</text>
+    <text x="130" y="132" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#64748b">å	 Home ª¯</text>
+  </g>
+
+  <g transform="translate(320,78)">
+    <rect width="260" height="150" rx="12" fill="#1e1b36" stroke="#c084fc" stroke-width="2"/>
+    <text x="130" y="32" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="14" font-weight="700" fill="#e9d5ff">EnvoyDev</text>
+    <text x="130" y="56" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#94a3b8">§6sb</text>
+    <text x="130" y="88" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#e9d5ff">yî · û¡ · CLI</text>
+    <text x="130" y="110" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#e9d5ff">EnvoyDev Mobile</text>
+    <text x="130" y="132" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#64748b">Ó“EnvoyCoder</text>
+  </g>
+
+  <g transform="translate(610,78)">
+    <rect width="260" height="150" rx="12" fill="#211962" fill-opacity="0.55" stroke="#a5b4fc" stroke-width="2.5"/>
+    <text x="130" y="32" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="14" font-weight="700" fill="#eef2ff">EnvoyHome</text>
+    <text x="130" y="56" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#c7d2fe">¶­zýS'</text>
+    <text x="130" y="88" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#e0e7ff">J) · °Æ · HA/MQTT</text>
+    <text x="130" y="110" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="12" fill="#e0e7ff">Lb + K:{¢7ï</text>
+    <text x="130" y="132" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#a5b4fc">ê	ˆ¤Û · home.*</text>
+  </g>
+
+  <text x="450" y="260" text-anchor="middle" font-family="system-ui,'PingFang SC','Noto Sans SC',sans-serif" font-size="11" fill="#64748b">K:/—ã  zýSÆ¥zý¶EínY(¶(5
+</text>
+</svg>

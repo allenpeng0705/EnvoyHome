@@ -447,3 +447,15 @@ export {
   LIBREOFFICE_CATALOG_VERSION,
   libreOfficeCatalogEntryForHost,
 } from "./libreoffice-catalog.js";
+export {
+  ObscuraInstallService,
+  getObscuraInstallService,
+  __setObscuraInstallHooksForTests,
+  __resetObscuraInstallForTests,
+} from "./obscura-install.js";
+export {
+  OBSCURA_WHY_TEXT,
+  OBSCURA_CATALOG_VERSION,
+  OBSCURA_CATALOG,
+  obscuraCatalogEntryForHost,
+} from "./obscura-catalog.js";

@@ -87,6 +87,7 @@ export interface RunningDaemon {
   embedEngine: import("./local-engine/embed-engine.js").EmbedEngineService;
   knowledge: KnowledgeService;
   libreOfficeInstall: import("./libreoffice-install.js").LibreOfficeInstallService;
+  obscuraInstall: import("./obscura-install.js").ObscuraInstallService;
   mesh: MeshHostHandle;
   /** Live hosting peer when meshHostingEnabled (null when stub-only). */
   meshPeer: HomeMeshPeer | null;
@@ -659,6 +660,20 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     );
   });
 
+  // Stage D — managed Obscura silent first-boot when not bundled/PATH (non-blocking).
+  const { ObscuraInstallService } = await import("./obscura-install.js");
+  const { resolveObscuraBinary } = await import("./web-extract-obscura.js");
+  const obscuraInstall = new ObscuraInstallService(paths);
+  await obscuraInstall.load();
+  const obscuraAlready = await resolveObscuraBinary().catch(() => null);
+  void obscuraInstall
+    .maybeAutoInstall({ alreadyReady: Boolean(obscuraAlready) })
+    .catch((err) => {
+      logger.warn(
+        `obscura auto-install skipped: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
+
   return {
     config: { ...config, wsPort: ws.host.port, httpPort },
     logger,
@@ -689,6 +704,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     embedEngine,
     knowledge,
     libreOfficeInstall,
+    obscuraInstall,
     mesh,
     meshPeer,
     subscriptions,

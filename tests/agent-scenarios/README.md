@@ -18,7 +18,7 @@ lib/expect.mjs              # soft live asserts
 lib/fence.mjs               # $skillId / $proposalId substitution
 ```
 
-Roughly **100+** catalogue cases; **50+** are `live: true` and hit a **real LLM** via `pnpm agent:eval` (not CI). Includes web_search journeys (`pnpm agent:eval:web`).
+Roughly **100+** catalogue cases; **50+** are `live: true` and hit a **real LLM** via `pnpm agent:eval` (not CI). Includes web_search + `web_extract` / `web_research` journeys (`pnpm agent:eval:web`).
 
 ## Case fields
 
@@ -79,12 +79,18 @@ Live packs include `catalogue/*/live-llm-direct.json` and **`catalogue/general/d
 pnpm agent:eval:docs
 # Web search journeys (live LLM + household provider):
 pnpm agent:eval:web
+# Web research dig grading (live LLM; enables researchEnabled per case):
+pnpm agent:eval:web-research
+# (also included under gen-live-web* via agent:eval:web)
 # P0 packs (browser + memory inject + ask_user multi-turn):
 pnpm agent:eval:p0
 pnpm agent:eval:browser
 pnpm agent:eval:browser-form   # P2-H live form card (real LLM + Chromium)
 pnpm agent:eval:memory
 pnpm agent:eval:ask
+# Multi-tool agent stress (real LLM + ~/.envoyhome settings):
+pnpm agent:eval:tools
+pnpm agent:eval:complex
 ```
 
 **Browser form live (`gen-live-browser-form*`):** enables managed browser via `setup.browserEnabled`, opens `https://httpbin.org/forms/post`, expects `propose_form` + a `selection: form` choice. The live runner fills `fieldValues` from `liveAnswer.formByKind` / `formDefault` (secrets never logged) and auto-allows Approvals. Needs Playwright Chromium on the daemon host (`npx playwright install chromium`) and an enabled LLM in `~/.envoyhome`.
@@ -102,6 +108,8 @@ pnpm agent:eval:ask
 | `home-journeys.json` | `purpose: home` + demo HA get_state; general chat refuses HA; live approval honesty |
 | `edit-patch-journeys.json` | `edit_file` / `apply_patch` (+ path jail / multi-match refuse) |
 | `cross-tool-workflows.json` | Multi-tool compose + live (web→KB→schedule, quotes→decide, KB→remind) |
+| `agent-tool-stress-journeys.json` | Harder agent↔tool chains (nav, CSV extract, memory+KB, PDF extract, zh compare, plan+write, refuse HA) |
+| `complex-agent-journeys.json` / `privacy-mode-journeys.json` | Complex multi-tool + Privacy Mode live |
 | `honesty-abstain.json` | Unknown facts, missing files, conflicting goals, do-nothing |
 | `user-job-journeys.json` | NL “do this for me” jobs (remind, KB, decide, research+remind, remember) |
 | `proactive-ambient.json` | Heartbeat silent OK, enable heartbeat job, notify propose→confirm, live explain |

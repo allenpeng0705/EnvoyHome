@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" role="img" aria-label="EnvoyHome architecture">
+  <title>EnvoyHome architecture</title>
+  <desc>Desktop Settings and phone thin clients dial the EnvoyHome daemon over home.*; the daemon talks to models, knowledge, workflows, and Home Assistant / MQTT hubs.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f1224"/>
+      <stop offset="100%" stop-color="#1a1540"/>
+    </linearGradient>
+    <linearGradient id="homeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#211962" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#4f46e5" stop-opacity="0.35"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="2.5" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <marker id="arrIndigo" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#818cf8"/>
+    </marker>
+    <marker id="arrCyan" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#22d3ee"/>
+    </marker>
+    <marker id="arrAmber" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#fbbf24"/>
+    </marker>
+    <marker id="arrGreen" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#4ade80"/>
+    </marker>
+  </defs>
+
+  <rect width="960" height="560" rx="16" fill="url(#bg)"/>
+  <circle cx="160" cy="120" r="140" fill="none" stroke="#4f46e5" stroke-opacity="0.12" stroke-width="2"/>
+  <circle cx="800" cy="460" r="160" fill="none" stroke="#22d3ee" stroke-opacity="0.1" stroke-width="2"/>
+
+  <text x="480" y="36" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="18" font-weight="700" fill="#f8fafc">EnvoyHome architecture</text>
+  <text x="480" y="58" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#94a3b8">Thin clients · home.* control plane · smart-home hubs  not a hub itself</text>
+  <line x1="120" y1="72" x2="840" y2="72" stroke="#334155" stroke-width="1.5" stroke-dasharray="4 6"/>
+
+  <!-- Desktop -->
+  <g transform="translate(40,110)" filter="url(#soft)">
+    <rect width="200" height="220" rx="14" fill="#1e1b36" stroke="#818cf8" stroke-width="2"/>
+    <text x="100" y="28" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="14" font-weight="700" fill="#a5b4fc">Desktop Settings</text>
+    <text x="100" y="48" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#94a3b8">Tauri thin shell</text>
+    <rect x="20" y="66" width="160" height="36" rx="8" fill="rgba(129,140,248,0.18)" stroke="#818cf8" stroke-width="1"/>
+    <text x="100" y="88" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#c7d2fe">Chat · Approvals</text>
+    <rect x="20" y="112" width="160" height="36" rx="8" fill="rgba(129,140,248,0.12)" stroke="#6366f1" stroke-width="1"/>
+    <text x="100" y="134" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#c7d2fe">Models · Local</text>
+    <rect x="20" y="158" width="160" height="36" rx="8" fill="rgba(129,140,248,0.12)" stroke="#6366f1" stroke-width="1"/>
+    <text x="100" y="180" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#c7d2fe">Workflows · Skills</text>
+    <text x="100" y="208" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="10" fill="#64748b">Pairing QR / host:port</text>
+  </g>
+
+  <!-- Phone -->
+  <g transform="translate(720,110)" filter="url(#soft)">
+    <rect width="200" height="220" rx="14" fill="#1e1b36" stroke="#22d3ee" stroke-width="2"/>
+    <text x="100" y="28" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="14" font-weight="700" fill="#67e8f9">Phone</text>
+    <text x="100" y="48" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#94a3b8">Flutter thin client</text>
+    <rect x="20" y="66" width="160" height="36" rx="8" fill="rgba(34,211,238,0.16)" stroke="#22d3ee" stroke-width="1"/>
+    <text x="100" y="88" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#a5f3fc">Chat · Home</text>
+    <rect x="20" y="112" width="160" height="36" rx="8" fill="rgba(34,211,238,0.1)" stroke="#0891b2" stroke-width="1"/>
+    <text x="100" y="134" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#a5f3fc">Settings hub</text>
+    <rect x="20" y="158" width="160" height="36" rx="8" fill="rgba(34,211,238,0.1)" stroke="#0891b2" stroke-width="1"/>
+    <text x="100" y="180" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" fill="#a5f3fc">Artifacts · Push</text>
+    <text x="100" y="208" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="10" fill="#64748b">No keys / no agent brain</text>
+  </g>
+
+  <!-- Daemon center -->
+  <g transform="translate(300,100)" filter="url(#soft)">
+    <rect width="360" height="250" rx="16" fill="url(#homeGrad)" stroke="#a5b4fc" stroke-width="2.5"/>
+    <text x="180" y="30" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="16" font-weight="700" fill="#eef2ff">EnvoyHome daemon</text>
+    <text x="180" y="50" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#c7d2fe">home.* · WS :4780/ws · HTTP :4781</text>
+    <line x1="28" y1="62" x2="332" y2="62" stroke="#6366f1" stroke-opacity="0.5" stroke-width="1"/>
+
+    <rect x="24" y="78" width="150" height="48" rx="8" fill="rgba(15,18,36,0.55)" stroke="#818cf8" stroke-width="1"/>
+    <text x="99" y="98" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" font-weight="600" fill="#c7d2fe">Approvals / grants</text>
+    <text x="99" y="114" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="10" fill="#94a3b8">ask · TTL · fail-closed</text>
+
+    <rect x="186" y="78" width="150" height="48" rx="8" fill="rgba(15,18,36,0.55)" stroke="#818cf8" stroke-width="1"/>
+    <text x="261" y="98" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" font-weight="600" fill="#c7d2fe">Memory + KB</text>
+    <text x="261" y="114" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="10" fill="#94a3b8">L1L3 · KnowYou · knowledge/</text>
+
+    <rect x="24" y="140" width="150" height="48" rx="8" fill="rgba(15,18,36,0.55)" stroke="#4ade80" stroke-width="1"/>
+    <text x="99" y="160" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" font-weight="600" fill="#bbf7d0">Workflows / skills</text>
+    <text x="99" y="176" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="10" fill="#94a3b8">static DAG · MCP catalogue</text>
+
+    <rect x="186" y="140" width="150" height="48" rx="8" fill="rgba(15,18,36,0.55)" stroke="#c084fc" stroke-width="1"/>
+    <text x="261" y="160" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" font-weight="600" fill="#e9d5ff">Harness + models</text>
+    <text x="261" y="176" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="10" fill="#94a3b8">envoy-harness · Local :18792</text>
+
+    <rect x="24" y="202" width="312" height="32" rx="8" fill="rgba(15,18,36,0.65)" stroke="#fbbf24" stroke-width="1"/>
+    <text x="180" y="222" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="12" font-weight="600" fill="#fde68a">Smart-home tools · resolveObject · actuation journal</text>
+  </g>
+
+  <!-- Arrows thin client -->
+  <path d="M240,210 C270,210 275,210 300,210" fill="none" stroke="#818cf8" stroke-width="2.5" marker-end="url(#arrIndigo)"/>
+  <text x="268" y="198" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="10" fill="#a5b4fc">home.*</text>
+  <path d="M720,210 C690,210 685,210 660,210" fill="none" stroke="#22d3ee" stroke-width="2.5" marker-end="url(#arrCyan)"/>
+  <text x="692" y="198" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="10" fill="#67e8f9">home.*</text>
+
+  <!-- Hubs -->
+  <g transform="translate(120,400)" filter="url(#soft)">
+    <rect width="280" height="110" rx="14" fill="#1e1b36" stroke="#fbbf24" stroke-width="2"/>
+    <text x="140" y="28" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="14" font-weight="700" fill="#fcd34d">Home Assistant</text>
+    <text x="140" y="50" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#94a3b8">Aggregator hub  EnvoyHome enhances AI</text>
+    <rect x="24" y="66" width="110" height="28" rx="6" fill="rgba(251,191,36,0.12)" stroke="#f59e0b" stroke-width="1"/>
+    <text x="79" y="84" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#fde68a">bound objects</text>
+    <rect x="146" y="66" width="110" height="28" rx="6" fill="rgba(251,191,36,0.12)" stroke="#f59e0b" stroke-width="1"/>
+    <text x="201" y="84" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#fde68a">admin actuation</text>
+  </g>
+
+  <g transform="translate(560,400)" filter="url(#soft)">
+    <rect width="280" height="110" rx="14" fill="#1e1b36" stroke="#4ade80" stroke-width="2"/>
+    <text x="140" y="28" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="14" font-weight="700" fill="#86efac">MQTT</text>
+    <text x="140" y="50" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#94a3b8">Event-source + publish (allow-listed)</text>
+    <rect x="24" y="66" width="110" height="28" rx="6" fill="rgba(74,222,128,0.12)" stroke="#22c55e" stroke-width="1"/>
+    <text x="79" y="84" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#bbf7d0">topics / objects</text>
+    <rect x="146" y="66" width="110" height="28" rx="6" fill="rgba(74,222,128,0.12)" stroke="#22c55e" stroke-width="1"/>
+    <text x="201" y="84" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#bbf7d0">safety class</text>
+  </g>
+
+  <path d="M420,350 C380,370 320,385 260,400" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrAmber)"/>
+  <path d="M540,350 C580,370 640,385 700,400" fill="none" stroke="#4ade80" stroke-width="2" marker-end="url(#arrGreen)"/>
+
+  <text x="480" y="545" text-anchor="middle" font-family="system-ui,Segoe UI,sans-serif" font-size="11" fill="#64748b">Family multi-account · Approvals gate physical world · Mesh Social stays on EnvoyMesh</text>
+</svg>

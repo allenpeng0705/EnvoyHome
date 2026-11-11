@@ -17,6 +17,8 @@
  *   ENVOY_HARNESS_COMMIT      full sha override of scripts/envoy-harness.pin
  *   ENVOY_HARNESS_REPO_URL    clone URL (default allenpeng0705/envoy-harness)
  *   ENVOYHOME_HARNESS_FORCE_PIN=1  re-checkout the pin even if ../envoy-harness exists
+ *   ENVOYHOME_SKIP_OBSCURA=1       skip bundling Obscura (local debug only)
+ *   ENVOYHOME_OBSCURA_FORCE=1      re-download Obscura even if staged
  */
 
 import { execFileSync, spawnSync } from "node:child_process";
@@ -355,10 +357,22 @@ function stageDaemon() {
   if (!existsSync(path.join(destDir, "node_modules"))) {
     fail("The packaged daemon has no node_modules beside it.");
   }
+  // Chromium binaries stay Owner opt-in; the npm driver must ship so
+  // `import("playwright")` and the local install hint resolve (Design §9.5f.1).
+  const playwrightPkg = path.join(destDir, "node_modules", "playwright");
+  const playwrightCli = path.join(playwrightPkg, "cli.js");
+  if (!existsSync(playwrightPkg) || !existsSync(playwrightCli)) {
+    fail(
+      "The packaged daemon is missing the playwright driver (node_modules/playwright).\n" +
+        "  Chromium browsers are still Owner-installed; the driver must be beside main.mjs.\n" +
+        "  Check apps/desktop/scripts/build-daemon.mjs materializeNodeModules.",
+    );
+  }
   // Drop a stale convenience .js from older staging (ESM as .js needs "type":"module").
   const staleJs = path.join(resources, "envoyhome-daemon.js");
   if (existsSync(staleJs)) rmSync(staleJs, { force: true });
   say(`Daemon staged at ${path.relative(root, path.join(destDir, "main.mjs"))}.`);
+  say(`  ✓ playwright driver (${path.relative(root, playwrightCli)})`);
 }
 
 /**
@@ -472,10 +486,96 @@ function stagePushCredentials() {
   }
 }
 
+/**
+ * Stage pinned Obscura CLI into resources/obscura/ (Design §9.5f Stage D).
+ * Packaged app sets ENVOYHOME_OBSCURA_BUNDLE so the daemon prefers this binary.
+ */
+async function stageObscura() {
+  if (process.env.ENVOYHOME_SKIP_OBSCURA === "1") {
+    say("ENVOYHOME_SKIP_OBSCURA=1 — skipping Obscura staging.");
+    const dest = path.join(resources, "obscura");
+    mkdirSync(dest, { recursive: true });
+    writeFileSync(
+      path.join(dest, ".keep"),
+      "# Obscura not staged (ENVOYHOME_SKIP_OBSCURA=1).\n",
+    );
+    return;
+  }
+  say("Staging Obscura headless browser for the installer…");
+  const fetchScript = path.join(root, "scripts", "fetch-obscura.mjs");
+  if (!existsSync(fetchScript)) {
+    fail(
+      "scripts/fetch-obscura.mjs is missing.\n" +
+        "  Expected at repo root — restore it or run from an EnvoyHome checkout.",
+    );
+  }
+  const fetchResult = spawnTool(process.execPath, [fetchScript], {
+    cwd: root,
+    stdio: "inherit",
+  });
+  if (fetchResult.error) {
+    fail(
+      `Obscura fetch failed to start: ${fetchResult.error.message}\n` +
+        `  Retry: pnpm obscura:fetch\n` +
+        `  Skip (debug only): ENVOYHOME_SKIP_OBSCURA=1`,
+    );
+  }
+  if (fetchResult.status !== 0) {
+    fail(
+      `Obscura fetch failed while staging the desktop bundle (exit ${fetchResult.status}).\n` +
+        `  See messages above from scripts/fetch-obscura.mjs.\n` +
+        `  Retry: pnpm obscura:fetch\n` +
+        `  Force: ENVOYHOME_OBSCURA_FORCE=1 pnpm obscura:fetch\n` +
+        `  Skip (debug only): ENVOYHOME_SKIP_OBSCURA=1`,
+    );
+  }
+  const binaryName = process.platform === "win32" ? "obscura.exe" : "obscura";
+  const binary = path.join(resources, "obscura", binaryName);
+  if (!existsSync(binary)) {
+    fail(
+      `Obscura staging did not produce ${path.relative(root, binary)}.\n` +
+        `  fetch-obscura.mjs exited 0 but the CLI is missing — check extract/permissions / flatten.\n` +
+        `  Retry: ENVOYHOME_OBSCURA_FORCE=1 pnpm obscura:fetch`,
+    );
+  }
+  // Nested archives must be flattened at resources/obscura/ root (not obscura/*/obscura).
+  const nestedProbe = path.join(resources, "obscura", "obscura", binaryName);
+  if (existsSync(nestedProbe)) {
+    fail(
+      `Obscura CLI is nested under resources/obscura/obscura/ — flatten failed.\n` +
+        `  Retry: ENVOYHOME_OBSCURA_FORCE=1 pnpm obscura:fetch`,
+    );
+  }
+  const workerName = process.platform === "win32" ? "obscura-worker.exe" : "obscura-worker";
+  const worker = path.join(resources, "obscura", workerName);
+  if (process.platform !== "win32") {
+    for (const exe of [binary, ...(existsSync(worker) ? [worker] : [])]) {
+      try {
+        chmodSync(exe, 0o755);
+      } catch (err) {
+        fail(
+          `Could not chmod +x ${path.relative(root, exe)}: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    }
+  }
+  say(`  ✓ ${path.relative(root, binary)}`);
+  if (existsSync(worker)) {
+    say(`  ✓ ${path.relative(root, worker)}`);
+  } else {
+    say(
+      `  ⚠ ${workerName} not beside CLI — Obscura serve may need the worker sidecar; check archive layout`,
+    );
+  }
+}
+
 say("Staging the desktop bundle…");
 mkdirSync(resources, { recursive: true });
 ensurePeers();
 await stageNode();
 stageDaemon();
 stagePushCredentials();
+await stageObscura();
 say("Staged. The installer scripts can package the app now.");

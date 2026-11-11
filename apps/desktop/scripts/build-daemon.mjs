@@ -219,7 +219,10 @@ function copyPackage(name, dest, seen, missing, required, prefer) {
 }
 
 function materializeNodeModules(metafile, out) {
-  const names = externalPackages(metafile);
+  const names = new Set(externalPackages(metafile));
+  // Dynamic `import("playwright")` must always ship beside the packaged daemon
+  // (Chromium browsers stay Owner opt-in; the npm driver is required).
+  names.add("playwright");
   const dest = join(out, "node_modules");
   mkdirSync(dest, { recursive: true });
   const seen = new Set();

@@ -43,7 +43,7 @@ function buildWorkflowSystemPrompt(toolNames: string[]): string {
   const tools =
     toolNames.length > 0
       ? toolNames.slice(0, 80).join(", ")
-      : "write_file, read_file, notify";
+      : "write_file, read_file, web_extract, promote_knowledge";
   return [
     "You draft EnvoyHome static workflow YAML for a home agent.",
     "Reply with ONLY YAML (optional markdown fence). No commentary.",
@@ -56,7 +56,12 @@ function buildWorkflowSystemPrompt(toolNames: string[]): string {
     "- Include a stable id (snake_case) and at least one step/node.",
     "- llm_fill / llm_summarize need a prompt string; tool nodes need name and args as needed.",
     "- LLM prompts may use {{step.<id>}} or {{step.<id>.<field>}} from prior outputs (e.g. after extract_document use {{step.extract.text}}).",
-    "- Document pipelines: extract_document (sourcePath) → llm_summarize → optional export_document (args_from markdown from the summarize step).",
+    "- Document pipelines: extract_document (sourcePath) → llm_summarize → optional export_document (args_from markdown from the summarize step) or promote_knowledge.",
+    "- Web clip pipelines: web_extract (url) → llm_summarize with {{step.extract.markdown}} → write_file under documents/ and/or export_document / promote_knowledge.",
+    "- Web research pipelines: web_research (query) → llm_summarize with {{step.research.organized}} → optional export_document (Owner must enable Web research).",
+    "- Prefer catalogue tools that are available; mcp__* names are Owner MCP servers (Test-ok + enabled).",
+    "- Avoid interactive-only tools in static workflows when a simpler tool works (ask_user, session_plan, and browser propose_form/propose_handoff need a live chat turn).",
+    "- Tool nodes use name: <catalogueName> (not a free-form string).",
   ].join("\n");
 }
 

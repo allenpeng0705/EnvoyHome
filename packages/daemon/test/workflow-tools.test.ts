@@ -130,6 +130,73 @@ Prefer short answers.
   }
 });
 
+test("catalogue exposes export/browser argChoices; MCP ready tools appear", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "envoyhome-wf-meta-"));
+  try {
+    clearExtraToolSpecsForTests();
+    const paths = homePaths(stateDir);
+    const skills = new SkillService(paths);
+    const devices = new DeviceCredentialStore();
+    const bindings = new BindingStore(stateDir, devices);
+    const channels = new ChannelService({
+      stateDir,
+      bindings,
+      logger: new DaemonLogger(),
+      bundledPlugins: [mqttPlugin, haPlugin],
+    });
+    await channels.loadPersisted();
+
+    const tools = await listWorkflowTools({
+      skills,
+      channels,
+      mcpHub: {
+        listMcpTools: async () => [
+          {
+            name: "mcp__demo__ping",
+            mcpName: "ping",
+            description: "Ping the demo MCP server",
+            annotations: { readOnlyHint: true },
+          },
+        ],
+        getServerLabel: (id: string) => (id === "demo" ? "Demo MCP" : undefined),
+      } as never,
+    });
+    const exp = tools.find((t) => t.name === "export_document");
+    assert.ok(exp?.argChoices?.format?.includes("docx"));
+    assert.ok(exp?.argChoices?.format?.includes("epub"));
+    assert.ok(exp?.argChoices?.engine?.includes("auto"));
+    const br = tools.find((t) => t.name === "browser");
+    assert.ok(br?.argChoices?.action?.includes("navigate"));
+    assert.ok(br?.argChoices?.action?.includes("text"));
+    assert.ok(!br?.argChoices?.action?.includes("apply_form"));
+    const sched = tools.find((t) => t.name === "schedule");
+    assert.ok(sched?.argChoices?.action?.includes("propose"));
+    assert.ok(sched?.argChoices?.action?.includes("confirm"));
+    const msg = tools.find((t) => t.name === "message");
+    assert.ok(msg?.argChoices?.action?.includes("send"));
+    const mcp = tools.find((t) => t.name === "mcp__demo__ping");
+    assert.ok(mcp);
+    assert.equal(mcp!.source, "mcp");
+    assert.equal(mcp!.available, true);
+    assert.match(mcp!.summary, /Demo MCP|ping/i);
+
+    const known = await workflowToolNameSet({
+      skills,
+      channels,
+      mcpHub: {
+        listMcpTools: async () => [
+          { name: "mcp__demo__ping", mcpName: "ping", annotations: {} },
+        ],
+        getServerLabel: () => "Demo MCP",
+      } as never,
+    });
+    assert.ok(known.has("mcp__demo__ping"));
+  } finally {
+    clearExtraToolSpecsForTests();
+    await rm(stateDir, { recursive: true, force: true });
+  }
+});
+
 test("HA tools stay unavailable when channel enabled without credentials", async () => {
   const stateDir = await mkdtemp(join(tmpdir(), "envoyhome-wf-ha-enabled-"));
   try {

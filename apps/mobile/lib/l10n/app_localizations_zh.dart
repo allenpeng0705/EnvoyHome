@@ -569,6 +569,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get llmAutoSwitch => 'Auto model switch';
 
   @override
+  String get privacyModeTitle => 'Privacy Mode';
+
+  @override
+  String get privacyModeHint =>
+      'Forces local inference and blocks cloud tools. Owner-scope.';
+
+  @override
+  String get privacyModeEnabled => 'Enable Privacy Mode';
+
+  @override
+  String get privacyModeBlockEgress =>
+      'Also block smart-home actuation & event-source notify';
+
+  @override
+  String get privacyModeOwnerOnly =>
+      'Privacy Mode is Owner-only on this device.';
+
+  @override
   String get llmCompactNow => 'Compact memory now';
 
   @override
@@ -617,7 +635,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connTabBrowser => '浏览器';
 
   @override
-  String get browserControlLede => '让对话控制托管 Chromium 标签页。默认关闭。不是个人 Chrome。';
+  String get browserControlLede =>
+      '在家庭电脑上控制托管浏览器（自动优先 Obscura，否则 Chromium），或连接个人 Chrome / 远程 CDP。默认关闭。';
+
+  @override
+  String get browserControlDaemonHostNote =>
+      '浏览器会话在家庭电脑上运行。此处设置与桌面「连接 → 浏览器」同步。';
 
   @override
   String get browserControlEnabled => '启用 browser 工具';
@@ -702,13 +725,27 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get webSearchLede =>
-      '在对话中搜索公开网页。DuckDuckGo 无需密钥；Brave / Tavily 需要 Owner 配置密钥。';
+      '在对话中搜索公开网页。默认：先 DuckDuckGo，失败或未配置时用浏览器打开 Bing/Google/百度（无需 API 密钥）。Brave / Tavily 需要 Owner 密钥。';
 
   @override
   String get webSearchEnabled => '启用 web_search';
 
   @override
   String get webSearchProvider => '提供商';
+
+  @override
+  String get webSearchProviderBrowser => '浏览器（Bing / Google / 百度）';
+
+  @override
+  String get webSearchBrowserPrimaryHint =>
+      '直接在守护进程主机的无头引擎打开 Bing/Google/百度（有 Obscura 优先，否则 Chromium）。对话中每次搜索会询问一次。';
+
+  @override
+  String get webSearchDaemonHostNote =>
+      '搜索引擎与页面深入在运行 EnvoyHome 的家庭电脑上执行。手机只查看并由 Owner 编辑共享设置。';
+
+  @override
+  String get webSearchEffectiveUnresolved => '尚未就绪';
 
   @override
   String get webSearchApiKey => 'API 密钥';
@@ -735,11 +772,106 @@ class AppLocalizationsZh extends AppLocalizations {
   String get webSearchOwnerOnly => '仅家庭 Owner 设备可修改网页搜索。';
 
   @override
-  String get webSearchBrowserFallback => '浏览器回退（API/DDG 失败时用 Bing/Google）';
+  String get webSearchBrowserFallback =>
+      '浏览器回退（API/DDG 失败或未配置时用 Bing/Google/百度）';
 
   @override
   String get webSearchBrowserFallbackHint =>
-      '默认关闭。对话中进入浏览器回退仍会询问。SERP 页面可能验证码或拦截。';
+      '默认开启，便于零配置搜索。对话中进入浏览器回退仍会询问。SERP 页面可能验证码或拦截。';
+
+  @override
+  String get webSearchResearchEnabled => '网页研究（搜索后再深入抓取前几条）';
+
+  @override
+  String get webSearchResearchHint =>
+      '默认关闭。开启后提供 web_research：深入抓取前几条结果，返回整理摘要 + 链接列表。';
+
+  @override
+  String get webSearchDigDepth => '深入条数（1–10）';
+
+  @override
+  String get webSearchExtractBackend => '页面提取后端';
+
+  @override
+  String get webSearchExtractBackendAuto => '自动（有 Obscura 则用，否则 HTTP）';
+
+  @override
+  String get webSearchExtractBackendFetch => 'HTTP 抓取';
+
+  @override
+  String get webSearchExtractBackendObscura => 'Obscura（渲染 JS 后转 Markdown）';
+
+  @override
+  String get webSearchExtractBackendHint => '自动优先用守护进程上的 Obscura，否则纯 HTTP 抓取。';
+
+  @override
+  String get webSearchEffectiveExtract => '当前实际提取后端';
+
+  @override
+  String get webSearchObscuraReady => '守护进程主机上 Obscura 已就绪';
+
+  @override
+  String get webSearchObscuraMissing => '守护进程主机上未安装 Obscura';
+
+  @override
+  String get webSearchObscuraInstallHintNote =>
+      '桌面版自带 Obscura（或守护进程首次启动自动安装）。如需覆盖，请在运行 EnvoyHome 的家庭电脑上设置 ENVOYHOME_OBSCURA / PATH（不要在手机上），然后重新打开设置。';
+
+  @override
+  String get webSearchSerpBrowserEngine => '浏览器搜索引擎';
+
+  @override
+  String get webSearchSerpBrowserEngineAuto => '自动（有 Obscura 则用，否则 Chromium）';
+
+  @override
+  String get webSearchSerpBrowserEngineChromium => 'Chromium';
+
+  @override
+  String get webSearchSerpBrowserEngineObscura => 'Obscura';
+
+  @override
+  String get webSearchSerpBrowserEngineHint =>
+      '自动优先 Obscura 打开 Bing/Google/百度，否则 Playwright Chromium。';
+
+  @override
+  String get webSearchEffectiveSerp => '当前实际 SERP 引擎';
+
+  @override
+  String get browserControlManagedEngine => '托管浏览器引擎';
+
+  @override
+  String get browserControlManagedEngineAuto => '自动（有 Obscura 则用，否则 Chromium）';
+
+  @override
+  String get browserControlManagedEngineChromium => 'Chromium';
+
+  @override
+  String get browserControlManagedEngineObscura => 'Obscura';
+
+  @override
+  String get browserControlManagedEngineHint =>
+      '托管配置自动优先 Obscura。个人/远程始终连接真实 Chrome CDP。';
+
+  @override
+  String get browserControlEffectiveManaged => '当前实际托管引擎';
+
+  @override
+  String get webSearchEngines => '搜索引擎（顺序：Bing → Google → 百度）';
+
+  @override
+  String get webSearchEnginesHint => '浏览器回退时按勾选顺序尝试，直到某个引擎返回结果。';
+
+  @override
+  String get webSearchEnginesRequired => '请至少选择 Bing、Google 或百度之一。';
+
+  @override
+  String get webSearchEngineBing => 'Bing';
+
+  @override
+  String get webSearchEngineGoogle => 'Google';
+
+  @override
+  String get webSearchEngineBaidu => '百度';
 
   @override
   String get webSearchBrowserReady => '守护进程主机上 Playwright Chromium 已就绪';
@@ -847,6 +979,23 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get skillsTabSchedules => 'Schedules';
+
+  @override
+  String get skillsTabScenes => 'Scenes';
+
+  @override
+  String get scenesHint =>
+      'When → do household automations (standing orders). Presence templates need Privacy Mode.';
+
+  @override
+  String get scenesNone => 'No scenes yet.';
+
+  @override
+  String get scenesAddMorning => 'Add Good morning';
+
+  @override
+  String get scenesPrivacyRequired =>
+      'Enable Privacy Mode (LLM → Routing) before presence scenes.';
 
   @override
   String get skillsInstallUrl => 'Install from URL';

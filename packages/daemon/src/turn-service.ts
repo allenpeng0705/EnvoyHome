@@ -1472,9 +1472,18 @@ export class TurnService {
   > {
     const origin: "attended" | "unattended" =
       input.origin === "unattended" ? "unattended" : "attended";
+    const assertPrivacyCloud = async (label: string): Promise<void> => {
+      const privacy = await this.privacyMode.get(input.accountId);
+      if (privacy.enabled) {
+        throw new Error(`envoyhome.privacy_mode: ${label} blocked`);
+      }
+    };
     return {
       execImpl: this.sandboxExecImpl(input.accountId),
-      httpFetchImpl: workflowHttpFetch as typeof fetch,
+      httpFetchImpl: (async (url, init) => {
+        await assertPrivacyCloud("http_fetch");
+        return workflowHttpFetch(url as Parameters<typeof workflowHttpFetch>[0], init);
+      }) as typeof fetch,
       browserDefaultProfile: (() => {
         let configured: string | undefined;
         if (origin !== "unattended" && this.browserControl) {
@@ -1503,7 +1512,27 @@ export class TurnService {
       },
       extraToolImpl: async (tool, args) => {
         if (tool.startsWith("mcp__") && this.mcpHub) {
+          // V-P2-PRIV-1 — remote MCP (http/sse) fails closed under Privacy Mode.
+          const privacy = await this.privacyMode.get(input.accountId);
+          if (privacy.enabled) {
+            const { parseMcpCatalogueToolName } = await import("./mcp-hub.js");
+            const parsed = parseMcpCatalogueToolName(tool);
+            const transport = parsed
+              ? this.mcpHub.getServerTransport(parsed.serverId)
+              : undefined;
+            if (transport !== "stdio") {
+              throw new Error("envoyhome.privacy_mode: remote mcp blocked");
+            }
+          }
           return this.mcpHub.callTool(tool, args);
+        }
+        if (
+          tool === "web_search" ||
+          tool === "web_extract" ||
+          tool === "web_research" ||
+          tool === "browser"
+        ) {
+          await assertPrivacyCloud(tool);
         }
         // Design §9.5g.3 — park form card then apply on answer (one tool call).
         // apply_form is never agent-callable (secrets stay on home.answerChoice).
@@ -1572,6 +1601,7 @@ export class TurnService {
           workspaceMode: primary?.mode ?? null,
           webSearch: this.webSearch,
           browserControl: this.browserControl,
+          mcpHub: this.mcpHub,
           schedules: this.schedules,
           workflows: this.workflows,
           sessions: this.sessions,
@@ -1734,14 +1764,21 @@ export class TurnService {
           ownerAccountId: this.getOwnerAccountId(),
           authorizeBrowserFallback:
             input.approval && input.ctx
-              ? async ({ engines }) => {
+              ? async ({ engines, mode }) => {
+                  const primary = mode === "primary";
                   const decision = await input.approval!.authorizeBrowserSearchFallback({
                     accountId: input.ctx!.account_id,
                     agentId: input.ctx!.agent_id,
                     turnId: input.ctx!.turn_id,
                     tool: "web_search",
-                    args: { ...args, _browserFallback: true, engines },
-                    summary: `browser search fallback (${engines.join("→")})`,
+                    args: {
+                      ...args,
+                      ...(primary ? { _browserPrimary: true } : { _browserFallback: true }),
+                      engines,
+                    },
+                    summary: primary
+                      ? `browser search (${engines.join("→")})`
+                      : `browser search fallback (${engines.join("→")})`,
                   });
                   return decision === "allowed";
                 }

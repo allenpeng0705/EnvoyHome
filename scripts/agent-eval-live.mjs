@@ -131,7 +131,7 @@ function connect() {
 }
 
 const KNOWN_TOOLS =
-  "schedule|skills_list|skill_view|skill_propose|ask_user|session_plan|web_search|write_file|read_file|edit_file|apply_patch|list_dir|search_files|export_document|extract_document|knowledge_search|knowyou_search|memory_recall|memory_remember|session_search|exec|http_fetch|ha_[a-z_]+|mqtt_[a-z_]+";
+  "schedule|skills_list|skill_view|skill_propose|ask_user|session_plan|web_search|web_extract|web_research|browser|write_file|read_file|edit_file|apply_patch|list_dir|search_files|export_document|extract_document|knowledge_search|knowyou_search|memory_recall|memory_remember|session_search|exec|http_fetch|ha_[a-z_]+|mqtt_[a-z_]+";
 
 async function applySetupSeedExports(accountId, setup) {
   const rows = setup?.seedExports;
@@ -155,7 +155,15 @@ async function applySetupSeedExports(accountId, setup) {
     const markdown = String(raw.markdown ?? "");
     const title =
       typeof raw.title === "string" && raw.title.trim() ? raw.title.trim() : undefined;
-    const buf = await exportDocument(format, markdown, title ? { title } : undefined);
+    const exported = await exportDocument(format, markdown, title ? { title } : undefined);
+    const buf = Buffer.isBuffer(exported)
+      ? exported
+      : exported && typeof exported === "object" && Buffer.isBuffer(exported.buffer)
+        ? exported.buffer
+        : null;
+    if (!buf) {
+      throw new Error(`seedExports: exportDocument returned unexpected shape for ${rel}`);
+    }
     const abs = path.join(filesRoot, rel);
     await mkdir(path.dirname(abs), { recursive: true });
     await writeFile(abs, buf);
@@ -181,7 +189,19 @@ function collectToolNames(eventsSlice) {
   if (/search_files|"hits"\s*:\s*\[/i.test(blob)) names.add("search_files");
   if (/export_document|"format"\s*:\s*"(pdf|docx)"/i.test(blob)) names.add("export_document");
   if (/extract_document|extractChars|output\/extracts/i.test(blob)) names.add("extract_document");
-  if (/web_search|"provider"\s*:\s*"(duckduckgo|brave|tavily)"/i.test(blob)) {
+  // Prefer explicit tool names. Do not treat web_research payloads (which also
+  // carry provider: duckduckgo|brave|…) as plain web_search.
+  if (/web_research|"organized"\s*:/i.test(blob)) {
+    names.add("web_research");
+  }
+  if (/web_extract/i.test(blob) && /"markdown"\s*:/i.test(blob)) {
+    names.add("web_extract");
+  }
+  if (
+    /web_search/i.test(blob) ||
+    (/"provider"\s*:\s*"(duckduckgo|brave|tavily|browser)"/i.test(blob) &&
+      !/"organized"\s*:/i.test(blob))
+  ) {
     names.add("web_search");
   }
   if (
@@ -208,10 +228,16 @@ function collectToolNames(eventsSlice) {
   if (/"tool"\s*:\s*"exec"|execImpl|"cmd"\s*:\s*"/i.test(blob) || /\bexec\b/i.test(blob)) {
     names.add("exec");
   }
-  if (/ha_get_state|ha_call_service|ha_list_entities/i.test(blob)) {
-    if (/ha_get_state/i.test(blob)) names.add("ha_get_state");
-    if (/ha_call_service/i.test(blob)) names.add("ha_call_service");
-    if (/ha_list_entities/i.test(blob)) names.add("ha_list_entities");
+  // Prefer explicit tool-call fields — prompt text often names these tools (false positives).
+  for (const m of blob.matchAll(
+    /"tool"\s*:\s*"(ha_get_state|ha_call_service|ha_list_entities|mqtt_publish|mqtt_get)"/g,
+  )) {
+    names.add(m[1]);
+  }
+  for (const m of blob.matchAll(
+    /"name"\s*:\s*"(ha_get_state|ha_call_service|ha_list_entities|mqtt_publish|mqtt_get)"/g,
+  )) {
+    names.add(m[1]);
   }
   return [...names];
 }
@@ -307,6 +333,77 @@ async function applySetupBrowser(client, setup) {
   if (res?.error) {
     throw new Error(`setBrowserControlConfig: ${JSON.stringify(res.error)}`);
   }
+}
+
+/**
+ * Design §9.5f.3 — enable web_research for live cases (Owner-scope).
+ * Restored to disabled after each case so household defaults stay safe.
+ */
+async function applySetupWebResearch(client, setup) {
+  if (setup?.webResearchEnabled !== true && setup?.webResearchEnabled !== false) {
+    return;
+  }
+  const params = {
+    researchEnabled: setup.webResearchEnabled === true,
+  };
+  if (setup.digDepth != null && Number.isFinite(Number(setup.digDepth))) {
+    params.digDepth = Math.min(10, Math.max(1, Math.floor(Number(setup.digDepth))));
+  }
+  if (setup.extractBackend === "fetch" || setup.extractBackend === "obscura") {
+    params.extractBackend = setup.extractBackend;
+  }
+  const res = await client.rpc("home.setWebSearchConfig", params, 30_000);
+  if (res?.error) {
+    throw new Error(`setWebSearchConfig(research): ${JSON.stringify(res.error)}`);
+  }
+}
+
+async function restoreWebResearchOff(client) {
+  await client
+    .rpc(
+      "home.setWebSearchConfig",
+      { researchEnabled: false, extractBackend: "fetch" },
+      15_000,
+    )
+    .catch(() => undefined);
+}
+
+/** Design §19.4 — apply Privacy Mode for the seat; restore disabled after each case. */
+async function applySetupPrivacyMode(client, accountId, setup) {
+  const pm = setup?.privacyMode;
+  if (!pm || typeof pm !== "object") {
+    // Ensure prior case cannot leave Privacy Mode on (breaks cloud-only eval).
+    await client
+      .rpc(
+        "home.setPrivacyMode",
+        { accountId, enabled: false, blockSmartHomeEgress: true },
+        15_000,
+      )
+      .catch(() => undefined);
+    return;
+  }
+  const res = await client.rpc(
+    "home.setPrivacyMode",
+    {
+      accountId,
+      enabled: pm.enabled === true,
+      blockSmartHomeEgress: pm.blockSmartHomeEgress !== false,
+    },
+    15_000,
+  );
+  if (res.error) {
+    throw new Error(`setPrivacyMode: ${JSON.stringify(res.error)}`);
+  }
+}
+
+async function restorePrivacyModeOff(client, accountId) {
+  await client
+    .rpc(
+      "home.setPrivacyMode",
+      { accountId, enabled: false, blockSmartHomeEgress: true },
+      15_000,
+    )
+    .catch(() => undefined);
 }
 
 /** Build fieldValues for a §9.5g.3 form choice from liveAnswer.formByKind / formDefault. */
@@ -461,9 +558,13 @@ for (const c of cases) {
     await applySetupSeedKnowYou(client, ACCOUNT, c.setup);
     await applySetupDemoHa(client, ACCOUNT, c.setup);
     await applySetupBrowser(client, c.setup);
+    await applySetupWebResearch(client, c.setup);
+    await applySetupPrivacyMode(client, ACCOUNT, c.setup);
   } catch (err) {
     fail++;
     console.log(`FAIL ${c.id}  seed: ${err instanceof Error ? err.message : String(err)}`);
+    await restorePrivacyModeOff(client, ACCOUNT);
+    await restoreWebResearchOff(client);
     continue;
   }
   const opened = await client.rpc("home.openSession", {
@@ -506,13 +607,42 @@ for (const c of cases) {
       90_000,
     );
   } catch (err) {
-    fail++;
-    console.log(`FAIL ${c.id}  send: ${err instanceof Error ? err.message : String(err)}`);
+    const msg = err instanceof Error ? err.message : String(err);
+    // Privacy Mode + cloud-only can reject before a turn starts.
+    const early = softLiveExpect({
+      toolNames: [],
+      assistantText: msg,
+      eventNames: [],
+      expect: c.expect ?? {},
+    });
+    if (early.ok) {
+      pass++;
+      console.log(`PASS ${c.id}  (${early.reason}; send threw)`);
+    } else {
+      fail++;
+      console.log(`FAIL ${c.id}  send: ${msg}`);
+    }
+    await restorePrivacyModeOff(client, ACCOUNT);
+    await restoreWebResearchOff(client);
     continue;
   }
   if (sent.error) {
-    fail++;
-    console.log(`FAIL ${c.id}  send error ${JSON.stringify(sent.error)}`);
+    const errText = JSON.stringify(sent.error);
+    const early = softLiveExpect({
+      toolNames: [],
+      assistantText: errText,
+      eventNames: [],
+      expect: c.expect ?? {},
+    });
+    if (early.ok) {
+      pass++;
+      console.log(`PASS ${c.id}  (${early.reason}; send error)`);
+    } else {
+      fail++;
+      console.log(`FAIL ${c.id}  send error ${errText}`);
+    }
+    await restorePrivacyModeOff(client, ACCOUNT);
+    await restoreWebResearchOff(client);
     continue;
   }
   const turnId = sent.result?.turnId;
@@ -673,6 +803,8 @@ for (const c of cases) {
   } catch (err) {
     fail++;
     console.log(`FAIL ${c.id}  ${err instanceof Error ? err.message : String(err)}`);
+    await restorePrivacyModeOff(client, ACCOUNT);
+    await restoreWebResearchOff(client);
     continue;
   }
 
@@ -687,7 +819,15 @@ for (const c of cases) {
   const assistantChunks = messages
     .filter((m) => m.role === "assistant")
     .map((m) => String(m.content || m.text || ""));
-  const assistantText = assistantChunks.join("\n");
+  // Privacy Mode + cloud-only: turn may finish with error and empty assistant prose.
+  const finishErrors = slice
+    .filter((e) => e.event === "home:turn-finished")
+    .map((e) => {
+      const d = e.data ?? {};
+      return [d.error, d.status, d.message, d.reason].filter(Boolean).join(" ");
+    })
+    .filter(Boolean);
+  const assistantText = [...assistantChunks, ...finishErrors].join("\n");
 
   const verdict = softLiveExpect({
     toolNames,
@@ -703,6 +843,8 @@ for (const c of cases) {
     console.log(`FAIL ${c.id}  ${verdict.reason}`);
     console.log(`      assistant: ${assistantText.slice(0, 160).replace(/\n/g, " | ")}`);
   }
+  await restorePrivacyModeOff(client, ACCOUNT);
+  await restoreWebResearchOff(client);
 }
 
 client.ws.close();

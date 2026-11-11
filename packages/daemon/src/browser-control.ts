@@ -5,11 +5,21 @@ import { basename, join } from "node:path";
 import { randomUUID } from "node:crypto";
 import type { HomePaths } from "./home-paths.js";
 import {
+  browserInstallHint,
   probeBrowserRuntime,
   type BrowserRuntimeStatus,
   tryAcquireBrowserGate,
   releaseBrowserGate,
 } from "./web-search-browser.js";
+import {
+  applyReadinessOverride,
+  isHeadlessEngineReady,
+  isManagedEngineChoice,
+  probeEngineReadiness,
+  resolveManagedEngine,
+  type ManagedEngineChoice,
+  type EffectiveManagedEngine,
+} from "./engine-auto.js";
 import { isBlockedHostname } from "./skill-remote.js";
 import { assertHandoffOpenUrl } from "./outbound-url.js";
 import {
@@ -136,10 +146,16 @@ const PRESS_KEYS = new Set([
 
 const PROFILES = new Set<BrowserProfile>(["managed", "personal", "remote"]);
 
+/** Effective managed engine after Stage E resolve (personal/remote ignore). */
+export type ManagedBrowserEngine = "chromium" | "obscura";
+
+export type { ManagedEngineChoice };
+
 export type BrowserControlConfigFile = {
   enabled: boolean;
   unattendedEnabled: boolean;
   defaultProfile: BrowserProfile;
+  managedEngine: ManagedEngineChoice;
   personal: { enabled: boolean; cdpEndpoint: string };
   remote: { enabled: boolean; cdpUrl: string };
   elevatedAcknowledgedAt: string | null;
@@ -152,6 +168,11 @@ export type BrowserControlPublicConfig = {
   ready: boolean;
   browserRuntime: BrowserRuntimeStatus;
   browserInstallHint: string;
+  managedEngine: ManagedEngineChoice;
+  /** Resolved managed engine when available; omitted if neither ready under auto. */
+  effectiveManagedEngine?: EffectiveManagedEngine;
+  obscuraRuntime: "ready" | "missing";
+  obscuraInstallHint: string;
   defaultProfile: BrowserProfile;
   personalEnabled: boolean;
   personalCdpEndpoint: string;
@@ -222,6 +243,10 @@ type BrowserSession = {
   snapshotSeq: number;
   focusedId: string | null;
   lastUsedAt: number;
+  /** Stage C — which managed engine opened this session (engine switch must recreate). */
+  managedEngine?: ManagedBrowserEngine;
+  /** Stage C — stop daemon-owned obscura serve. */
+  stopObscura?: () => Promise<void>;
 };
 
 /** Test inject — create a page without launching Chromium. */
@@ -237,6 +262,7 @@ function defaultConfig(): BrowserControlConfigFile {
     enabled: false,
     unattendedEnabled: false,
     defaultProfile: "managed",
+    managedEngine: "auto",
     personal: { enabled: false, cdpEndpoint: DEFAULT_PERSONAL_CDP },
     remote: { enabled: false, cdpUrl: "" },
     elevatedAcknowledgedAt: null,
@@ -540,6 +566,9 @@ export class BrowserControlService {
         enabled: raw.enabled === true,
         unattendedEnabled: raw.unattendedEnabled === true,
         defaultProfile,
+        managedEngine: isManagedEngineChoice(raw.managedEngine)
+          ? raw.managedEngine
+          : "auto",
         personal: {
           enabled: personalRaw.enabled === true,
           cdpEndpoint:
@@ -580,6 +609,20 @@ export class BrowserControlService {
     return { ok: true };
   }
 
+  private managedUnavailableReason(
+    choice: ManagedEngineChoice,
+    obscuraHint: string,
+    chromeHint: string,
+  ): string {
+    if (choice === "obscura") {
+      return `Managed browser needs Obscura on the daemon host — ${obscuraHint}`;
+    }
+    if (choice === "chromium") {
+      return `Managed browser needs Chromium on the daemon host — ${chromeHint}`;
+    }
+    return `Managed browser needs Obscura or Chromium — Obscura: ${obscuraHint}; Chromium: ${chromeHint}`;
+  }
+
   unattendedAllowed(): boolean {
     return this.cfg.unattendedEnabled === true;
   }
@@ -598,6 +641,7 @@ export class BrowserControlService {
           enabled: this.cfg.enabled,
           unattendedEnabled: this.cfg.unattendedEnabled,
           defaultProfile: this.cfg.defaultProfile,
+          managedEngine: this.cfg.managedEngine,
           personal: this.cfg.personal,
           remote: {
             enabled: this.cfg.remote.enabled,
@@ -615,6 +659,8 @@ export class BrowserControlService {
 
   async getPublicConfig(): Promise<BrowserControlPublicConfig> {
     const runtime = await probeBrowserRuntime();
+    const { probeObscuraRuntime } = await import("./web-extract-obscura.js");
+    const obscura = await probeObscuraRuntime();
     const readyInfo = this.readyInfo();
     const elevatedAck = !!this.cfg.elevatedAcknowledgedAt;
     const personalEndpoint = this.cfg.personal.cdpEndpoint || DEFAULT_PERSONAL_CDP;
@@ -633,9 +679,16 @@ export class BrowserControlService {
       remoteReady = await probe(this.buildRemoteEndpoint());
     }
     const defaultProfile = this.cfg.defaultProfile;
+    const readiness = applyReadinessOverride({
+      obscuraReady: obscura.status === "ready",
+      chromiumReady: runtime.status === "ready",
+    });
+    const effectiveManaged = resolveManagedEngine(this.cfg.managedEngine, readiness);
+    // Forced engine with binary missing must not report ready (V-OUT-34).
+    const managedReady = isHeadlessEngineReady(effectiveManaged, readiness);
     let ready = false;
     if (readyInfo.ok) {
-      if (defaultProfile === "managed") ready = runtime.status === "ready";
+      if (defaultProfile === "managed") ready = managedReady;
       else if (defaultProfile === "personal") ready = personalReady;
       else ready = remoteReady;
     }
@@ -643,8 +696,12 @@ export class BrowserControlService {
       enabled: this.cfg.enabled,
       unattendedEnabled: this.cfg.unattendedEnabled,
       ready,
-      browserRuntime: runtime.status,
+      browserRuntime: readiness.chromiumReady ? "ready" : "missing",
       browserInstallHint: runtime.installHint,
+      managedEngine: this.cfg.managedEngine,
+      ...(effectiveManaged ? { effectiveManagedEngine: effectiveManaged } : {}),
+      obscuraRuntime: readiness.obscuraReady ? "ready" : "missing",
+      obscuraInstallHint: obscura.installHint,
       defaultProfile,
       personalEnabled: this.cfg.personal.enabled,
       personalCdpEndpoint: personalEndpoint,
@@ -662,8 +719,12 @@ export class BrowserControlService {
       const reason = readyInfo.reason;
       if (!this.cfg.enabled && typeof reason === "string" && reason.length > 0) {
         out.unavailableReason = reason;
-      } else if (defaultProfile === "managed" && runtime.status === "missing") {
-        out.unavailableReason = `Chromium not installed — ${runtime.installHint}`;
+      } else if (defaultProfile === "managed" && !managedReady) {
+        out.unavailableReason = this.managedUnavailableReason(
+          this.cfg.managedEngine,
+          obscura.installHint,
+          runtime.installHint,
+        );
       } else if (defaultProfile === "personal" && !elevatedAck) {
         out.unavailableReason = "Acknowledge elevated browser risk in Settings";
       } else if (defaultProfile === "personal" && !this.cfg.personal.enabled) {
@@ -696,6 +757,7 @@ export class BrowserControlService {
     enabled?: boolean;
     unattendedEnabled?: boolean;
     defaultProfile?: string;
+    managedEngine?: string;
     personalEnabled?: boolean;
     personalCdpEndpoint?: string;
     remoteEnabled?: boolean;
@@ -709,6 +771,21 @@ export class BrowserControlService {
     if (typeof input.enabled === "boolean") this.cfg.enabled = input.enabled;
     if (typeof input.unattendedEnabled === "boolean") {
       this.cfg.unattendedEnabled = input.unattendedEnabled;
+    }
+    if (typeof input.managedEngine === "string") {
+      const e = input.managedEngine.trim().toLowerCase();
+      if (!isManagedEngineChoice(e)) {
+        throw Object.assign(
+          new Error(`envoyhome.bad_params: unknown managedEngine: ${input.managedEngine}`),
+          { code: "bad_params" },
+        );
+      }
+      const prev = this.cfg.managedEngine;
+      this.cfg.managedEngine = e;
+      // Engine switch must not reuse a Chromium/Obscura session from the other runtime.
+      if (prev !== e) {
+        await this.stopAllManagedSessions();
+      }
     }
     if (typeof input.personalEnabled === "boolean") {
       if (input.personalEnabled && !this.cfg.elevatedAcknowledgedAt) {
@@ -885,13 +962,24 @@ export class BrowserControlService {
         action,
         profile,
         enabled: pub.enabled,
+        managedEngine: pub.managedEngine,
+        ...(pub.effectiveManagedEngine
+          ? { effectiveManagedEngine: pub.effectiveManagedEngine }
+          : {}),
         browserRuntime: pub.browserRuntime,
         browserInstallHint: pub.browserInstallHint,
+        obscuraRuntime: pub.obscuraRuntime,
+        obscuraInstallHint: pub.obscuraInstallHint,
         ready: pub.ready,
         personalReady: pub.personalReady,
         remoteReady: pub.remoteReady,
         session: session
-          ? { tabs: session.tabs.size, focusedId: session.focusedId, profile: session.profile }
+          ? {
+              tabs: session.tabs.size,
+              focusedId: session.focusedId,
+              profile: session.profile,
+              ...(session.managedEngine ? { managedEngine: session.managedEngine } : {}),
+            }
           : null,
       });
     }
@@ -901,14 +989,22 @@ export class BrowserControlService {
       return this.runProposeHandoff(args);
     }
 
-    if (profile === "managed") {
-      const probe = await probeBrowserRuntime();
-      if (probe.status !== "ready" && !this.pageFactory) {
+    if (profile === "managed" && !this.pageFactory) {
+      const readiness = await probeEngineReadiness();
+      const effective = resolveManagedEngine(this.cfg.managedEngine, readiness);
+      if (!isHeadlessEngineReady(effective, readiness)) {
+        const { obscuraInstallHint } = await import("./web-extract-obscura.js");
         return JSON.stringify({
           action,
           profile,
+          managedEngine: this.cfg.managedEngine,
+          ...(effective ? { effectiveManagedEngine: effective } : {}),
           error: "runtime_missing",
-          browserInstallHint: probe.installHint,
+          browserInstallHint: this.managedUnavailableReason(
+            this.cfg.managedEngine,
+            obscuraInstallHint(),
+            browserInstallHint(),
+          ),
         });
       }
     }
@@ -2296,6 +2392,14 @@ export class BrowserControlService {
     return { elements: list, truncated };
   }
 
+  private async stopAllManagedSessions(): Promise<void> {
+    const keys = [...this.sessions.keys()].filter((k) => k.endsWith(":managed"));
+    for (const key of keys) {
+      const accountId = key.slice(0, -":managed".length);
+      await this.stopSession(accountId, "managed");
+    }
+  }
+
   private async ensureSession(
     accountId: string,
     profile: BrowserProfile,
@@ -2303,11 +2407,36 @@ export class BrowserControlService {
     this.gcIdle();
     const key = this.sessionKey(accountId, profile);
     const existing = this.sessions.get(key);
+    const readiness =
+      profile === "managed" ? await probeEngineReadiness() : null;
+    const effectiveManaged =
+      profile === "managed" && readiness
+        ? resolveManagedEngine(this.cfg.managedEngine, readiness)
+        : null;
+    const managedRunnable =
+      profile === "managed" && readiness
+        ? isHeadlessEngineReady(effectiveManaged, readiness)
+        : false;
+
     if (existing && existing.profile === profile) {
-      existing.lastUsedAt = Date.now();
-      return existing;
+      // V-OUT-32 / V-OUT-34: switching effective managed engine must recreate session.
+      // Untagged sessions (pre-field) are treated as chromium.
+      if (profile === "managed") {
+        const sessionEngine = existing.managedEngine ?? "chromium";
+        const want = effectiveManaged ?? "chromium";
+        if (sessionEngine !== want || !managedRunnable) {
+          await this.stopSession(accountId, profile);
+        } else {
+          existing.lastUsedAt = Date.now();
+          return existing;
+        }
+      } else {
+        existing.lastUsedAt = Date.now();
+        return existing;
+      }
+    } else if (existing) {
+      await this.stopSession(accountId, existing.profile);
     }
-    if (existing) await this.stopSession(accountId, existing.profile);
 
     if (this.pageFactory && profile === "managed") {
       const session: BrowserSession = {
@@ -2324,6 +2453,7 @@ export class BrowserControlService {
         snapshotSeq: 0,
         focusedId: null,
         lastUsedAt: Date.now(),
+        managedEngine: effectiveManaged ?? "chromium",
       };
       this.sessions.set(key, session);
       return session;
@@ -2331,6 +2461,24 @@ export class BrowserControlService {
 
     if (profile === "personal" || profile === "remote") {
       return this.connectCdpSession(accountId, profile);
+    }
+
+    // Stage C/E — managed Obscura when effective (personal/remote never use this path).
+    if (!managedRunnable || !effectiveManaged) {
+      const { obscuraInstallHint } = await import("./web-extract-obscura.js");
+      throw Object.assign(
+        new Error(
+          `envoyhome.tool_unavailable: ${this.managedUnavailableReason(
+            this.cfg.managedEngine,
+            obscuraInstallHint(),
+            browserInstallHint(),
+          )}`,
+        ),
+        { code: "tool_unavailable" },
+      );
+    }
+    if (effectiveManaged === "obscura") {
+      return this.startManagedObscuraSession(accountId, key);
     }
 
     const pw = await import("playwright");
@@ -2359,9 +2507,55 @@ export class BrowserControlService {
       snapshotSeq: 0,
       focusedId: null,
       lastUsedAt: Date.now(),
+      managedEngine: "chromium",
     };
     this.sessions.set(key, session);
     return session;
+  }
+
+  private async startManagedObscuraSession(
+    accountId: string,
+    key: string,
+  ): Promise<BrowserSession> {
+    const { startObscuraServe } = await import("./web-extract-obscura.js");
+    const storageDir = join(
+      this.paths.stateDir,
+      "browser-profiles",
+      accountId,
+      "managed-obscura",
+    );
+    await mkdir(storageDir, { recursive: true });
+    const handle = await startObscuraServe({ storageDir });
+    try {
+      const pw = await import("playwright");
+      const cdpBrowser = await pw.chromium.connectOverCDP(handle.endpoint);
+      const ctxs = cdpBrowser.contexts();
+      const defaultCtx = ctxs[0] ?? (await cdpBrowser.newContext());
+      const session: BrowserSession = {
+        profile: "managed",
+        attachOnly: false,
+        browser: {
+          close: async () => {
+            await cdpBrowser.close().catch(() => undefined);
+          },
+        },
+        context: defaultCtx as unknown as BrowserSession["context"],
+        tabs: new Map(),
+        snapshotByTab: new Map(),
+        elementsByTab: new Map(),
+        snapshotSeq: 0,
+        focusedId: null,
+        lastUsedAt: Date.now(),
+        managedEngine: "obscura",
+        stopObscura: () => handle.stop(),
+      };
+      this.sessions.set(key, session);
+      return session;
+    } catch (err) {
+      // Don't leave a dangling obscura serve if CDP connect fails.
+      await handle.stop().catch(() => undefined);
+      throw err;
+    }
   }
 
   private async connectCdpSession(
@@ -2448,6 +2642,9 @@ export class BrowserControlService {
     }
     // connectOverCDP browser.close() disconnects; for attachOnly that is OK.
     await session.browser.close().catch(() => undefined);
+    if (session.stopObscura) {
+      await session.stopObscura().catch(() => undefined);
+    }
   }
 
   private gcIdle(): void {

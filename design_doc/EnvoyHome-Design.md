@@ -5,7 +5,7 @@
 | **Document** | Single all-in-one design for EnvoyHome |
 | **Role** | Ground truth for **implementation** and **verification** |
 | **Status** | Living draft — refine in place; bump changelog |
-| **Last updated** | 2026-11-10i (Chat document pane) |
+| **Last updated** | 2026-11-11f (workflow catalogue MCP + web-clip sample) |
 | **Not** | A port of HomeClaw; a clone of Hermes / OpenClaw / OpenHuman |
 
 **How to use this doc**
@@ -22,6 +22,19 @@
 
 | Date | Change |
 |------|--------|
+| 2026-11-11g | **Fix (§7 workflows catalogue UI + wire):** Appendix / `@envoyhome/protocol` `home.listWorkflowTools` `source` enum includes **`mcp`**. Settings tool browse groups + summary count MCP; `export_document` format choices stay tied to `EXPORT_FORMATS`; `browser`/`schedule`/`message` expose fuller `argChoices`. Web-clip howto layout is sequential (save → promote). Mobile insert uses canonical `name:`. No wire bump. |
+| 2026-11-11f | **Ship (§7 workflows + new tools):** `home.listWorkflowTools` includes Test-ok Owner **MCP** tools (`source: "mcp"`, `mcp__…`); put/validate/draft/schedules use the same set. `export_document` / `browser` expose `argChoices`. AI draft prompt teaches web_extract / web_research / promote pipelines. Settings howto adds **Web clip** sample (`web_extract` → summarize → `write_file` → `promote_knowledge`). Runtime already dispatched MCP via the harness path. No wire bump. |
+| 2026-11-11e | **Normative + Ship (Stage E — Obscura-first auto):** Config `extractBackend` / `serpBrowserEngine` / `managedEngine` add **`auto`** (new household **defaults**). Runtime prefer Obscura when ready, else fetch (dig) or Chromium (SERP/managed); `personal`/`remote` never Obscura. Public getConfig adds `effectiveExtractBackend` / `effectiveSerpBrowserEngine` / `effectiveManagedEngine`. Appendix C.5: auto-with-fallback is the Normative default; hard Obscura-only still needs parity scores. V-OUT-34. No wire bump. |
+| 2026-11-11 | **Normative + Ship (Stage D — Obscura package + auto-install):** Desktop installer **bundles** pinned Obscura (`scripts/fetch-obscura.mjs` / `obscura:fetch[:all]`; Tauri `resources/obscura/**`; `ENVOYHOME_OBSCURA_BUNDLE`). Daemon **managed** install under `stateDir/obscura/` with **silent first-boot** when missing (`ENVOYHOME_OBSCURA_AUTO` default on; `0` disables) — LibreOffice P2-K8 shape; GitHub release URL + sha256 pin (non-stealth render build). Resolve order: `ENVOYHOME_OBSCURA` → bundle → managed → PATH. Chromium still never silent-download / never bundled. Engine defaults stay Chromium until Appendix C.5. V-OUT-33. No wire bump. |
+| 2026-11-10r | **Normative + Ship (Stage B + C):** `serpBrowserEngine: "chromium" \| "obscura"` (default **chromium**) for Bing/Google/Baidu SERP HTML; `managedEngine` on `browser-control.json` (default **chromium**) — Obscura = daemon-owned `obscura serve` + Playwright `connectOverCDP` + `--storage-dir` / `--allow-file-access` (no stealth). `personal`/`remote` ignore `managedEngine`. Defaults stay Chromium; Appendix C.5 still gates any **default flip**. V-OUT-31 / V-OUT-32. No wire bump. |
+| 2026-11-10q | **Normative + Ship (§9.5f.2 Stage A):** Owner `extractBackend: "fetch" \| "obscura"` (default **`fetch`**). Obscura dig via `obscura fetch --dump markdown` when selected; never silent-download; missing binary → soft-fail / install hint (`obscuraRuntime` / `obscuraInstallHint` on getWebSearchConfig). `web_research` dig uses the same backend. Stage B/C landed `2026-11-10r` (still Chromium-default). V-OUT-30. No wire bump. |
+| 2026-11-10p | **Normative + Ship (§9.5f.2 / §9.5f.3):** Builtin `web_extract` (HTTPS URL → readable Markdown, SSRF) and Owner-optional `web_research` (search → dig top N → `{ organized, links }`). Config additive `researchEnabled` (default false) + `digDepth` (default 3, max 10). Does **not** dig inside `web_search`. V-OUT-28 / V-OUT-29. No wire bump. |
+| 2026-11-10o | **Ship (§9.5f.1):** Default `fallback: "browser"` (was `none`) — zero-config Bing/Google/Baidu via Chromium when API/DDG is unset or returns no hits. `ready` is true when primary **or** browser fallback can run. Tool summary asks the agent to present links to the user. No wire bump. |
+| 2026-11-10n | **Ship (§9.5f / §9.5f.1):** Owner MAY set `provider: "browser"` so `web_search` opens Bing/Google/Baidu SERP **directly** (no DuckDuckGo/API first). Still Owner opt-in; default remains `duckduckgo`. Attended ask once per search; Chromium required. Desktop + mobile provider dropdown. No wire bump. |
+| 2026-11-10m | **Ship (§9.5f.1):** Browser SERP engines add **Baidu** (`browserEngines: bing\|google\|baidu`). Desktop + **mobile** Connections → Web search expose engine checkboxes (order Bing→Google→Baidu). Fixed Baidu SERP URL only; CAPTCHA/安全验证 soft-fail. Default engines unchanged `["bing","google"]`. No wire bump. |
+| 2026-11-10l | **Product (mobile):** Live-verify checklist **PASS** — soft-disconnect keeps push token (unit); APNs prior evidence; claim sheet mobile row updated. Store/TestFlight still external. No wire bump. |
+| 2026-11-10k | **Ship (P2-AUTO / §19.8):** Household **Scenes** authoring — Settings → Skills → Scenes (desktop) + mobile Skills → Scenes. Templates create standing orders (`scene:*` ids) on ScheduleService; presence templates require Privacy Mode + `blockSmartHomeEgress` (V-P2-PRIV-2 honesty). Not a second engine / hub. V-UX-15. No wire bump. |
+| 2026-11-10j | **Ship (P2-PRIV / §19.4):** `home.getPrivacyMode` / `home.setPrivacyMode` (owner-scope, per seat). Settings → Models → Routing (+ mobile Routing). V-P2-PRIV-1: cloud tools fail closed (`web_search` / `browser` / `http_fetch` / `web_extract` / `web_research` / remote MCP / `image_generate` / `message`; turns forceLocal). V-P2-PRIV-2: when `enabled && blockSmartHomeEgress`, refuse `ha_call_service` / `mqtt_publish` + event-source notify. Catalogue §3.2 / §4.3.1 / Appendix A. Lift early-adopter silence for Privacy Mode only. No wire bump. |
 | 2026-11-10i | **Product (§9.5d / §9.5j):** Desktop Chat opens sandbox paths in a **right-side document pane** (Markdown rendered; conversation stays visible). System → Files keeps the modal viewer. Escape / Close dismisses the pane. No wire bump. |
 | 2026-11-10h | **Hygiene (P2-K8):** Managed LO download — TDF origin + manual https redirects, pinned catalog `sha256`, size cap, `safeJoin` managed `sofficeRelPath`, sync install lock, Windows `pathToFileURL` UserInstallation. Shared promote-path predicate (desktop+mobile). Mobile System → Files LO status/install. Appendix A: `home.promoteKnowledgeFile` wire block; `autoInstall` required on LO status. No wire bump. |
 | 2026-11-10g | **Ship (P2-K8 / §9.5b):** Managed LibreOffice under `stateDir/libreoffice/`. **Silent first-boot** auto-download when missing (non-blocking); on failure/decline → Setup + System → Files one-click with why-copy. `ENVOYHOME_LIBREOFFICE_AUTO=0` disables silent. JS writers always remain. RPCs: expand `home.getDocumentExportStatus`; add `home.installLibreOffice` / `home.cancelLibreOfficeInstall` / `home.setLibreOfficeInstallPreference`. V-OFFICE-12…14. No wire bump. |
@@ -492,7 +505,7 @@ Three transports carry `home.*`: the local/LAN WebSocket host (reuse-host), the 
 | **Channels** | `home.listChannels`, `home.enableChannel`, `home.disableChannel`, `home.getChannelStatus`, `home.setChannelConfig`, `home.startDemoHa`, `home.getDemoHaStatus`, `home.stopDemoHa`, `home.startDemoMqtt`, `home.getDemoMqttStatus`, `home.stopDemoMqtt` | Config + enable/disable = Owner-scope. Demo start/status account-scoped; demo stop Owner-scope |
 | **Smart-home objects** | `home.listSources`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations` | §5.7.3/§5.7.7 — registry is **owner-scope** to write; objects are reached through **tools**, never a device/state API. `listSources` returns the **household** registry (Design `2026-10-16l`) |
 | **Harness** | `home.listHarnesses`, `home.setHarness` | Per agent/default |
-| **Models** | `home.listProviders`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.getUsage` | provider pool + EnvoyHome Local / Ollama engine (§8.5) + default + placement + opt-in switch (B6/§8) |
+| **Models** | `home.listProviders`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.getUsage`, `home.getPrivacyMode`, `home.setPrivacyMode` | provider pool + EnvoyHome Local / Ollama engine (§8.5) + default + placement + opt-in switch (B6/§8) + Privacy Mode (§19.4) |
 | **Static workflows** | `home.listWorkflows`, `home.getWorkflow`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.runWorkflow`, `home.listWorkflowTools`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.listWorkflowStepTemplates`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate` | DAG procedures (linear `steps[]` = single path); §7 |
 | **Schedules** | `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.cancelScheduleProposal`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts`, `home.getHeartbeatConfig`, `home.setHeartbeatConfig`, `home.listStandingOrders`, `home.putStandingOrder`, `home.removeStandingOrder`, `home.setStandingOrderEnabled` | Daemon clock jobs (§7.4); NL propose→confirm + structured put; run history; §19.10 heartbeat + standing orders |
 | **Skills** | `home.listSkills`, `home.searchClawHubSkills`, `home.installSkill`, `home.removeSkill`, `home.verifySkill` | AgentSkills / ClawHub path |
@@ -813,7 +826,7 @@ Verification: V-SEC-13, V-SEC-14, V-SEC-20; Settings on `account.detail` (§10.1
 | Scope | Methods | Rule |
 |-------|---------|------|
 | **loopback-owner** | `home.getDaemonLog`, `home.shutdown`, `home.getServiceStatus`, `home.installService`, `home.uninstallService`, `home.restartService` | Only from the home machine Settings window — never over mesh, never from a paired device. Host OS / process lifecycle. |
-| **owner-scope** | `home.mintPairing`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts`, `home.listPairedDevices`, `home.sendTestPush`, `home.transferHouseholdOwner`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig`, `home.getDocumentExportStatus`, `home.installLibreOffice`, `home.cancelLibreOfficeInstall`, `home.setLibreOfficeInstallPreference`, `home.listMcpServers`, `home.upsertMcpServer`, `home.removeMcpServer`, `home.setMcpServerEnabled`, `home.testMcpServer`, `home.listMcpTools`, `home.setBinding`, `home.removeBinding`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations`, `home.createAccount`, `home.deleteAccount`, `home.enableChannel`, `home.disableChannel`, `home.setChannelConfig`, `home.stopDemoHa`, `home.stopDemoMqtt`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.getEmbedEngineStatus`, `home.enableEmbedEngine`, `home.disableEmbedEngine`, `home.downloadEmbedModel`, `home.cancelEmbedModelDownload`, `home.resumeEmbedModelDownload`, `home.searchClawHubSkills`, `home.installSkill`, `home.verifySkill`, `home.removeSkill`, `home.setHarness`, `home.doctorFix`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate` | **`isHouseholdOwner(caller)`** (§4.1.1): loopback **or** device with `accountIds = [ownerAccountId]`. Mobile OK. `setWorkspace` filesystem root only for Owner seat (R3). |
+| **owner-scope** | `home.mintPairing`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts`, `home.listPairedDevices`, `home.sendTestPush`, `home.transferHouseholdOwner`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig`, `home.getDocumentExportStatus`, `home.installLibreOffice`, `home.cancelLibreOfficeInstall`, `home.setLibreOfficeInstallPreference`, `home.listMcpServers`, `home.upsertMcpServer`, `home.removeMcpServer`, `home.setMcpServerEnabled`, `home.testMcpServer`, `home.listMcpTools`, `home.setBinding`, `home.removeBinding`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations`, `home.createAccount`, `home.deleteAccount`, `home.enableChannel`, `home.disableChannel`, `home.setChannelConfig`, `home.stopDemoHa`, `home.stopDemoMqtt`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.getEmbedEngineStatus`, `home.enableEmbedEngine`, `home.disableEmbedEngine`, `home.downloadEmbedModel`, `home.cancelEmbedModelDownload`, `home.resumeEmbedModelDownload`, `home.searchClawHubSkills`, `home.installSkill`, `home.verifySkill`, `home.removeSkill`, `home.setHarness`, `home.doctorFix`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate`, `home.getPrivacyMode`, `home.setPrivacyMode` | **`isHouseholdOwner(caller)`** (§4.1.1): loopback **or** device with `accountIds = [ownerAccountId]`. Mobile OK. `setWorkspace` filesystem root only for Owner seat (R3). |
 | **account-scoped** | bootstrap/negotiation: `home.hello`, `home.health`, `home.subscribe`, `home.meshStatus`, `home.registerPushToken`, `home.unregisterPushToken`. Reads of shared catalogs: `home.listAccounts`, `home.listChannels`, `home.getChannelStatus`, `home.listHarnesses`, `home.listProviders`, `home.listWorkflows`, `home.getWorkflow`, `home.listSkills`, `home.doctor`, `home.listWorkflowStepTemplates`, `home.getDemoHaStatus`, `home.getDemoMqttStatus`, `home.listSources` (household object registry — Design `2026-10-16l`), `home.getHouseholdOwner`. Seat-or-Owner (§4.1.1 `mayActForSeat`): `home.listGrants`, `home.revokeGrant`, `home.listBindings`, `home.updateAccount` (field rules: `toolPolicy` still Owner-only), `home.getWorkspace`. Own-account data: `home.getUsage`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getMediaGenerateConfig`, `home.setMediaGenerateConfig`, `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.listMemory`, `home.setMemorySettings`, `home.recall`, `home.forget`, `home.compactMemory`, `home.searchKnowledge`, `home.reindexKnowledge`, `home.promoteKnowledgeFile`, `home.getKnowledgeStatus`, `home.searchKnowYou`, `home.updateKnowYou`, `home.getKnowledgePolicy`, `home.setKnowledgePolicy`, `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.clearTranscript`, `home.deleteTranscriptMessages`, `home.archiveSession`, `home.unarchiveSession`, `home.removeSession`, `home.renameSession`, `home.listChoices`, `home.answerChoice`, `home.listSessions`, `home.listApprovals`, `home.answerApproval`, `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.cancelScheduleProposal`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts`, `home.getHeartbeatConfig`, `home.setHeartbeatConfig`, `home.listStandingOrders`, `home.putStandingOrder`, `home.removeStandingOrder`, `home.setStandingOrderEnabled`, `home.runWorkflow`, `home.listWorkflowTools`, `home.startDemoHa`, `home.startDemoMqtt` | Default: device bound to that account (§4.1). **Seat-or-Owner** as §4.1.1. Zero-binding devices may still call bootstrap methods including push register/unregister. A method that appears in **none** of the three rows is a spec bug — `scripts/docs-lint.mjs` fails the build if a catalogued method is missing here. |
 
 A method's scope is **transport-independent** (§3.3.1), except loopback-owner methods which are refused on both remote transports. Owner-scope over mesh requires an **exclusive** Owner-bound device.
@@ -1729,7 +1742,7 @@ Rules:
 - `llm_fill` / `llm_summarize` are narrow calls — not open tool loops — and go through the daemon's `provider_handle`, so they obey the account's provider mode and mix rules (§8). Node kinds stay the closed set: `llm_fill` \| `tool` \| `llm_summarize` (`kind` is accepted as an alias for `type`; `tool:` is accepted as an alias for tool `name`).
 - **Prompt / args templates (Normative):** `llm_*` `prompt` strings may interpolate `{{step.<nodeId>}}`, `{{step.<nodeId>.<field>}}`, or `{{<outKey>}}` from prior node outputs. Tool `args_from` uses the same `step.*` refs. When a tool returns JSON, top-level string/number/boolean fields are also recorded as `nodeId.field` (e.g. `extract_document` → `{{step.extract.text}}` / `args_from: { markdown: step.summarize }`). This is how Office/PDF → Markdown → summarize → export chains work in workflows (§9.5b / §9.5c).
 - **Reusable LLM step templates (Normative):** users may save prompt-centric templates (id, label, `nodeType` ∈ {`llm_fill`,`llm_summarize`}, prompt, optional `out`) under global `workflows/step-templates.json` or account `accounts/<id>/workflow-step-templates.json` (account overlays same `id`). Templates do **not** add runtime node kinds — applying one inserts a normal `llm_*` node (optional UI `label`). Labels are purpose names (e.g. “Extract JSON”), not new kinds; **Custom step…** / **Save as step** write the **global** library by default so **Your steps** can reuse them in any workflow later; asks for name + prompt (defaults `nodeType` to `llm_fill`; change in inspector if needed). **Custom step…** also offers **Refine with AI** on the prompt via `home.draftWorkflowPrompt` (goal = step name when set). Skills still extend **tools** only. RPCs: `home.listWorkflowStepTemplates`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate`. Settings **Add step ▾** lists built-in Fill/Summarize blanks, **Custom step…**, and saved templates; inspector also offers **Refine with AI** and **Save as step**.
-- A `tool` node is a real tool call: `name` MUST appear in `home.listWorkflowTools` (builtins, verified `skill:<id>`, or HA/MQTT decls). Unknown names are refused at put (`workflow.unknown_tool`). Runtime still goes through the account sandbox and §4.3/§4.4 — **a workflow is not an approval bypass.** Unavailable integrations fail closed (`envoyhome.tool_unavailable`). Verification: V-DAG-3. Builtin document tools `extract_document` / `export_document` (§9.5b/c), list/search `list_dir` / `search_files` (§9.5e), `web_search` (§9.5f), and `browser` (§9.5g) are in that catalogue.
+- A `tool` node is a real tool call: `name` MUST appear in `home.listWorkflowTools` (builtins, verified `skill:<id>`, HA/MQTT decls, or Test-ok Owner **MCP** `mcp__…` — §9.5h). Unknown names are refused at put (`workflow.unknown_tool`). Runtime still goes through the account sandbox and §4.3/§4.4 — **a workflow is not an approval bypass.** Unavailable integrations fail closed (`envoyhome.tool_unavailable`). Verification: V-DAG-3. Builtin document tools `extract_document` / `export_document` / `promote_knowledge` (§9.5b/c/j), list/search `list_dir` / `search_files` (§9.5e), `web_search` / `web_extract` / `web_research` (§9.5f–§9.5f.3), and `browser` (§9.5g) are in that catalogue.
 - Authoring: Settings dual-mode (**Diagram** DAG canvas \| **YAML**; YAML is Normative on disk) / `home.putWorkflow` / `home.validateWorkflow` / `home.setWorkflowEnabled` / `home.removeWorkflow` / `home.listWorkflowTools`; attended drafts via `home.draftWorkflow` (NL → YAML, never writes; optional `currentYaml` to revise) and `home.draftWorkflowPrompt` (refine LLM node prompt) from **New** / Edit; step templates via `home.listWorkflowStepTemplates` / `home.putWorkflowStepTemplate` / `home.removeWorkflowStepTemplate`; reload via `home.reloadWorkflows`; attended test via `home.runWorkflow`. Optional node `x`/`y` are UI layout hints ignored by the executor.
 
 ### 7.3 Verification
@@ -2188,8 +2201,8 @@ Household agents need current web results without `exec` or arbitrary `http_fetc
 | **Args** | `query` (required); `count?` (1–10, default 5) |
 | **Output** | JSON `{ provider, results: [{ title, url, description }], error?, fallback?, engine? }` capped ≤ ~20 000 chars |
 | **Timeout (primary)** | 15 s |
-| **Providers (v1)** | `duckduckgo` (default, no key) \| `brave` \| `tavily` |
-| **Hosts (primary)** | Fixed provider API/HTML hosts only — never a model-supplied search URL (SSRF stays on `http_fetch`) |
+| **Providers (v1)** | `duckduckgo` (default, no key) \| `brave` \| `tavily` \| **`browser`** (Owner opt-in; Bing/Google/Baidu SERP via Chromium — §9.5f.1) |
+| **Hosts (primary)** | Fixed provider API/HTML hosts only — never a model-supplied search URL (SSRF stays on `http_fetch`). `provider: "browser"` uses the fixed SERP templates in §9.5f.1 |
 
 **Config (Normative — household Owner).** On disk `web-search.json`:
 
@@ -2197,14 +2210,18 @@ Household agents need current web results without `exec` or arbitrary `http_fetc
 {
   "enabled": true,
   "provider": "duckduckgo",
-  "fallback": "none",
+  "fallback": "browser",
   "browserEngines": ["bing", "google"],
   "unattendedBrowser": false,
+  "researchEnabled": false,
+  "digDepth": 3,
+  "extractBackend": "auto",
+  "serpBrowserEngine": "auto",
   "updatedAt": "…"
 }
 ```
 
-Plus secret file for API key (channel-secret pattern). Additive Owner-scope `home.getWebSearchConfig` / `home.setWebSearchConfig` (fields additive). Defaults: `enabled: true`, `provider: duckduckgo`, **`fallback: "none"`**, `browserEngines: ["bing","google"]` (Bing first), `unattendedBrowser: false`. Brave/Tavily require a non-empty key or the **primary** path is unavailable (`envoyhome.tool_unavailable`) — DuckDuckGo remains usable without a key.
+Plus secret file for API key (channel-secret pattern). Additive Owner-scope `home.getWebSearchConfig` / `home.setWebSearchConfig` (fields additive). Defaults: `enabled: true`, `provider: duckduckgo`, **`fallback: "browser"`** (`2026-11-10o` — was `none`; zero-config Bing/Google/Baidu when primary fails or Brave/Tavily has no key), `browserEngines: ["bing","google"]` (Bing first), `unattendedBrowser: false`, **`researchEnabled: false`**, **`digDepth: 3`** (`2026-11-10p`), **`extractBackend: "auto"`** (`2026-11-11e`, was fetch), **`serpBrowserEngine: "auto"`** (`2026-11-11e`, was chromium). Brave/Tavily without a key skip primary and use browser fallback when enabled; DuckDuckGo remains usable without a key. Public config ALSO exposes `obscuraRuntime` / `browserRuntime` + install hints, plus **`effectiveExtractBackend`** / **`effectiveSerpBrowserEngine`** (Stage E). Stage D: desktop bundle / managed auto-install; optional `ENVOYHOME_OBSCURA` / `ENVOYHOME_OBSCURA_BUNDLE`; `ENVOYHOME_OBSCURA_AUTO=0` disables silent.
 
 **Disposition — primary path (Normative — `2026-10-19b`):**
 - Attended + enabled + provider ready → **allow without prompt** (`ToolSpec.attendedAllow`)
@@ -2214,19 +2231,22 @@ Plus secret file for API key (channel-secret pattern). Additive Owner-scope `hom
 
 Not sandbox-fence. Appears in `home.listWorkflowTools`. Settings: Connections → Web search (desktop); slim Owner entry on mobile. V-OUT-6.
 
-#### 9.5f.1 Browser SERP fallback (Normative — `2026-10-19c`)
+#### 9.5f.1 Browser SERP (fallback + optional primary) (Normative — `2026-10-19c`, amend `2026-11-10n`)
 
-**Intent.** API / DDG HTML search is primary. An optional **free** headless Chromium path MAY scrape Bing (then Google) SERP HTML when the primary path fails — Owner opt-in only. This is **not** a general browser agent and **not** the default.
+**Intent.** API / DDG HTML search is the **default** primary. An optional **free** headless Chromium path MAY scrape Bing / Google / Baidu SERP HTML — Owner opt-in only. Two Owner modes:
+1. **`fallback: "browser"`** — run browser SERP only after the API/DDG primary returns no usable hits.
+2. **`provider: "browser"`** (`2026-11-10n`) — run browser SERP **as the primary** (no DuckDuckGo/Brave/Tavily first). Still not the factory default.
 
-**Peer filter.** HomeClaw separates `web_search` (API) from Playwright `browser_*`. EnvoyHome **adapts** Playwright only as a **search fallback**, **rejects** using headless Google/Bing as the sole search path, and **rejects** free navigation / CAPTCHA solving inside `web_search`.
+This is **not** a general browser agent (§9.5g) and **not** on by default.
 
-**When it runs (Normative).** All of:
-1. `enabled === true` and `fallback === "browser"`.
-2. Primary attempt finished with **no usable hits**: thrown/`error` set **or** `results.length === 0`.
-3. Chromium/Playwright **available** on the host (else skip with `error` naming the missing runtime — do not crash the daemon).
-4. Policy allows the **browser leg** (§ disposition below).
+**Peer filter.** HomeClaw separates `web_search` (API) from Playwright `browser_*`. EnvoyHome **adapts** Playwright for **search SERP only** (fixed URLs), **rejects** free navigation / CAPTCHA solving inside `web_search`, and **rejects** silent Chromium download. Owner-elected `provider: "browser"` is allowed when Chromium is ready.
 
-**Engine order (Normative).** Use `browserEngines` in order; default `["bing","google"]`. **Bing first** (typically less hostile than Google for automated SERPs). Stop at the first engine that yields ≥1 organic hit. If all engines fail (empty, timeout, CAPTCHA/challenge page, navigation error), return primary error (if any) plus a clear fallback error — **no retry loop**.
+**When browser SERP runs (Normative).** All of:
+1. `enabled === true` and either `provider === "browser"` **or** (`fallback === "browser"` and the API/DDG primary finished with **no usable hits**).
+2. Chromium/Playwright **available** on the host (else `tool_unavailable` / soft error naming the missing runtime — do not crash the daemon).
+3. Policy allows the **browser leg** (§ disposition below).
+
+**Engine order (Normative).** Use `browserEngines` in order; default `["bing","google"]` (Owners MAY add **`baidu`** — important for CN households; desktop + mobile Settings expose checkboxes). **Bing first** by default (typically less hostile than Google for automated SERPs). Stop at the first engine that yields ≥1 organic hit. If all engines fail (empty, timeout, CAPTCHA/challenge/百度安全验证 page, navigation error), return primary error (if any) plus a clear fallback error — **no retry loop**.
 
 **Fixed SERP URLs only (Normative).** The browser MAY open only:
 
@@ -2234,6 +2254,7 @@ Not sandbox-fence. Appears in `home.listWorkflowTools`. Settings: Connections �
 |--------|----------------------------------|
 | `bing` | `https://www.bing.com/search?q={query}` |
 | `google` | `https://www.google.com/search?q={query}&hl=en` |
+| `baidu` | `https://www.baidu.com/s?wd={query}` |
 
 Refuse any other navigation (no ads, related searches, consent interstitial click-through beyond dismissing an obvious cookie banner if a single known selector exists — otherwise treat cookie walls as failure). No model-supplied URL. No persistent logged-in profiles; ephemeral context per call.
 
@@ -2255,19 +2276,70 @@ Refuse any other navigation (no ads, related searches, consent interstitial clic
 - **Unattended:** browser fallback **off** unless `unattendedBrowser === true` **and** a matching `web_search` grant exists; otherwise skip fallback.
 - **`restricted`:** deny entire `web_search` (unchanged).
 
-**Output fields (additive):** `fallback: "none"|"browser"`, `engine?: "bing"|"google"` when fallback produced hits or attempted; keep `provider` as the **primary** provider id. Prefer honest errors: `captcha_or_block`, `timeout`, `browser_busy`, `runtime_missing`.
+**Output fields (additive):** `fallback: "none"|"browser"`, `engine?: "bing"|"google"|"baidu"` when browser SERP produced hits or attempted; keep `provider` as the configured primary id (`browser` when Owner elected browser-primary). Prefer honest errors: `captcha_or_block`, `timeout`, `browser_busy`, `runtime_missing`.
 
-**Settings (Normative — optional + install guide).** Connections → Web search:
-1. **Toggle off by default** — “Browser fallback (Bing/Google when API/DDG fails)”. Owner may enable without installing Chromium first; saving `fallback: "browser"` while runtime is missing is allowed, but the UI MUST show **Not ready** and MUST NOT imply search already uses the browser.
+**Settings (Normative — optional + install guide).** Connections → Web search (desktop + mobile):
+1. **Provider** MAY be `browser` — “Browser (Bing / Google / Baidu)” — searches those engines directly. Requires Chromium ready or UI shows **Not ready**.
+2. **Browser fallback on by default** (`2026-11-10o`) — “Browser fallback (Bing/Google/Baidu when API/DDG fails or is unset)” (hidden when provider is already `browser`). Owner may turn it off. Saving while Chromium is missing is allowed, but the UI MUST show **Not ready** for the browser path and MUST NOT imply search already uses the browser until `browserRuntime === "ready"`.
 2. **`getWebSearchConfig` additive fields:** `browserRuntime: "ready" | "missing"`, `browserInstallHint` (platform-appropriate one-liner, e.g. `npx playwright install chromium` / documented daemon path). Never expose binary paths that escape the product docs.
 3. When `browserRuntime === "missing"` and the toggle is on (or the user turns it on): show a **copyable install hint** + short note that after install they reopen Settings / restart the daemon if needed; link or text to Design/help is enough — no silent download of Chromium without Owner action.
 4. Best-effort warning: SERP pages may CAPTCHA/block; prefer Brave/Tavily when quality matters.
 
 **Doctor.** MAY issue warn when `fallback === "browser"` and `browserRuntime === "missing"` (fix: clear hint or set `fallback` back to `none`). No auto-install Fix that downloads browsers without confirmation.
 
-**Non-goals (this subsection).** Free navigation / click / form-fill — those live in **§9.5g** `browser`, not inside `web_search`. Solving CAPTCHAs; storing Google cookies; using this fallback as the only search path; SerpAPI/CSE as substitutes (deferred keyed providers).
+**Non-goals (this subsection).** Free navigation / click / form-fill — those live in **§9.5g** `browser`, not inside `web_search`. Solving CAPTCHAs; storing Google/Baidu cookies; silent Chromium download; SerpAPI/CSE as substitutes (deferred keyed providers). Factory-default browser-primary is rejected — Owner must opt in.
 
 Verification: **V-OUT-7**.
+
+#### 9.5f.2 Web extract (Normative — `2026-11-10p` / Stage A `2026-11-10q`)
+
+**Intent.** Sibling of `web_search`: fetch **one** public page and return readable Markdown (Tavily-extract-like, **local**). Not crawl graphs; not dig-inside-search.
+
+| Field | Value |
+|-------|--------|
+| **Tool** | `web_extract` |
+| **Risk** | `network`, `grantable: true` (attended asks like `http_fetch`) |
+| **Args** | `url` (required, https only); `maxChars?` (default 20 000, max 40 000) |
+| **Output** | JSON `{ url, title?, markdown, chars, truncated?, error?, backend? }` |
+| **Engine (default)** | `extractBackend: "auto"` (Stage E) — Obscura if ready else HTTPS GET via `http_fetch` SSRF chokepoint; HTML → main-content Markdown. Soft-fail on non-HTML, CAPTCHA/paywall heuristics, timeout |
+| **Engine (Owner force)** | `extractBackend: "fetch" \| "obscura"` — forced backend. Obscura runs `obscura fetch <url> --dump markdown`. Missing forced Obscura → `tool_unavailable` / dig soft-fail `obscura_missing`. Never stealth/CAPTCHA solve |
+| **Privacy** | Refuse under Privacy Mode (same family as `http_fetch` / `web_search`) |
+
+**Settings.** Connections → Web search: Extract backend dropdown (`fetch` \| `obscura`) + Obscura ready/missing + copyable install hint (desktop + mobile).
+
+**Non-goals.** Follow links; free crawl; CAPTCHA solve; **silent Chromium** download; model-supplied non-https; Obscura MCP as the extract plane; stealth Obscura as product default. **Obscura** MAY be desktop-bundled and/or managed auto-installed (Stage D `2026-11-11`) — that is not Chromium silent-download. Stage B/C engine select — see §9.5f.1 follow-on note and Appendix C.5.
+
+Verification: **V-OUT-28**, **V-OUT-30**.
+
+##### 9.5f.1 / §9.5g engine select (Normative — shipped Stage B/C `2026-11-10r`)
+
+| Stage | Config | Default | Behavior |
+|-------|--------|---------|----------|
+| **A′ dig** | `extractBackend: "auto" \| "fetch" \| "obscura"` | **`auto`** | Auto: Obscura if ready else HTTP `fetch`. Forced `obscura`/`fetch` honor Owner. |
+| **B** SERP | `serpBrowserEngine: "auto" \| "chromium" \| "obscura"` | **`auto`** | Auto: Obscura if ready else Playwright Chromium if ready else soft-fail + hints. Fixed SERP URLs only. |
+| **C** Managed | `managedEngine: "auto" \| "chromium" \| "obscura"` | **`auto`** | Auto: Obscura `serve`+CDP if ready else Chromium `launchPersistentContext`. **`personal` / `remote` ignore** (real CDP only). No stealth. |
+| **D** Runtime | Bundle + managed auto-install | n/a | Desktop packages pinned Obscura; managed silent first-boot when missing. Resolve: env → bundle → managed → PATH. |
+| **E** Auto | Runtime prefer + fallback | **`auto`** | Capability table: dig/SERP/managed prefer Obscura when ready; Chromium optional; never map elevated profiles to Obscura |
+
+**Capability (Stage E):** dig + SERP HTML + managed headless are Obscura-confident under `auto`. CAPTCHA/stealth never. Hard Obscura-only (no Chromium fallback) still needs Appendix C.5 parity scores — `auto` is the Normative default, not hard Obscura-only.
+
+#### 9.5f.3 Web research (Normative — `2026-11-10p`)
+
+**Intent.** Owner-optional **bundled** research: run `web_search`, dig top N organic URLs with `web_extract`, return an organized brief **plus** the link list. Does **not** change `web_search` (SERP/API rows only).
+
+| Field | Value |
+|-------|--------|
+| **Tool** | `web_research` |
+| **Risk** | `network`, `grantable: true`; `attendedAllow: true` when Owner enabled research (same spirit as `web_search`) |
+| **Args** | `query` (required); `count?` (search hits, 1–10); `digDepth?` (1–10, default Owner `digDepth`) |
+| **Output** | JSON `{ organized, links: [{ title, url, description }], extracts?: [...], provider, engine?, error? }` capped ≤ ~20 000 chars for the wire payload; agent presents **organized first**, then links |
+| **Pipeline** | Daemon-orchestrated: (1) `web_search` (2) sequential `web_extract` for up to `digDepth` URLs (3) template `organized` from extract titles + capped excerpts — LLM rewrite stays in the agent reply |
+| **Owner config** | `researchEnabled` default **false**; `digDepth` default **3**, max **10**. Dig uses household `extractBackend` (§9.5f.2). Catalogue `available` only when `researchEnabled` and `web_search` ready |
+| **Soft-fail** | Per-URL extract failures still return `links`; empty extracts → `organized` notes that only links are available; Obscura-missing digs soft-fail per URL |
+
+**Settings.** Connections → Web search: toggle “Web research (dig top results)” + dig-depth control (desktop + mobile).
+
+Verification: **V-OUT-29** (dig path inherits **V-OUT-30** when `extractBackend: "obscura"`).
 
 ### 9.5g Browser control (Normative — `2026-10-19e`)
 
@@ -2280,15 +2352,15 @@ Household agents need to navigate and interact with pages beyond SERP scrape. **
 | **Args** | `action` (required) + action-specific fields (`url`, `targetId`, `ref`, `kind`, `text`, `snapshotId`, `verify`, …) |
 | **v1 actions** | `doctor` \| `status` \| `start` \| `stop` \| `tabs` \| `open` \| `focus` \| `close` \| `navigate` \| `snapshot` \| `screenshot` \| `act` \| `text` \| `wait` \| `press` |
 | **`act.kind`** | `click` \| `type` \| `select` \| `drag` (refs from prior `snapshot`; freshness §9.5g.2) |
-| **Runtime** | Default: managed headless Chromium via Playwright on the **daemon host**. Elevated profiles: §9.5g.1 |
-| **Config** | `browser-control.json` — see §9.5g.1 for full shape; defaults `enabled: false`, `unattendedEnabled: false`, `defaultProfile: "managed"` |
+| **Runtime** | Default: managed headless via `managedEngine: "auto"` (Obscura if ready, else Playwright Chromium) on the **daemon host**. Owner MAY force `obscura` / `chromium` (§9.5f.1 / §9.5g engine select). Elevated profiles: §9.5g.1 |
+| **Config** | `browser-control.json` — see §9.5g.1; defaults `enabled: false`, `unattendedEnabled: false`, `defaultProfile: "managed"`, **`managedEngine: "auto"`** (Stage E) |
 
 **Disposition (Normative):**
-- Catalogue `available` when `enabled` and the **default** profile is ready (managed → Chromium; personal/remote → §9.5g.1).
+- Catalogue `available` when `enabled` and the **default** profile is ready (managed → selected `managedEngine` runtime; personal/remote → §9.5g.1).
 - Attended → ApprovalSink ask; summary MUST include action + profile (+ URL or targetId).
 - Unattended → matching grant **and** `unattendedEnabled === true` **and** resolved profile is `managed`; else deny/skip. Elevated profiles never run unattended (§9.5g.1).
 - `restricted` → deny.
-- Missing Chromium (managed) → soft-fail with install hint (same as §9.5f.1); never silent download.
+- Missing managed runtime (Chromium or Obscura per `managedEngine`) → soft-fail with install hint; Chromium never silent-download; Obscura MAY auto-install / ship bundled (Stage D).
 
 **SSRF / isolation (Normative):** `open` / `navigate` MUST reject non-`http(s)`, link-local, and metadata IPs (same family as `http_fetch`) on the **initial URL and every subsequent request/redirect** (route guard + final-URL re-check). Managed: Playwright persistent context under `stateDir/browser-profiles/<accountId>/managed` — not the Owner’s daily Chrome. Household-wide **concurrency 1** with the SERP browser leg (shared busy mutex; the §9.5f.1 **10 s SERP rate limit does not apply** to interactive `browser` actions). Action timeout ≤ 30 s; `text`/`snapshot` capped (`maxChars` ≤ 40 000); screenshots under `output/browser/` capped at **5 MiB**. CDP endpoints are **Owner-config only** — never from tool args. Doctor MAY warn when enabled and managed Chromium is missing while the default profile needs it.
 
@@ -2309,7 +2381,8 @@ Beside managed Chromium, the Owner MAY enable two elevated profiles that reuse l
 | `remote` | Playwright `connectOverCDP` to Owner `cdpUrl` (+ optional token secret) | Always-on box / Browserless-class host |
 
 **Config file** (`browser-control.json`):
-`{ enabled, unattendedEnabled, defaultProfile: "managed"|"personal"|"remote", personal: { enabled, cdpEndpoint }, remote: { enabled, cdpUrl }, elevatedAcknowledgedAt?, updatedAt }`
+`{ enabled, unattendedEnabled, defaultProfile: "managed"|"personal"|"remote", managedEngine: "auto"|"chromium"|"obscura", personal: { enabled, cdpEndpoint }, remote: { enabled, cdpUrl }, elevatedAcknowledgedAt?, updatedAt }`  
+(`managedEngine` default **`auto`** — Stage E `2026-11-11e`; elevated profiles ignore it.)
 
 **Secret:** `secrets/browser_remote_cdp_token.secret` — write-only via `setBrowserControlConfig.remoteToken`; never returned by get (only `hasRemoteToken`).
 
@@ -2563,8 +2636,8 @@ Canonical memory IDs live in [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Des
 | V-OUT-3 | `write_file` echoes a chip-ready path (normalized `./`/`/`/`\`/`//`); human-visible writes steered to `documents/`/`output/`/`knowledge/` |
 | V-OUT-4 | `listSandboxEntries` lists sandbox tops + R3-effective `workspace/`; refuses `share/` and inactive workspace; parent never escapes the browsed root; entry cap |
 | V-OUT-5 | `list_dir` / `search_files` are `read`-tier builtins through the **turn profile’s** path jail only (not another account’s `files/` or mounts); empty `list_dir` → synthetic tops; search depth/visit/hit caps; `share/` refused; fence-safe + catalogue |
-| V-OUT-6 | `web_search`: enabled DuckDuckGo works without a key; Brave/Tavily without key → unavailable; attended allow (no ask); unattended without grant denied; restricted denied; result JSON capped; fixed provider hosts only |
-| V-OUT-7 | Browser SERP fallback: default off (Settings toggle); runs only after primary empty/error; Bing before Google; fixed SERP URLs; attended ask for browser leg; unattended browser requires `unattendedBrowser`+grant; missing Chromium soft-fails + Settings/Doctor **install hint**; concurrency/timeout/rate caps; no free navigation; no silent Chromium download |
+| V-OUT-6 | `web_search`: enabled DuckDuckGo works without a key; Brave/Tavily without key → unavailable when `fallback: none` (default browser fallback still catalogue-ready); attended allow (no ask); unattended without grant denied; restricted denied; result JSON capped; fixed provider hosts only |
+| V-OUT-7 | Browser SERP fallback: default **on** (`fallback: browser`, Settings toggle); runs after primary empty/error **or** unready API primary; Bing before Google; fixed SERP URLs; attended ask for browser leg; unattended browser requires `unattendedBrowser`+grant; missing Chromium soft-fails + Settings/Doctor **install hint**; concurrency/timeout/rate caps; no free navigation; no silent Chromium download |
 | V-OUT-8 | Builtin `browser` (§9.5g): Owner-disabled by default; catalogue available when managed Chromium ready **or** (Owner + elevated ready); attended ask (summary tags resolved profile incl. household default); unattended needs grant+`unattendedEnabled`+managed; restricted deny; navigate/open SSRF incl. redirects; snapshot/act; concurrency 1 with SERP (no SERP rate on browser); soft-fail missing Chromium + install hint |
 | V-OUT-9 | Elevated `personal` (§9.5g.1): acknowledge required; Owner-account only; never unattended; loopback CDP only; connectOverCDP; approval summary tags `[personal]`; CDP endpoint never from tool args |
 | V-OUT-10 | Elevated `remote` (§9.5g.1): acknowledge required; Owner-account only; never unattended; Owner `cdpUrl` + optional secret; connectOverCDP; approval summary tags `[remote]`; CDP URL never from tool args |
@@ -2580,6 +2653,13 @@ Canonical memory IDs live in [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Des
 | V-OUT-25 | §9.5g.3: `input[type=file]` → `kind: file`; apply via `setInputFiles` after jail resolve |
 | V-OUT-26 | §9.5g.3: file apply refuses escape / >8 MiB / disallowed mime; basename-only in transcript |
 | V-OUT-27 | §9.5g.3: unattended refuses any form card that includes a `file` field |
+| V-OUT-28 | §9.5f.2: `web_extract` https-only SSRF; HTML→Markdown capped; Privacy Mode refuse; soft-fail non-HTML/CAPTCHA |
+| V-OUT-29 | §9.5f.3: `web_research` Owner opt-in; dig ≤ digDepth; returns `{ organized, links }`; catalogue off when research disabled; does not dig inside `web_search` |
+| V-OUT-30 | §9.5f.2 Stage A: `extractBackend` fetch\|obscura (default fetch); obscura soft-fail + install hint; never silent-download; research dig uses same backend |
+| V-OUT-31 | Stage B: `serpBrowserEngine` chromium\|obscura (default chromium); SERP HTML via selected engine; missing → soft-fail + hint; CAPTCHA soft-fail unchanged |
+| V-OUT-32 | Stage C: `managedEngine` chromium\|obscura (default chromium); Obscura = serve+CDP+storage-dir; personal/remote ignore; no stealth; missing → soft-fail + hint |
+| V-OUT-33 | Stage D: desktop bundles pinned Obscura; managed auto-install under `stateDir/obscura/`; resolve env→bundle→managed→PATH; `ENVOYHOME_OBSCURA_AUTO`; never stealth default; Chromium still Owner `npx playwright install` |
+| V-OUT-34 | Stage E: `extractBackend`/`serpBrowserEngine`/`managedEngine` default `auto`; prefer Obscura when ready else fetch/Chromium; personal/remote ignore; effective* on getConfig; Owner force still works |
 | V-OFFICE-1 | §9.5j/b: `export_document` `format: pptx` writes OOXML under `output/exports/` |
 | V-OFFICE-2 | §9.5j/b: `format: md` \| `html` \| `rtf` export; refuse overwrite of uploads |
 | V-OFFICE-3 | §9.5j/b: docx tables + xlsx multi-sheet from GFM tables/headings |
@@ -2615,7 +2695,7 @@ YAML/JSON export is secondary. Desktop Settings is a **single window** with a le
 |--------|--------|-----------------|
 | `accounts` | *(legacy deep-link)* | Opens **System → Profiles** — create / delete (**Owner**); Owner badge; **Transfer ownership** (§4.1.1); workspace mounts (§4.2.1). Members see list read-mostly |
 | `account.detail` | *(in System → Profiles cards)* | Own **display name / locale** (seat-or-Owner); **tool policy** Owner-only; **Workspace folders** (§4.2.1 multi-mount): Owner adds/removes from desktop **or** mobile; members see status only |
-| `connections` | Connections (tabs) | **Pair devices** (`pairing`): QR / mint (Owner phone or desktop); revoke/list/rebind. **Home Assistant** / **MQTT**: config + enable + bind/flags Owner-scope. **Channels**: enable + `setChannelConfig` Owner-scope. **Web search** (§9.5f/§9.5f.1): provider + browser SERP fallback. **Browser** (§9.5g/§9.5g.1/§9.5g.2/§9.5g.3): managed + elevated + observe→act→verify + dynamic form cards. **MCP** (§9.5h): Owner add any server + Test + enable; no quality allow-list. Legacy `bindings` → `channels`; legacy `smarthome` → HA tab. |
+| `connections` | Connections (tabs) | **Pair devices** (`pairing`): QR / mint (Owner phone or desktop); revoke/list/rebind. **Home Assistant** / **MQTT**: config + enable + bind/flags Owner-scope. **Channels**: enable + `setChannelConfig` Owner-scope. **Web search** (§9.5f/§9.5f.1): provider + browser SERP fallback (Bing/Google/Baidu engines). **Browser** (§9.5g/§9.5g.1/§9.5g.2/§9.5g.3): managed + elevated + observe→act→verify + dynamic form cards. **MCP** (§9.5h): Owner add any server + Test + enable; no quality allow-list. Legacy `bindings` → `channels`; legacy `smarthome` → HA tab. |
 | `chat` | Chats + approval inbox | Loopback turns; **ChatGPT-style session rail** (New chat + list; archive/delete); trash menu (**Empty** / **Archive** / **Delete chat**) + per-message copy/delete; **pending tool/actuation approvals** Allow/Deny inline (V-UX-7); toast + auto-focus Chats on `home:approval-needed`. **Home-intent routing** (§5.7.8): general sessions omit `ha_*`/`mqtt_*` unless the turn is home-related. |
 | `homeChat` | Home chat | Dedicated smart-home session (`purpose: "home"`): **one session per profile** (reuse, no New/Recents); trash menu (**Empty** / **Delete chat**) + per-message delete; bound-object card + `ha_*`/`mqtt_*` always available; same Approvals gate. Entry from the sidebar. Not a second brain — same daemon/harness. **Hidden until Home Assistant is configured and enabled** (`homeassistant` channel: baseUrl + access token saved, then Enable) — do not show an empty Home chat when HA is absent. MQTT-only homes use Workflows / MQTT bind until HA is connected. |
 | `llm` | LLM (tabs) | **Model Provider** (`models`, default): provider pool. **Local Model** (`local`): EnvoyHome Local / Ollama (§8.5). **Routing** (`routing`): Cloud / Local only / Smart Routing. **Memory** (`memory`): standing notes; On disk / In prompt; cloud vs local inject packages (Memory Design §4.2.1); pending learns; compact; flush/review. Harness UI hidden (envoy-harness default). Legacy ids deep-link to the tab. |
@@ -2654,6 +2734,7 @@ YAML/JSON export is secondary. Desktop Settings is a **single window** with a le
 | V-UX-12b | Mobile Skills → Schedules: reads `jobs` from `listSchedules`; parity with V-UX-12 (Repeating/Once, badge, no remove synced, tool argChoices) |
 | V-UX-13 | User can open **Schedules chat** from the shell (desktop sidebar and mobile nav) without Home Assistant; session uses `purpose: "schedules"` (one session per profile); **Chat \| Histories** panes — Histories shows **Not set** (canceled/expired proposals) + **Runs** (`listScheduleReceipts`); the turn standing text lists non-system jobs and tells the model to propose/confirm via the schedule tool; smart-home tools are not enabled by that purpose |
 | V-UX-14 | Chat shows a **choice card** (`selection` one/many/text/`form`) for `ask_user`, schedule time candidates, Home device disambiguation, §9.5g.3 browser form assist, and §9.5i `outbound_handoff` (Open https); `home.answerChoice` settles or cancels it; TTL expires as cancel (fail closed, wakes parked `ask_user` / form apply / handoff) |
+| V-UX-15 | Skills → Scenes creates household when→do standing orders (`scene:*`); presence templates refuse without Privacy Mode + smart-home egress block (§19.8) |
 
 ---
 
@@ -2999,9 +3080,9 @@ Federation, Bot Mode, silent skill overwrite, vLLM-as-required, **EnvoyMesh Soci
 
 ### 19.4 Phase 2 RPC / Settings
 
-`home.setPrivacyMode` (**Phase 2**, §19.4 — not in the v1 catalogue); mobile uses same pairing as desktop (hosting). Memory/learn RPCs are **v1** (§9.4). No Social settings surface. **Smart home adds exactly four `home.*` methods and no device/state API** (§3.4, §5.7.3, §5.7.7): `home.listSources`, `home.setSourceBinding`, `home.removeSourceBinding` (the object registry the safety class depends on) and `home.listActuations` (the journal). Everything else is channel plugins, a tool bundle and workflow definitions; its Settings surface reuses `home.setChannelConfig` and the smart-home screen.
+`home.getPrivacyMode` / `home.setPrivacyMode` (**shipped** `2026-11-10j` — owner-scope; per-seat `accounts/<id>/privacy-mode.json`). Settings → Models → Routing (desktop + Owner mobile). When `enabled`: turns forceLocal; cloud tools refuse (`web_search`, `web_extract`, `web_research`, `browser`, `http_fetch`, remote MCP http/sse, `image_generate`, `message`). When also `blockSmartHomeEgress` (default true): refuse `ha_call_service` / `mqtt_publish` and event-source notify (V-P2-PRIV-1/2). Mobile uses same pairing as desktop (hosting). Memory/learn RPCs are **v1** (§9.4). No Social settings surface. **Smart home adds exactly four `home.*` methods and no device/state API** (§3.4, §5.7.3, §5.7.7): `home.listSources`, `home.setSourceBinding`, `home.removeSourceBinding` (the object registry the safety class depends on) and `home.listActuations` (the journal). Everything else is channel plugins, a tool bundle and workflow definitions; its Settings surface reuses `home.setChannelConfig` and the smart-home screen.
 
-**Early-adopter silence (`2026-10-22d`):** A on-disk `privacy-mode.json` stub MUST NOT be marketed as Privacy Mode. No Settings toggle and no `home.setPrivacyMode` ⇒ no product claim (see [`reviews/2026-10-22-early-adopter-claims.md`](reviews/2026-10-22-early-adopter-claims.md)).
+**Marketing (`2026-11-10j`):** Privacy Mode MAY be claimed once RPC + Settings + V-P2-PRIV-* tests are green (see claim sheet). Prior stub-only silence (`2026-10-22d`) is lifted for this feature only.
 
 ⚠️ **Privacy Mode must cover smart home.** A "local-only" switch that still publishes to a remote MQTT broker or calls a cloud HA instance is a lie — §5.7.4 rule 4 makes that a requirement on the Phase 2 feature.
 
@@ -3100,8 +3181,8 @@ What it must **not** add is a device model. That is the Phase 2 question, and on
 |-----------|------------------|--------------------|
 | **Additional aggregators** (Zigbee2MQTT-native, Matter/Thread, vendor clouds) | MQTT already reaches most of them; HA reaches nearly all | A household runs an aggregator HA cannot front |
 | **A canonical device/entity model** (areas, rooms, capabilities, state cache) | Duplicating HA's model is the fastest way to be wrong for every non-HA platform; v1 needs none of it | Two aggregators must interoperate on one object, or Settings needs a room-scoped UX |
-| **Scenes / automation authoring UI** | Thin dual-mode Diagram\|YAML editor + draft RPCs shipped (§7 / V-UX-9/10); full household-friendly scene product still deferred | Non-technical household members need a scene product beyond operator Diagram/YAML |
-| **Presence-aware automations** ("nobody home → …") | Requires the Phase 2 Privacy Mode work to be honest about what leaves the house (§5.7.4 rule 4) | Privacy Mode lands and its smart-home coverage is verified (V-P2-PRIV-2) |
+| **Scenes / automation authoring UI** | Thin dual-mode Diagram\|YAML editor + draft RPCs shipped (§7 / V-UX-9/10); **household Scenes tab shipped** `2026-11-10k` (templates → standing orders; V-UX-15) | Deeper room-scoped device model UX still deferred |
+| **Presence-aware automations** ("nobody home → …") | Privacy Mode + V-P2-PRIV-2 shipped `2026-11-10j`; presence scene templates gate on Privacy Mode honesty (`2026-11-10k`) | Bound occupancy sources + live verify |
 | **Camera/media pipelines** | Highest sensitivity, lowest marginal value over HA's own UI | Explicit operator demand, with a storage/retention story |
 
 **Explicitly not planned:** being an MQTT broker, a radio/controller (Zigbee, Z-Wave, Matter, Thread), a hub replacement, or a cloud smart-home service. EnvoyHome integrates with hubs; it is not one (§1.3 non-goals).
@@ -3742,7 +3823,7 @@ Returns the household object registry for callers on this EnvoyHome (Design `202
 **`home.removeWorkflow`** params `{ "id", "accountId?" }` → `{ "ok": true }` — owner-scope  
 **`home.setWorkflowEnabled`** params `{ "id", "enabled", "accountId?" }` → `{ "ok": true, "id", "enabled" }` — owner-scope  
 **`home.runWorkflow`** params `{ "accountId", "id", "text?" }` → `{ "ok", "runId?", "results": [{ "nodeId", "type", "ok", "detail?", "output?" }] }` — account-scoped; attended test run (still §4.3/§4.4 on tool nodes). Emits `home:workflow-step` / `home:workflow-finished` for live UI. Ephemeral session (not listed after return). Ask-tier tools emit `home:approval-needed` but do **not** block the RPC — they fail closed as `envoyhome.approval_pending` unless a grant already allows; use Approvals + a normal turn to answer interactively.  
-**`home.listWorkflowTools`** params `{ "accountId?" }` → `{ "tools": [{ "name", "risk", "source": "builtin"|"skill"|"smarthome", "summary", "sampleArgs?", "argChoices?", "argChoiceGroups?", "argChoiceDependsOn?", "available", "unavailableReason?" }] }` — account-scoped; Settings Insert-sample / Schedules tool-arg dropdowns when choices are known.
+**`home.listWorkflowTools`** params `{ "accountId?" }` → `{ "tools": [{ "name", "risk", "source": "builtin"|"skill"|"smarthome"|"mcp", "summary", "sampleArgs?", "argChoices?", "argChoiceGroups?", "argChoiceDependsOn?", "available", "unavailableReason?" }] }` — account-scoped; Settings Insert-sample / Schedules tool-arg dropdowns when choices are known. MCP rows are Test-ok + enabled Owner servers (`mcp__…`).
 **`home.draftWorkflow`** params `{ "accountId", "text", "hintTools?", "currentYaml?" }` → `{ "yaml", "notes?" }` — owner-scope; attended NL → validated YAML (create, or revise when `currentYaml` is set); **never writes**; unknown tools / invalid YAML fail closed (`envoyhome.draft_invalid` / `workflow.unknown_tool`).
 **`home.draftWorkflowPrompt`** params `{ "accountId", "nodeType": "llm_fill"|"llm_summarize", "goal?", "currentPrompt?" }` → `{ "prompt" }` — owner-scope; attended prompt draft / refine for an LLM node; never writes.
 **`home.listWorkflowStepTemplates`** params `{ "accountId?" }` → `{ "templates": [{ "id", "label", "nodeType", "prompt", "out?", "source": "global"|"account", "accountId?" }] }` — account-scoped; Settings Add step ▾.
@@ -3792,6 +3873,9 @@ Returns the household object registry for callers on this EnvoyHome (Design `202
 
 **`home.getMediaGenerateConfig`** params `{ "accountId" }` → `{ "enabled", "maxPerDay", "dayCount?", "hasProvider" }` — §19.12 D2 image_generate Owner opt-in + daily cap; `dayCount` optional on wire  
 **`home.setMediaGenerateConfig`** params `{ "accountId", "enabled?", "maxPerDay?" }` → `{ "ok": true, "enabled", "maxPerDay" }` — Owner configures enable + cap for that seat (fail-closed default)
+
+**`home.getPrivacyMode`** params `{ "accountId" }` → `{ "enabled", "blockSmartHomeEgress" }` — §19.4; **owner-scope**  
+**`home.setPrivacyMode`** params `{ "accountId", "enabled?", "blockSmartHomeEgress?" }` → `{ "ok": true, "enabled", "blockSmartHomeEgress" }` — Owner hard switch; cloud fail-closed; optional smart-home egress block (default true)
 
 **`home.doctor`** → `{ "ok": true, "issues": [{ "id", "severity", "message", "fixable" }] }`  
 **`home.doctorFix`** params `{ "issueIds": ["…"] }` → `{ "fixed": [], "failed": [] }`
@@ -4122,6 +4206,21 @@ Every row MUST be denied for **unattended** execution *and* MUST be refused a gr
 **Corpus inputs are post-resolution.** Every row above is an input to the *classifier* (`domain`, `service`, resolved object class, `data`), not to a tool — §5.7.3 requires tools to take a resolved handle, so a tool-level test with a raw `entity_id` is testing something else (V-HA-14). Keeping the two distinct is what stops a future refactor from "fixing" a corpus row by loosening the resolver.
 
 **Also required-deny (non-classifier):** a `scope: "always"` answer to a safety-class approval (§4.4); a `null`/short-prefix grant for an `admin` tool (V-HA-11); an unattended `*.toggle` (V-HA-16); an `emitInbound` for an unregistered `sourceId` (V-HA-13); `ha_get_state` on another account's object (V-HA-14).
+
+### C.5 Obscura parity gate (before hard Obscura-only default)
+
+**Purpose.** Stage E (`2026-11-11e`) Normative default is **`auto`** (prefer Obscura when ready, else fetch/Chromium). That is **not** the same as hard Obscura-only. Do **not** remove Chromium fallback / force `obscura` as the sole factory value without recorded parity scores below.
+
+| Plane | Corpus / checks | Pass bar |
+|-------|-----------------|----------|
+| Extract dig | JS-shell pages where `fetch` returns `empty_content`; `obscura` returns readable markdown; SSRF + CAPTCHA soft-fail unchanged | V-OUT-28/30 green; live research suite still green on `fetch` |
+| SERP (Stage B) | Bing/Google/Baidu fixture + live soft cases | Hit rate ≥ Chromium baseline; CAPTCHA soft-fail; missing binary → install hint |
+| Managed browser (Stage C) | Existing browser scenario corpus (snapshot/act/verify, form, file upload, outbound blocked) | Pass rate ≥ Chromium on same fixtures; `personal`/`remote` still real CDP; stealth off; no Obscura MCP as §9.5g |
+| Bundle / auto-install (Stage D) | `obscura:fetch` host + `--all`; desktop resources; managed `stateDir/obscura/` silent first-boot; resolve order | V-OUT-33; pin + sha256; `ENVOYHOME_OBSCURA_AUTO=0` skips; Chromium still never bundled |
+| Auto select (Stage E) | Only Obscura ready → dig/SERP/managed use Obscura; only Chromium → Chromium (dig→fetch); both → Obscura; personal/remote ignore | V-OUT-34 |
+| Non-goals always | CAPTCHA solve; silent **Chromium** download; stealth as default; elevated → Obscura | Fail closed |
+
+Record pass rates in the Implementation Plan changelog when a stage ships or a hard Obscura-only default flips.
 
 ---
 

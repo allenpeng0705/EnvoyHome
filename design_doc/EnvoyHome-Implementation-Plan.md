@@ -47,7 +47,7 @@ EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0
 
 **Active coding epic:** _(none)_ — Phase 2 board through **P2-K** shipped.
 
-**Last shipped:** P2-K8 managed LibreOffice auto-install (`2026-11-10g`); LibreOffice install guidance (`2026-11-10f`); P2-K7 (`2026-11-10e`); P2-K Office File Pipeline (`2026-11-10c`…`d`)
+**Last shipped:** Stage E Obscura-first auto (`2026-11-11e`, V-OUT-34); Stage D Obscura bundle + auto-install (`2026-11-11`, V-OUT-33); Stage B/C Obscura engine select (`2026-11-10r`)
 
 ## Key Decisions
 
@@ -63,13 +63,13 @@ EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0
 - `[x]` First-party chat plugins (Design §5.0): **Telegram**, **Discord**, **Slack**, **Feishu/Lark**, **DingTalk**, **WeCom**; **WhatsApp** + **WeChat personal** deferred.
 - `[ ]` Tag `v1.0.0` — when [release bar](#release-bar-8--design-21) items (1)–(8) all `[x]` with honest evidence. **Do not tag** on early-adopter alone.
 - `[ ]` First-party IM epic — plugins+Channels catalog shipped; **live Telegram→five bots deferred** from early-adopter marketing (Mesh phone is primary).
-- `[ ]` Phase 2 Privacy Mode RPC / Settings — `privacy-mode.json` stub may exist; **never advertise** until `home.setPrivacyMode` + V-P2-PRIV-*.
+- `[x]` Phase 2 Privacy Mode RPC / Settings — `home.getPrivacyMode` / `home.setPrivacyMode` + Models → Routing + V-P2-PRIV-1/2 (`2026-11-10j`).
 - `[x]` Early-adopter claim sheet — [`reviews/2026-10-22-early-adopter-claims.md`](reviews/2026-10-22-early-adopter-claims.md) (`2026-10-22d`).
 - `[x]` Phase 2 agent capabilities P2-A…E — Design **Accepted 2026-10-20**; **A–E + D2 `[x]`** (`2026-10-20o`/`p` Design-max Adapt).
 
 ## Current Milestone
 
-**Milestone:** Spine on `main`; **early-adopter claims frozen**; deepen desktop/mobile ops; live HA sign-off optional for narrow claims; IM live + Privacy RPC remain post-early-adopter / Phase 2.
+**Milestone:** Spine on `main`; **early-adopter claims frozen** (Privacy Mode silence lifted `2026-11-10j`); deepen desktop/mobile ops + Automation UX; live HA sign-off optional for narrow claims; IM live remains deferred.
 
 | Track | Status | Notes |
 |-------|--------|-------|
@@ -81,9 +81,9 @@ EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0
 | Tauri supervise | `[x]` | Spawn/reap; OS service install/uninstall/restart RPCs + Advanced controls |
 | Inbound → turns + product events | `[x]` | Daemon + Settings subscribe/`on` |
 | policy.json / forceLocalForEventSource | `[x]` | PolicyStore |
-| Privacy Mode | `[~]` | Stub file only — **silence in marketing** until Phase 2 RPC |
+| Privacy Mode | `[x]` | RPC + Settings + V-P2-PRIV-1/2 (`2026-11-10j`) |
 | Live HA C.4 | `[>]` | Fixture `[x]`; checklist [`docs/smart-home-live-checklist.md`](../docs/smart-home-live-checklist.md); sign-off pending |
-| EnvoyMesh mobile thin client | `[~]` | Pair + push + chat + artifacts + This machine; live verify + Store polish — [`docs/mobile-live-verify.md`](../docs/mobile-live-verify.md) |
+| EnvoyMesh mobile thin client | `[x]` | Live-verify **PASS** `2026-11-10` — [`docs/mobile-live-verify.md`](../docs/mobile-live-verify.md); Store upload still external ops |
 | First-party IM set | `[~]` | Plugins+catalog `[x]`; **live verify deferred** (not in early-adopter claims) |
 | Phase 2 P2-A…E | `[x]` | Design Accepted 2026-10-20; **A–E + D2 `[x]`** (`2026-10-20o`/`p`) |
 | Tag `v1.0.0` | `[ ]` | Blocked on release bar honesty |
@@ -93,8 +93,10 @@ EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0
 0. **Operator live HA** `[>]` — fill `docs/smart-home-live-checklist.md` when hub creds available (or keep narrow claim).  
 1. **Mobile thin client** `[~]` — Store/TestFlight polish when phone is a launch surface.  
 2. **First-party IM live** `[ ]` — Telegram first, then five bots; only then widen claims.  
-3. **Privacy Mode RPC** `[ ]` — `home.setPrivacyMode` + Settings + V-P2-PRIV-* (or stay silent).  
-4. **Tag `v1.0.0`** `[ ]` — when release bar (1)–(8) honestly `[x]`.
+3. **Automation authoring UX** `[x]` — §19.8 Scenes (`2026-11-10k`).  
+4. **Mobile live-verify PASS** `[x]` — [`docs/mobile-live-verify.md`](../docs/mobile-live-verify.md) (`2026-11-10`).  
+5. **Tag `v1.0.0`** `[ ]` — when release bar (1)–(8) honestly `[x]`.  
+6. **First-party IM live** `[ ]` — Telegram first (deferred from marketing).
 
 ## Build stage board (B0–B14)
 
@@ -141,11 +143,11 @@ Tag `v1.0.0` when (1)–(8) are honestly `[x]` including bar 1’s e2e bar you c
 | Epic | Status | Design |
 |------|--------|--------|
 | Desktop quality (beyond B12 scaffold) | `[~]` | §10.1 nav + V-UX-6 UI; live HA inventory operator |
-| EnvoyMesh mobile thin client | `[~]` | §19.2 — chat/approvals/artifacts + push |
+| EnvoyMesh mobile thin client | `[x]` | §19.2 — live-verify PASS `2026-11-10` |
 | Profile workspace folders (host mounts outside sandbox) | `[~]` | Design §4.2.1 — up to 16 named mounts; Owner sets (incl. `/`); `workspace/<id>/…` jail; V-SEC-13/14/20 |
 | Household Owner account | `[x]` | Design §4.1.1 — exclusive Owner bind; R1/R4 deferred; seat-or-Owner grants; V-SEC-15…21 |
-| Privacy Mode RPC (+ smart-home egress) | `[ ]` | §19.4, V-P2-PRIV-*; stub silent until RPC — early-adopter claim sheet |
-| Automation authoring UX | `[ ]` | §19.8 |
+| Privacy Mode RPC (+ smart-home egress) | `[x]` | §19.4, V-P2-PRIV-1/2 — shipped `2026-11-10j` |
+| Automation authoring UX | `[x]` | §19.8 Scenes tab → standing orders; V-UX-15 (`2026-11-10k`) |
 | First-party IM set (Telegram + Discord + Slack + Feishu + DingTalk + WeCom) | `[ ]` | Design §5.0 `2026-10-16c` — after mobile solid |
 | **P2-A…E agent capabilities** | `[x]` | Accepted 2026-10-20; A–E + D2 shipped (`2026-10-20o`) |
 | Memory Tree / fleets / TokenJuice | `[>]` | §19.7 — not core |
@@ -588,7 +590,14 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-OUT-4 | **B11** | listSandboxEntries: sandbox tops + R3-effective workspace/; refuse share/ + inactive workspace; parent stays in root; entry cap |
 | V-OUT-5 | **B11** | list_dir / search_files: read-tier builtins; **turn-profile jail only**; share/ refuse; search depth/visit/hit caps; fence + catalogue |
 | V-OUT-6 | **B11** | web_search: DDG zero-config; Brave/Tavily key gate; attendedAllow; unattended grant; restricted deny; result cap |
-| V-OUT-7 | **B11** | web_search browser fallback: Settings opt-in; Bing→Google; attended ask; caps; missing Chromium → install hint (no silent download) |
+| V-OUT-7 | **B11** | web_search browser fallback: default on (`fallback: browser`); Bing→Google→Baidu engines; skip unready API primary; attended ask; caps; missing Chromium → install hint (no silent download) |
+| V-OUT-28 | **B11** | web_extract: https SSRF; HTML→Markdown capped; Privacy Mode refuse; soft-fail |
+| V-OUT-29 | **B11** | web_research: Owner researchEnabled + digDepth; organized + links; catalogue gate |
+| V-OUT-30 | **B11** | extractBackend fetch\|obscura (default fetch); obscura missing → soft-fail + hint; research dig shares backend; no silent download |
+| V-OUT-31 | **B11** | serpBrowserEngine chromium\|obscura (default chromium); SERP soft-fail + hint |
+| V-OUT-32 | **B11** | managedEngine chromium\|obscura (default chromium); personal/remote ignore; no stealth |
+| V-OUT-33 | **B11** | Stage D: bundle Obscura in desktop resources; managed auto-install; resolve env→bundle→managed→PATH |
+| V-OUT-34 | **B11** | Stage E: engine fields default auto; prefer Obscura then fetch/Chromium; effective* on getConfig |
 | V-OUT-8 | **B11** | browser control tool: Owner opt-in; Playwright managed session; SSRF; snapshot/act; attended ask; restricted/unattended gates |
 | V-OUT-9 | **B11** | browser personal profile: Owner-only; ack; loopback CDP; never unattended; summary tag |
 | V-OUT-10 | **B11** | browser remote profile: Owner-only; ack; cdpUrl+secret; never unattended; summary tag |
@@ -650,6 +659,7 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-UX-10 | **B12** | `home.draftWorkflow` / `home.draftWorkflowPrompt` draft-only (never write); optional `currentYaml` revise; Settings New/Edit Draft/Revise with AI; invalid/unknown-tool fail closed |
 | V-UX-11 | **B12** | reusable LLM step templates list/put/remove; Add step ▾ + Save as step; runtime kinds stay closed |
 | V-UX-12 | **B12** | Schedules authoring: Reminder/Workflow/Tool; list payloadKind + Workflow badge; putSchedule / confirm payload override |
+| V-UX-15 | **P2-AUTO** | Skills → Scenes → `scene:*` standing orders; presence templates require Privacy Mode egress block |
 | V-UX-MEM-1 | **B12** | Memory screen: view, pending, caps, compact, flush/review toggles, active backend |
 | V-P2-MESH-1 | **B4** | phone path works with hosting only (no Social, attach not required) |
 | V-P2-MESH-2 | **B4** | if attach is enabled, the dial target stays the hosting peer; dual-mode ports/mDNS do not collide |
@@ -677,8 +687,8 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-HA-22 | **B14** | home inject = bound objects only, capped; no full HA dump in standing inject |
 | V-HA-23 | **B14** | Home chat (`purpose: "home"`) enables smart-home tools + bound inject; Approvals still required to actuate |
 | V-HA-24 | **B14** | ambiguous / low-confidence home intent does not call `ha_call_service` / `mqtt_publish` |
-| V-P2-PRIV-1 | *(Phase 2 — unowned by design)* | Privacy Mode → cloud fails closed |
-| V-P2-PRIV-2 | *(Phase 2 — unowned by design)* | Privacy Mode also stops outbound smart-home calls **and** notifications (Design §19.4) |
+| V-P2-PRIV-1 | **P2-PRIV** | Privacy Mode → cloud fails closed |
+| V-P2-PRIV-2 | **P2-PRIV** | Privacy Mode also stops outbound smart-home calls **and** notifications (Design §19.4) |
 | V-P2-MOB-1 | *(Phase 2 — unowned by design)* | Dart thin client; no local model; dials the hosting peer |
 | V-P2-HA-1, V-P2-HA-2 | *(Phase 2 — unowned by design)* | home-automation via the Channel contract + static workflow, no approval bypass (Design §19.8) |
 | V-P2-EDIT-1, V-P2-EDIT-2 | **P2-A** | file edit / apply_patch jail + write grants (Design §19.9) |
@@ -693,7 +703,7 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-P2-AGENT-6, V-P2-AGENT-7, V-P2-AGENT-8 | **P2-E4** | plan-execute: simple/medium corpus; write/admin confirm; attended hop budget / unattended no-op (Design §19.13 E4 / `2026-11-03`) |
 | Design Appendix C.2 (pre-MVP floor) | **B0–B14 (gate)** | every C.2 row green, including the smart-home safety IDs (V-HA-4/5/7/8/11/13/14/19) in the every-PR `smarthome` suite |
 
-**Not owned by any single v1 stage, on purpose:** `V-P2-PRIV-*`, `V-P2-MOB-1`, and `V-P2-HA-*` remain Design §19.6 Phase 2 (unowned for v1). **P2-A…E** IDs are owned by the Phase 2 epics above — still **not** claimable for v1 / B0–B14.
+**Not owned by any single v1 stage, on purpose:** `V-P2-MOB-1` and `V-P2-HA-*` remain Design §19.6 Phase 2 (unowned for v1). **V-P2-PRIV-*** owned by **P2-PRIV** (`2026-11-10j`). **P2-A…E** IDs are owned by the Phase 2 epics above — still **not** claimable for v1 / B0–B14.
 
 **Open by reference matrix** (where each family is defined and where it is tested):
 
@@ -891,6 +901,17 @@ If you need to change the answer to "in what order we build," edit this doc and 
 
 | Date | Change |
 |------|--------|
+| 2026-11-11e | **Stage E:** `extractBackend`/`serpBrowserEngine`/`managedEngine` default `auto`; Obscura-first with fetch/Chromium fallback; V-OUT-34. Aligns Design `2026-11-11e`. |
+| 2026-11-11 | **Stage D:** desktop bundles pinned Obscura; managed silent first-boot under `stateDir/obscura/`; `obscura:fetch` / `obscura:fetch:all`; V-OUT-33. Aligns Design `2026-11-11`. |
+| 2026-11-10r | **Stage B+C:** `serpBrowserEngine` + `managedEngine` (defaults chromium); Owner select Obscura for SERP HTML / managed CDP; V-OUT-31/32. Appendix C.5 still gates **default flip**. Aligns Design `2026-11-10r`. |
+| 2026-11-10q | **§9.5f.2 Stage A:** `extractBackend` fetch\|obscura (default fetch); Obscura dig soft-fail + install hint; V-OUT-30. Aligns Design `2026-11-10q`. |
+| 2026-11-10p | **§9.5f.2/§9.5f.3:** `web_extract` + Owner-optional `web_research` (digDepth). Aligns Design `2026-11-10p`. V-OUT-28/29. |
+| 2026-11-10o | **§9.5f.1 default browser fallback:** `fallback: "browser"` by default; unready API primary → SERP. Aligns Design `2026-11-10o`. |
+| 2026-11-10n | **§9.5f browser-primary:** `provider: "browser"` searches Bing/Google/Baidu directly (no DDG first). Desktop + mobile dropdown. Aligns Design `2026-11-10n`. |
+| 2026-11-10m | **§9.5f.1 Baidu SERP + engine UI:** `browserEngines` adds `baidu`; desktop + mobile Web search checkboxes. Aligns Design `2026-11-10m`. Default still Bing→Google. |
+| 2026-11-10l | **Mobile live-verify PASS:** soft-disconnect push token retain unit-verified; checklist + claim sheet updated — [`docs/mobile-live-verify.md`](../docs/mobile-live-verify.md). Store/TestFlight still external. |
+| 2026-11-10k | **P2-AUTO shipped:** Skills → Scenes (desktop + mobile); templates → `scene:*` standing orders; presence templates require Privacy Mode. V-UX-15. Aligns Design `2026-11-10k`. |
+| 2026-11-10j | **P2-PRIV shipped:** `home.getPrivacyMode` / `home.setPrivacyMode`; Settings Models→Routing; V-P2-PRIV-1/2 ownership; claim-sheet silence lifted for Privacy Mode. Aligns Design `2026-11-10j`. |
 | 2026-11-10b | **P2-J follow-through:** magic/MIME refuse; `multiple` paths; jail browse UI; R3 mounts on file apply. Aligns Design `2026-11-10b`. |
 | 2026-11-10 | **P2-J shipped:** §9.5g.3 file upload — `kind: file`, jail path + `setInputFiles`, ≤8 MiB mime allow-list, unattended refuse; V-OUT-25…27. Aligns Design `2026-11-10`. |
 | 2026-11-04d | **P2-I shipped:** §9.5i Daily Outbound Assist — hard stop pay/OTP/CAPTCHA; MCP prefer; `outbound_handoff`; V-OUT-20…24. Aligns Design `2026-11-04d`. |

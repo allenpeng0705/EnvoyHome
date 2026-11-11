@@ -58,6 +58,19 @@ export const BUILTIN_TOOLS: Readonly<Record<string, ToolSpec>> = {
     grantable: true,
     attendedAllow: true,
   },
+  /** Design §9.5f.2 — one URL → readable Markdown (asks like http_fetch). */
+  web_extract: {
+    name: "web_extract",
+    risk: "network",
+    grantable: true,
+  },
+  /** Design §9.5f.3 — search + dig; attendedAllow when Owner enabled research. */
+  web_research: {
+    name: "web_research",
+    risk: "network",
+    grantable: true,
+    attendedAllow: true,
+  },
   /** Design §9.5g — OpenClaw-adapted browser control (always ask when attended). */
   browser: {
     name: "browser",

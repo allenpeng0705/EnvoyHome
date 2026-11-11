@@ -29,6 +29,7 @@ import {
 import {
   assertExportOutputPath,
   defaultExportUri,
+  EXPORT_FORMATS,
   exportDocument,
   exportMimeType,
   isExportEnginePreference,
@@ -47,6 +48,11 @@ import {
 } from "@envoyhome/memory";
 import type { WebSearchService } from "./web-search.js";
 import type { BrowserControlService } from "./browser-control.js";
+import {
+  parseMcpCatalogueToolName,
+  riskFromAnnotations,
+  type McpHub,
+} from "./mcp-hub.js";
 import { describeScheduleSpec } from "./schedule/chat-card.js";
 import { formatProposeFailure, type ScheduleService } from "./schedule/service.js";
 import { resolveAndValidateUserSchedulePayload } from "./schedule/resolve-user-payload.js";
@@ -76,7 +82,7 @@ function toolPathOpts(
   };
 }
 
-export type WorkflowToolSource = "builtin" | "skill" | "smarthome";
+export type WorkflowToolSource = "builtin" | "skill" | "smarthome" | "mcp";
 
 export interface WorkflowToolInfo {
   name: string;
@@ -99,6 +105,53 @@ export interface WorkflowToolInfo {
   unavailableReason?: string;
 }
 
+/** Design §9.5b/j — export_document format dropdown (keep in sync with EXPORT_FORMATS). */
+export const EXPORT_DOCUMENT_FORMAT_CHOICES = EXPORT_FORMATS;
+
+/** Design §9.5g — browser actions for Schedules / tool-arg dropdowns (no apply_form — daemon-internal). */
+export const BROWSER_ACTION_CHOICES = [
+  "navigate",
+  "open",
+  "snapshot",
+  "act",
+  "wait",
+  "press",
+  "screenshot",
+  "text",
+  "tabs",
+  "focus",
+  "close",
+  "start",
+  "stop",
+  "doctor",
+  "status",
+  "propose_form",
+  "propose_handoff",
+] as const;
+
+/** Design §7.4 — schedule tool action dropdown. */
+export const SCHEDULE_ACTION_CHOICES = [
+  "propose",
+  "confirm",
+  "list",
+  "reschedule",
+  "enable",
+  "remove",
+  "rename",
+] as const;
+
+/** Design §19.11 — message tool action dropdown. */
+export const MESSAGE_ACTION_CHOICES = [
+  "send",
+  "notify",
+  "reply",
+  "react",
+  "edit",
+  "delete",
+  "pin",
+  "unpin",
+] as const;
+
 /** Curated HA domain → services for Schedules / tool-arg dropdowns. */
 export const HA_DOMAIN_SERVICE_CHOICES: Record<string, string[]> = {
   light: ["turn_on", "turn_off", "toggle"],
@@ -117,7 +170,11 @@ export const HA_DOMAIN_SERVICE_CHOICES: Record<string, string[]> = {
 
 const BUILTIN_META: Record<
   string,
-  { summary: string; sampleArgs: Record<string, unknown> }
+  {
+    summary: string;
+    sampleArgs: Record<string, unknown>;
+    argChoices?: Record<string, string[]>;
+  }
 > = {
   read_file: {
     summary: "Read a file under the account sandbox or workspace/…",
@@ -164,13 +221,25 @@ const BUILTIN_META: Record<
     sampleArgs: { query: "favorite drink", limit: 8 },
   },
   web_search: {
-    summary: "Search the public web (household provider; Design §9.5f)",
+    summary:
+      "Search the public web (Design §9.5f). Return titles, URLs, and short snippets, then present them clearly to the user. May use Bing/Google/Baidu via browser when API/DDG is unavailable.",
     sampleArgs: { query: "EnvoyHome household agent", count: 5 },
+  },
+  web_extract: {
+    summary:
+      "Fetch one https page and return readable Markdown (Design §9.5f.2). Soft-fails on CAPTCHA/non-HTML.",
+    sampleArgs: { url: "https://example.com/", maxChars: 8000 },
+  },
+  web_research: {
+    summary:
+      "Search then dig top results (Design §9.5f.3). Present the organized brief first, then the link list. Owner must enable Web research in Settings.",
+    sampleArgs: { query: "EnvoyHome household agent", digDepth: 3 },
   },
   browser: {
     summary:
       "Control a managed Chromium tab (navigate / snapshot / act / propose_form / propose_handoff) — Design §9.5g / §9.5i",
     sampleArgs: { action: "navigate", url: "https://example.com/" },
+    argChoices: { action: [...BROWSER_ACTION_CHOICES] },
   },
   schedule: {
     summary:
@@ -180,6 +249,7 @@ const BUILTIN_META: Record<
       text: "Remind me tomorrow at 8am to stretch",
       message: "stretch",
     },
+    argChoices: { action: [...SCHEDULE_ACTION_CHOICES] },
   },
   export_document: {
     summary:
@@ -189,6 +259,10 @@ const BUILTIN_META: Record<
       markdown: "# Report\n\n| A | B |\n|---|---|\n| 1 | 2 |\n",
       title: "Report",
       engine: "auto",
+    },
+    argChoices: {
+      format: [...EXPORT_DOCUMENT_FORMAT_CHOICES],
+      engine: ["auto", "js", "libreoffice"],
     },
   },
   extract_document: {
@@ -215,6 +289,7 @@ const BUILTIN_META: Record<
       peerId: "123",
       text: "Hello",
     },
+    argChoices: { action: [...MESSAGE_ACTION_CHOICES] },
   },
   sessions_list: {
     summary: "List recent sessions for this account (capped; Design §19.11)",
@@ -405,11 +480,23 @@ export function requireObjectId(
   });
 }
 
+function metaExtras(meta: (typeof BUILTIN_META)[string] | undefined): {
+  sampleArgs?: Record<string, unknown>;
+  argChoices?: Record<string, string[]>;
+} {
+  return {
+    ...(meta?.sampleArgs ? { sampleArgs: meta.sampleArgs } : {}),
+    ...(meta?.argChoices ? { argChoices: meta.argChoices } : {}),
+  };
+}
+
 export async function listWorkflowTools(input: {
   skills: SkillService;
   channels: ChannelService;
   webSearch?: WebSearchService | null;
   browserControl?: BrowserControlService | null;
+  /** Design §9.5h — ready Owner MCP tools (`mcp__…`) enter the workflow catalogue. */
+  mcpHub?: McpHub | null;
   /** When set with ownerAccountId, elevated-only readiness does not mark available for non-Owners. */
   forAccountId?: string | null;
   ownerAccountId?: string | null;
@@ -432,9 +519,40 @@ export async function listWorkflowTools(input: {
         risk: spec.risk,
         source: "builtin",
         summary: meta?.summary ?? spec.name,
-        ...(meta?.sampleArgs ? { sampleArgs: meta.sampleArgs } : {}),
+        ...metaExtras(meta),
         available: webReady.ok,
         ...(webReady.ok ? {} : { unavailableReason: webReady.reason }),
+      });
+      continue;
+    }
+    if (spec.name === "web_extract") {
+      out.push({
+        name: spec.name,
+        risk: spec.risk,
+        source: "builtin",
+        summary: meta?.summary ?? spec.name,
+        ...metaExtras(meta),
+        // Always catalogue-available when search service exists; Privacy Mode still refuses at run.
+        available: !!input.webSearch,
+        ...(input.webSearch
+          ? {}
+          : { unavailableReason: "Web extract not configured" }),
+      });
+      continue;
+    }
+    if (spec.name === "web_research") {
+      const research = input.webSearch?.researchReadyInfo() ?? {
+        ok: false,
+        reason: "Web research not configured",
+      };
+      out.push({
+        name: spec.name,
+        risk: spec.risk,
+        source: "builtin",
+        summary: meta?.summary ?? spec.name,
+        ...metaExtras(meta),
+        available: research.ok,
+        ...(research.ok ? {} : { unavailableReason: research.reason }),
       });
       continue;
     }
@@ -469,9 +587,9 @@ export async function listWorkflowTools(input: {
         risk: spec.risk,
         source: "builtin",
         summary: meta?.summary ?? spec.name,
+        ...metaExtras(meta),
         available,
       };
-      if (meta?.sampleArgs) browserRow.sampleArgs = meta.sampleArgs;
       if (!available && unavailableReason) browserRow.unavailableReason = unavailableReason;
       out.push(browserRow);
       continue;
@@ -481,7 +599,7 @@ export async function listWorkflowTools(input: {
       risk: spec.risk,
       source: "builtin",
       summary: meta?.summary ?? spec.name,
-      ...(meta?.sampleArgs ? { sampleArgs: meta.sampleArgs } : {}),
+      ...metaExtras(meta),
       available: true,
     });
   }
@@ -546,6 +664,29 @@ export async function listWorkflowTools(input: {
     });
   }
 
+  // Design §9.5h — Test-ok + enabled MCP tools (same gate as chat catalogue).
+  if (input.mcpHub) {
+    const mcpTools = await input.mcpHub.listMcpTools();
+    for (const t of mcpTools) {
+      const parsed = parseMcpCatalogueToolName(t.name);
+      const label = parsed
+        ? input.mcpHub.getServerLabel(parsed.serverId) ?? parsed.serverId
+        : "mcp";
+      const short = parsed?.toolName ?? t.mcpName;
+      const desc = typeof t.description === "string" ? t.description.trim() : "";
+      out.push({
+        name: t.name,
+        risk: riskFromAnnotations(t.annotations),
+        source: "mcp",
+        summary: desc
+          ? `MCP · ${label} · ${short} — ${desc.slice(0, 120)}`
+          : `MCP · ${label} · ${short}`,
+        sampleArgs: {},
+        available: true,
+      });
+    }
+  }
+
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -555,6 +696,7 @@ export async function workflowToolNameSet(input: {
   channels: ChannelService;
   webSearch?: WebSearchService | null;
   browserControl?: BrowserControlService | null;
+  mcpHub?: McpHub | null;
 }): Promise<Set<string>> {
   const tools = await listWorkflowTools(input);
   const set = new Set(tools.map((t) => t.name));
@@ -672,6 +814,34 @@ export async function resolveBoundHandle(
     actuationAllowList: [...rec.actuationAllowList],
     indirectionAllowList: [...rec.indirectionAllowList],
   };
+}
+
+/** V-P2-PRIV-2 — refuse HA/MQTT actuation when Privacy Mode blocks smart-home egress. */
+async function assertPrivacySmartHomeEgress(
+  channels: ChannelService,
+  accountId: string,
+): Promise<void> {
+  const store = channels.getPrivacyMode();
+  if (!store) return;
+  const privacy = await store.get(accountId);
+  if (privacy.enabled && privacy.blockSmartHomeEgress) {
+    throw new Error("envoyhome.privacy_mode: smart-home egress blocked");
+  }
+}
+
+/** V-P2-PRIV-1 — refuse cloud-network tools under Privacy Mode. */
+async function assertPrivacyCloudAllowed(
+  channels: ChannelService,
+  accountId: string | undefined,
+  label: string,
+): Promise<void> {
+  if (!accountId) return;
+  const store = channels.getPrivacyMode();
+  if (!store) return;
+  const privacy = await store.get(accountId);
+  if (privacy.enabled) {
+    throw new Error(`envoyhome.privacy_mode: ${label} blocked`);
+  }
 }
 
 async function journaledActuate(input: {
@@ -831,6 +1001,8 @@ export async function runExtendedWorkflowTool(input: {
   webSearch?: WebSearchService | null;
   /** Design §9.5g. */
   browserControl?: BrowserControlService | null;
+  /** Design §9.5h — catalogue validation when schedule confirm carries a tool payload. */
+  mcpHub?: McpHub | null;
   /** Design §7.4 V-CRON-9. */
   schedules?: ScheduleService | null;
   /** For schedule confirm workflow existence. */
@@ -850,9 +1022,10 @@ export async function runExtendedWorkflowTool(input: {
   }) => void;
   /** Design §9.5g.1 — Owner seat for elevated profiles. */
   ownerAccountId?: string | null;
-  /** Design §9.5f.1 — mid-tool ask for browser SERP fallback. */
+  /** Design §9.5f.1 — mid-tool ask for browser SERP (primary or fallback). */
   authorizeBrowserFallback?: (detail: {
-    engines: Array<"bing" | "google">;
+    engines: Array<"bing" | "google" | "baidu">;
+    mode: "primary" | "fallback";
   }) => Promise<boolean>;
   /** Design §19.11 — session tools. */
   sessions?: import("./sessions.js").SessionStore | null;
@@ -989,12 +1162,14 @@ export async function runExtendedWorkflowTool(input: {
       ...(input.browserControl !== undefined
         ? { browserControl: input.browserControl }
         : {}),
+      ...(input.mcpHub !== undefined ? { mcpHub: input.mcpHub } : {}),
       ...(input.onScheduleCandidates
         ? { onScheduleCandidates: input.onScheduleCandidates }
         : {}),
     });
   }
   if (tool === "web_search") {
+    await assertPrivacyCloudAllowed(input.channels, input.accountId, "web_search");
     if (!input.webSearch) {
       throw new Error("envoyhome.tool_unavailable: web search not configured");
     }
@@ -1005,12 +1180,33 @@ export async function runExtendedWorkflowTool(input: {
         : {}),
     });
   }
-  if (tool === "browser") {
-    if (!input.browserControl) {
-      throw new Error("envoyhome.tool_unavailable: browser control not configured");
+  if (tool === "web_extract") {
+    await assertPrivacyCloudAllowed(input.channels, input.accountId, "web_extract");
+    const { runWebExtract } = await import("./web-extract.js");
+    const backend = input.webSearch
+      ? await input.webSearch.resolveExtractBackendEffective()
+      : "fetch";
+    return runWebExtract(input.args, { backend });
+  }
+  if (tool === "web_research") {
+    await assertPrivacyCloudAllowed(input.channels, input.accountId, "web_research");
+    if (!input.webSearch) {
+      throw new Error("envoyhome.tool_unavailable: web research not configured");
     }
+    return input.webSearch.runResearch(input.args, {
+      origin,
+      ...(input.authorizeBrowserFallback
+        ? { authorizeBrowserFallback: input.authorizeBrowserFallback }
+        : {}),
+    });
+  }
+  if (tool === "browser") {
     if (!input.accountId) {
       throw new Error("envoyhome.bad_params: accountId required for browser");
+    }
+    await assertPrivacyCloudAllowed(input.channels, input.accountId, "browser");
+    if (!input.browserControl) {
+      throw new Error("envoyhome.tool_unavailable: browser control not configured");
     }
     // Design §9.5g.3 — apply_form is never agent-callable (secrets one-shot via form card).
     if (input.args.action === "apply_form") {
@@ -1086,6 +1282,7 @@ export async function runExtendedWorkflowTool(input: {
           "envoyhome.bad_params: accountId + actuations required for ha_call_service",
         );
       }
+      await assertPrivacySmartHomeEgress(input.channels, input.accountId);
       const objectId = requireObjectId(input.args, tool);
       const handle = await resolveBoundHandle(input.channels, objectId, input.accountId);
       // ApprovalSink already claimed a grant for unattended before dispatch.
@@ -1156,6 +1353,7 @@ export async function runExtendedWorkflowTool(input: {
             "envoyhome.bad_params: accountId + actuations required for mqtt_publish",
           );
         }
+        await assertPrivacySmartHomeEgress(input.channels, input.accountId);
         const objectId = requireObjectId(input.args, tool);
         const handle = await resolveBoundHandle(input.channels, objectId, input.accountId);
         const topic = handle.sourceId;
@@ -1591,6 +1789,7 @@ async function runScheduleTool(input: {
   channels: ChannelService;
   webSearch?: WebSearchService | null;
   browserControl?: BrowserControlService | null;
+  mcpHub?: McpHub | null;
   clientContext?: import("./client-context.js").ClientTurnContext;
   sessionId?: string;
   onScheduleCandidates?: (info: {
@@ -1812,6 +2011,7 @@ async function runScheduleTool(input: {
         ...(input.browserControl !== undefined
           ? { browserControl: input.browserControl }
           : {}),
+        ...(input.mcpHub !== undefined ? { mcpHub: input.mcpHub } : {}),
       }),
     });
   }

@@ -17,6 +17,12 @@
 # resources\push\ (REQUIRE_PUSH_CREDENTIALS=1 by default). Set
 # $env:REQUIRE_PUSH_CREDENTIALS="0" to package without push.
 #
+# Obscura (Design §9.5f Stage D): stage fetches the pinned host binary into
+# resources\obscura\ (scripts/fetch-obscura.mjs). Release builds fail if
+# obscura.exe is missing. Set $env:ENVOYHOME_SKIP_OBSCURA="1" only for local
+# debug. Force re-download: $env:ENVOYHOME_OBSCURA_FORCE="1".
+# All platforms: pnpm obscura:fetch:all
+#
 # Final installer is copied to the **repo-root** release folder:
 #   <EnvoyHome>\release\envoyhome-desktop-{version}-windows-{arch}-setup.exe
 # Override with $env:OUT_DIR (relative → under repo root; absolute path allowed).
@@ -75,14 +81,24 @@ Write-Host "  Version: $Version"
 Write-Host "============================================"
 Write-Host ""
 
-Write-Host "[1/3] Staging Node runtime + packaged daemon..."
+Write-Host "[1/3] Staging Node runtime + packaged daemon + Obscura..."
 node (Join-Path $Root "scripts\stage-desktop-bundle.mjs")
-if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+if ($LASTEXITCODE -ne 0) {
+  Write-Error @"
+stage-desktop-bundle.mjs failed (see messages above).
+  Obscura retry: pnpm obscura:fetch
+  Obscura skip (debug only): `$env:ENVOYHOME_SKIP_OBSCURA='1'
+"@
+  exit $LASTEXITCODE
+}
 
 $daemonMain = Join-Path $Root "apps\desktop\src-tauri\resources\daemon\main.mjs"
 $daemonNm = Join-Path $Root "apps\desktop\src-tauri\resources\daemon\node_modules"
 $nodeExe = Join-Path $Root "apps\desktop\src-tauri\resources\node-runtime\node.exe"
 $pushDir = Join-Path $Root "apps\desktop\src-tauri\resources\push"
+$obscuraExe = Join-Path $Root "apps\desktop\src-tauri\resources\obscura\obscura.exe"
+$obscuraUnix = Join-Path $Root "apps\desktop\src-tauri\resources\obscura\obscura"
+$obscuraVersion = Join-Path $Root "apps\desktop\src-tauri\resources\obscura\OBSCURA_VERSION"
 if (-not (Test-Path $daemonMain)) {
   Write-Error "Staging did not produce resources\daemon\main.mjs"
   exit 1
@@ -98,6 +114,27 @@ if (-not (Test-Path $nodeExe)) {
 if (-not (Test-Path $pushDir)) {
   Write-Error "Staging did not produce resources\push\ (push-config or .keep)"
   exit 1
+}
+# Obscura CLI (Stage D) — required for release unless explicitly skipped.
+# Tauri bundles resources\obscura\** via tauri.conf.bundle.json.
+if ($env:ENVOYHOME_SKIP_OBSCURA -eq "1") {
+  Write-Warning "ENVOYHOME_SKIP_OBSCURA=1 — installer will not embed Obscura"
+} elseif (-not (Test-Path $obscuraExe) -and -not (Test-Path $obscuraUnix)) {
+  Write-Error @"
+Staging did not produce resources\obscura\obscura.exe (or obscura).
+  Obscura is required in the desktop package (Design §9.5f Stage D).
+  Fix: pnpm obscura:fetch ; then re-run .\scripts\build-desktop.ps1
+  Force: `$env:ENVOYHOME_OBSCURA_FORCE='1'; pnpm obscura:fetch
+  Skip (debug only): `$env:ENVOYHOME_SKIP_OBSCURA='1'
+"@
+  exit 1
+} else {
+  $obscuraShown = if (Test-Path $obscuraExe) { $obscuraExe } else { $obscuraUnix }
+  Write-Host "  ✓ Obscura bundled: $($obscuraShown.Substring($Root.Length).TrimStart('\','/'))"
+  if (Test-Path $obscuraVersion) {
+    $pin = (Get-Content -TotalCount 1 $obscuraVersion).Trim()
+    Write-Host "    pin: $pin"
+  }
 }
 
 Write-Host "[2/3] Building the app and the EXE..."

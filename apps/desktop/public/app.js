@@ -29,11 +29,17 @@ import {
 } from "./theme.js";
 import { graphToYaml, yamlToGraph } from "./workflow-model.js";
 import {
+  SCENE_TEMPLATES,
+  assertPresenceSceneAllowed,
+  buildStandingOrderFromScene,
+  isSceneStandingOrderId,
+} from "./scenes-model.js";
+import {
   classifyChatFormat,
   humanizeScheduleChatText,
   renderChatMarkdown,
 } from "./chat-markdown.js";
-import { extractSandboxFilePaths } from "./sandbox-paths.js";
+import { extractSandboxFilePaths, parseSandboxArtifactHref } from "./sandbox-paths.js";
 import { mountWorkflowCanvas } from "./workflow-canvas.js";
 
 const DEFAULT_WS = "ws://127.0.0.1:4780/ws";
@@ -149,6 +155,51 @@ steps:
     args_from:
       markdown: step.summarize
     x: 560
+    y: 100
+`;
+
+/**
+ * Web clip demo: https page → readable Markdown → summarize → documents/ + promote.
+ * Needs Connections → Web search enabled (fetch/Obscura extract). Uses {{step.extract.markdown}}.
+ */
+const WORKFLOW_HOWTO_WEB = `id: demo_web_clip
+enabled: false
+match:
+  keywords: ["clip page", "web clip", "summarize url"]
+steps:
+  - id: extract
+    type: tool
+    name: web_extract
+    args:
+      url: https://example.com/
+      maxChars: 6000
+    x: 40
+    y: 100
+  - id: summarize
+    type: llm_summarize
+    prompt: |
+      Summarize this page for the household in 5–8 short bullet points.
+      Keep any important links:
+
+      {{step.extract.markdown}}
+    out: summary
+    x: 300
+    y: 100
+  - id: save
+    type: tool
+    name: write_file
+    args:
+      path: documents/web-clip.md
+    args_from:
+      content: step.summarize
+    x: 560
+    y: 100
+  - id: promote
+    type: tool
+    name: promote_knowledge
+    args:
+      sourcePath: documents/web-clip.md
+    x: 820
     y: 100
 `;
 
@@ -5759,6 +5810,19 @@ async function showView(id) {
             await openArtifactViewer({ accountId: aid, path });
             return;
           }
+          // Design §9.5d — markdown sandbox/workspace href → mesh open (no public URL).
+          const mdLink = el?.closest?.("a[href]");
+          if (mdLink && mdLink.closest?.(".chat-md")) {
+            const href = mdLink.getAttribute("href") || "";
+            const sandbox = parseSandboxArtifactHref(href);
+            if (sandbox) {
+              ev.preventDefault();
+              ev.stopPropagation();
+              if (!aid) return;
+              await openArtifactViewer({ accountId: aid, path: sandbox });
+              return;
+            }
+          }
           const copyBtn = el?.closest?.("[data-copy-msg]");
           if (copyBtn) {
             ev.preventDefault();
@@ -7581,22 +7645,51 @@ async function showView(id) {
           provider: "duckduckgo",
           hasApiKey: false,
           ready: true,
-          fallback: "none",
+          fallback: "browser",
           unattendedBrowser: false,
+          researchEnabled: false,
+          digDepth: 3,
+          extractBackend: "auto",
+          serpBrowserEngine: "auto",
           browserRuntime: "missing",
           browserInstallHint: "",
+          obscuraRuntime: "missing",
+          obscuraInstallHint: "",
         };
         const provider = cfg.provider || "duckduckgo";
         const needsKey = provider === "brave" || provider === "tavily";
+        const browserPrimary = provider === "browser";
         const fallbackOn = cfg.fallback === "browser";
+        const enginesVisible = browserPrimary || fallbackOn;
         const browserReady = cfg.browserRuntime === "ready";
+        const researchOn = cfg.researchEnabled === true;
+        const digDepth = Math.min(10, Math.max(1, Number(cfg.digDepth) || 3));
+        const extractBackend =
+          cfg.extractBackend === "obscura" || cfg.extractBackend === "fetch"
+            ? cfg.extractBackend
+            : "auto";
+        const serpBrowserEngine =
+          cfg.serpBrowserEngine === "obscura" || cfg.serpBrowserEngine === "chromium"
+            ? cfg.serpBrowserEngine
+            : "auto";
+        const effectiveExtract = cfg.effectiveExtractBackend || "fetch";
+        const effectiveSerp = cfg.effectiveSerpBrowserEngine || "";
+        const obscuraReady = cfg.obscuraRuntime === "ready";
         const installCmd = cfg.browserInstallHint || "npx playwright install chromium";
+        const obscuraInstallCmd =
+          cfg.obscuraInstallHint ||
+          "Obscura ships in the desktop app or installs automatically on first boot (~70 MB). Override with ENVOYHOME_OBSCURA / ENVOYHOME_OBSCURA_BUNDLE, or set ENVOYHOME_OBSCURA_AUTO=0 to disable auto-install";
+        const engines = Array.isArray(cfg.browserEngines) ? cfg.browserEngines : ["bing", "google"];
+        const engOn = (id) => engines.includes(id);
         const readyBadge = cfg.ready
           ? `<span class="pill ok">${escapeHtml(t("webSearch.ready"))}</span>`
           : `<span class="pill warn">${escapeHtml(t("webSearch.notReady"))}</span>`;
         const browserBadge = browserReady
           ? `<span class="pill ok">${escapeHtml(t("webSearch.browserReady"))}</span>`
           : `<span class="pill warn">${escapeHtml(t("webSearch.browserMissing"))}</span>`;
+        const obscuraBadge = obscuraReady
+          ? `<span class="pill ok">${escapeHtml(t("webSearch.obscuraReady"))}</span>`
+          : `<span class="pill warn">${escapeHtml(t("webSearch.obscuraMissing"))}</span>`;
         el.innerHTML = shell(`
           <p class="lede">${escapeHtml(t("webSearch.lede"))}</p>
           <div class="card-row" style="align-items:center;gap:0.75rem;margin-bottom:1rem">
@@ -7617,22 +7710,48 @@ async function showView(id) {
               <option value="duckduckgo" ${provider === "duckduckgo" ? "selected" : ""}>${escapeHtml(t("webSearch.provider.duckduckgo"))}</option>
               <option value="brave" ${provider === "brave" ? "selected" : ""}>${escapeHtml(t("webSearch.provider.brave"))}</option>
               <option value="tavily" ${provider === "tavily" ? "selected" : ""}>${escapeHtml(t("webSearch.provider.tavily"))}</option>
+              <option value="browser" ${provider === "browser" ? "selected" : ""}>${escapeHtml(t("webSearch.provider.browser"))}</option>
             </select>
           </label>
           <label class="field" id="websearch-key-wrap" style="${needsKey ? "" : "display:none"}">
             <span>${escapeHtml(t("webSearch.apiKey"))}${cfg.hasApiKey ? ` (${escapeHtml(t("webSearch.keySet"))})` : ""}</span>
             <input type="password" id="websearch-api-key" autocomplete="off" placeholder="${escapeHtml(t("webSearch.apiKeyPlaceholder"))}" />
           </label>
-          <label class="field">
+          <label class="field" id="websearch-fallback-wrap" style="${browserPrimary ? "display:none" : ""}">
             <span>${escapeHtml(t("webSearch.browserFallback"))}</span>
             <input type="checkbox" id="websearch-fallback" ${fallbackOn ? "checked" : ""} />
           </label>
           <div class="card-row" style="align-items:center;gap:0.75rem;margin:0.5rem 0">
             ${browserBadge}
-            <span class="muted">${escapeHtml(t("webSearch.browserFallbackHint"))}</span>
+            <span class="muted">${escapeHtml(
+              browserPrimary ? t("webSearch.browserPrimaryHint") : t("webSearch.browserFallbackHint"),
+            )}</span>
           </div>
+          <fieldset id="websearch-engines" class="field" style="border:none;padding:0;margin:0.5rem 0;${
+            enginesVisible ? "" : "opacity:0.55"
+          }">
+            <legend class="muted" style="padding:0;margin:0 0 0.35rem">${escapeHtml(t("webSearch.engines"))}</legend>
+            <p class="muted" style="margin:0 0 0.5rem">${escapeHtml(t("webSearch.enginesHint"))}</p>
+            <label class="field" style="flex-direction:row;align-items:center;gap:0.5rem">
+              <input type="checkbox" id="websearch-eng-bing" data-engine="bing" ${engOn("bing") ? "checked" : ""} />
+              <span>${escapeHtml(t("webSearch.engine.bing"))}</span>
+            </label>
+            <label class="field" style="flex-direction:row;align-items:center;gap:0.5rem">
+              <input type="checkbox" id="websearch-eng-google" data-engine="google" ${engOn("google") ? "checked" : ""} />
+              <span>${escapeHtml(t("webSearch.engine.google"))}</span>
+            </label>
+            <label class="field" style="flex-direction:row;align-items:center;gap:0.5rem">
+              <input type="checkbox" id="websearch-eng-baidu" data-engine="baidu" ${engOn("baidu") ? "checked" : ""} />
+              <span>${escapeHtml(t("webSearch.engine.baidu"))}</span>
+            </label>
+          </fieldset>
           <div class="card" id="websearch-install-card" style="margin:0.75rem 0;${
-            !browserReady && fallbackOn ? "" : "display:none"
+            !browserReady &&
+            enginesVisible &&
+            (serpBrowserEngine === "chromium" ||
+              (serpBrowserEngine === "auto" && !obscuraReady))
+              ? ""
+              : "display:none"
           }">
             <p class="muted" style="margin:0 0 0.5rem">${escapeHtml(t("webSearch.installHintNote"))}</p>
             <code id="websearch-install-hint" style="display:block;user-select:all;word-break:break-all">${escapeHtml(installCmd)}</code>
@@ -7642,6 +7761,49 @@ async function showView(id) {
             <span>${escapeHtml(t("webSearch.unattendedBrowser"))}</span>
             <input type="checkbox" id="websearch-unattended-browser" ${cfg.unattendedBrowser === true ? "checked" : ""} />
           </label>
+          <label class="field" id="websearch-serp-engine-wrap" style="${enginesVisible ? "" : "opacity:0.55"}">
+            <span>${escapeHtml(t("webSearch.serpBrowserEngine"))}</span>
+            <select id="websearch-serp-engine">
+              <option value="auto" ${serpBrowserEngine === "auto" ? "selected" : ""}>${escapeHtml(t("webSearch.serpBrowserEngine.auto"))}</option>
+              <option value="obscura" ${serpBrowserEngine === "obscura" ? "selected" : ""}>${escapeHtml(t("webSearch.serpBrowserEngine.obscura"))}</option>
+              <option value="chromium" ${serpBrowserEngine === "chromium" ? "selected" : ""}>${escapeHtml(t("webSearch.serpBrowserEngine.chromium"))}</option>
+            </select>
+          </label>
+          <p class="muted">${escapeHtml(t("webSearch.serpBrowserEngineHint"))}${
+            effectiveSerp
+              ? ` — ${escapeHtml(t("webSearch.effectiveSerp"))}: ${escapeHtml(effectiveSerp)}`
+              : ""
+          }</p>
+          <label class="field">
+            <span>${escapeHtml(t("webSearch.researchEnabled"))}</span>
+            <input type="checkbox" id="websearch-research" ${researchOn ? "checked" : ""} />
+          </label>
+          <p class="muted">${escapeHtml(t("webSearch.researchHint"))}</p>
+          <label class="field" id="websearch-digdepth-wrap" style="${researchOn ? "" : "display:none"}">
+            <span>${escapeHtml(t("webSearch.digDepth"))}</span>
+            <input type="number" id="websearch-digdepth" min="1" max="10" value="${digDepth}" />
+          </label>
+          <label class="field">
+            <span>${escapeHtml(t("webSearch.extractBackend"))}</span>
+            <select id="websearch-extract-backend">
+              <option value="auto" ${extractBackend === "auto" ? "selected" : ""}>${escapeHtml(t("webSearch.extractBackend.auto"))}</option>
+              <option value="obscura" ${extractBackend === "obscura" ? "selected" : ""}>${escapeHtml(t("webSearch.extractBackend.obscura"))}</option>
+              <option value="fetch" ${extractBackend === "fetch" ? "selected" : ""}>${escapeHtml(t("webSearch.extractBackend.fetch"))}</option>
+            </select>
+          </label>
+          <p class="muted">${escapeHtml(t("webSearch.extractBackendHint"))} — ${escapeHtml(t("webSearch.effectiveExtract"))}: ${escapeHtml(effectiveExtract)}</p>
+          <div class="card-row" style="align-items:center;gap:0.75rem;margin:0.5rem 0">
+            ${obscuraBadge}
+          </div>
+          <div class="card" id="websearch-obscura-install-card" style="margin:0.75rem 0;${
+            !obscuraReady && (extractBackend === "obscura" || extractBackend === "auto" || serpBrowserEngine === "obscura" || serpBrowserEngine === "auto")
+              ? ""
+              : "display:none"
+          }">
+            <p class="muted" style="margin:0 0 0.5rem">${escapeHtml(t("webSearch.obscuraInstallHintNote"))}</p>
+            <code id="websearch-obscura-install-hint" style="display:block;user-select:all;word-break:break-all">${escapeHtml(obscuraInstallCmd)}</code>
+            <button type="button" class="ghost" id="websearch-copy-obscura-hint" style="margin-top:0.5rem">${escapeHtml(t("webSearch.copyHint"))}</button>
+          </div>
           <p class="muted">${escapeHtml(t("webSearch.hint"))}</p>
           <div class="row-actions">
             <button type="button" class="primary" id="websearch-save">${escapeHtml(t("app.save"))}</button>
@@ -7655,20 +7817,73 @@ async function showView(id) {
         };
         const syncInstallCard = () => {
           const card = document.getElementById("websearch-install-card");
+          const enginesBox = document.getElementById("websearch-engines");
+          const serpWrap = document.getElementById("websearch-serp-engine-wrap");
+          const fallbackWrap = document.getElementById("websearch-fallback-wrap");
           if (!card) return;
-          // Show when Chromium missing and Owner enables (or already has) browser fallback.
+          const p = document.getElementById("websearch-provider")?.value;
+          const wantPrimary = p === "browser";
           const wantFallback = !!document.getElementById("websearch-fallback")?.checked;
-          card.style.display = !browserReady && wantFallback ? "" : "none";
+          const wantEngines = wantPrimary || wantFallback;
+          const serpEng =
+            document.getElementById("websearch-serp-engine")?.value || "auto";
+          // Auto + Obscura ready does not need a Chromium install nudge.
+          const needChromium =
+            serpEng === "chromium" || (serpEng === "auto" && !obscuraReady);
+          if (fallbackWrap) fallbackWrap.style.display = wantPrimary ? "none" : "";
+          card.style.display =
+            !browserReady && wantEngines && needChromium ? "" : "none";
+          if (enginesBox) enginesBox.style.opacity = wantEngines ? "" : "0.55";
+          if (serpWrap) serpWrap.style.opacity = wantEngines ? "" : "0.55";
         };
-        document.getElementById("websearch-provider")?.addEventListener("change", syncKeyVisibility);
-        document.getElementById("websearch-fallback")?.addEventListener("change", syncInstallCard);
+        const syncObscuraCard = () => {
+          const card = document.getElementById("websearch-obscura-install-card");
+          if (!card) return;
+          const b = document.getElementById("websearch-extract-backend")?.value;
+          const s = document.getElementById("websearch-serp-engine")?.value;
+          const want =
+            b === "obscura" || b === "auto" || s === "obscura" || s === "auto";
+          card.style.display = !obscuraReady && want ? "" : "none";
+        };
+        const syncResearch = () => {
+          const on = !!document.getElementById("websearch-research")?.checked;
+          const wrap = document.getElementById("websearch-digdepth-wrap");
+          if (wrap) wrap.style.display = on ? "" : "none";
+        };
+        document.getElementById("websearch-provider")?.addEventListener("change", () => {
+          syncKeyVisibility();
+          syncInstallCard();
+          syncObscuraCard();
+        });
+        document.getElementById("websearch-fallback")?.addEventListener("change", () => {
+          syncInstallCard();
+        });
+        document.getElementById("websearch-research")?.addEventListener("change", syncResearch);
+        document
+          .getElementById("websearch-extract-backend")
+          ?.addEventListener("change", syncObscuraCard);
+        document
+          .getElementById("websearch-serp-engine")
+          ?.addEventListener("change", () => {
+            syncInstallCard();
+            syncObscuraCard();
+          });
         syncInstallCard();
+        syncObscuraCard();
         document.getElementById("websearch-copy-hint")?.addEventListener("click", async () => {
           try {
             await navigator.clipboard.writeText(installCmd);
             showToast(t("webSearch.hintCopied"), "ok");
           } catch {
             showToast(installCmd, "ok");
+          }
+        });
+        document.getElementById("websearch-copy-obscura-hint")?.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(obscuraInstallCmd);
+            showToast(t("webSearch.hintCopied"), "ok");
+          } catch {
+            showToast(obscuraInstallCmd, "ok");
           }
         });
         document.getElementById("websearch-save")?.addEventListener("click", async () => {
@@ -7680,7 +7895,40 @@ async function showView(id) {
             : "none";
           const unattendedBrowser = !!document.getElementById("websearch-unattended-browser")
             ?.checked;
-          const params = { enabled, provider: nextProvider, fallback, unattendedBrowser };
+          const researchEnabled = !!document.getElementById("websearch-research")?.checked;
+          let digDepth = Number(document.getElementById("websearch-digdepth")?.value);
+          if (!Number.isFinite(digDepth)) digDepth = 3;
+          digDepth = Math.min(10, Math.max(1, Math.floor(digDepth)));
+          const extractRaw =
+            document.getElementById("websearch-extract-backend")?.value || "auto";
+          const nextExtract =
+            extractRaw === "obscura" || extractRaw === "fetch" ? extractRaw : "auto";
+          const serpRaw =
+            document.getElementById("websearch-serp-engine")?.value || "auto";
+          const nextSerp =
+            serpRaw === "obscura" || serpRaw === "chromium" ? serpRaw : "auto";
+          const browserEngines = ["bing", "google", "baidu"].filter(
+            (id) => !!document.getElementById(`websearch-eng-${id}`)?.checked,
+          );
+          if (
+            (fallback === "browser" || nextProvider === "browser") &&
+            browserEngines.length === 0
+          ) {
+            showToast(t("webSearch.enginesRequired"), "err");
+            return;
+          }
+          const params = {
+            enabled,
+            provider: nextProvider,
+            // Browser-as-primary does not use the DDG→browser fallback toggle.
+            fallback: nextProvider === "browser" ? "none" : fallback,
+            unattendedBrowser,
+            researchEnabled,
+            digDepth,
+            extractBackend: nextExtract,
+            serpBrowserEngine: nextSerp,
+            browserEngines: browserEngines.length ? browserEngines : ["bing", "google"],
+          };
           if (keyRaw.trim()) params.apiKey = keyRaw.trim();
           const saved = await rpc("home.setWebSearchConfig", params);
           if (saved.error) {
@@ -7705,7 +7953,16 @@ async function showView(id) {
         }
         const cfg = ans?.result || {};
         const browserReady = cfg.browserRuntime === "ready";
+        const obscuraReady = cfg.obscuraRuntime === "ready";
+        const managedEngine =
+          cfg.managedEngine === "obscura" || cfg.managedEngine === "chromium"
+            ? cfg.managedEngine
+            : "auto";
+        const effectiveManaged = cfg.effectiveManagedEngine || "";
         const installCmd = cfg.browserInstallHint || "npx playwright install chromium";
+        const obscuraInstallCmd =
+          cfg.obscuraInstallHint ||
+          "Obscura ships in the desktop app or installs automatically on first boot (~70 MB). Override with ENVOYHOME_OBSCURA / ENVOYHOME_OBSCURA_BUNDLE, or set ENVOYHOME_OBSCURA_AUTO=0 to disable auto-install";
         const def = cfg.defaultProfile || "managed";
         const ackDone = cfg.elevatedAcknowledged === true;
         const readyBadge = cfg.ready
@@ -7714,6 +7971,9 @@ async function showView(id) {
         const runtimeBadge = browserReady
           ? `<span class="pill ok">${escapeHtml(t("webSearch.browserReady"))}</span>`
           : `<span class="pill warn">${escapeHtml(t("webSearch.browserMissing"))}</span>`;
+        const obscuraBadge = obscuraReady
+          ? `<span class="pill ok">${escapeHtml(t("webSearch.obscuraReady"))}</span>`
+          : `<span class="pill warn">${escapeHtml(t("webSearch.obscuraMissing"))}</span>`;
         const personalBadge = cfg.personalReady
           ? `<span class="pill ok">${escapeHtml(t("browserControl.personalReady"))}</span>`
           : `<span class="pill warn">${escapeHtml(t("browserControl.personalNotReady"))}</span>`;
@@ -7725,6 +7985,7 @@ async function showView(id) {
           <div class="card-row" style="align-items:center;gap:0.75rem;margin-bottom:1rem;flex-wrap:wrap">
             ${readyBadge}
             ${runtimeBadge}
+            ${obscuraBadge}
             ${personalBadge}
             ${remoteBadge}
             ${
@@ -7749,6 +8010,19 @@ async function showView(id) {
               <option value="remote" ${def === "remote" ? "selected" : ""}>${escapeHtml(t("browserControl.profileRemote"))}</option>
             </select>
           </label>
+          <label class="field">
+            <span>${escapeHtml(t("browserControl.managedEngine"))}</span>
+            <select id="browserctl-managed-engine">
+              <option value="auto" ${managedEngine === "auto" ? "selected" : ""}>${escapeHtml(t("browserControl.managedEngine.auto"))}</option>
+              <option value="obscura" ${managedEngine === "obscura" ? "selected" : ""}>${escapeHtml(t("browserControl.managedEngine.obscura"))}</option>
+              <option value="chromium" ${managedEngine === "chromium" ? "selected" : ""}>${escapeHtml(t("browserControl.managedEngine.chromium"))}</option>
+            </select>
+          </label>
+          <p class="muted">${escapeHtml(t("browserControl.managedEngineHint"))}${
+            effectiveManaged
+              ? ` — ${escapeHtml(t("browserControl.effectiveManaged"))}: ${escapeHtml(effectiveManaged)}`
+              : ""
+          }</p>
           <div class="card" style="margin:0.75rem 0">
             <p class="muted" style="margin:0 0 0.5rem">${escapeHtml(t("browserControl.elevatedWarn"))}</p>
             ${
@@ -7780,10 +8054,25 @@ async function showView(id) {
               <input type="password" id="browserctl-remote-token" autocomplete="off" placeholder="${escapeHtml(t("browserControl.tokenPlaceholder"))}" />
             </label>
           </div>
-          <div class="card" id="browserctl-install-card" style="margin:0.75rem 0;${!browserReady ? "" : "display:none"}">
+          <div class="card" id="browserctl-install-card" style="margin:0.75rem 0;${
+            (managedEngine === "chromium" ||
+              (managedEngine === "auto" && !obscuraReady)) &&
+            !browserReady
+              ? ""
+              : "display:none"
+          }">
             <p class="muted" style="margin:0 0 0.5rem">${escapeHtml(t("webSearch.installHintNote"))}</p>
             <code style="display:block;user-select:all;word-break:break-all">${escapeHtml(installCmd)}</code>
             <button type="button" class="ghost" id="browserctl-copy-hint" style="margin-top:0.5rem">${escapeHtml(t("webSearch.copyHint"))}</button>
+          </div>
+          <div class="card" id="browserctl-obscura-install-card" style="margin:0.75rem 0;${
+            (managedEngine === "obscura" || managedEngine === "auto") && !obscuraReady
+              ? ""
+              : "display:none"
+          }">
+            <p class="muted" style="margin:0 0 0.5rem">${escapeHtml(t("webSearch.obscuraInstallHintNote"))}</p>
+            <code style="display:block;user-select:all;word-break:break-all">${escapeHtml(obscuraInstallCmd)}</code>
+            <button type="button" class="ghost" id="browserctl-copy-obscura-hint" style="margin-top:0.5rem">${escapeHtml(t("webSearch.copyHint"))}</button>
           </div>
           <p class="muted">${escapeHtml(t("browserControl.hint"))}</p>
           <div class="row-actions">
@@ -7791,6 +8080,25 @@ async function showView(id) {
           </div>
         `);
         wireTabs();
+        const syncManagedInstallCards = () => {
+          const eng = document.getElementById("browserctl-managed-engine")?.value || "auto";
+          const chromeCard = document.getElementById("browserctl-install-card");
+          const obscuraCard = document.getElementById("browserctl-obscura-install-card");
+          if (chromeCard) {
+            // Auto + Obscura ready: Chromium is optional fallback — no install nudge.
+            const needChromium =
+              eng === "chromium" || (eng === "auto" && !obscuraReady);
+            chromeCard.style.display =
+              needChromium && !browserReady ? "" : "none";
+          }
+          if (obscuraCard) {
+            obscuraCard.style.display =
+              (eng === "obscura" || eng === "auto") && !obscuraReady ? "" : "none";
+          }
+        };
+        document
+          .getElementById("browserctl-managed-engine")
+          ?.addEventListener("change", syncManagedInstallCards);
         document.getElementById("browserctl-copy-hint")?.addEventListener("click", async () => {
           try {
             await navigator.clipboard.writeText(installCmd);
@@ -7799,10 +8107,22 @@ async function showView(id) {
             showToast(installCmd, "ok");
           }
         });
+        document.getElementById("browserctl-copy-obscura-hint")?.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(obscuraInstallCmd);
+            showToast(t("webSearch.hintCopied"), "ok");
+          } catch {
+            showToast(obscuraInstallCmd, "ok");
+          }
+        });
         document.getElementById("browserctl-save")?.addEventListener("click", async () => {
           const enabled = !!document.getElementById("browserctl-enabled")?.checked;
           const unattendedEnabled = !!document.getElementById("browserctl-unattended")?.checked;
           const defaultProfile = document.getElementById("browserctl-default")?.value || "managed";
+          const managedRaw =
+            document.getElementById("browserctl-managed-engine")?.value || "auto";
+          const nextManaged =
+            managedRaw === "obscura" || managedRaw === "chromium" ? managedRaw : "auto";
           const acknowledgeElevated = !!document.getElementById("browserctl-ack")?.checked;
           const personalEnabled = !!document.getElementById("browserctl-personal")?.checked;
           const personalCdpEndpoint = document.getElementById("browserctl-personal-cdp")?.value ?? "";
@@ -7813,6 +8133,7 @@ async function showView(id) {
             enabled,
             unattendedEnabled,
             defaultProfile,
+            managedEngine: nextManaged,
             personalEnabled,
             personalCdpEndpoint,
             remoteEnabled,
@@ -9114,6 +9435,9 @@ async function showView(id) {
         let listErr = null;
         let mediaGenEnabled = false;
         let mediaGenHasProvider = false;
+        let privacyEnabled = false;
+        let privacyBlockEgress = true;
+        let privacyReadable = false;
         if (aid) {
           const body = await listProvidersRpc(aid);
           if (body.error) listErr = errMsg(body);
@@ -9128,6 +9452,12 @@ async function showView(id) {
           if (mg && !mg.error) {
             mediaGenEnabled = mg.result?.enabled === true;
             mediaGenHasProvider = mg.result?.hasProvider === true;
+          }
+          const priv = await rpc("home.getPrivacyMode", { accountId: aid }).catch(() => null);
+          if (priv && !priv.error) {
+            privacyReadable = true;
+            privacyEnabled = priv.result?.enabled === true;
+            privacyBlockEgress = priv.result?.blockSmartHomeEgress !== false;
           }
         }
         try {
@@ -9185,6 +9515,26 @@ async function showView(id) {
             <p class="muted routing-hint" id="media-gen-provider-hint"></p>
             <div id="media-gen-msg"></div>
           </div>
+          ${
+            privacyReadable
+              ? `<div class="card routing-card" style="margin-top:1rem">
+            <h3>${escapeHtml(t("privacyMode.title"))}</h3>
+            <p class="muted routing-hint">${escapeHtml(t("privacyMode.hint"))}</p>
+            <label class="routing-check">
+              <input type="checkbox" id="privacy-mode-enabled" ${privacyEnabled ? "checked" : ""} />
+              <span>${escapeHtml(t("privacyMode.enabled"))}</span>
+            </label>
+            <label class="routing-check">
+              <input type="checkbox" id="privacy-mode-egress" ${privacyBlockEgress ? "checked" : ""} ${
+                  privacyEnabled ? "" : "disabled"
+                } />
+              <span>${escapeHtml(t("privacyMode.blockEgress"))}</span>
+            </label>
+            <p class="muted routing-hint">${escapeHtml(t("privacyMode.egressHint"))}</p>
+            <div id="privacy-mode-msg"></div>
+          </div>`
+              : `<p class="muted routing-hint" style="margin-top:1rem">${escapeHtml(t("privacyMode.ownerOnly"))}</p>`
+          }
           <div id="routing-msg"></div>`
               : ""
           }`);
@@ -9210,6 +9560,29 @@ async function showView(id) {
               : `<p class="muted">${escapeHtml(t("mediaGen.saved"))}</p>`;
           }
         });
+        const privacyCb = /** @type {HTMLInputElement | null} */ (
+          document.getElementById("privacy-mode-enabled")
+        );
+        const privacyEgressCb = /** @type {HTMLInputElement | null} */ (
+          document.getElementById("privacy-mode-egress")
+        );
+        const persistPrivacy = async () => {
+          if (!aid || !privacyCb || !privacyEgressCb) return;
+          const msg = document.getElementById("privacy-mode-msg");
+          privacyEgressCb.disabled = privacyCb.checked !== true;
+          const ans = await rpc("home.setPrivacyMode", {
+            accountId: aid,
+            enabled: privacyCb.checked === true,
+            blockSmartHomeEgress: privacyEgressCb.checked === true,
+          });
+          if (msg) {
+            msg.innerHTML = ans.error
+              ? `<p class="le-error">${escapeHtml(errMsg(ans))}</p>`
+              : `<p class="muted">${escapeHtml(t("privacyMode.saved"))}</p>`;
+          }
+        };
+        privacyCb?.addEventListener("change", () => void persistPrivacy());
+        privacyEgressCb?.addEventListener("change", () => void persistPrivacy());
 
         const routingForm = /** @type {HTMLFormElement | null} */ (
           document.getElementById("routing-form")
@@ -9954,13 +10327,15 @@ async function showView(id) {
         automationTab !== "workflows" &&
         automationTab !== "jobs" &&
         automationTab !== "heartbeat" &&
-        automationTab !== "standing"
+        automationTab !== "standing" &&
+        automationTab !== "scenes"
       ) {
         automationTab = "skills";
       }
       const tabsHtml = `<div class="page-tabs" role="tablist">
         ${tab("skills", "nav.skills")}
         ${tab("workflows", "nav.workflows")}
+        ${tab("scenes", "nav.scenes")}
         ${tab("jobs", "nav.jobs")}
         ${tab("heartbeat", "nav.heartbeat")}
         ${tab("standing", "nav.standing")}
@@ -9976,7 +10351,8 @@ async function showView(id) {
               next !== "workflows" &&
               next !== "jobs" &&
               next !== "heartbeat" &&
-              next !== "standing"
+              next !== "standing" &&
+              next !== "scenes"
             ) {
               return;
             }
@@ -10280,6 +10656,7 @@ async function showView(id) {
           builtin: String(countBySource("builtin")),
           skill: String(countBySource("skill")),
           smarthome: String(countBySource("smarthome")),
+          mcp: String(countBySource("mcp")),
           available: String(readyTools.length),
         });
         const toolDatalistOptions = readyTools
@@ -10481,6 +10858,24 @@ async function showView(id) {
               <details class="wf-demo-yaml">
                 <summary>${escapeHtml(t("workflows.howtoViewYaml"))}</summary>
                 <pre class="skill-howto-md"><code>${escapeHtml(WORKFLOW_HOWTO_DOCS)}</code></pre>
+              </details>
+            </div>
+            <div class="wf-howto-block" data-wf-demo="web">
+              <div class="wf-howto-head">
+                <h4 class="muted">${escapeHtml(t("workflows.howtoWeb"))}</h4>
+                <span class="wf-howto-actions">
+                  <button type="button" class="secondary" id="wf-test-web">${escapeHtml(t("workflows.howtoTest"))}</button>
+                  <button type="button" id="wf-try-web">${escapeHtml(t("workflows.howtoTry"))}</button>
+                </span>
+              </div>
+              <p class="wf-howto-what">${escapeHtml(t("workflows.howtoWebWhat"))}</p>
+              <p class="muted wf-howto-blurb">${escapeHtml(t("workflows.howtoWebHint"))}</p>
+              <div class="wf-demo-saved" id="wf-saved-web" hidden></div>
+              <div class="wf-demo-canvas" id="wf-demo-web"></div>
+              <div class="wf-demo-run" id="wf-run-web" hidden></div>
+              <details class="wf-demo-yaml">
+                <summary>${escapeHtml(t("workflows.howtoViewYaml"))}</summary>
+                <pre class="skill-howto-md"><code>${escapeHtml(WORKFLOW_HOWTO_WEB)}</code></pre>
               </details>
             </div>
           </details>
@@ -10869,6 +11264,7 @@ async function showView(id) {
         const sourceLabel = (src) => {
           if (src === "skill") return t("workflows.toolsSourceSkill");
           if (src === "smarthome") return t("workflows.toolsSourceSmarthome");
+          if (src === "mcp") return t("workflows.toolsSourceMcp");
           return t("workflows.toolsSourceBuiltin");
         };
 
@@ -10879,7 +11275,8 @@ async function showView(id) {
           const q = (filterEl?.value || "").trim().toLowerCase();
           const filtered = readyTools.filter((row) => {
             if (!q) return true;
-            const hay = `${row.name} ${row.summary || ""} ${row.risk || ""}`.toLowerCase();
+            const hay =
+              `${row.name} ${row.summary || ""} ${row.risk || ""} ${row.source || ""}`.toLowerCase();
             return hay.includes(q);
           });
           if (!filtered.length) {
@@ -10888,7 +11285,7 @@ async function showView(id) {
             )}</p>`;
             return;
           }
-          host.innerHTML = ["builtin", "skill", "smarthome"]
+          host.innerHTML = ["builtin", "skill", "smarthome", "mcp"]
             .map((src) => {
               const rows = filtered.filter((r) => r.source === src);
               if (!rows.length) return "";
@@ -11053,12 +11450,14 @@ async function showView(id) {
         mountHowtoDemo("branch", "wf-demo-branch", WORKFLOW_HOWTO_BRANCH);
         mountHowtoDemo("linear", "wf-demo-linear", WORKFLOW_HOWTO_LINEAR);
         mountHowtoDemo("docs", "wf-demo-docs", WORKFLOW_HOWTO_DOCS);
+        mountHowtoDemo("web", "wf-demo-web", WORKFLOW_HOWTO_WEB);
 
         const DEMO_SAMPLES = [
           ["complex", WORKFLOW_HOWTO_COMPLEX],
           ["branch", WORKFLOW_HOWTO_BRANCH],
           ["linear", WORKFLOW_HOWTO_LINEAR],
           ["docs", WORKFLOW_HOWTO_DOCS],
+          ["web", WORKFLOW_HOWTO_WEB],
         ];
 
         /** Show the saved demo_* copy under its sample card (not in the main list). */
@@ -11227,6 +11626,10 @@ async function showView(id) {
           openEditor("create", WORKFLOW_HOWTO_DOCS.trim() + "\n", "account", { practiceDemo: true });
           setWfMsg(`<p class="muted">${escapeHtml(t("workflows.howtoLoadedDocs"))}</p>`);
         });
+        document.getElementById("wf-try-web")?.addEventListener("click", () => {
+          openEditor("create", WORKFLOW_HOWTO_WEB.trim() + "\n", "account", { practiceDemo: true });
+          setWfMsg(`<p class="muted">${escapeHtml(t("workflows.howtoLoadedWeb"))}</p>`);
+        });
         document.getElementById("wf-test-complex")?.addEventListener("click", () => {
           testDemoWorkflow(WORKFLOW_HOWTO_COMPLEX, "complex");
         });
@@ -11238,6 +11641,9 @@ async function showView(id) {
         });
         document.getElementById("wf-test-docs")?.addEventListener("click", () => {
           testDemoWorkflow(WORKFLOW_HOWTO_DOCS, "docs");
+        });
+        document.getElementById("wf-test-web")?.addEventListener("click", () => {
+          testDemoWorkflow(WORKFLOW_HOWTO_WEB, "web");
         });
 
         const sampleKeyForDemoId = (id) => {
@@ -11463,6 +11869,205 @@ async function showView(id) {
           setBanner(`<p class="muted">${escapeHtml(t("heartbeat.saved"))}</p>`);
           automationTab = "heartbeat";
           await showView("automation");
+        });
+        return;
+      }
+
+      if (automationTab === "scenes") {
+        if (!aid) {
+          el.innerHTML = shell(`<p>${escapeHtml(t("profile.pick"))}</p>`);
+          wireTabs();
+          return;
+        }
+        const [listed, sourcesBody, privBody] = await Promise.all([
+          rpc("home.listStandingOrders", { accountId: aid }),
+          rpc("home.listSources", {}),
+          rpc("home.getPrivacyMode", { accountId: aid }).catch(() => null),
+        ]);
+        if (listed.error) {
+          el.innerHTML = shell(`<p class="le-error">${escapeHtml(errMsg(listed))}</p>`);
+          wireTabs();
+          return;
+        }
+        const privacy =
+          privBody && !privBody.error
+            ? {
+                enabled: privBody.result?.enabled === true,
+                blockSmartHomeEgress: privBody.result?.blockSmartHomeEgress !== false,
+              }
+            : null;
+        const presenceGate = assertPresenceSceneAllowed(privacy);
+        const sources = Array.isArray(sourcesBody.result?.sources)
+          ? sourcesBody.result.sources
+          : [];
+        // putStandingOrder requires source bound to this seat (not merely shared).
+        const boundSources = sources.filter(
+          (s) => s && s.bound === true && s.accountId === aid && s.sourceId,
+        );
+        const sceneOrders = (listed.result?.orders || []).filter((o) =>
+          isSceneStandingOrderId(o.id),
+        );
+        const rows = sceneOrders.length
+          ? `<ul class="sys-list">${sceneOrders
+              .map((o) => {
+                const whenKind =
+                  o.when && typeof o.when === "object" && o.when.kind
+                    ? String(o.when.kind)
+                    : "?";
+                return `<li class="sys-row">
+                  <div class="sys-row-main">
+                    <span class="sys-row-title">${escapeHtml(o.name || o.id)}</span>
+                    <span class="sys-row-meta muted">${escapeHtml(whenKind)}${
+                      o.enabled ? "" : ` · ${escapeHtml(t("standing.disabled"))}`
+                    }</span>
+                  </div>
+                  <div class="sys-row-actions">
+                    <button type="button" class="secondary" data-scene-toggle="${escapeHtml(o.id)}" data-en="${o.enabled ? "1" : "0"}">${escapeHtml(
+                      o.enabled ? t("standing.disable") : t("standing.enable"),
+                    )}</button>
+                    <button type="button" class="secondary" data-scene-remove="${escapeHtml(o.id)}">${escapeHtml(t("standing.remove"))}</button>
+                  </div>
+                </li>`;
+              })
+              .join("")}</ul>`
+          : `<p class="muted">${escapeHtml(t("scenes.none"))}</p>`;
+        const tplOpts = SCENE_TEMPLATES.map(
+          (tpl) =>
+            `<option value="${escapeHtml(tpl.id)}">${escapeHtml(t(tpl.nameKey))}</option>`,
+        ).join("");
+        const sourceOpts = boundSources.length
+          ? boundSources
+              .map((s) => {
+                const sid = String(s.sourceId || "");
+                const label = String(s.displayName || sid);
+                return `<option value="${escapeHtml(sid)}">${escapeHtml(label)}</option>`;
+              })
+              .join("")
+          : `<option value="">${escapeHtml(t("scenes.noSources"))}</option>`;
+        el.innerHTML = shell(`
+          <h3>${escapeHtml(t("scenes.title"))}</h3>
+          <p class="muted">${escapeHtml(t("scenes.hint"))}</p>
+          ${
+            presenceGate.ok
+              ? ""
+              : `<p class="muted">${escapeHtml(t("scenes.privacyRequired"))}</p>`
+          }
+          ${rows}
+          <h4>${escapeHtml(t("scenes.addTitle"))}</h4>
+          <form id="scene-form" class="stack-form">
+            <label>${escapeHtml(t("scenes.template"))}
+              <select name="templateId" id="scene-template">${tplOpts}</select>
+            </label>
+            <p class="muted" id="scene-tpl-hint"></p>
+            <label>${escapeHtml(t("scenes.name"))}
+              <input type="text" name="name" maxlength="120" placeholder="" />
+            </label>
+            <label id="scene-cron-wrap">${escapeHtml(t("standing.cron"))}
+              <input type="text" name="cron" id="scene-cron" />
+            </label>
+            <label id="scene-source-wrap" hidden>${escapeHtml(t("scenes.source"))}
+              <select name="sourceId" id="scene-source">${sourceOpts}</select>
+            </label>
+            <button type="submit" class="primary">${escapeHtml(t("scenes.add"))}</button>
+          </form>
+          <div id="scene-banner"></div>
+        `);
+        wireTabs();
+        const setBanner = (html) => {
+          const b = el.querySelector("#scene-banner");
+          if (b) b.innerHTML = html;
+        };
+        const syncTplUi = () => {
+          const sel = /** @type {HTMLSelectElement | null} */ (
+            document.getElementById("scene-template")
+          );
+          const tpl = SCENE_TEMPLATES.find((x) => x.id === sel?.value) || SCENE_TEMPLATES[0];
+          const hint = document.getElementById("scene-tpl-hint");
+          if (hint && tpl) hint.textContent = t(tpl.hintKey);
+          const cronWrap = document.getElementById("scene-cron-wrap");
+          const sourceWrap = document.getElementById("scene-source-wrap");
+          const cronInput = /** @type {HTMLInputElement | null} */ (
+            document.getElementById("scene-cron")
+          );
+          if (tpl?.whenKind === "cron") {
+            if (cronWrap) cronWrap.hidden = false;
+            if (sourceWrap) sourceWrap.hidden = true;
+            if (cronInput && !cronInput.value) cronInput.value = tpl.cronExpr || "";
+          } else {
+            if (cronWrap) cronWrap.hidden = true;
+            if (sourceWrap) sourceWrap.hidden = false;
+          }
+        };
+        syncTplUi();
+        document.getElementById("scene-template")?.addEventListener("change", syncTplUi);
+        el.querySelector("#scene-form")?.addEventListener("submit", async (ev) => {
+          ev.preventDefault();
+          const fd = new FormData(/** @type {HTMLFormElement} */ (ev.target));
+          const templateId = String(fd.get("templateId") || "");
+          const tpl = SCENE_TEMPLATES.find((x) => x.id === templateId);
+          if (!tpl) return;
+          if (tpl.presenceAware) {
+            const gate = assertPresenceSceneAllowed(privacy);
+            if (!gate.ok) {
+              setBanner(`<p class="le-error">${escapeHtml(t("scenes.privacyRequired"))}</p>`);
+              return;
+            }
+          }
+          try {
+            const built = buildStandingOrderFromScene(tpl, {
+              name: String(fd.get("name") || "").trim() || t(tpl.nameKey),
+              cronExpr: String(fd.get("cron") || "").trim(),
+              sourceId: String(fd.get("sourceId") || "").trim(),
+            });
+            const ans = await rpc("home.putStandingOrder", {
+              accountId: aid,
+              id: built.id,
+              name: built.name,
+              enabled: true,
+              when: built.when,
+              action: built.action,
+            });
+            if (ans.error) {
+              setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+              return;
+            }
+            automationTab = "scenes";
+            await showView("automation");
+          } catch (err) {
+            setBanner(
+              `<p class="le-error">${escapeHtml(err instanceof Error ? err.message : String(err))}</p>`,
+            );
+          }
+        });
+        el.querySelectorAll("[data-scene-toggle]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-scene-toggle");
+            const en = btn.getAttribute("data-en") === "1";
+            const ans = await rpc("home.setStandingOrderEnabled", {
+              accountId: aid,
+              id,
+              enabled: !en,
+            });
+            if (ans.error) {
+              setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+              return;
+            }
+            automationTab = "scenes";
+            await showView("automation");
+          });
+        });
+        el.querySelectorAll("[data-scene-remove]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-scene-remove");
+            if (!window.confirm(t("standing.confirmRemove"))) return;
+            const ans = await rpc("home.removeStandingOrder", { accountId: aid, id });
+            if (ans.error) {
+              setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+              return;
+            }
+            automationTab = "scenes";
+            await showView("automation");
+          });
         });
         return;
       }

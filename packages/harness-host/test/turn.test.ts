@@ -12,6 +12,7 @@ import {
   clearExtraToolSpecsForTests,
   dispatchTool,
   formatSandboxToolResultLines,
+  appendMissingSandboxHandoffLines,
   formatScheduleToolOutput,
   claimsReminderWithoutPropose,
   normalizeSandboxEchoPath,
@@ -1166,6 +1167,105 @@ test("formatSandboxToolResultLines: export_document uri", () => {
   assert.equal(lines.length, 1);
   assert.match(lines[0]!, /output\/exports\/hi-abc\.docx/);
   assert.match(lines[0]!, /docx/);
+});
+
+test("appendMissingSandboxHandoffLines: adds chip path when model omits it", () => {
+  const out = appendMissingSandboxHandoffLines("Here is your doc.", [
+    {
+      tool: "export_document",
+      output: JSON.stringify({
+        uri: "output/exports/memo.docx",
+        bytes: 10,
+        format: "docx",
+      }),
+    },
+  ]);
+  assert.match(out, /Here is your doc/);
+  assert.match(out, /`output\/exports\/memo\.docx`/);
+});
+
+test("appendMissingSandboxHandoffLines: skips when path already cited", () => {
+  const out = appendMissingSandboxHandoffLines(
+    "Saved as `output/exports/memo.docx`.",
+    [
+      {
+        tool: "export_document",
+        output: JSON.stringify({
+          uri: "output/exports/memo.docx",
+          bytes: 10,
+          format: "docx",
+        }),
+      },
+    ],
+  );
+  assert.equal(out, "Saved as `output/exports/memo.docx`.");
+});
+
+test("appendMissingSandboxHandoffLines: skips bare path cite (no backticks)", () => {
+  const out = appendMissingSandboxHandoffLines(
+    "File at output/exports/memo.docx ready.",
+    [
+      {
+        tool: "export_document",
+        output: JSON.stringify({
+          uri: "output/exports/memo.docx",
+          bytes: 10,
+          format: "docx",
+        }),
+      },
+    ],
+  );
+  assert.equal(out, "File at output/exports/memo.docx ready.");
+});
+
+test("appendMissingSandboxHandoffLines: extract uri cited — no duplicate from sourcePath", () => {
+  const out = appendMissingSandboxHandoffLines(
+    "See `output/extracts/note.md`.",
+    [
+      {
+        tool: "extract_document",
+        output: JSON.stringify({
+          uri: "output/extracts/note.md",
+          extractChars: 10,
+          sourcePath: "documents/note.docx",
+        }),
+      },
+    ],
+  );
+  assert.equal(out, "See `output/extracts/note.md`.");
+  assert.doesNotMatch(out, /documents\/note\.docx/);
+});
+
+test("formatSandboxToolResultLines: image_generate + browser screenshot", () => {
+  const lines = formatSandboxToolResultLines([
+    {
+      tool: "image_generate",
+      output: JSON.stringify({ path: "output/media/gen-1.png", bytes: 99 }),
+    },
+    {
+      tool: "browser",
+      output: JSON.stringify({
+        action: "screenshot",
+        path: "output/browser/shot.png",
+        bytes: 50,
+      }),
+    },
+    {
+      tool: "browser",
+      output: JSON.stringify({
+        action: "act",
+        verify: { mode: "screenshot", path: "output/browser/verify.png", bytes: 12 },
+      }),
+    },
+    {
+      tool: "browser",
+      output: JSON.stringify({ action: "snapshot", snapshotId: "s1" }),
+    },
+  ]);
+  assert.equal(lines.length, 3);
+  assert.match(lines[0]!, /output\/media\/gen-1\.png/);
+  assert.match(lines[1]!, /output\/browser\/shot\.png/);
+  assert.match(lines[2]!, /output\/browser\/verify\.png/);
 });
 
 test("formatSandboxToolResultLines: extract_document uri", () => {

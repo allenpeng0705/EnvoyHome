@@ -26,7 +26,7 @@ Self-hosted **home agent control plane** for a household:
 | Claim | Why |
 |-------|-----|
 | **`v1.0.0` / “Normative v1 complete”** | Plan `[ ] Tag v1.0.0`; B7/B14 still `[~]` |
-| **Privacy Mode product toggle** | `privacy-mode.json` stub only; `home.setPrivacyMode` is Phase 2 (§19.4). Never advertise until RPC + Settings + V-P2-PRIV-* |
+| ~~**Privacy Mode product toggle**~~ | **Lifted `2026-11-10j`:** `home.getPrivacyMode` / `home.setPrivacyMode` + Settings + V-P2-PRIV-1/2 green. OK to claim Privacy Mode hard switch (cloud + optional smart-home egress). |
 | **Production-ready first-party IM zoo** | Telegram/Discord/Slack/Feishu/DingTalk/WeCom plugins exist; **live bot verify remaining**. OK: “plugins + setup docs”; not OK: “drop-in Telegram for the family” without operator sign-off |
 | **agentskills.io conformance** | §9.2 / §15.2 — target only, unverified |
 | **OpenClaw-shaped device nodes** | Camera/screen/computer-use / `nodes` — Defer (`2026-10-22`) |
@@ -63,8 +63,8 @@ Self-hosted **home agent control plane** for a household:
 | Layer | Status | Claim |
 |-------|--------|-------|
 | Flutter thin client + `mobile-client` | Shipped (`0.1.0+1`) | “Pair phone over EnvoyMesh hosting” |
-| Live device + push | Operator | [`docs/mobile-live-verify.md`](../../docs/mobile-live-verify.md) |
-| App Store / Play production | Not ready until | Release signing + privacy URL ([`docs/store-listing.md`](../../docs/store-listing.md)) + live verify PASS |
+| Live device + push | **PASS** `2026-11-10` | [`docs/mobile-live-verify.md`](../../docs/mobile-live-verify.md) — APNs + soft-disconnect token retain |
+| App Store / Play production | Not ready until | Release signing + privacy URL ([`docs/store-listing.md`](../../docs/store-listing.md)) — live verify no longer blocking demos |
 
 ## Sign-off
 
@@ -72,6 +72,6 @@ Self-hosted **home agent control plane** for a household:
 |------|------|-------|
 | Docs freeze (this sheet) | 2026-10-22 | Aligns v1 ship review |
 | Live HA/MQTT | _pending_ | See `docs/smart-home-live-checklist.md` |
-| Live mobile | _pending_ | See `docs/mobile-live-verify.md` |
+| Live mobile | **PASS** `2026-11-10` | See `docs/mobile-live-verify.md` |
 | Live Telegram | _deferred_ | Mesh phone primary for early-adopter |
 | Tag `v1.0.0` | _blocked_ | Plan `[ ]` until bars green |

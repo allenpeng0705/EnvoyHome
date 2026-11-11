@@ -580,6 +580,24 @@ class AppLocalizationsDe extends AppLocalizations {
   String get llmAutoSwitch => 'Auto model switch';
 
   @override
+  String get privacyModeTitle => 'Privacy Mode';
+
+  @override
+  String get privacyModeHint =>
+      'Forces local inference and blocks cloud tools. Owner-scope.';
+
+  @override
+  String get privacyModeEnabled => 'Enable Privacy Mode';
+
+  @override
+  String get privacyModeBlockEgress =>
+      'Also block smart-home actuation & event-source notify';
+
+  @override
+  String get privacyModeOwnerOnly =>
+      'Privacy Mode is Owner-only on this device.';
+
+  @override
   String get llmCompactNow => 'Compact memory now';
 
   @override
@@ -629,7 +647,11 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get browserControlLede =>
-      'Control a managed Chromium tab from chat. Off by default. Not your personal Chrome.';
+      'Control a managed browser on the home computer (Auto prefers Obscura, else Chromium), or attach personal Chrome / remote CDP. Off by default.';
+
+  @override
+  String get browserControlDaemonHostNote =>
+      'Browser sessions run on the home computer. Settings here sync with desktop Connections → Browser.';
 
   @override
   String get browserControlEnabled => 'Enable browser tool';
@@ -714,13 +736,27 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get webSearchLede =>
-      'Search the public web from chat. DuckDuckGo needs no key; Brave and Tavily need an Owner API key.';
+      'Search the public web from chat. Default: DuckDuckGo, then Bing/Google/Baidu in the browser if needed (no API key). Brave and Tavily need an Owner API key.';
 
   @override
   String get webSearchEnabled => 'Enable web_search';
 
   @override
   String get webSearchProvider => 'Provider';
+
+  @override
+  String get webSearchProviderBrowser => 'Browser (Bing / Google / Baidu)';
+
+  @override
+  String get webSearchBrowserPrimaryHint =>
+      'Searches Bing/Google/Baidu directly in the daemon host headless engine (Obscura if ready, else Chromium). Attended chats ask once before each search.';
+
+  @override
+  String get webSearchDaemonHostNote =>
+      'Engines and dig run on the home computer that hosts EnvoyHome. This phone only views and (Owner) edits the shared settings.';
+
+  @override
+  String get webSearchEffectiveUnresolved => 'not ready yet';
 
   @override
   String get webSearchApiKey => 'API key';
@@ -749,11 +785,113 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get webSearchBrowserFallback =>
-      'Browser fallback (Bing/Google when API/DDG fails)';
+      'Browser fallback (Bing/Google/Baidu when API/DDG fails or is unset)';
 
   @override
   String get webSearchBrowserFallbackHint =>
-      'Off by default. Attended chats still ask before the browser leg. SERP pages may CAPTCHA or block.';
+      'On by default for zero-config search. Attended chats ask before the browser leg. SERP pages may CAPTCHA or block.';
+
+  @override
+  String get webSearchResearchEnabled =>
+      'Web research (search then dig top pages)';
+
+  @override
+  String get webSearchResearchHint =>
+      'Off by default. Enables web_research: dig into top results and return an organized brief plus links.';
+
+  @override
+  String get webSearchDigDepth => 'Dig depth (1–10 pages)';
+
+  @override
+  String get webSearchExtractBackend => 'Page extract backend';
+
+  @override
+  String get webSearchExtractBackendAuto =>
+      'Auto (Obscura if ready, else HTTP fetch)';
+
+  @override
+  String get webSearchExtractBackendFetch => 'HTTP fetch';
+
+  @override
+  String get webSearchExtractBackendObscura => 'Obscura (JS-rendered Markdown)';
+
+  @override
+  String get webSearchExtractBackendHint =>
+      'Auto prefers Obscura when installed on the daemon host, otherwise plain HTTP fetch.';
+
+  @override
+  String get webSearchEffectiveExtract => 'Effective dig backend now';
+
+  @override
+  String get webSearchObscuraReady => 'Obscura ready on daemon host';
+
+  @override
+  String get webSearchObscuraMissing => 'Obscura not installed on daemon host';
+
+  @override
+  String get webSearchObscuraInstallHintNote =>
+      'Desktop builds ship Obscura (or the daemon auto-installs on first boot). On the home computer that runs EnvoyHome (not this phone), override with ENVOYHOME_OBSCURA / PATH if needed, then reopen Settings.';
+
+  @override
+  String get webSearchSerpBrowserEngine => 'Browser SERP engine';
+
+  @override
+  String get webSearchSerpBrowserEngineAuto =>
+      'Auto (Obscura if ready, else Chromium)';
+
+  @override
+  String get webSearchSerpBrowserEngineChromium => 'Chromium';
+
+  @override
+  String get webSearchSerpBrowserEngineObscura => 'Obscura';
+
+  @override
+  String get webSearchSerpBrowserEngineHint =>
+      'Auto prefers Obscura for Bing/Google/Baidu, then Playwright Chromium.';
+
+  @override
+  String get webSearchEffectiveSerp => 'Effective SERP engine now';
+
+  @override
+  String get browserControlManagedEngine => 'Managed browser engine';
+
+  @override
+  String get browserControlManagedEngineAuto =>
+      'Auto (Obscura if ready, else Chromium)';
+
+  @override
+  String get browserControlManagedEngineChromium => 'Chromium';
+
+  @override
+  String get browserControlManagedEngineObscura => 'Obscura';
+
+  @override
+  String get browserControlManagedEngineHint =>
+      'Auto prefers Obscura for managed browser. Personal/remote always use real Chrome CDP.';
+
+  @override
+  String get browserControlEffectiveManaged => 'Effective managed engine now';
+
+  @override
+  String get webSearchEngines =>
+      'Search engines (order: Bing → Google → Baidu)';
+
+  @override
+  String get webSearchEnginesHint =>
+      'When browser fallback runs, try checked engines in this order until one returns results.';
+
+  @override
+  String get webSearchEnginesRequired =>
+      'Pick at least one of Bing, Google, or Baidu for browser fallback.';
+
+  @override
+  String get webSearchEngineBing => 'Bing';
+
+  @override
+  String get webSearchEngineGoogle => 'Google';
+
+  @override
+  String get webSearchEngineBaidu => 'Baidu';
 
   @override
   String get webSearchBrowserReady =>
@@ -865,6 +1003,23 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get skillsTabSchedules => 'Schedules';
+
+  @override
+  String get skillsTabScenes => 'Scenes';
+
+  @override
+  String get scenesHint =>
+      'When → do household automations (standing orders). Presence templates need Privacy Mode.';
+
+  @override
+  String get scenesNone => 'No scenes yet.';
+
+  @override
+  String get scenesAddMorning => 'Add Good morning';
+
+  @override
+  String get scenesPrivacyRequired =>
+      'Enable Privacy Mode (LLM → Routing) before presence scenes.';
 
   @override
   String get skillsInstallUrl => 'Install from URL';

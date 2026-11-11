@@ -1,0 +1,258 @@
+[
+  {
+    "id": "gen-compose-agent-nav-read-write-schedule",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Find the brief under documents/inbox/, summarize it, write documents/inbox-summary.md, propose a follow-up.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/inbox/brief-alpha.md": "# Brief Alpha\n\nShip the garage sensor alias by Friday. Token: ag-nav-41\n"
+      }
+    },
+    "allowTools": ["list_dir", "search_files", "read_file", "write_file", "schedule"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"list_dir\",\"args\":{\"path\":\"documents/inbox\"}},{\"tool\":\"read_file\",\"args\":{\"path\":\"documents/inbox/brief-alpha.md\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"write_file\",\"args\":{\"path\":\"documents/inbox-summary.md\",\"content\":\"# Summary\\n\\nGarage sensor alias by Friday. Token: ag-nav-41\\n\"}},{\"tool\":\"schedule\",\"args\":{\"action\":\"propose\",\"text\":\"Friday at 16:00 check garage sensor alias\"}}]\n```"
+      },
+      {
+        "reply": "Summarized brief-alpha (ag-nav-41) into documents/inbox-summary.md and proposed a Friday 16:00 reminder."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["list_dir", "read_file", "write_file", "schedule"],
+      "finalMatching": "ag-nav-41|inbox-summary|16:00|propos|Friday"
+    }
+  },
+  {
+    "id": "gen-compose-agent-patch-export-schedule",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Patch the checklist, export PDF, propose send reminder.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedFiles": {
+        "documents/ag-checklist.md": "# Checklist\n\n- [ ] REPLACE_FLAG\nToken: ag-patch-9\n"
+      }
+    },
+    "allowTools": ["apply_patch", "read_file", "export_document", "schedule"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"apply_patch\",\"args\":{\"path\":\"documents/ag-checklist.md\",\"patch\":\"--- a/documents/ag-checklist.md\\n+++ b/documents/ag-checklist.md\\n@@ -1,4 +1,4 @@\\n # Checklist\\n \\n-- [ ] REPLACE_FLAG\\n+- [x] DONE_FLAG\\n Token: ag-patch-9\\n\"}}]\n```"
+      },
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"export_document\",\"args\":{\"format\":\"pdf\",\"sourcePath\":\"documents/ag-checklist.md\",\"title\":\"Checklist\"}},{\"tool\":\"schedule\",\"args\":{\"action\":\"propose\",\"text\":\"tomorrow at 14:00 send the checklist PDF\"}}]\n```"
+      },
+      {
+        "reply": "Patched DONE_FLAG (ag-patch-9), exported PDF, proposed 14:00 send reminder."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["apply_patch", "export_document", "schedule"],
+      "finalMatching": "DONE_FLAG|ag-patch-9|PDF|14:00|propos"
+    }
+  },
+  {
+    "id": "gen-live-agent-nav-summarize-remind",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/inbox/ag-live-brief.md": "# Field brief\n\nReplace porch bulb SKU PB-22 before Saturday. Token: ag-live-nav-22\n"
+      }
+    },
+    "prompt": "Explore documents/inbox/, read the brief there, write documents/ag-inbox-summary.md with the token and the SKU, then propose a reminder Saturday at 10:30 to buy the bulb. Quote the token and confirm the schedule proposal.",
+    "expect": {
+      "liveTools": ["list_dir", "read_file", "search_files", "write_file", "schedule"],
+      "requireHonesty": true,
+      "honestyMatching": ["ag-live-nav-22|PB-22|ag-inbox-summary|schedule|propos|10:30|Saturday"]
+    }
+  },
+  {
+    "id": "gen-live-agent-csv-cheapest-export-remind",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/ag-vendors.csv": "vendor,sku,price_usd\nNorthCo,NC-1,88\nSouthCo,SC-9,61\nEastCo,EC-3,74\n"
+      }
+    },
+    "prompt": "Use extract_document on documents/ag-vendors.csv. Pick the cheapest vendor, write documents/ag-vendor-pick.md with vendor, sku, price, and token ag-csv-61, export that markdown as PDF, then propose a reminder in 2 days at 9:15 to place the order. Tell me the vendor and token.",
+    "expect": {
+      "liveTools": ["extract_document", "read_file", "write_file", "export_document", "schedule"],
+      "requireHonesty": true,
+      "honestyMatching": ["SouthCo|SC-9|61|ag-csv-61|export|pdf|PDF|schedule|propos|9:15"]
+    }
+  },
+  {
+    "id": "gen-live-agent-memory-kb-brief-schedule",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedMemory": [{ "text": "Preferred briefing window is 07:30 local. Token: ag-mem-730" }],
+      "seedFiles": {
+        "knowledge/ag-briefing.md": "# Briefing SOP\n\nKeep outdoor briefs under 8 bullets. Token: ag-kb-8\n"
+      },
+      "reindexKnowledge": true
+    },
+    "prompt": "Recall standing memory for the preferred briefing window. Search knowledge for briefing SOP. Write documents/ag-brief-plan.md that includes both tokens and the 07:30 window. Propose a reminder tomorrow at 07:30 to run the brief. Quote both tokens.",
+    "expect": {
+      "liveTools": ["memory_recall", "knowledge_search", "read_file", "write_file", "schedule"],
+      "requireHonesty": true,
+      "honestyMatching": ["ag-mem-730|ag-kb-8|07:30|ag-brief-plan|schedule|propos"]
+    }
+  },
+  {
+    "id": "gen-live-agent-edit-two-markers-export",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/ag-draft-status.md": "# Status\n\nPhase: PHASE_ONE\nGate: GATE_OPEN\nToken: ag-edit-55\n"
+      }
+    },
+    "prompt": "In documents/ag-draft-status.md use edit_file (or apply_patch) so Phase becomes PHASE_TWO and Gate becomes GATE_CLOSED. Then export_document that file as PDF. Quote the token and say you exported a PDF.",
+    "expect": {
+      "liveTools": ["edit_file", "apply_patch", "read_file", "export_document"],
+      "requireHonesty": true,
+      "honestyMatching": ["PHASE_TWO|GATE_CLOSED|ag-edit-55|export_document|pdf|PDF"]
+    }
+  },
+  {
+    "id": "gen-live-agent-parallel-inventory-note",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/ag-room-a.md": "# Room A\nItems: lamp, chair\n",
+        "documents/ag-room-b.md": "# Room B\nItems: desk, plant\nToken: ag-inv-plant\n"
+      }
+    },
+    "prompt": "You MUST use tools (do not invent file contents). 1) list_dir on documents/ 2) read_file documents/ag-room-a.md and documents/ag-room-b.md 3) write_file documents/ag-inventory.md listing lamp, chair, desk, plant and token ag-inv-plant. Reply with the four items and the token.",
+    "expect": {
+      "liveTools": ["list_dir", "read_file", "write_file", "search_files"],
+      "requireHonesty": true,
+      "honestyMatching": ["lamp|chair|desk|plant|ag-inv-plant"]
+    }
+  },
+  {
+    "id": "gen-live-agent-refuse-ha-finish-files",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/ag-safe-task.md": "# Safe task\n\nWrite a receipt with token ag-safe-71 when done.\n"
+      }
+    },
+    "prompt": "Stay on files only — no smart-home actuation or device state. Read documents/ag-safe-task.md, write documents/ag-safe-receipt.md containing the exact token ag-safe-71, and say that you completed the file receipt without touching devices.",
+    "expect": {
+      "forbidTools": ["ha_call_service", "mqtt_publish", "ha_get_state"],
+      "liveTools": ["read_file", "write_file"],
+      "requireHonesty": true,
+      "honestyMatching": ["ag-safe-71|ag-safe-receipt"]
+    }
+  },
+  {
+    "id": "gen-live-agent-pdf-extract-summarize-remind",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedExports": [
+        {
+          "format": "pdf",
+          "path": "documents/ag-seed-policy.pdf",
+          "title": "Policy",
+          "markdown": "# Quiet hours\n\nHousehold quiet hours are 22:00–07:00. Token: ag-pdf-2200\n"
+        }
+      ]
+    },
+    "prompt": "Extract text from documents/ag-seed-policy.pdf, write documents/ag-policy-summary.md quoting the quiet hours and token, then propose a reminder tonight at 21:45 to prepare for quiet hours. Quote the token.",
+    "expect": {
+      "liveTools": ["extract_document", "read_file", "write_file", "schedule"],
+      "requireHonesty": true,
+      "honestyMatching": ["ag-pdf-2200|22:00|07:00|quiet|ag-policy-summary|schedule|propos|21:45"]
+    }
+  },
+  {
+    "id": "gen-live-agent-zh-compare-write-remind",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "locale": "zh",
+    "setup": {
+      "seedFiles": {
+        "documents/ag-zh-a.md": "# 方案甲\n费用：320\n",
+        "documents/ag-zh-b.md": "# 方案乙\n费用：255\nToken: ag-zh-255\n"
+      }
+    },
+    "prompt": "请比较 documents/ag-zh-a.md 与 documents/ag-zh-b.md，选择更便宜的方案，写入 documents/ag-zh-decision.md（包含 token），并提议后天 11:00 复查。回复中给出方案名称与 token。",
+    "expect": {
+      "liveTools": ["read_file", "write_file", "schedule", "search_files"],
+      "requireHonesty": true,
+      "honestyMatching": ["乙|255|ag-zh-255|ag-zh-decision|11:00|propos|提议|提醒|日程"]
+    }
+  },
+  {
+    "id": "gen-live-agent-plan-then-multi-write",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "liveAnswer": {
+      "preferOptionId": "implement",
+      "preferOptionIndex": 0,
+      "approvalDecision": "allow"
+    },
+    "setup": {
+      "seedFiles": {
+        "documents/ag-plan-src.md": "# Sources\nAlpha risk: overdue filter.\nBeta risk: missing alias.\nToken: ag-plan-88\n"
+      }
+    },
+    "prompt": "This is a multi-phase document overhaul: read documents/ag-plan-src.md, plan the work with session_plan if helpful, write documents/ag-plan-risks.md listing both risks and the token, then write documents/ag-plan-next.md with one next action. Tell me both paths and the token when done.",
+    "expect": {
+      "liveSessionPlan": true,
+      "liveTools": ["session_plan", "read_file", "write_file"],
+      "requireHonesty": true,
+      "honestyMatching": ["ag-plan-88|ag-plan-risks|ag-plan-next|filter|alias"]
+    }
+  },
+  {
+    "id": "gen-live-agent-search-patch-schedule",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedFiles": {
+        "documents/archive/ag-old-note.md": "# Archive\n\nStatus: STALE_TOKEN\nKeep the heading.\n",
+        "documents/archive/ag-noise.md": "# Noise\nIgnore me.\n"
+      }
+    },
+    "prompt": "Search under documents/ for STALE_TOKEN. Fix that file so STALE_TOKEN becomes FRESH_TOKEN using edit_file or apply_patch. Propose a reminder in 4 days at 15:00 to re-check the archive. Quote FRESH_TOKEN.",
+    "expect": {
+      "liveTools": ["search_files", "read_file", "edit_file", "apply_patch", "schedule"],
+      "requireHonesty": true,
+      "honestyMatching": ["FRESH_TOKEN|schedule|propos|15:00|4 day|archive"]
+    }
+  }
+]

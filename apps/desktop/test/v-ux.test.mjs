@@ -336,6 +336,12 @@ test("V-UX-1..5 smoke: nav + account + memory + advanced + pairing QR", async (t
     assert.ok(await page.locator("#skill-url-form").isVisible());
     await page.getByRole("tab", { name: "Workflows" }).click();
     await page.waitForSelector("#reload-wf");
+    // Web clip howto (Design 2026-11-11f) — sample card + Try/Test controls.
+    assert.ok(await page.getByRole("button", { name: /Open in editor/i }).count() >= 1);
+    assert.ok(await page.locator("#wf-try-web").count() >= 1);
+    assert.ok(await page.locator("#wf-test-web").count() >= 1);
+    assert.ok(await page.locator("#wf-demo-web").count() >= 1);
+    assert.match(await page.locator(".wf-howto").innerText(), /Web clip|web_extract|promote_knowledge/i);
     await page.getByRole("button", { name: "System" }).click();
     await page.getByRole("tab", { name: "Shared files" }).click();
     // Copy tracks i18n artifacts.hint (mesh open; no public URL required).

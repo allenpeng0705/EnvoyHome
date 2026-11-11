@@ -866,10 +866,21 @@ class _WebSearchTabState extends State<_WebSearchTab> {
   String _provider = 'duckduckgo';
   bool _hasApiKey = false;
   bool _ready = false;
-  bool _browserFallback = false;
+  bool _browserFallback = true;
   bool _unattendedBrowser = false;
+  bool _researchEnabled = false;
+  int _digDepth = 3;
+  String _extractBackend = 'auto';
+  String _serpBrowserEngine = 'auto';
+  String _effectiveExtractBackend = 'fetch';
+  String? _effectiveSerpBrowserEngine;
+  bool _engineBing = true;
+  bool _engineGoogle = true;
+  bool _engineBaidu = false;
   String _browserRuntime = 'missing';
   String? _browserInstallHint;
+  String _obscuraRuntime = 'missing';
+  String? _obscuraInstallHint;
   String? _unavailableReason;
   String? _error;
   bool _busy = false;
@@ -905,6 +916,10 @@ class _WebSearchTabState extends State<_WebSearchTab> {
           ownerId != null && ownerId.isNotEmpty && ids.length == 1 && ids.first == ownerId;
       final cfg = await home.getWebSearchConfig();
       if (!mounted) return;
+      final enginesRaw = cfg['browserEngines'];
+      final engines = enginesRaw is List
+          ? enginesRaw.map((e) => e.toString()).toList()
+          : const <String>['bing', 'google'];
       setState(() {
         _isOwnerDevice = isOwner;
         _enabled = cfg['enabled'] != false;
@@ -913,8 +928,35 @@ class _WebSearchTabState extends State<_WebSearchTab> {
         _ready = cfg['ready'] == true;
         _browserFallback = cfg['fallback']?.toString() == 'browser';
         _unattendedBrowser = cfg['unattendedBrowser'] == true;
+        _researchEnabled = cfg['researchEnabled'] == true;
+        final dig = cfg['digDepth'];
+        _digDepth = dig is num
+            ? dig.toInt().clamp(1, 10)
+            : int.tryParse(dig?.toString() ?? '')?.clamp(1, 10) ?? 3;
+        final eb = cfg['extractBackend']?.toString();
+        _extractBackend =
+            eb == 'obscura' || eb == 'fetch' || eb == 'auto' ? eb! : 'auto';
+        final se = cfg['serpBrowserEngine']?.toString();
+        _serpBrowserEngine =
+            se == 'obscura' || se == 'chromium' || se == 'auto' ? se! : 'auto';
+        final eeb = cfg['effectiveExtractBackend']?.toString();
+        _effectiveExtractBackend =
+            eeb == 'obscura' || eeb == 'fetch' ? eeb! : 'fetch';
+        final ese = cfg['effectiveSerpBrowserEngine']?.toString();
+        _effectiveSerpBrowserEngine =
+            ese == 'obscura' || ese == 'chromium' ? ese : null;
+        _engineBing = engines.contains('bing');
+        _engineGoogle = engines.contains('google');
+        _engineBaidu = engines.contains('baidu');
+        // Keep at least the design default when an empty list comes back.
+        if (!_engineBing && !_engineGoogle && !_engineBaidu) {
+          _engineBing = true;
+          _engineGoogle = true;
+        }
         _browserRuntime = cfg['browserRuntime']?.toString() ?? 'missing';
         _browserInstallHint = cfg['browserInstallHint']?.toString();
+        _obscuraRuntime = cfg['obscuraRuntime']?.toString() ?? 'missing';
+        _obscuraInstallHint = cfg['obscuraInstallHint']?.toString();
         _unavailableReason = cfg['unavailableReason']?.toString();
         _error = null;
       });
@@ -931,12 +973,31 @@ class _WebSearchTabState extends State<_WebSearchTab> {
     setState(() => _busy = true);
     try {
       final key = _apiKeyCtrl.text.trim();
+      final engines = <String>[
+        if (_engineBing) 'bing',
+        if (_engineGoogle) 'google',
+        if (_engineBaidu) 'baidu',
+      ];
+      final browserPrimary = _provider == 'browser';
+      if ((browserPrimary || _browserFallback) && engines.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(l10n.webSearchEnginesRequired)),
+        );
+        setState(() => _busy = false);
+        return;
+      }
       await home.setWebSearchConfig(
         enabled: _enabled,
         provider: _provider,
         apiKey: key.isEmpty ? null : key,
-        fallback: _browserFallback ? 'browser' : 'none',
+        fallback: browserPrimary ? 'none' : (_browserFallback ? 'browser' : 'none'),
+        browserEngines: engines.isEmpty ? const ['bing', 'google'] : engines,
         unattendedBrowser: _unattendedBrowser,
+        researchEnabled: _researchEnabled,
+        digDepth: _digDepth,
+        extractBackend: _extractBackend,
+        serpBrowserEngine: _serpBrowserEngine,
       );
       _apiKeyCtrl.clear();
       if (!mounted) return;
@@ -957,10 +1018,17 @@ class _WebSearchTabState extends State<_WebSearchTab> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final needsKey = _provider == 'brave' || _provider == 'tavily';
+    final browserPrimary = _provider == 'browser';
+    final enginesEnabled = browserPrimary || _browserFallback;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Text(l10n.webSearchLede),
+        const SizedBox(height: 8),
+        Text(
+          l10n.webSearchDaemonHostNote,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
         if (_error != null) ...[
           const SizedBox(height: 8),
           Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
@@ -977,6 +1045,38 @@ class _WebSearchTabState extends State<_WebSearchTab> {
               ? null
               : Text(_unavailableReason!),
         ),
+        // Compact host-engine status (same data desktop Connections shows).
+        Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _obscuraRuntime == 'ready'
+                      ? l10n.webSearchObscuraReady
+                      : l10n.webSearchObscuraMissing,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _browserRuntime == 'ready'
+                      ? l10n.webSearchBrowserReady
+                      : l10n.webSearchBrowserMissing,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${l10n.webSearchEffectiveSerp}: ${_effectiveSerpBrowserEngine ?? l10n.webSearchEffectiveUnresolved}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                Text(
+                  '${l10n.webSearchEffectiveExtract}: $_effectiveExtractBackend',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: Text(l10n.webSearchEnabled),
@@ -989,10 +1089,11 @@ class _WebSearchTabState extends State<_WebSearchTab> {
         Text(l10n.webSearchProvider),
         DropdownButtonFormField<String>(
           value: _provider,
-          items: const [
-            DropdownMenuItem(value: 'duckduckgo', child: Text('DuckDuckGo')),
-            DropdownMenuItem(value: 'brave', child: Text('Brave')),
-            DropdownMenuItem(value: 'tavily', child: Text('Tavily')),
+          items: [
+            const DropdownMenuItem(value: 'duckduckgo', child: Text('DuckDuckGo')),
+            const DropdownMenuItem(value: 'brave', child: Text('Brave')),
+            const DropdownMenuItem(value: 'tavily', child: Text('Tavily')),
+            DropdownMenuItem(value: 'browser', child: Text(l10n.webSearchProviderBrowser)),
           ],
           onChanged: !_isOwnerDevice || _busy
               ? null
@@ -1012,14 +1113,52 @@ class _WebSearchTabState extends State<_WebSearchTab> {
             ),
           ),
         ],
-        SwitchListTile(
+        if (!browserPrimary)
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.webSearchBrowserFallback),
+            subtitle: Text(l10n.webSearchBrowserFallbackHint),
+            value: _browserFallback,
+            onChanged: !_isOwnerDevice || _busy
+                ? null
+                : (v) => setState(() => _browserFallback = v),
+          ),
+        if (browserPrimary) ...[
+          const SizedBox(height: 8),
+          Text(
+            l10n.webSearchBrowserPrimaryHint,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+        const SizedBox(height: 8),
+        Text(l10n.webSearchEngines),
+        Text(
+          l10n.webSearchEnginesHint,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        CheckboxListTile(
           contentPadding: EdgeInsets.zero,
-          title: Text(l10n.webSearchBrowserFallback),
-          subtitle: Text(l10n.webSearchBrowserFallbackHint),
-          value: _browserFallback,
-          onChanged: !_isOwnerDevice || _busy
+          title: Text(l10n.webSearchEngineBing),
+          value: _engineBing,
+          onChanged: !_isOwnerDevice || _busy || !enginesEnabled
               ? null
-              : (v) => setState(() => _browserFallback = v),
+              : (v) => setState(() => _engineBing = v ?? false),
+        ),
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(l10n.webSearchEngineGoogle),
+          value: _engineGoogle,
+          onChanged: !_isOwnerDevice || _busy || !enginesEnabled
+              ? null
+              : (v) => setState(() => _engineGoogle = v ?? false),
+        ),
+        CheckboxListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(l10n.webSearchEngineBaidu),
+          value: _engineBaidu,
+          onChanged: !_isOwnerDevice || _busy || !enginesEnabled
+              ? null
+              : (v) => setState(() => _engineBaidu = v ?? false),
         ),
         ListTile(
           contentPadding: EdgeInsets.zero,
@@ -1029,7 +1168,10 @@ class _WebSearchTabState extends State<_WebSearchTab> {
                 : l10n.webSearchBrowserMissing,
           ),
         ),
-        if (_browserFallback &&
+        // Auto + Obscura ready: Chromium install is optional — don't nudge.
+        if ((browserPrimary || _browserFallback) &&
+            (_serpBrowserEngine == 'chromium' ||
+                (_serpBrowserEngine == 'auto' && _obscuraRuntime != 'ready')) &&
             _browserRuntime != 'ready' &&
             (_browserInstallHint?.isNotEmpty ?? false)) ...[
           const SizedBox(height: 8),
@@ -1063,6 +1205,138 @@ class _WebSearchTabState extends State<_WebSearchTab> {
               ? null
               : (v) => setState(() => _unattendedBrowser = v),
         ),
+        const SizedBox(height: 8),
+        Text(l10n.webSearchSerpBrowserEngine),
+        Text(
+          l10n.webSearchSerpBrowserEngineHint,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        DropdownButtonFormField<String>(
+          value: _serpBrowserEngine,
+          items: [
+            DropdownMenuItem(
+              value: 'auto',
+              child: Text(l10n.webSearchSerpBrowserEngineAuto),
+            ),
+            DropdownMenuItem(
+              value: 'obscura',
+              child: Text(l10n.webSearchSerpBrowserEngineObscura),
+            ),
+            DropdownMenuItem(
+              value: 'chromium',
+              child: Text(l10n.webSearchSerpBrowserEngineChromium),
+            ),
+          ],
+          onChanged: !_isOwnerDevice || _busy || !enginesEnabled
+              ? null
+              : (v) {
+                  if (v != null) setState(() => _serpBrowserEngine = v);
+                },
+        ),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          title: Text(
+            '${l10n.webSearchEffectiveSerp}: ${_effectiveSerpBrowserEngine ?? l10n.webSearchEffectiveUnresolved}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(l10n.webSearchResearchEnabled),
+          subtitle: Text(l10n.webSearchResearchHint),
+          value: _researchEnabled,
+          onChanged: !_isOwnerDevice || _busy
+              ? null
+              : (v) => setState(() => _researchEnabled = v),
+        ),
+        if (_researchEnabled) ...[
+          const SizedBox(height: 8),
+          Text(l10n.webSearchDigDepth),
+          Slider(
+            value: _digDepth.toDouble(),
+            min: 1,
+            max: 10,
+            divisions: 9,
+            label: '$_digDepth',
+            onChanged: !_isOwnerDevice || _busy
+                ? null
+                : (v) => setState(() => _digDepth = v.round()),
+          ),
+        ],
+        const SizedBox(height: 12),
+        Text(l10n.webSearchExtractBackend),
+        Text(
+          l10n.webSearchExtractBackendHint,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        DropdownButtonFormField<String>(
+          value: _extractBackend,
+          items: [
+            DropdownMenuItem(
+              value: 'auto',
+              child: Text(l10n.webSearchExtractBackendAuto),
+            ),
+            DropdownMenuItem(
+              value: 'obscura',
+              child: Text(l10n.webSearchExtractBackendObscura),
+            ),
+            DropdownMenuItem(
+              value: 'fetch',
+              child: Text(l10n.webSearchExtractBackendFetch),
+            ),
+          ],
+          onChanged: !_isOwnerDevice || _busy
+              ? null
+              : (v) {
+                  if (v != null) setState(() => _extractBackend = v);
+                },
+        ),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          title: Text(
+            '${l10n.webSearchEffectiveExtract}: $_effectiveExtractBackend',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(
+            _obscuraRuntime == 'ready'
+                ? l10n.webSearchObscuraReady
+                : l10n.webSearchObscuraMissing,
+          ),
+        ),
+        if ((_extractBackend == 'obscura' ||
+                _extractBackend == 'auto' ||
+                _serpBrowserEngine == 'obscura' ||
+                _serpBrowserEngine == 'auto') &&
+            _obscuraRuntime != 'ready' &&
+            (_obscuraInstallHint?.isNotEmpty ?? false)) ...[
+          const SizedBox(height: 8),
+          Text(l10n.webSearchObscuraInstallHintNote),
+          const SizedBox(height: 8),
+          SelectableText(
+            _obscuraInstallHint!,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontFamily: 'monospace',
+                ),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: _obscuraInstallHint!));
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(l10n.webSearchCopyHint)),
+                );
+              },
+              child: Text(l10n.webSearchCopyHint),
+            ),
+          ),
+        ],
         const SizedBox(height: 16),
         FilledButton(
           onPressed: !_isOwnerDevice || _busy ? null : _save,
@@ -1087,6 +1361,10 @@ class _BrowserControlTabState extends State<_BrowserControlTab> {
   bool _ready = false;
   String _browserRuntime = 'missing';
   String _defaultProfile = 'managed';
+  String _managedEngine = 'auto';
+  String? _effectiveManagedEngine;
+  String _obscuraRuntime = 'missing';
+  String? _obscuraInstallHint;
   bool _personalEnabled = false;
   String _personalCdp = 'http://127.0.0.1:9222';
   bool _personalReady = false;
@@ -1140,6 +1418,14 @@ class _BrowserControlTabState extends State<_BrowserControlTab> {
         _ready = cfg['ready'] == true;
         _browserRuntime = cfg['browserRuntime']?.toString() ?? 'missing';
         _defaultProfile = cfg['defaultProfile']?.toString() ?? 'managed';
+        final me = cfg['managedEngine']?.toString();
+        _managedEngine =
+            me == 'obscura' || me == 'chromium' || me == 'auto' ? me! : 'auto';
+        final eme = cfg['effectiveManagedEngine']?.toString();
+        _effectiveManagedEngine =
+            eme == 'obscura' || eme == 'chromium' ? eme : null;
+        _obscuraRuntime = cfg['obscuraRuntime']?.toString() ?? 'missing';
+        _obscuraInstallHint = cfg['obscuraInstallHint']?.toString();
         _personalEnabled = cfg['personalEnabled'] == true;
         _personalCdp =
             cfg['personalCdpEndpoint']?.toString() ?? 'http://127.0.0.1:9222';
@@ -1170,6 +1456,7 @@ class _BrowserControlTabState extends State<_BrowserControlTab> {
         enabled: _enabled,
         unattendedEnabled: _unattended,
         defaultProfile: _defaultProfile,
+        managedEngine: _managedEngine,
         personalEnabled: _personalEnabled,
         personalCdpEndpoint: _personalCdp,
         remoteEnabled: _remoteEnabled,
@@ -1196,10 +1483,16 @@ class _BrowserControlTabState extends State<_BrowserControlTab> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final canEdit = _isOwnerDevice && !_busy;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Text(l10n.browserControlLede),
+        const SizedBox(height: 8),
+        Text(
+          l10n.browserControlDaemonHostNote,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
         if (_error != null) ...[
           const SizedBox(height: 8),
           Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
@@ -1207,8 +1500,7 @@ class _BrowserControlTabState extends State<_BrowserControlTab> {
         if (!_isOwnerDevice) ...[
           const SizedBox(height: 12),
           Text(l10n.browserControlOwnerOnly),
-          const SizedBox(height: 16),
-        ] else ...[
+        ],
         const SizedBox(height: 12),
         ListTile(
           contentPadding: EdgeInsets.zero,
@@ -1221,18 +1513,100 @@ class _BrowserControlTabState extends State<_BrowserControlTab> {
                     : l10n.webSearchBrowserMissing),
           ),
         ),
+        Card(
+          margin: const EdgeInsets.only(bottom: 8),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _obscuraRuntime == 'ready'
+                      ? l10n.webSearchObscuraReady
+                      : l10n.webSearchObscuraMissing,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _browserRuntime == 'ready'
+                      ? l10n.webSearchBrowserReady
+                      : l10n.webSearchBrowserMissing,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${l10n.browserControlEffectiveManaged}: ${_effectiveManagedEngine ?? l10n.webSearchEffectiveUnresolved}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+        ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: Text(l10n.browserControlEnabled),
           value: _enabled,
-          onChanged: _busy ? null : (v) => setState(() => _enabled = v),
+          onChanged: !canEdit ? null : (v) => setState(() => _enabled = v),
         ),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: Text(l10n.browserControlUnattended),
           value: _unattended,
-          onChanged: _busy ? null : (v) => setState(() => _unattended = v),
+          onChanged: !canEdit ? null : (v) => setState(() => _unattended = v),
         ),
+        const SizedBox(height: 8),
+        Text(l10n.browserControlManagedEngine),
+        Text(
+          l10n.browserControlManagedEngineHint,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        DropdownButtonFormField<String>(
+          value: _managedEngine,
+          items: [
+            DropdownMenuItem(
+              value: 'auto',
+              child: Text(l10n.browserControlManagedEngineAuto),
+            ),
+            DropdownMenuItem(
+              value: 'obscura',
+              child: Text(l10n.browserControlManagedEngineObscura),
+            ),
+            DropdownMenuItem(
+              value: 'chromium',
+              child: Text(l10n.browserControlManagedEngineChromium),
+            ),
+          ],
+          onChanged: !canEdit
+              ? null
+              : (v) {
+                  if (v != null) setState(() => _managedEngine = v);
+                },
+        ),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          dense: true,
+          title: Text(
+            '${l10n.browserControlEffectiveManaged}: ${_effectiveManagedEngine ?? l10n.webSearchEffectiveUnresolved}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(
+            _obscuraRuntime == 'ready'
+                ? l10n.webSearchObscuraReady
+                : l10n.webSearchObscuraMissing,
+          ),
+        ),
+        if ((_managedEngine == 'obscura' || _managedEngine == 'auto') &&
+            _obscuraRuntime != 'ready' &&
+            (_obscuraInstallHint?.isNotEmpty ?? false)) ...[
+          Text(l10n.webSearchObscuraInstallHintNote),
+          SelectableText(
+            _obscuraInstallHint!,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontFamily: 'monospace',
+                ),
+          ),
+        ],
         ListTile(
           contentPadding: EdgeInsets.zero,
           title: Text(l10n.browserControlDefaultProfile),
@@ -1253,7 +1627,7 @@ class _BrowserControlTabState extends State<_BrowserControlTab> {
                 child: Text(l10n.browserControlProfileRemote),
               ),
             ],
-            onChanged: _busy
+            onChanged: !canEdit
                 ? null
                 : (v) {
                     if (v != null) setState(() => _defaultProfile = v);
@@ -1271,7 +1645,7 @@ class _BrowserControlTabState extends State<_BrowserControlTab> {
             contentPadding: EdgeInsets.zero,
             title: Text(l10n.browserControlAcknowledge),
             value: false,
-            onChanged: _busy
+            onChanged: !canEdit
                 ? null
                 : (v) {
                     if (v) setState(() => _elevatedAck = true);
@@ -1286,13 +1660,11 @@ class _BrowserControlTabState extends State<_BrowserControlTab> {
                 : l10n.browserControlPersonalNotReady,
           ),
           value: _personalEnabled,
-          onChanged: !_isOwnerDevice || _busy
-              ? null
-              : (v) => setState(() => _personalEnabled = v),
+          onChanged: !canEdit ? null : (v) => setState(() => _personalEnabled = v),
         ),
         TextFormField(
           key: ValueKey('personal-cdp-$_personalCdp'),
-          enabled: _isOwnerDevice && !_busy,
+          enabled: canEdit,
           initialValue: _personalCdp,
           decoration: InputDecoration(labelText: l10n.browserControlPersonalCdp),
           onChanged: (v) => _personalCdp = v,
@@ -1306,19 +1678,17 @@ class _BrowserControlTabState extends State<_BrowserControlTab> {
                 : l10n.browserControlRemoteNotReady,
           ),
           value: _remoteEnabled,
-          onChanged: !_isOwnerDevice || _busy
-              ? null
-              : (v) => setState(() => _remoteEnabled = v),
+          onChanged: !canEdit ? null : (v) => setState(() => _remoteEnabled = v),
         ),
         TextFormField(
           key: ValueKey('remote-cdp-$_remoteCdpUrl'),
-          enabled: _isOwnerDevice && !_busy,
+          enabled: canEdit,
           initialValue: _remoteCdpUrl,
           decoration: InputDecoration(labelText: l10n.browserControlRemoteCdp),
           onChanged: (v) => _remoteCdpUrl = v,
         ),
         TextFormField(
-          enabled: _isOwnerDevice && !_busy,
+          enabled: canEdit,
           obscureText: true,
           initialValue: '',
           decoration: InputDecoration(
@@ -1329,7 +1699,9 @@ class _BrowserControlTabState extends State<_BrowserControlTab> {
           ),
           onChanged: (v) => _remoteToken = v,
         ),
-        if (_browserRuntime != 'ready' &&
+        if ((_managedEngine == 'chromium' ||
+                (_managedEngine == 'auto' && _obscuraRuntime != 'ready')) &&
+            _browserRuntime != 'ready' &&
             (_browserInstallHint?.isNotEmpty ?? false)) ...[
           const SizedBox(height: 8),
           Text(l10n.webSearchInstallHintNote),
@@ -1341,12 +1713,13 @@ class _BrowserControlTabState extends State<_BrowserControlTab> {
                 ),
           ),
         ],
-        const SizedBox(height: 16),
-        FilledButton(
-          onPressed: _busy ? null : _save,
-          child: Text(l10n.browserControlSave),
-        ),
-        ], // owner-only form
+        if (_isOwnerDevice) ...[
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: _busy ? null : _save,
+            child: Text(l10n.browserControlSave),
+          ),
+        ],
       ],
     );
   }
@@ -1421,7 +1794,7 @@ class _McpServersTabState extends State<_McpServersTab> {
   }
 
   Future<void> _reload() async {
-    final home = widget.session.home;
+    final home = widget.session.session;
     if (home == null) return;
     setState(() {
       _busy = true;
@@ -1453,7 +1826,7 @@ class _McpServersTabState extends State<_McpServersTab> {
   }
 
   Future<void> _add() async {
-    final home = widget.session.home;
+    final home = widget.session.session;
     if (home == null) return;
     final label = _labelCtrl.text.trim();
     if (label.isEmpty) return;
@@ -1490,7 +1863,7 @@ class _McpServersTabState extends State<_McpServersTab> {
   }
 
   Future<void> _test(String id) async {
-    final home = widget.session.home;
+    final home = widget.session.session;
     if (home == null) return;
     setState(() {
       _busy = true;
@@ -1559,7 +1932,7 @@ class _McpServersTabState extends State<_McpServersTab> {
                     onChanged: _busy || !ready
                         ? null
                         : (v) async {
-                            final home = widget.session.home;
+                            final home = widget.session.session;
                             if (home == null) return;
                             try {
                               await home.setMcpServerEnabled(id: id, enabled: v);
@@ -1574,7 +1947,7 @@ class _McpServersTabState extends State<_McpServersTab> {
                     onPressed: _busy
                         ? null
                         : () async {
-                            final home = widget.session.home;
+                            final home = widget.session.session;
                             if (home == null) return;
                             await home.removeMcpServer(id: id);
                             await _reload();

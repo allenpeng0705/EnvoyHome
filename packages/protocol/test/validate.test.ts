@@ -143,7 +143,7 @@ test("catalogue: every method's declared scope matches Design §4.3.1", () => {
   for (const [scope, body] of rows) {
     for (const m of body.matchAll(/`(home\.[a-z][a-zA-Z]*)`/g)) {
       const name = m[1]!;
-      if (name === "home.getChannelConfig" || name === "home.setPrivacyMode") continue;
+      if (name === "home.getChannelConfig") continue;
       assert.equal(declared.has(name), false, `${name} appears in two §4.3.1 rows`);
       declared.set(name, scope);
     }
@@ -297,6 +297,13 @@ test("home.listWorkflowTools: result shape and optional sampleArgs", () => {
         summary: "HA get state",
         available: false,
         unavailableReason: "Enable the homeassistant channel in Settings",
+      },
+      {
+        name: "mcp__demo__ping",
+        risk: "network",
+        source: "mcp",
+        summary: "MCP · Demo · ping",
+        available: true,
       },
     ],
   };

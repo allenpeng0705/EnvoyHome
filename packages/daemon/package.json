@@ -24,7 +24,8 @@
     "dev": "node ./dist/bin/envoyhome-daemon.js",
     "test": "tsc -p tsconfig.json && node --test test/*.test.ts",
     "test:agent-scenarios": "tsc -p tsconfig.json && node --test test/agent-scenarios.test.ts",
-    "test:web-search-browser": "tsc -p tsconfig.json && node --test test/web-search-browser.test.ts test/web-search-browser-playwright.test.ts"
+    "test:web-search-browser": "tsc -p tsconfig.json && node --test test/web-search-browser.test.ts test/web-search-browser-playwright.test.ts",
+    "test:obscura-real": "tsc -p tsconfig.json && node --test --test-force-exit test/obscura-real.test.ts test/obscura-browser-flow-real.test.ts"
   },
   "dependencies": {
     "@envoyhome/channel-api": "workspace:*",

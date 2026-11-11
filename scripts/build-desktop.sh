@@ -26,6 +26,11 @@
 # resources/push/. Default REQUIRE_PUSH_CREDENTIALS=1 — build fails if those
 # secrets are missing. Set REQUIRE_PUSH_CREDENTIALS=0 to package without push.
 #
+# Obscura (Design §9.5f Stage D): stage fetches the pinned host binary into
+# resources/obscura/ (scripts/fetch-obscura.mjs). Release builds fail if the
+# CLI is missing. Set ENVOYHOME_SKIP_OBSCURA=1 only for local debug packaging.
+# Force re-download: ENVOYHOME_OBSCURA_FORCE=1. All platforms: pnpm obscura:fetch:all
+#
 # Optional Apple Developer ID + notarization (Gatekeeper-friendly DMG):
 #   Copy scripts/sign-macos-release.env.example → scripts/sign-macos-release.env
 #   (gitignored). Without credentials, this builds an unsigned DMG.
@@ -171,8 +176,13 @@ echo "  Version: ${VERSION}  Target: ${TARGET}"
 echo "============================================"
 echo ""
 
-echo "[1/3] Staging Node runtime + packaged daemon…"
-node "$ROOT/scripts/stage-desktop-bundle.mjs"
+echo "[1/3] Staging Node runtime + packaged daemon + Obscura…"
+if ! node "$ROOT/scripts/stage-desktop-bundle.mjs"; then
+  echo "error: stage-desktop-bundle.mjs failed (see messages above)." >&2
+  echo "  Obscura retry: pnpm obscura:fetch" >&2
+  echo "  Obscura skip (debug only): ENVOYHOME_SKIP_OBSCURA=1" >&2
+  exit 1
+fi
 
 if [ ! -f "$ROOT/apps/desktop/src-tauri/resources/daemon/main.mjs" ]; then
   echo "error: staging did not produce resources/daemon/main.mjs" >&2
@@ -196,6 +206,33 @@ if [ -f "$ROOT/apps/desktop/src-tauri/resources/push/push-config.json" ]; then
   if ! ls "$ROOT/apps/desktop/src-tauri/resources/push"/AuthKey_*.p8 >/dev/null 2>&1 && \
      ! ls "$ROOT/apps/desktop/src-tauri/resources/push"/*.p8 >/dev/null 2>&1; then
     echo "warning: resources/push/push-config.json present but no AuthKey_*.p8 beside it" >&2
+  fi
+fi
+# Obscura CLI (Stage D) — required for release unless explicitly skipped.
+# Tauri bundles resources/obscura/** via tauri.conf.bundle.json.
+OBSCURA_BIN=""
+if [ -f "$ROOT/apps/desktop/src-tauri/resources/obscura/obscura" ]; then
+  OBSCURA_BIN="$ROOT/apps/desktop/src-tauri/resources/obscura/obscura"
+elif [ -f "$ROOT/apps/desktop/src-tauri/resources/obscura/obscura.exe" ]; then
+  OBSCURA_BIN="$ROOT/apps/desktop/src-tauri/resources/obscura/obscura.exe"
+fi
+if [ "${ENVOYHOME_SKIP_OBSCURA:-}" = "1" ]; then
+  echo "warning: ENVOYHOME_SKIP_OBSCURA=1 — installer will not embed Obscura" >&2
+elif [ -z "$OBSCURA_BIN" ]; then
+  echo "error: staging did not produce resources/obscura/obscura (or obscura.exe)" >&2
+  echo "  Obscura is required in the desktop package (Design §9.5f Stage D)." >&2
+  echo "  Fix: pnpm obscura:fetch && re-run ./scripts/build-desktop.sh" >&2
+  echo "  Force: ENVOYHOME_OBSCURA_FORCE=1 pnpm obscura:fetch" >&2
+  echo "  Skip (debug only): ENVOYHOME_SKIP_OBSCURA=1" >&2
+  exit 1
+elif [ ! -x "$OBSCURA_BIN" ] && [[ "$OBSCURA_BIN" != *.exe ]]; then
+  echo "error: Obscura binary exists but is not executable: $OBSCURA_BIN" >&2
+  echo "  Fix: chmod +x \"$OBSCURA_BIN\"" >&2
+  exit 1
+else
+  echo "  ✓ Obscura bundled: ${OBSCURA_BIN#"$ROOT/"}"
+  if [ -f "$ROOT/apps/desktop/src-tauri/resources/obscura/OBSCURA_VERSION" ]; then
+    echo "    pin: $(head -n1 "$ROOT/apps/desktop/src-tauri/resources/obscura/OBSCURA_VERSION" | tr -d '[:space:]')"
   fi
 fi
 

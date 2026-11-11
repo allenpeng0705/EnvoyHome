@@ -43,18 +43,25 @@ test("V-OUT-6: default DuckDuckGo is ready without a key", async () => {
   assert.equal(pub.hasApiKey, false);
 });
 
-test("V-OUT-6: Brave/Tavily without key are unavailable", async () => {
+test("V-OUT-6: Brave/Tavily without key unavailable when fallback none", async () => {
   const svc = await freshService();
-  await svc.setConfig({ provider: "brave" });
+  await svc.setConfig({ provider: "brave", fallback: "none" });
   let pub = await svc.getPublicConfig();
   assert.equal(pub.ready, false);
   assert.match(pub.unavailableReason ?? "", /Brave/i);
 
-  await svc.setConfig({ provider: "tavily", apiKey: "tvly-test" });
+  await svc.setConfig({ provider: "tavily", apiKey: "tvly-test", fallback: "none" });
   pub = await svc.getPublicConfig();
   assert.equal(pub.ready, true);
   assert.equal(pub.hasApiKey, true);
   assert.equal(pub.provider, "tavily");
+});
+
+test("V-OUT-6: Brave without key stays catalogue-ready via default browser fallback", async () => {
+  const svc = await freshService();
+  await svc.setConfig({ provider: "brave" });
+  assert.equal(svc.readyInfo().ok, true);
+  assert.equal((await svc.getPublicConfig()).fallback, "browser");
 });
 
 test("V-OUT-6: disabled → unavailable", async () => {
@@ -138,9 +145,9 @@ test("V-OUT-6: catalogue marks web_search available for default DDG", async () =
   assert.equal(row!.risk, "network");
 });
 
-test("V-OUT-6: catalogue unavailable when Brave has no key", async () => {
+test("V-OUT-6: catalogue unavailable when Brave has no key and fallback none", async () => {
   const svc = await freshService();
-  await svc.setConfig({ provider: "brave" });
+  await svc.setConfig({ provider: "brave", fallback: "none" });
   const stateDir = dirs[dirs.length - 1]!;
   const logger = new DaemonLogger();
   const devices = new DeviceCredentialStore();

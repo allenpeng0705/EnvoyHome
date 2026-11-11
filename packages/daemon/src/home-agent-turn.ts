@@ -12,6 +12,7 @@ import {
   type Tracer,
 } from "@envoymesh/envoy-harness";
 import {
+  appendMissingSandboxHandoffLines,
   applyReminderHonestyGuard,
   claimsActuationWithoutTools,
   dispatchTool,
@@ -90,8 +91,13 @@ class LiveTurnEventQueue {
   private closed = false;
   hadSchedulePropose = false;
   toolsDispatched = false;
+  /** Tool outputs for §9.5d file Open chips (parent Agent path). */
+  toolResults: Array<{ tool: string; output: string }> = [];
 
   push(ev: TurnEvent): void {
+    if (ev.kind === "tool_result" && ev.tool && typeof ev.text === "string") {
+      this.toolResults.push({ tool: ev.tool, output: ev.text });
+    }
     this.pending.push(ev);
     const waiters = this.waiters.splice(0);
     for (const w of waiters) w();
@@ -190,15 +196,18 @@ async function finalizeHomeText(input: {
     });
   };
 
+  const withFileHandoffs = (body: string): string =>
+    appendMissingSandboxHandoffLines(body, queue.toolResults);
+
   if (!toolLoop || queue.toolsDispatched) {
-    queue.push({ kind: "text", text: withScheduleOffer() });
+    queue.push({ kind: "text", text: withFileHandoffs(withScheduleOffer()) });
     return;
   }
 
   // 1. Multi-round offer question → stash pending; do not recover.
   if (isHomeOfferQuestion(raw)) {
     deps.onHomeProposalOffer?.(raw);
-    queue.push({ kind: "text", text: withScheduleOffer() });
+    queue.push({ kind: "text", text: withFileHandoffs(withScheduleOffer()) });
     return;
   }
 
@@ -243,7 +252,7 @@ async function finalizeHomeText(input: {
 
   // 4. Soft offer / mention → stash for later affirmation.
   deps.onHomeProposalOffer?.(raw);
-  queue.push({ kind: "text", text: withScheduleOffer() });
+  queue.push({ kind: "text", text: withFileHandoffs(withScheduleOffer()) });
 }
 
 export interface RunAgentTurnInput {

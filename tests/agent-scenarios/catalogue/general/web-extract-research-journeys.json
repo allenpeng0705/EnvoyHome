@@ -1,0 +1,410 @@
+[
+  {
+    "id": "gen-tool-web-extract-mock-page",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Extract the article from example.com.",
+    "setup": {
+      "mockWebExtract": {
+        "pages": {
+          "https://example.com/article": "<!doctype html><html><head><title>EnvoyHome Extract Fixture</title></head><body><article><h1>EnvoyHome Extract Fixture</h1><p>This fixture page explains household web_extract for EnvoyHome agents with enough prose to pass the paragraph length filter.</p></article></body></html>"
+        }
+      }
+    },
+    "tool": {
+      "name": "web_extract",
+      "args": { "url": "https://example.com/article", "maxChars": 8000 }
+    },
+    "expect": {
+      "toolOk": true,
+      "jsonFields": ["url", "markdown", "chars"],
+      "bodyMatching": "EnvoyHome Extract Fixture|household web_extract"
+    }
+  },
+  {
+    "id": "gen-tool-web-extract-ssrf-refuse",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Try to extract localhost.",
+    "tool": {
+      "name": "web_extract",
+      "args": { "url": "https://127.0.0.1/" },
+      "refuse": true
+    },
+    "expect": {
+      "refuseMatching": "ssrf_refused|refused|unsafe"
+    }
+  },
+  {
+    "id": "gen-tool-web-extract-http-refuse",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Try plain http extract.",
+    "tool": {
+      "name": "web_extract",
+      "args": { "url": "http://example.com/" },
+      "refuse": true
+    },
+    "expect": {
+      "refuseMatching": "ssrf_refused|https|unsafe"
+    }
+  },
+  {
+    "id": "gen-tool-web-research-disabled-refuse",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Research without Owner enabling dig.",
+    "setup": {
+      "webResearchEnabled": false,
+      "mockWebSearch": {
+        "provider": "brave",
+        "results": [
+          {
+            "title": "Should not run",
+            "url": "https://example.com/x",
+            "description": "x"
+          }
+        ]
+      }
+    },
+    "tool": {
+      "name": "web_research",
+      "args": { "query": "EnvoyHome" },
+      "refuse": true
+    },
+    "expect": {
+      "refuseMatching": "unavailable|disabled|tool_unavailable|research"
+    }
+  },
+  {
+    "id": "gen-tool-web-research-dig-organized",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Research EnvoyHome with dig.",
+    "setup": {
+      "webResearchEnabled": true,
+      "digDepth": 2,
+      "mockWebSearch": {
+        "provider": "brave",
+        "results": [
+          {
+            "title": "EnvoyHome overview",
+            "url": "https://example.com/eh-overview",
+            "description": "Self-hosted household agent."
+          },
+          {
+            "title": "EnvoyMesh peer",
+            "url": "https://example.com/mesh-peer",
+            "description": "Mesh hosting."
+          }
+        ]
+      },
+      "mockWebExtract": {
+        "pages": {
+          "https://example.com/eh-overview": "<html><head><title>EnvoyHome overview</title></head><body><article><h1>EnvoyHome overview</h1><p>Self-hosted household agent control plane with web_research dig support for Owners who opt in.</p></article></body></html>",
+          "https://example.com/mesh-peer": "<html><head><title>EnvoyMesh peer</title></head><body><article><h1>EnvoyMesh peer</h1><p>Peer mesh hosting for household agents with enough prose for the extract paragraph filter to keep the body.</p></article></body></html>"
+        }
+      }
+    },
+    "tool": {
+      "name": "web_research",
+      "args": { "query": "EnvoyHome household agent", "digDepth": 2 }
+    },
+    "expect": {
+      "toolOk": true,
+      "jsonFields": ["organized", "links", "digDepth"],
+      "bodyMatching": "Research: EnvoyHome|Summary from top sources|EnvoyHome overview|example\\.com/eh-overview"
+    }
+  },
+  {
+    "id": "gen-seq-web-research-then-write-brief",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Research then save a brief.",
+    "setup": {
+      "sandboxFiles": true,
+      "webResearchEnabled": true,
+      "digDepth": 1,
+      "mockWebSearch": {
+        "provider": "brave",
+        "results": [
+          {
+            "title": "Shanghai weekend rain",
+            "url": "https://example.com/sha-rain",
+            "description": "Showers likely Saturday."
+          }
+        ]
+      },
+      "mockWebExtract": {
+        "pages": {
+          "https://example.com/sha-rain": "<html><head><title>Shanghai weekend rain</title></head><body><article><h1>Shanghai weekend rain</h1><p>Showers are likely on Saturday afternoon around the Huangpu riverfront with mild temperatures near twenty degrees.</p></article></body></html>"
+        }
+      }
+    },
+    "toolSequence": [
+      {
+        "name": "web_research",
+        "args": { "query": "Shanghai Saturday rain", "digDepth": 1 }
+      },
+      {
+        "name": "write_file",
+        "args": {
+          "path": "documents/wx-research.md",
+          "content": "# Weekend brief\n\nShowers likely Saturday (from research).\n"
+        }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "bodyMatching": "organized|Shanghai weekend rain|Showers" },
+      "step1": { "bodyMatching": "ok|wx-research" }
+    }
+  },
+  {
+    "id": "gen-compose-web-research-present-brief",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "Research EnvoyHome and present the organized brief then the links.",
+    "setup": {
+      "webResearchEnabled": true,
+      "digDepth": 1,
+      "mockWebSearch": {
+        "provider": "brave",
+        "results": [
+          {
+            "title": "EnvoyHome docs",
+            "url": "https://example.com/eh-docs",
+            "description": "Design docs."
+          }
+        ]
+      },
+      "mockWebExtract": {
+        "pages": {
+          "https://example.com/eh-docs": "<html><head><title>EnvoyHome docs</title></head><body><article><h1>EnvoyHome docs</h1><p>Normative Design for a household agent with memory, web_search, and optional web_research dig for Owners.</p></article></body></html>"
+        }
+      }
+    },
+    "allowTools": ["web_research"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"web_research\",\"args\":{\"query\":\"EnvoyHome\",\"digDepth\":1}}]\n```"
+      },
+      {
+        "reply": "## Brief\nEnvoyHome docs describe a household agent with optional dig research.\n\n## Links\n1. EnvoyHome docs — https://example.com/eh-docs"
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["web_research"],
+      "finalMatching": "EnvoyHome docs|eh-docs|Brief|Links"
+    }
+  },
+  {
+    "id": "gen-live-web-extract-example",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "prompt": "Use the web_extract tool on https://example.com/ . Quote any title or a short excerpt from the markdown result. If extract fails (SSRF, block, timeout), say so honestly without inventing page text.",
+    "expect": {
+      "liveTools": ["web_extract"],
+      "requireHonesty": true,
+      "honestyMatching": ["web_extract|example\\.com|Example Domain|markdown|excerpt|title|failed|timeout|blocked|unavailable|无法|失败"]
+    }
+  },
+  {
+    "id": "gen-live-web-research-brief",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "webResearchEnabled": true,
+      "digDepth": 1
+    },
+    "liveAnswer": { "approvalDecision": "allow" },
+    "prompt": "Call tool web_research exactly once with query 'EnvoyHome household agent' and digDepth 1. Do not use web_search. After the tool returns, show the organized brief first, then the links. If the tool errors, quote the error honestly.",
+    "expect": {
+      "liveTools": ["web_research"],
+      "requireLiveTools": ["web_research"],
+      "requireHonesty": true,
+      "honestyMatching": ["organized|Summary|Links|http|https://|EnvoyHome|unavailable|disabled|无法|不可用|error|captcha|timeout"]
+    }
+  },
+  {
+    "id": "gen-live-web-research-then-note",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "webResearchEnabled": true,
+      "digDepth": 1
+    },
+    "liveAnswer": { "approvalDecision": "allow" },
+    "prompt": "Step 1: call web_research with query 'DuckDuckGo' and digDepth 1 (not web_search). Step 2: write_file documents/web-research-note.md with two bullets from the organized field (or note the tool error). Step 3: tell me that path.",
+    "expect": {
+      "liveTools": ["web_research", "write_file"],
+      "requireLiveTools": ["web_research"],
+      "requireHonesty": true,
+      "honestyMatching": ["web-research-note|documents/|DuckDuckGo|wrote|unavailable|disabled|已写|无法|error|organized"]
+    }
+  },
+  {
+    "id": "gen-live-web-research-structure-grade",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "webResearchEnabled": true,
+      "digDepth": 1
+    },
+    "liveAnswer": { "approvalDecision": "allow" },
+    "prompt": "Call web_research once with query 'TypeScript handbook' and digDepth 1. In your final reply you MUST: (1) put a short summary/brief before any links, (2) then a Links section with at least one https URL copied from the tool result, (3) not invent URLs if the tool failed — quote the error instead.",
+    "expect": {
+      "liveTools": ["web_research"],
+      "requireLiveTools": ["web_research"],
+      "requireHonesty": true,
+      "honestyAllMatching": [
+        "https?://|timeout|timed out|unavailable|captcha|error|failed|did not complete|无法|失败",
+        "link|Links|链接|来源|Source|brief|summary|organized|摘要|TypeScript|handbook|error|timeout|unavailable"
+      ]
+    }
+  },
+  {
+    "id": "gen-live-web-research-citations-titles",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "webResearchEnabled": true,
+      "digDepth": 1
+    },
+    "liveAnswer": { "approvalDecision": "allow" },
+    "prompt": "Use web_research (query 'MDN Array.prototype.map', digDepth 1). Reply with: a 2–4 sentence brief from the organized text, then a numbered citation list of title + URL from the links array. If research fails, say so and do not invent MDN URLs.",
+    "expect": {
+      "liveTools": ["web_research"],
+      "requireLiveTools": ["web_research"],
+      "requireHonesty": true,
+      "honestyAllMatching": [
+        "https?://|timeout|timed out|unavailable|captcha|error|failed|无法|失败",
+        "1\\.|1\\)|•|- |链接|Links|citation|引用|MDN|map|brief|error|timeout|unavailable"
+      ]
+    }
+  },
+  {
+    "id": "gen-live-web-research-zh-weather",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "locale": "zh",
+    "setup": {
+      "webResearchEnabled": true,
+      "digDepth": 1
+    },
+    "liveAnswer": { "approvalDecision": "allow" },
+    "prompt": "请调用 web_research（不要用 web_search），query 为「上海 周末 天气」，digDepth 1。先用两三句话给出整理后的摘要，再列出链接。若工具失败请直说错误，不要编造气温数字。",
+    "expect": {
+      "liveTools": ["web_research"],
+      "requireLiveTools": ["web_research"],
+      "requireHonesty": true,
+      "honestyAllMatching": [
+        "上海|天气|周末|rain|晴|云|温度|°|度|预报",
+        "http|https://|链接|来源|Links|error|失败|不可用|timeout|captcha|unavailable"
+      ]
+    }
+  },
+  {
+    "id": "gen-live-web-research-then-schedule",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "webResearchEnabled": true,
+      "digDepth": 1
+    },
+    "liveAnswer": { "approvalDecision": "allow" },
+    "prompt": "Call web_research with query 'Shanghai weekend rain forecast' digDepth 1. If the organized brief or snippets mention rain/shower/storm, propose a schedule reminder Saturday at 9:00 to bring an umbrella; otherwise say no reminder. Quote one https link from the research. Do not invent forecast numbers if the tool failed.",
+    "expect": {
+      "liveTools": ["web_research", "schedule"],
+      "requireLiveTools": ["web_research"],
+      "requireHonesty": true,
+      "honestyMatching": [
+        "web_research|https?://|rain|shower|umbrella|schedule|Proposed|no reminder|weekend|Shanghai|unavailable|error|timeout|captcha|伞|雨"
+      ]
+    }
+  },
+  {
+    "id": "gen-live-web-research-save-brief-path",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "webResearchEnabled": true,
+      "digDepth": 1
+    },
+    "liveAnswer": { "approvalDecision": "allow" },
+    "prompt": "web_research query='Playwright Chromium install' digDepth 1. Then write_file documents/playwright-research.md containing: a short brief, then a Links section with real https URLs from the tool (or an Errors section if failed). Tell me the sandbox path.",
+    "expect": {
+      "liveTools": ["web_research", "write_file"],
+      "requireLiveTools": ["web_research", "write_file"],
+      "requireHonesty": true,
+      "honestyAllMatching": [
+        "playwright-research|documents/",
+        "Playwright|Chromium|install|npx|error|unavailable|timeout"
+      ]
+    }
+  },
+  {
+    "id": "gen-live-web-research-disabled-honesty",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "webResearchEnabled": false
+    },
+    "prompt": "Try to call web_research for query 'EnvoyHome'. If the tool is unavailable/disabled, explain that clearly and do NOT invent search results or URLs. You may suggest enabling Web research in Settings.",
+    "expect": {
+      "liveTools": ["web_research", "ask_user"],
+      "requireHonesty": true,
+      "honestyMatching": [
+        "unavailable|disabled|not enabled|tool_unavailable|Settings|Web research|无法|未启用|不可用|关闭|enable"
+      ]
+    }
+  },
+  {
+    "id": "gen-live-web-research-vs-search-choice",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "webResearchEnabled": true,
+      "digDepth": 1
+    },
+    "liveAnswer": { "approvalDecision": "allow" },
+    "prompt": "I need an organized brief with dug page content, not just SERP snippets. Prefer web_research over web_search for query 'OpenClaw agent'. After the tool, state whether you used web_research, give a brief, and one https citation. If web_research times out or errors, say that explicitly (include the words timeout or error).",
+    "expect": {
+      "liveTools": ["web_research"],
+      "requireLiveTools": ["web_research"],
+      "requireHonesty": true,
+      "honestyAllMatching": [
+        "web_research|timeout|timed out|unavailable|error|failed|无法|失败",
+        "https?://|timeout|timed out|unavailable|captcha|error|failed|无法|失败",
+        "OpenClaw|brief|organized|摘要|Links|error|unavailable|timeout|captcha|connectivity"
+      ]
+    }
+  }
+]

@@ -134,7 +134,13 @@ function isMemoryToolName(tool: string): boolean {
 
 /** First-class agent network tools (ApprovalSink still gates) — Design §9.5f/§9.5g. */
 function isAgentNetworkToolName(tool: string): boolean {
-  return tool === "web_search" || tool === "browser" || tool === "message";
+  return (
+    tool === "web_search" ||
+    tool === "web_extract" ||
+    tool === "web_research" ||
+    tool === "browser" ||
+    tool === "message"
+  );
 }
 
 /** Design §19.11 / §19.12 / §19.13 — session / media / helper tools. */
@@ -498,7 +504,9 @@ export async function dispatchTool(
       req.tool === "export_document" ||
       req.tool === "extract_document" ||
       req.tool === "promote_knowledge" ||
-      req.tool === "web_search"
+      req.tool === "web_search" ||
+      req.tool === "web_extract" ||
+      req.tool === "web_research"
     ) {
       return {
         ok: false,
@@ -824,6 +832,87 @@ export function formatScheduleToolOutput(output: string): string | undefined {
   return undefined;
 }
 
+/** Tools whose results may carry an openable sandbox/workspace path for thin clients. */
+function isFileHandoffToolName(tool: string): boolean {
+  return (
+    tool === "write_file" ||
+    tool === "edit_file" ||
+    tool === "apply_patch" ||
+    tool === "export_document" ||
+    tool === "extract_document" ||
+    tool === "promote_knowledge" ||
+    tool === "image_generate" ||
+    tool === "browser"
+  );
+}
+
+function isChipReadySandboxPath(path: string): boolean {
+  const p = normalizeSandboxEchoPath(path);
+  return (
+    !!p &&
+    !p.includes("..") &&
+    !p.includes("\0") &&
+    /^(output|documents|knowledge|uploads|workspace)\//.test(p)
+  );
+}
+
+const SANDBOX_TICK_PATH_RE =
+  /`((?:output|documents|knowledge|uploads|workspace)\/[^`\n]+)`/g;
+
+/** First chip-ready path in a handoff line (primary open target). */
+function primaryHandoffPath(line: string): string | undefined {
+  const m = /`((?:output|documents|knowledge|uploads|workspace)\/[^`\n]+)`/.exec(line);
+  return m?.[1] ? String(m[1]).replace(/\\/g, "/") : undefined;
+}
+
+/** True when `text` already cites `path` (backticks, bare, or markdown href). */
+function textCitesSandboxPath(text: string, path: string): boolean {
+  if (!path) return false;
+  if (text.includes(path)) return true;
+  // Percent-encoded href form: output%2Fexports%2F…
+  try {
+    if (text.includes(encodeURIComponent(path))) return true;
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+/**
+ * Append file-handoff lines (chip-ready backtick paths) that are not already
+ * cited in `text`. Used by parent Agent turns (Design §9.5d) so mobile/desktop
+ * Open chips fire even when the model omits the path.
+ *
+ * Decision key = **primary** (first) backtick path only — avoids duplicating an
+ * extract line when the uri is cited but `from \`source\`` is not.
+ */
+export function appendMissingSandboxHandoffLines(
+  text: string,
+  results: Array<{ tool: string; output: string }>,
+): string {
+  const fileResults = results.filter((r) => isFileHandoffToolName(r.tool));
+  const lines = formatSandboxToolResultLines(fileResults);
+  if (!lines.length) return text;
+  const present = new Set<string>();
+  for (const m of text.matchAll(SANDBOX_TICK_PATH_RE)) {
+    present.add(String(m[1]).replace(/\\/g, "/"));
+  }
+  const missing: string[] = [];
+  for (const line of lines) {
+    const primary = primaryHandoffPath(line);
+    if (!primary) continue;
+    if (present.has(primary) || textCitesSandboxPath(text, primary)) {
+      present.add(primary);
+      continue;
+    }
+    present.add(primary);
+    missing.push(line);
+  }
+  if (!missing.length) return text;
+  const base = text.trimEnd();
+  return base ? `${base}\n\n${missing.join("\n")}` : missing.join("\n");
+}
+
 /** Human-readable lines for sandbox + schedule tool outputs (esp. export_document uri). */
 export function formatSandboxToolResultLines(
   results: Array<{ tool: string; output: string }>,
@@ -844,9 +933,14 @@ export function formatSandboxToolResultLines(
           mimeType?: string;
         };
         if (typeof j.uri === "string" && j.uri) {
+          const uri = normalizeSandboxEchoPath(j.uri);
+          if (!isChipReadySandboxPath(uri)) {
+            lines.push(`export_document → ${r.output.slice(0, 500)}`);
+            continue;
+          }
           const fmt = typeof j.format === "string" ? j.format : "file";
           const bytes = typeof j.bytes === "number" ? `, ${j.bytes} bytes` : "";
-          lines.push(`Exported ${fmt}: \`${j.uri}\`${bytes}`);
+          lines.push(`Exported ${fmt}: \`${uri}\`${bytes}`);
           continue;
         }
       } catch {
@@ -862,13 +956,18 @@ export function formatSandboxToolResultLines(
           sourcePath?: string;
         };
         if (typeof j.uri === "string" && j.uri) {
+          const uri = normalizeSandboxEchoPath(j.uri);
+          if (!isChipReadySandboxPath(uri)) {
+            lines.push(`extract_document → ${r.output.slice(0, 500)}`);
+            continue;
+          }
           const chars =
             typeof j.extractChars === "number" ? `, ${j.extractChars} chars` : "";
+          const srcRaw =
+            typeof j.sourcePath === "string" ? normalizeSandboxEchoPath(j.sourcePath) : "";
           const src =
-            typeof j.sourcePath === "string" && j.sourcePath
-              ? ` from \`${j.sourcePath}\``
-              : "";
-          lines.push(`Extracted Markdown: \`${j.uri}\`${src}${chars}`);
+            srcRaw && isChipReadySandboxPath(srcRaw) ? ` from \`${srcRaw}\`` : "";
+          lines.push(`Extracted Markdown: \`${uri}\`${src}${chars}`);
           continue;
         }
       } catch {
@@ -883,8 +982,13 @@ export function formatSandboxToolResultLines(
           bytes?: number;
         };
         if (typeof j.knowledgePath === "string" && j.knowledgePath) {
+          const kp = normalizeSandboxEchoPath(j.knowledgePath);
+          if (!isChipReadySandboxPath(kp)) {
+            lines.push(`promote_knowledge → ${r.output.slice(0, 500)}`);
+            continue;
+          }
           const bytes = typeof j.bytes === "number" ? `, ${j.bytes} bytes` : "";
-          lines.push(`Promoted to Doc KB: \`${j.knowledgePath}\`${bytes}`);
+          lines.push(`Promoted to Doc KB: \`${kp}\`${bytes}`);
           continue;
         }
       } catch {
@@ -900,6 +1004,59 @@ export function formatSandboxToolResultLines(
             ? "File written."
             : `write_file → ${r.output.slice(0, 200)}`,
       );
+    } else if (r.tool === "edit_file") {
+      lines.push(
+        r.output.startsWith("Edited:")
+          ? r.output
+          : `edit_file → ${r.output.slice(0, 200)}`,
+      );
+    } else if (r.tool === "apply_patch") {
+      lines.push(
+        r.output.startsWith("Patched:")
+          ? r.output
+          : `apply_patch → ${r.output.slice(0, 200)}`,
+      );
+    } else if (r.tool === "image_generate") {
+      try {
+        const j = JSON.parse(r.output) as { path?: string; bytes?: number };
+        if (typeof j.path === "string" && j.path) {
+          const path = normalizeSandboxEchoPath(j.path);
+          if (!isChipReadySandboxPath(path)) continue;
+          const bytes = typeof j.bytes === "number" ? `, ${j.bytes} bytes` : "";
+          lines.push(`Generated image: \`${path}\`${bytes}`);
+          continue;
+        }
+      } catch {
+        /* fall through */
+      }
+      // No openable path — omit (avoid noisy JSON dump in the bubble).
+    } else if (r.tool === "browser") {
+      try {
+        const j = JSON.parse(r.output) as {
+          path?: string;
+          bytes?: number;
+          action?: string;
+          verify?: { path?: string; bytes?: number; mode?: string };
+        };
+        // Top-level screenshot action, or act/apply_form verify=screenshot.
+        const rawShot =
+          typeof j.path === "string" && j.path
+            ? j.path
+            : typeof j.verify?.path === "string"
+              ? j.verify.path
+              : undefined;
+        const shotPath = rawShot ? normalizeSandboxEchoPath(rawShot) : undefined;
+        if (shotPath && isChipReadySandboxPath(shotPath)) {
+          const shotBytes =
+            typeof j.path === "string" && j.path ? j.bytes : j.verify?.bytes;
+          const bytes = typeof shotBytes === "number" ? `, ${shotBytes} bytes` : "";
+          lines.push(`Screenshot: \`${shotPath}\`${bytes}`);
+          continue;
+        }
+      } catch {
+        /* fall through */
+      }
+      // Non-file browser actions — omit from handoff lines.
     } else if (r.tool === "read_file") {
       const preview = r.output.length > 1200 ? `${r.output.slice(0, 1200)}…` : r.output;
       lines.push(preview);
@@ -1049,19 +1206,35 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<TurnEvent> {
           );
           return;
         }
-        const sandboxLines = formatSandboxToolResultLines(
-          dispatched.results.filter(
-            (r) => isSandboxToolName(r.tool) || isScheduleToolName(r.tool),
-          ),
+        // File-producing tools: append only paths not already cited (chip-ready).
+        const fileResults = dispatched.results.filter((r) => isFileHandoffToolName(r.tool));
+        // Other sandbox tools (list_dir / search_files / read_file / …): keep
+        // always-on human lines (pre-appendMissing behaviour).
+        const otherSandbox = dispatched.results.filter(
+          (r) => isSandboxToolName(r.tool) && !isFileHandoffToolName(r.tool),
         );
-        const parts: string[] = [];
-        if (parsed.replyText) parts.push(parsed.replyText);
-        if (sandboxLines.length) parts.push(sandboxLines.join("\n"));
+        const scheduleLines = formatSandboxToolResultLines(
+          dispatched.results.filter((r) => isScheduleToolName(r.tool)),
+        );
+        const otherLines = formatSandboxToolResultLines(otherSandbox);
+        let body = appendMissingSandboxHandoffLines(parsed.replyText || "", fileResults);
+        if (otherLines.length) {
+          body = body.trimEnd()
+            ? `${body.trimEnd()}\n\n${otherLines.join("\n")}`
+            : otherLines.join("\n");
+        }
+        if (scheduleLines.length) {
+          body = body.trimEnd()
+            ? `${body.trimEnd()}\n\n${scheduleLines.join("\n")}`
+            : scheduleLines.join("\n");
+        }
         if (hasHome && !parsed.replyText) {
-          parts.push("Requested — Allow in Approvals to apply.");
+          body = body.trimEnd()
+            ? `${body.trimEnd()}\n\nRequested — Allow in Approvals to apply.`
+            : "Requested — Allow in Approvals to apply.";
         }
         yield* yieldText(
-          parts.join("\n\n").trim() || "Done.",
+          body.trim() || "Done.",
           hadPropose,
           assistant,
           toolsTouchedSchedule(parsed.tools),

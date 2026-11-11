@@ -592,6 +592,23 @@ class EnvoyHomeSession {
         'filter': filter,
       });
 
+  /// Design §19.4 — Owner-scope Privacy Mode for a seat.
+  Future<Map<String, dynamic>> getPrivacyMode({required String accountId}) =>
+      _call('home.getPrivacyMode', {'accountId': accountId});
+
+  Future<Map<String, dynamic>> setPrivacyMode({
+    required String accountId,
+    bool? enabled,
+    bool? blockSmartHomeEgress,
+  }) async {
+    final params = <String, dynamic>{'accountId': accountId};
+    if (enabled != null) params['enabled'] = enabled;
+    if (blockSmartHomeEgress != null) {
+      params['blockSmartHomeEgress'] = blockSmartHomeEgress;
+    }
+    return _call('home.setPrivacyMode', params);
+  }
+
   Future<Map<String, dynamic>> setDefaultProvider({
     required String accountId,
     required String providerId,
@@ -683,6 +700,10 @@ class EnvoyHomeSession {
     String? fallback,
     List<String>? browserEngines,
     bool? unattendedBrowser,
+    bool? researchEnabled,
+    int? digDepth,
+    String? extractBackend,
+    String? serpBrowserEngine,
   }) async {
     final params = <String, dynamic>{};
     if (enabled != null) params['enabled'] = enabled;
@@ -691,6 +712,10 @@ class EnvoyHomeSession {
     if (fallback != null) params['fallback'] = fallback;
     if (browserEngines != null) params['browserEngines'] = browserEngines;
     if (unattendedBrowser != null) params['unattendedBrowser'] = unattendedBrowser;
+    if (researchEnabled != null) params['researchEnabled'] = researchEnabled;
+    if (digDepth != null) params['digDepth'] = digDepth;
+    if (extractBackend != null) params['extractBackend'] = extractBackend;
+    if (serpBrowserEngine != null) params['serpBrowserEngine'] = serpBrowserEngine;
     return _call('home.setWebSearchConfig', params);
   }
 
@@ -726,6 +751,7 @@ class EnvoyHomeSession {
     bool? enabled,
     bool? unattendedEnabled,
     String? defaultProfile,
+    String? managedEngine,
     bool? personalEnabled,
     String? personalCdpEndpoint,
     bool? remoteEnabled,
@@ -737,6 +763,7 @@ class EnvoyHomeSession {
     if (enabled != null) params['enabled'] = enabled;
     if (unattendedEnabled != null) params['unattendedEnabled'] = unattendedEnabled;
     if (defaultProfile != null) params['defaultProfile'] = defaultProfile;
+    if (managedEngine != null) params['managedEngine'] = managedEngine;
     if (personalEnabled != null) params['personalEnabled'] = personalEnabled;
     if (personalCdpEndpoint != null) params['personalCdpEndpoint'] = personalCdpEndpoint;
     if (remoteEnabled != null) params['remoteEnabled'] = remoteEnabled;
@@ -946,6 +973,46 @@ class EnvoyHomeSession {
     }
     return _call('home.listSchedules', params);
   }
+
+  /// Design §19.10 / §19.8 — standing orders (incl. household scenes).
+  Future<Map<String, dynamic>> listStandingOrders({required String accountId}) =>
+      _call('home.listStandingOrders', {'accountId': accountId});
+
+  Future<Map<String, dynamic>> putStandingOrder({
+    required String accountId,
+    String? id,
+    required String name,
+    bool enabled = true,
+    required Map<String, dynamic> when,
+    required Map<String, dynamic> action,
+  }) {
+    final params = <String, dynamic>{
+      'accountId': accountId,
+      'name': name,
+      'enabled': enabled,
+      'when': when,
+      'action': action,
+    };
+    if (id != null && id.isNotEmpty) params['id'] = id;
+    return _call('home.putStandingOrder', params);
+  }
+
+  Future<Map<String, dynamic>> removeStandingOrder({
+    required String accountId,
+    required String id,
+  }) =>
+      _call('home.removeStandingOrder', {'accountId': accountId, 'id': id});
+
+  Future<Map<String, dynamic>> setStandingOrderEnabled({
+    required String accountId,
+    required String id,
+    required bool enabled,
+  }) =>
+      _call('home.setStandingOrderEnabled', {
+        'accountId': accountId,
+        'id': id,
+        'enabled': enabled,
+      });
 
   Future<Map<String, dynamic>> proposeSchedule({
     required String accountId,

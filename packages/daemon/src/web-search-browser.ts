@@ -2,9 +2,14 @@
 // Playwright is optional; probe + dynamic import so the daemon runs without it.
 
 import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { WebSearchHit } from "./web-search.js";
 
-export type BrowserSerpEngine = "bing" | "google";
+export type BrowserSerpEngine = "bing" | "google" | "baidu";
+/** Stage B — which headless engine fetches fixed SERP HTML. */
+export type SerpBrowserEngine = "chromium" | "obscura";
 
 export const BROWSER_SERP_TIMEOUT_MS = 20_000;
 export const BROWSER_SERP_MAX_HITS = 8;
@@ -12,13 +17,56 @@ export const BROWSER_SERP_RATE_MS = 10_000;
 
 export type BrowserRuntimeStatus = "ready" | "missing";
 
+const FALLBACK_BROWSER_INSTALL_HINT = "npx playwright install chromium";
+
+function shellQuote(path: string): string {
+  if (!/[ \t"$`\\]/.test(path)) return path;
+  return `"${path.replace(/(["\\$`])/g, "\\$1")}"`;
+}
+
+/**
+ * Resolve the Playwright CLI that matches the daemon's driver.
+ * Packaged desktop ships `resources/daemon/node_modules/playwright` but often
+ * has no `npx` on PATH — prefer the local CLI so the Chromium version matches.
+ */
+export function resolveLocalPlaywrightCli(
+  fromUrl: string = import.meta.url,
+): string | null {
+  const here = dirname(fileURLToPath(fromUrl));
+  const candidates = [
+    join(here, "node_modules", "playwright", "cli.js"),
+    join(here, "..", "node_modules", "playwright", "cli.js"),
+    join(here, "..", "..", "node_modules", "playwright", "cli.js"),
+    // Packaged: dist-daemon/main.mjs → node_modules beside the bundle.
+    join(here, "..", "..", "..", "node_modules", "playwright", "cli.js"),
+  ];
+  for (const p of candidates) {
+    if (existsSync(p)) return p;
+  }
+  try {
+    const req = createRequire(fromUrl);
+    const pkgJson = req.resolve("playwright/package.json");
+    const cli = join(dirname(pkgJson), "cli.js");
+    if (existsSync(cli)) return cli;
+  } catch {
+    /* driver not resolvable */
+  }
+  return null;
+}
+
 /**
  * Owner-facing one-liner (copyable). The npm `playwright` driver is a daemon
- * dependency; Owners only download Chromium browsers — Design §9.5f.1.
- * Run on the **daemon host** (not a phone UI).
+ * dependency; Chromium binaries remain Owner opt-in — Design §9.5f.1 / Stage E.
+ * Prefer Obscura (bundled / auto-install) when using `auto`; Chromium is the
+ * optional SERP/managed fallback. Run on the **daemon host** (not a phone UI).
+ * Never silent-download Chromium.
  */
 export function browserInstallHint(): string {
-  return "npx playwright install chromium";
+  const cli = resolveLocalPlaywrightCli();
+  if (cli) {
+    return `node ${shellQuote(cli)} install chromium`;
+  }
+  return FALLBACK_BROWSER_INSTALL_HINT;
 }
 
 /** Probe optional Playwright + Chromium (no launch). */
@@ -47,6 +95,10 @@ export function serpUrl(engine: BrowserSerpEngine, query: string): string {
   const q = encodeURIComponent(query);
   if (engine === "google") {
     return `https://www.google.com/search?q=${q}&hl=en`;
+  }
+  if (engine === "baidu") {
+    // Fixed SERP template only (Design §9.5f.1) — no free navigation.
+    return `https://www.baidu.com/s?wd=${q}`;
   }
   return `https://www.bing.com/search?q=${q}`;
 }
@@ -123,6 +175,55 @@ export function parseGoogleSerpHtml(html: string, count: number): WebSearchHit[]
   return results;
 }
 
+/** Exported for fixture tests — Baidu organic results (prefer `mu=` real URL). */
+export function parseBaiduSerpHtml(html: string, count: number): WebSearchHit[] {
+  const results: WebSearchHit[] = [];
+  // Common organic containers: result / c-container with optional mu= real target.
+  const blocks = html.matchAll(
+    /<div[^>]*(?:class="[^"]*(?:result|c-container)[^"]*"|tpl="[^"]+")[^>]*>([\s\S]*?)(?=<div[^>]*(?:class="[^"]*(?:result|c-container)|id="\d+")|<\/div>\s*<div id="page"|$)/gi,
+  );
+  for (const block of blocks) {
+    if (results.length >= count) break;
+    const full = block[0] ?? "";
+    const chunk = block[1] ?? "";
+    const mu =
+      full.match(/\smu="(https?:\/\/[^"]+)"/i)?.[1] ??
+      chunk.match(/\smu="(https?:\/\/[^"]+)"/i)?.[1];
+    const am =
+      chunk.match(/<h3[^>]*>\s*<a[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i) ??
+      chunk.match(/<a[^>]+href="([^"]+)"[^>]*>\s*<h3[^>]*>([\s\S]*?)<\/h3>/i);
+    if (!am && !mu) continue;
+    let url = cleanHref(mu ?? am?.[1] ?? "");
+    if (!url || !/^https?:\/\//i.test(url)) continue;
+    // Skip Baidu chrome / redirect-only when we have no real target.
+    if (/baidu\.com\/(s\?|link\?|baidu\.php)/i.test(url) && !mu) continue;
+    if (/baidu\.com\/(s\?|baidu\.php)/i.test(url)) continue;
+    if (results.some((r) => r.url === url)) continue;
+    const title = stripTags(decodeHtml(am?.[2] ?? "")).trim();
+    const sm =
+      chunk.match(/class="[^"]*c-abstract[^"]*"[^>]*>([\s\S]*?)<\//i) ??
+      chunk.match(/class="[^"]*content-right_8Zs40[^"]*"[^>]*>([\s\S]*?)<\//i);
+    const description = sm ? stripTags(decodeHtml(sm[1] ?? "")).trim().slice(0, 500) : "";
+    results.push({ title: title || url, url, description });
+  }
+  // Fallback: h3>a with http(s) when block regex misses modern markup.
+  if (results.length === 0) {
+    const loose = html.matchAll(/<h3[^>]*>\s*<a[^>]+href="(https?:\/\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi);
+    for (const m of loose) {
+      if (results.length >= count) break;
+      const url = cleanHref(m[1] ?? "");
+      if (!url || /baidu\.com\//i.test(url)) continue;
+      if (results.some((r) => r.url === url)) continue;
+      results.push({
+        title: stripTags(decodeHtml(m[2] ?? "")).trim() || url,
+        url,
+        description: "",
+      });
+    }
+  }
+  return results;
+}
+
 export function looksLikeCaptchaOrBlock(html: string): boolean {
   const h = html.toLowerCase();
   return (
@@ -131,6 +232,9 @@ export function looksLikeCaptchaOrBlock(html: string): boolean {
     h.includes("enable javascript") ||
     h.includes("detected unusual traffic") ||
     h.includes("our systems have detected") ||
+    h.includes("网络不给力") ||
+    h.includes("安全验证") ||
+    h.includes("百度安全验证") ||
     (h.includes("challenge") && h.includes("cloudflare"))
   );
 }
@@ -193,6 +297,8 @@ export async function runBrowserSerpFallback(input: {
   query: string;
   count: number;
   engines: BrowserSerpEngine[];
+  /** Stage B — default chromium. */
+  serpBrowserEngine?: SerpBrowserEngine;
   /** Override launch (tests). */
   fetchHtml?: BrowserFetchHtml;
   now?: () => number;
@@ -209,20 +315,44 @@ export async function runBrowserSerpFallback(input: {
 
   const count = Math.min(BROWSER_SERP_MAX_HITS, Math.max(1, input.count));
   const engines =
-    input.engines.length > 0 ? input.engines : (["bing", "google"] as BrowserSerpEngine[]);
+    input.engines.length > 0
+      ? input.engines
+      : (["bing", "google"] as BrowserSerpEngine[]);
 
-  const fetchHtml = input.fetchHtml ?? defaultPlaywrightFetchHtml;
-  if (!input.fetchHtml) {
-    const probe = await probeBrowserRuntime();
-    if (probe.status !== "ready") {
-      releaseBrowserGate();
-      return {
-        results: [],
-        error: `runtime_missing: ${probe.installHint}`,
-        code: "runtime_missing",
-      };
+  const serpEngine: SerpBrowserEngine =
+    input.serpBrowserEngine === "obscura" ? "obscura" : "chromium";
+  let fetchHtml = input.fetchHtml;
+  if (!fetchHtml) {
+    if (serpEngine === "obscura") {
+      const { probeObscuraRuntime, runObscuraFetchHtml } = await import(
+        "./web-extract-obscura.js"
+      );
+      const probe = await probeObscuraRuntime();
+      if (probe.status !== "ready" || !probe.binary) {
+        releaseBrowserGate();
+        return {
+          results: [],
+          error: `runtime_missing: ${probe.installHint}`,
+          code: "runtime_missing",
+        };
+      }
+      const binary = probe.binary;
+      fetchHtml = (url, timeoutMs) =>
+        runObscuraFetchHtml(url, timeoutMs, { binary });
+    } else {
+      const probe = await probeBrowserRuntime();
+      if (probe.status !== "ready") {
+        releaseBrowserGate();
+        return {
+          results: [],
+          error: `runtime_missing: ${probe.installHint}`,
+          code: "runtime_missing",
+        };
+      }
+      fetchHtml = defaultPlaywrightFetchHtml;
     }
   }
+  const doFetch: BrowserFetchHtml = fetchHtml;
 
   const started = now();
   try {
@@ -236,7 +366,7 @@ export async function runBrowserSerpFallback(input: {
       const url = serpUrl(engine, input.query);
       let html: string;
       try {
-        html = await fetchHtml(url, remaining);
+        html = await doFetch(url, remaining);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (/timeout|aborted/i.test(msg)) {
@@ -254,7 +384,9 @@ export async function runBrowserSerpFallback(input: {
       const results =
         engine === "bing"
           ? parseBingSerpHtml(html, count)
-          : parseGoogleSerpHtml(html, count);
+          : engine === "baidu"
+            ? parseBaiduSerpHtml(html, count)
+            : parseGoogleSerpHtml(html, count);
       if (results.length > 0) {
         return { engine, results };
       }

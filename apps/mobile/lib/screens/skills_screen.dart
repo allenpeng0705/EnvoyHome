@@ -7,7 +7,7 @@ import '../l10n/app_localizations.dart';
 import '../state/session_controller.dart';
 import 'workflow_editor_page.dart';
 
-/// Skills | Workflows | Schedules.
+/// Skills | Workflows | Scenes | Schedules.
 class SkillsScreen extends StatelessWidget {
   const SkillsScreen({super.key, required this.session});
 
@@ -17,14 +17,16 @@ class SkillsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         appBar: AppBar(
           title: Text(l10n.navSkills),
           bottom: TabBar(
+            isScrollable: true,
             tabs: [
               Tab(text: l10n.skillsTabSkills),
               Tab(text: l10n.skillsTabWorkflows),
+              Tab(text: l10n.skillsTabScenes),
               Tab(text: l10n.skillsTabSchedules),
             ],
           ),
@@ -33,6 +35,7 @@ class SkillsScreen extends StatelessWidget {
           children: [
             _SkillsListTab(session: session),
             _WorkflowsTab(session: session),
+            _ScenesTab(session: session),
             _SchedulesTab(session: session),
           ],
         ),
@@ -966,6 +969,128 @@ class _SchedulesTabState extends State<_SchedulesTab> {
           else
             ..._repeating.map((s) => _jobTile(s, l10n, accountId)),
         ],
+      ],
+    );
+  }
+}
+
+class _ScenesTab extends StatefulWidget {
+  const _ScenesTab({required this.session});
+  final SessionController session;
+
+  @override
+  State<_ScenesTab> createState() => _ScenesTabState();
+}
+
+class _ScenesTabState extends State<_ScenesTab> {
+  List<Map<String, dynamic>> _scenes = [];
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_reload());
+  }
+
+  Future<void> _reload() async {
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    if (home == null || accountId == null) return;
+    try {
+      final body = await home.listStandingOrders(accountId: accountId);
+      final raw = body['orders'];
+      final list = <Map<String, dynamic>>[];
+      if (raw is List) {
+        for (final row in raw) {
+          if (row is Map) {
+            final m = Map<String, dynamic>.from(row);
+            final id = m['id']?.toString() ?? '';
+            if (id.startsWith('scene:')) list.add(m);
+          }
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _scenes = list;
+        _error = null;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    }
+  }
+
+  Future<void> _addMorning() async {
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    if (home == null || accountId == null) return;
+    setState(() => _busy = true);
+    try {
+      final id = 'scene:good_morning:${DateTime.now().millisecondsSinceEpoch.toRadixString(36)}';
+      await home.putStandingOrder(
+        accountId: accountId,
+        id: id,
+        name: 'Good morning',
+        when: {'kind': 'cron', 'cronExpr': '0 7 * * *'},
+        action: {
+          'kind': 'agentTurn',
+          'prompt':
+              'Run the household good-morning routine: briefly check bound lights/climate if needed, then send a short friendly morning note. Prefer local tools; do not invent devices.',
+        },
+      );
+      await _reload();
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _remove(String id) async {
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    if (home == null || accountId == null) return;
+    setState(() => _busy = true);
+    try {
+      await home.removeStandingOrder(accountId: accountId, id: id);
+      await _reload();
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text(l10n.scenesHint),
+        const SizedBox(height: 12),
+        if (_error != null)
+          Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        FilledButton(
+          onPressed: _busy ? null : _addMorning,
+          child: Text(l10n.scenesAddMorning),
+        ),
+        const SizedBox(height: 12),
+        if (_scenes.isEmpty)
+          Text(l10n.scenesNone)
+        else
+          ..._scenes.map(
+            (s) => ListTile(
+              title: Text(s['name']?.toString() ?? s['id']?.toString() ?? '?'),
+              subtitle: Text(
+                (s['when'] is Map ? (s['when'] as Map)['kind'] : '?').toString(),
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.delete_outline),
+                onPressed: _busy ? null : () => _remove(s['id']?.toString() ?? ''),
+              ),
+            ),
+          ),
       ],
     );
   }

@@ -10,6 +10,7 @@ import {
   __resetBrowserSerpGatesForTests,
   parseBingSerpHtml,
   parseGoogleSerpHtml,
+  parseBaiduSerpHtml,
   looksLikeCaptchaOrBlock,
   runBrowserSerpFallback,
   serpUrl,
@@ -39,18 +40,73 @@ async function freshService() {
   return { svc, stateDir };
 }
 
-test("V-OUT-7: default fallback is none; public config exposes runtime fields", async () => {
+test("V-OUT-7: default fallback is browser; public config exposes runtime fields", async () => {
   const { svc } = await freshService();
   const pub = await svc.getPublicConfig();
-  assert.equal(pub.fallback, "none");
+  assert.equal(pub.fallback, "browser");
+  assert.equal(pub.researchEnabled, false);
+  assert.equal(pub.digDepth, 3);
   assert.equal(pub.unattendedBrowser, false);
   assert.deepEqual(pub.browserEngines, ["bing", "google"]);
   assert.ok(pub.browserRuntime === "ready" || pub.browserRuntime === "missing");
-  assert.equal(pub.browserInstallHint, "npx playwright install chromium");
+  assert.match(pub.browserInstallHint, /install chromium/);
   assert.doesNotMatch(pub.browserInstallHint, /npm install playwright/);
+  // Prefer the daemon-local Playwright CLI (version-matched; works without npx).
+  assert.match(pub.browserInstallHint, /(npx playwright|node .+playwright.+cli\.js) install chromium/);
 });
 
-test("V-OUT-7: serpUrl is fixed Bing then Google templates only", () => {
+test("V-OUT-7 / packaging: browserInstallHint prefers local Playwright CLI", async () => {
+  const { browserInstallHint, resolveLocalPlaywrightCli } = await import(
+    "../dist/web-search-browser.js"
+  );
+  const cli = resolveLocalPlaywrightCli();
+  assert.ok(cli, "playwright driver should resolve in the daemon workspace");
+  assert.match(cli, /playwright[/\\]cli\.js$/);
+  const hint = browserInstallHint();
+  assert.match(hint, /node .+cli\.js install chromium/);
+  assert.doesNotMatch(hint, /^npx /);
+});
+
+test("V-OUT-7: no API key + browser fallback → SERP without calling primary API", async () => {
+  __resetBrowserSerpGatesForTests();
+  const { svc } = await freshService();
+  await svc.setConfig({
+    provider: "brave",
+    fallback: "browser",
+    browserEngines: ["bing"],
+    apiKey: null,
+  });
+  let apiCalls = 0;
+  svc.fetchImpl = (async () => {
+    apiCalls++;
+    return new Response("{}", { status: 200 });
+  }) as typeof fetch;
+  const out = JSON.parse(
+    await svc.runSearch(
+      { query: "EnvoyHome" },
+      {
+        origin: "attended",
+        authorizeBrowserFallback: async () => true,
+        browserFetchHtml: async (url) => {
+          assert.match(url, /bing\.com\/search/);
+          return `<li class="b_algo"><h2><a href="https://hit.example/eh">EnvoyHome</a></h2><div class="b_caption"><p>Home agent</p></div></li>`;
+        },
+      },
+    ),
+  ) as {
+    provider: string;
+    fallback?: string;
+    engine?: string;
+    results: Array<{ title: string; url: string }>;
+  };
+  assert.equal(apiCalls, 0);
+  assert.equal(out.provider, "brave");
+  assert.equal(out.fallback, "browser");
+  assert.equal(out.engine, "bing");
+  assert.equal(out.results[0]?.url, "https://hit.example/eh");
+});
+
+test("V-OUT-7: serpUrl is fixed Bing/Google/Baidu templates only", () => {
   assert.equal(
     serpUrl("bing", "hello world"),
     "https://www.bing.com/search?q=hello%20world",
@@ -58,6 +114,10 @@ test("V-OUT-7: serpUrl is fixed Bing then Google templates only", () => {
   assert.equal(
     serpUrl("google", "a&b"),
     "https://www.google.com/search?q=a%26b&hl=en",
+  );
+  assert.equal(
+    serpUrl("baidu", "EnvoyHome"),
+    "https://www.baidu.com/s?wd=EnvoyHome",
   );
 });
 
@@ -93,13 +153,88 @@ test("V-OUT-7: parseGoogleSerpHtml extracts organic hits", () => {
   assert.equal(hits[0]!.url, "https://news.example/story");
 });
 
+test("V-OUT-7: parseBaiduSerpHtml prefers mu= real URLs", () => {
+  const html = `
+    <div class="result c-container" mu="https://example.com/envoyhome">
+      <h3 class="t"><a href="https://www.baidu.com/link?url=abc">EnvoyHome 主页</a></h3>
+      <div class="c-abstract">家庭智能体</div>
+    </div>
+    <div class="result c-container" mu="https://news.example/baidu-hit">
+      <h3 class="t"><a href="https://www.baidu.com/link?url=def">另一条</a></h3>
+    </div>
+  `;
+  const hits = parseBaiduSerpHtml(html, 5);
+  assert.equal(hits.length, 2);
+  assert.equal(hits[0]!.url, "https://example.com/envoyhome");
+  assert.match(hits[0]!.title, /EnvoyHome/);
+  assert.match(hits[0]!.description, /家庭/);
+  assert.equal(hits[1]!.url, "https://news.example/baidu-hit");
+});
+
+test("V-OUT-7: setConfig accepts baidu in browserEngines", async () => {
+  const { svc } = await freshService();
+  await svc.setConfig({
+    fallback: "browser",
+    browserEngines: ["baidu", "bing", "google"],
+  });
+  const pub = await svc.getPublicConfig();
+  assert.deepEqual(pub.browserEngines, ["baidu", "bing", "google"]);
+});
+
+test("V-OUT-7: provider browser searches SERP directly (no DDG)", async () => {
+  __resetBrowserSerpGatesForTests();
+  const { svc } = await freshService();
+  await svc.setConfig({
+    provider: "browser",
+    browserEngines: ["google", "bing"],
+  });
+  let ddgCalls = 0;
+  svc.fetchImpl = (async () => {
+    ddgCalls++;
+    return new Response("should-not-run", { status: 200 });
+  }) as typeof fetch;
+  let modeSeen: string | undefined;
+  const out = JSON.parse(
+    await svc.runSearch(
+      { query: "EnvoyHome" },
+      {
+        origin: "attended",
+        authorizeBrowserFallback: async ({ mode }) => {
+          modeSeen = mode;
+          return true;
+        },
+        browserFetchHtml: async (url) => {
+          assert.match(url, /google\.com\/search|bing\.com\/search/);
+          if (url.includes("google.com")) {
+            return `<div class="g"><a href="https://envoyhome.example/"><h3>EnvoyHome</h3></a></div>`;
+          }
+          return "";
+        },
+      },
+    ),
+  ) as {
+    provider: string;
+    fallback?: string;
+    engine?: string;
+    results: Array<{ url: string }>;
+  };
+  assert.equal(ddgCalls, 0);
+  assert.equal(modeSeen, "primary");
+  assert.equal(out.provider, "browser");
+  assert.equal(out.fallback, "none");
+  assert.equal(out.engine, "google");
+  assert.equal(out.results[0]?.url, "https://envoyhome.example/");
+});
+
 test("V-OUT-7: captcha/block detection", () => {
   assert.equal(looksLikeCaptchaOrBlock("<html>unusual traffic from your computer</html>"), true);
+  assert.equal(looksLikeCaptchaOrBlock("<html>百度安全验证</html>"), true);
   assert.equal(looksLikeCaptchaOrBlock("<html><li class=b_algo>ok</li></html>"), false);
 });
 
 test("V-OUT-7: fallback off leaves primary error; no browser call", async () => {
   const { svc } = await freshService();
+  await svc.setConfig({ fallback: "none" });
   let browserCalls = 0;
   svc.fetchImpl = (async () =>
     new Response("<html></html>", { status: 200 })) as typeof fetch;
@@ -310,12 +445,12 @@ test("V-OUT-7: attended without approval hook fails closed", async () => {
   assert.match(out.error ?? "", /approval hook/i);
 });
 
-test("V-OUT-7: Doctor warns when fallback on and runtime missing", async () => {
+test("V-OUT-7/34: Doctor warns when fallback on and no SERP engine ready", async () => {
   const { svc, stateDir } = await freshService();
-  await svc.setConfig({ fallback: "browser" });
+  await svc.setConfig({ fallback: "browser", serpBrowserEngine: "auto" });
   const pub = await svc.getPublicConfig();
-  if (pub.browserRuntime === "ready") {
-    // Host has Playwright — soft-skip warn assertion.
+  if (pub.browserRuntime === "ready" || pub.obscuraRuntime === "ready") {
+    // Host already has Obscura or Chromium — Stage E auto is fine; soft-skip.
     return;
   }
   const devices = new DeviceCredentialStore();

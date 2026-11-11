@@ -1122,6 +1122,36 @@ abstract class AppLocalizations {
   /// **'Auto model switch'**
   String get llmAutoSwitch;
 
+  /// No description provided for @privacyModeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy Mode'**
+  String get privacyModeTitle;
+
+  /// No description provided for @privacyModeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Forces local inference and blocks cloud tools. Owner-scope.'**
+  String get privacyModeHint;
+
+  /// No description provided for @privacyModeEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Privacy Mode'**
+  String get privacyModeEnabled;
+
+  /// No description provided for @privacyModeBlockEgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Also block smart-home actuation & event-source notify'**
+  String get privacyModeBlockEgress;
+
+  /// No description provided for @privacyModeOwnerOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy Mode is Owner-only on this device.'**
+  String get privacyModeOwnerOnly;
+
   /// No description provided for @llmCompactNow.
   ///
   /// In en, this message translates to:
@@ -1221,8 +1251,14 @@ abstract class AppLocalizations {
   /// No description provided for @browserControlLede.
   ///
   /// In en, this message translates to:
-  /// **'Control managed Chromium, or attach personal Chrome / remote CDP. Off by default.'**
+  /// **'Control a managed browser on the home computer (Auto prefers Obscura, else Chromium), or attach personal Chrome / remote CDP. Off by default.'**
   String get browserControlLede;
+
+  /// No description provided for @browserControlDaemonHostNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Browser sessions run on the home computer. Settings here sync with desktop Connections → Browser.'**
+  String get browserControlDaemonHostNote;
 
   /// No description provided for @browserControlEnabled.
   ///
@@ -1383,7 +1419,7 @@ abstract class AppLocalizations {
   /// No description provided for @webSearchLede.
   ///
   /// In en, this message translates to:
-  /// **'Search the public web from chat. DuckDuckGo needs no key; Brave and Tavily need an Owner API key.'**
+  /// **'Search the public web from chat. Default: DuckDuckGo, then Bing/Google/Baidu in the browser if needed (no API key). Brave and Tavily need an Owner API key.'**
   String get webSearchLede;
 
   /// No description provided for @webSearchEnabled.
@@ -1397,6 +1433,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Provider'**
   String get webSearchProvider;
+
+  /// No description provided for @webSearchProviderBrowser.
+  ///
+  /// In en, this message translates to:
+  /// **'Browser (Bing / Google / Baidu)'**
+  String get webSearchProviderBrowser;
+
+  /// No description provided for @webSearchBrowserPrimaryHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Searches Bing/Google/Baidu directly in the daemon host headless engine (Obscura if ready, else Chromium). Attended chats ask once before each search.'**
+  String get webSearchBrowserPrimaryHint;
+
+  /// No description provided for @webSearchDaemonHostNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Engines and dig run on the home computer that hosts EnvoyHome. This phone only views and (Owner) edits the shared settings.'**
+  String get webSearchDaemonHostNote;
+
+  /// No description provided for @webSearchEffectiveUnresolved.
+  ///
+  /// In en, this message translates to:
+  /// **'not ready yet'**
+  String get webSearchEffectiveUnresolved;
 
   /// No description provided for @webSearchApiKey.
   ///
@@ -1449,14 +1509,194 @@ abstract class AppLocalizations {
   /// No description provided for @webSearchBrowserFallback.
   ///
   /// In en, this message translates to:
-  /// **'Browser fallback (Bing/Google when API/DDG fails)'**
+  /// **'Browser fallback (Bing/Google/Baidu when API/DDG fails or is unset)'**
   String get webSearchBrowserFallback;
 
   /// No description provided for @webSearchBrowserFallbackHint.
   ///
   /// In en, this message translates to:
-  /// **'Off by default. Attended chats still ask before the browser leg. SERP pages may CAPTCHA or block.'**
+  /// **'On by default for zero-config search. Attended chats ask before the browser leg. SERP pages may CAPTCHA or block.'**
   String get webSearchBrowserFallbackHint;
+
+  /// No description provided for @webSearchResearchEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Web research (search then dig top pages)'**
+  String get webSearchResearchEnabled;
+
+  /// No description provided for @webSearchResearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Off by default. Enables web_research: dig into top results and return an organized brief plus links.'**
+  String get webSearchResearchHint;
+
+  /// No description provided for @webSearchDigDepth.
+  ///
+  /// In en, this message translates to:
+  /// **'Dig depth (1–10 pages)'**
+  String get webSearchDigDepth;
+
+  /// No description provided for @webSearchExtractBackend.
+  ///
+  /// In en, this message translates to:
+  /// **'Page extract backend'**
+  String get webSearchExtractBackend;
+
+  /// No description provided for @webSearchExtractBackendAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto (Obscura if ready, else HTTP fetch)'**
+  String get webSearchExtractBackendAuto;
+
+  /// No description provided for @webSearchExtractBackendFetch.
+  ///
+  /// In en, this message translates to:
+  /// **'HTTP fetch'**
+  String get webSearchExtractBackendFetch;
+
+  /// No description provided for @webSearchExtractBackendObscura.
+  ///
+  /// In en, this message translates to:
+  /// **'Obscura (JS-rendered Markdown)'**
+  String get webSearchExtractBackendObscura;
+
+  /// No description provided for @webSearchExtractBackendHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto prefers Obscura when installed on the daemon host, otherwise plain HTTP fetch.'**
+  String get webSearchExtractBackendHint;
+
+  /// No description provided for @webSearchEffectiveExtract.
+  ///
+  /// In en, this message translates to:
+  /// **'Effective dig backend now'**
+  String get webSearchEffectiveExtract;
+
+  /// No description provided for @webSearchObscuraReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Obscura ready on daemon host'**
+  String get webSearchObscuraReady;
+
+  /// No description provided for @webSearchObscuraMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Obscura not installed on daemon host'**
+  String get webSearchObscuraMissing;
+
+  /// No description provided for @webSearchObscuraInstallHintNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Desktop builds ship Obscura (or the daemon auto-installs on first boot). On the home computer that runs EnvoyHome (not this phone), override with ENVOYHOME_OBSCURA / PATH if needed, then reopen Settings.'**
+  String get webSearchObscuraInstallHintNote;
+
+  /// No description provided for @webSearchSerpBrowserEngine.
+  ///
+  /// In en, this message translates to:
+  /// **'Browser SERP engine'**
+  String get webSearchSerpBrowserEngine;
+
+  /// No description provided for @webSearchSerpBrowserEngineAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto (Obscura if ready, else Chromium)'**
+  String get webSearchSerpBrowserEngineAuto;
+
+  /// No description provided for @webSearchSerpBrowserEngineChromium.
+  ///
+  /// In en, this message translates to:
+  /// **'Chromium'**
+  String get webSearchSerpBrowserEngineChromium;
+
+  /// No description provided for @webSearchSerpBrowserEngineObscura.
+  ///
+  /// In en, this message translates to:
+  /// **'Obscura'**
+  String get webSearchSerpBrowserEngineObscura;
+
+  /// No description provided for @webSearchSerpBrowserEngineHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto prefers Obscura for Bing/Google/Baidu, then Playwright Chromium.'**
+  String get webSearchSerpBrowserEngineHint;
+
+  /// No description provided for @webSearchEffectiveSerp.
+  ///
+  /// In en, this message translates to:
+  /// **'Effective SERP engine now'**
+  String get webSearchEffectiveSerp;
+
+  /// No description provided for @browserControlManagedEngine.
+  ///
+  /// In en, this message translates to:
+  /// **'Managed browser engine'**
+  String get browserControlManagedEngine;
+
+  /// No description provided for @browserControlManagedEngineAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto (Obscura if ready, else Chromium)'**
+  String get browserControlManagedEngineAuto;
+
+  /// No description provided for @browserControlManagedEngineChromium.
+  ///
+  /// In en, this message translates to:
+  /// **'Chromium'**
+  String get browserControlManagedEngineChromium;
+
+  /// No description provided for @browserControlManagedEngineObscura.
+  ///
+  /// In en, this message translates to:
+  /// **'Obscura'**
+  String get browserControlManagedEngineObscura;
+
+  /// No description provided for @browserControlManagedEngineHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto prefers Obscura for managed browser. Personal/remote always use real Chrome CDP.'**
+  String get browserControlManagedEngineHint;
+
+  /// No description provided for @browserControlEffectiveManaged.
+  ///
+  /// In en, this message translates to:
+  /// **'Effective managed engine now'**
+  String get browserControlEffectiveManaged;
+
+  /// No description provided for @webSearchEngines.
+  ///
+  /// In en, this message translates to:
+  /// **'Search engines (order: Bing → Google → Baidu)'**
+  String get webSearchEngines;
+
+  /// No description provided for @webSearchEnginesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'When browser fallback runs, try checked engines in this order until one returns results.'**
+  String get webSearchEnginesHint;
+
+  /// No description provided for @webSearchEnginesRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Pick at least one of Bing, Google, or Baidu for browser fallback.'**
+  String get webSearchEnginesRequired;
+
+  /// No description provided for @webSearchEngineBing.
+  ///
+  /// In en, this message translates to:
+  /// **'Bing'**
+  String get webSearchEngineBing;
+
+  /// No description provided for @webSearchEngineGoogle.
+  ///
+  /// In en, this message translates to:
+  /// **'Google'**
+  String get webSearchEngineGoogle;
+
+  /// No description provided for @webSearchEngineBaidu.
+  ///
+  /// In en, this message translates to:
+  /// **'Baidu'**
+  String get webSearchEngineBaidu;
 
   /// No description provided for @webSearchBrowserReady.
   ///
@@ -1661,6 +1901,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Schedules'**
   String get skillsTabSchedules;
+
+  /// No description provided for @skillsTabScenes.
+  ///
+  /// In en, this message translates to:
+  /// **'Scenes'**
+  String get skillsTabScenes;
+
+  /// No description provided for @scenesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'When → do household automations (standing orders). Presence templates need Privacy Mode.'**
+  String get scenesHint;
+
+  /// No description provided for @scenesNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No scenes yet.'**
+  String get scenesNone;
+
+  /// No description provided for @scenesAddMorning.
+  ///
+  /// In en, this message translates to:
+  /// **'Add Good morning'**
+  String get scenesAddMorning;
+
+  /// No description provided for @scenesPrivacyRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable Privacy Mode (LLM → Routing) before presence scenes.'**
+  String get scenesPrivacyRequired;
 
   /// No description provided for @skillsInstallUrl.
   ///

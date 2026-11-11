@@ -310,6 +310,9 @@ class _RoutingTab extends StatefulWidget {
 class _RoutingTabState extends State<_RoutingTab> {
   String _filter = 'any';
   bool _auto = false;
+  bool _privacyEnabled = false;
+  bool _privacyBlockEgress = true;
+  bool _privacyReadable = false;
   String? _error;
   bool _busy = false;
 
@@ -325,10 +328,26 @@ class _RoutingTabState extends State<_RoutingTab> {
     if (home == null || accountId == null) return;
     try {
       final p = await home.listProviders(accountId: accountId);
+      var privacyReadable = false;
+      var privacyEnabled = false;
+      var privacyBlockEgress = true;
+      try {
+        final priv = await home.getPrivacyMode(accountId: accountId);
+        privacyReadable = true;
+        privacyEnabled = priv['enabled'] == true;
+        privacyBlockEgress = priv['blockSmartHomeEgress'] != false;
+      } catch (_) {
+        privacyReadable = false;
+      }
       if (!mounted) return;
       setState(() {
         _filter = p['placementFilter']?.toString() ?? 'any';
-        _auto = p['autoModelSwitch'] == true;
+        final auto = p['autoModelSwitch'];
+        _auto = auto == true ||
+            (auto is Map && auto['enabled'] == true);
+        _privacyReadable = privacyReadable;
+        _privacyEnabled = privacyEnabled;
+        _privacyBlockEgress = privacyBlockEgress;
       });
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
@@ -358,6 +377,29 @@ class _RoutingTabState extends State<_RoutingTab> {
     try {
       await home.setAutoModelSwitch(accountId: accountId, enabled: v);
       if (mounted) setState(() => _auto = v);
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _setPrivacy({bool? enabled, bool? blockEgress}) async {
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    if (home == null || accountId == null) return;
+    setState(() => _busy = true);
+    try {
+      final next = await home.setPrivacyMode(
+        accountId: accountId,
+        enabled: enabled,
+        blockSmartHomeEgress: blockEgress,
+      );
+      if (!mounted) return;
+      setState(() {
+        _privacyEnabled = next['enabled'] == true;
+        _privacyBlockEgress = next['blockSmartHomeEgress'] != false;
+      });
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
     } finally {
@@ -398,6 +440,31 @@ class _RoutingTabState extends State<_RoutingTab> {
           value: _auto,
           onChanged: _busy ? null : _setAuto,
         ),
+        const Divider(),
+        Text(l10n.privacyModeTitle, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(l10n.privacyModeHint),
+        if (!_privacyReadable)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(l10n.privacyModeOwnerOnly),
+          )
+        else ...[
+          SwitchListTile(
+            title: Text(l10n.privacyModeEnabled),
+            value: _privacyEnabled,
+            onChanged: _busy
+                ? null
+                : (v) => _setPrivacy(enabled: v, blockEgress: _privacyBlockEgress),
+          ),
+          SwitchListTile(
+            title: Text(l10n.privacyModeBlockEgress),
+            value: _privacyBlockEgress,
+            onChanged: !_privacyEnabled || _busy
+                ? null
+                : (v) => _setPrivacy(enabled: _privacyEnabled, blockEgress: v),
+          ),
+        ],
       ],
     );
   }

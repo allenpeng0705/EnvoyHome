@@ -2,7 +2,7 @@
 
 Get the daemon, desktop app, and (optionally) the mobile client running locally.
 
-Overview and design links: [`README.md`](README.md).
+Overview and design links: [`README.md`](README.md) · [`README.zh-CN.md`](README.zh-CN.md).
 
 ## Table of contents
 

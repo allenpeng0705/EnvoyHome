@@ -81,6 +81,7 @@ async function resolveUserSchedulePayload(
         channels: deps.channels,
         webSearch: deps.webSearch,
         browserControl: deps.browserControl,
+        mcpHub: deps.mcpHub ?? null,
       }),
     });
   } catch (err) {
@@ -1323,6 +1324,10 @@ export function createDispatcher(deps: RouterDeps) {
             fallback?: string;
             browserEngines?: string[];
             unattendedBrowser?: boolean;
+            researchEnabled?: boolean;
+            digDepth?: number;
+            extractBackend?: string;
+            serpBrowserEngine?: string;
           } = {};
           if (typeof params.enabled === "boolean") patch.enabled = params.enabled;
           if (typeof params.provider === "string") patch.provider = params.provider;
@@ -1335,6 +1340,18 @@ export function createDispatcher(deps: RouterDeps) {
           }
           if (typeof params.unattendedBrowser === "boolean") {
             patch.unattendedBrowser = params.unattendedBrowser;
+          }
+          if (typeof params.researchEnabled === "boolean") {
+            patch.researchEnabled = params.researchEnabled;
+          }
+          if (typeof params.digDepth === "number") {
+            patch.digDepth = params.digDepth;
+          }
+          if (typeof params.extractBackend === "string") {
+            patch.extractBackend = params.extractBackend;
+          }
+          if (typeof params.serpBrowserEngine === "string") {
+            patch.serpBrowserEngine = params.serpBrowserEngine;
           }
           return await deps.webSearch.setConfig(patch);
         } catch (err) {
@@ -1458,6 +1475,7 @@ export function createDispatcher(deps: RouterDeps) {
             enabled?: boolean;
             unattendedEnabled?: boolean;
             defaultProfile?: string;
+            managedEngine?: string;
             personalEnabled?: boolean;
             personalCdpEndpoint?: string;
             remoteEnabled?: boolean;
@@ -1471,6 +1489,9 @@ export function createDispatcher(deps: RouterDeps) {
           }
           if (typeof params.defaultProfile === "string") {
             patch.defaultProfile = params.defaultProfile;
+          }
+          if (typeof params.managedEngine === "string") {
+            patch.managedEngine = params.managedEngine;
           }
           if (typeof params.personalEnabled === "boolean") {
             patch.personalEnabled = params.personalEnabled;
@@ -2562,6 +2583,7 @@ export function createDispatcher(deps: RouterDeps) {
           channels: deps.channels,
           webSearch: deps.webSearch,
           browserControl: deps.browserControl,
+          mcpHub: deps.mcpHub ?? null,
           forAccountId,
           ownerAccountId: ownerAccountId ?? null,
         });
@@ -2599,6 +2621,7 @@ export function createDispatcher(deps: RouterDeps) {
             channels: deps.channels,
             webSearch: deps.webSearch,
             browserControl: deps.browserControl,
+            mcpHub: deps.mcpHub ?? null,
           });
           const hintRaw = Array.isArray(params.hintTools) ? params.hintTools : [];
           const hintTools = hintRaw.filter((x): x is string => typeof x === "string" && x.length > 0);
@@ -2609,6 +2632,7 @@ export function createDispatcher(deps: RouterDeps) {
             channels: deps.channels,
             webSearch: deps.webSearch,
             browserControl: deps.browserControl,
+            mcpHub: deps.mcpHub ?? null,
           });
           const drafted = await draftWorkflowFromText({
             text: String(params.text ?? ""),
@@ -2731,8 +2755,9 @@ export function createDispatcher(deps: RouterDeps) {
         const known = await workflowToolNameSet({
           skills: deps.skills,
           channels: deps.channels,
-            webSearch: deps.webSearch,
-            browserControl: deps.browserControl,
+          webSearch: deps.webSearch,
+          browserControl: deps.browserControl,
+          mcpHub: deps.mcpHub ?? null,
         });
         const result = deps.workflows.validate(String(params.yaml ?? ""), known);
         if (result.ok) return { ok: true, id: result.id };
@@ -2749,6 +2774,7 @@ export function createDispatcher(deps: RouterDeps) {
             channels: deps.channels,
             webSearch: deps.webSearch,
             browserControl: deps.browserControl,
+            mcpHub: deps.mcpHub ?? null,
           });
           const { id } = await deps.workflows.put(
             String(params.yaml ?? ""),
@@ -3330,6 +3356,49 @@ export function createDispatcher(deps: RouterDeps) {
         if (typeof params.maxPerDay === "number") patch.maxPerDay = params.maxPerDay;
         const next = await deps.turns.mediaGenerate.set(accountId, patch);
         return { ok: true, enabled: next.enabled, maxPerDay: next.maxPerDay };
+      }
+
+      /* ---- P2 Privacy Mode (Design §19.4 / V-P2-PRIV-*) ---- */
+      case "home.getPrivacyMode": {
+        // Owner-scope via assertScope / METHODS — accountId names the seat.
+        const accountId = String(params.accountId ?? "").trim();
+        if (!accountId) {
+          throw Object.assign(new Error("envoyhome.bad_params: accountId required"), {
+            code: "bad_params",
+          });
+        }
+        if (!(await deps.accounts.get(accountId))) {
+          throw Object.assign(new Error("envoyhome.not_found: account"), {
+            code: "not_found",
+          });
+        }
+        return await deps.turns.privacyMode.get(accountId);
+      }
+      case "home.setPrivacyMode": {
+        const accountId = String(params.accountId ?? "").trim();
+        if (!accountId) {
+          throw Object.assign(new Error("envoyhome.bad_params: accountId required"), {
+            code: "bad_params",
+          });
+        }
+        if (!(await deps.accounts.get(accountId))) {
+          throw Object.assign(new Error("envoyhome.not_found: account"), {
+            code: "not_found",
+          });
+        }
+        const cur = await deps.turns.privacyMode.get(accountId);
+        const next = await deps.turns.privacyMode.set(accountId, {
+          enabled: typeof params.enabled === "boolean" ? params.enabled : cur.enabled,
+          blockSmartHomeEgress:
+            typeof params.blockSmartHomeEgress === "boolean"
+              ? params.blockSmartHomeEgress
+              : cur.blockSmartHomeEgress,
+        });
+        return {
+          ok: true,
+          enabled: next.enabled,
+          blockSmartHomeEgress: next.blockSmartHomeEgress,
+        };
       }
 
       /* ---- B10 skills ---- */

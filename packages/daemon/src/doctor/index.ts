@@ -191,31 +191,69 @@ export async function collectDoctorIssues(
 
   if (deps.webSearch) {
     const ws = await deps.webSearch.getPublicConfig();
-    if (ws.fallback === "browser" && ws.browserRuntime === "missing") {
-      issues.push({
-        id: "websearch.browser_runtime_missing",
-        severity: "warn",
-        message: `web_search browser fallback is on but Chromium is missing on the daemon host — run: ${ws.browserInstallHint}`,
-        fixable: false,
-      });
+    const needsBrowserSerp = ws.fallback === "browser" || ws.provider === "browser";
+    if (needsBrowserSerp) {
+      // Stage E: auto is fine with Obscura OR Chromium; forced engine needs that one.
+      const choice = ws.serpBrowserEngine ?? "auto";
+      const obscuraOk = ws.obscuraRuntime === "ready";
+      const chromeOk = ws.browserRuntime === "ready";
+      const serpOk =
+        choice === "auto"
+          ? obscuraOk || chromeOk
+          : choice === "obscura"
+            ? obscuraOk
+            : chromeOk;
+      if (!serpOk) {
+        const hint =
+          choice === "obscura"
+            ? ws.obscuraInstallHint
+            : choice === "chromium"
+              ? ws.browserInstallHint
+              : `Obscura: ${ws.obscuraInstallHint}; Chromium: ${ws.browserInstallHint}`;
+        issues.push({
+          id: "websearch.browser_runtime_missing",
+          severity: "warn",
+          message:
+            ws.provider === "browser"
+              ? `web_search provider is browser but no SERP engine is ready — ${hint}`
+              : `web_search browser fallback is on but no SERP engine is ready — ${hint}`,
+          fixable: false,
+        });
+      }
     }
   }
 
   if (deps.browserControl) {
     const bc = await deps.browserControl.getPublicConfig();
-    // Warn only when managed Chromium is needed (default managed, or personal/remote
-    // not the sole ready path).
+    // Warn when managed headless is needed and neither (or forced) engine is ready.
     const needsManaged =
       bc.enabled &&
       (bc.defaultProfile === "managed" ||
         (!bc.personalReady && !bc.remoteReady));
-    if (needsManaged && bc.browserRuntime === "missing") {
-      issues.push({
-        id: "browser.runtime_missing",
-        severity: "warn",
-        message: `browser control needs managed Chromium on the daemon host — run: ${bc.browserInstallHint}`,
-        fixable: false,
-      });
+    if (needsManaged) {
+      const choice = bc.managedEngine ?? "auto";
+      const obscuraOk = bc.obscuraRuntime === "ready";
+      const chromeOk = bc.browserRuntime === "ready";
+      const managedOk =
+        choice === "auto"
+          ? obscuraOk || chromeOk
+          : choice === "obscura"
+            ? obscuraOk
+            : chromeOk;
+      if (!managedOk) {
+        const hint =
+          choice === "obscura"
+            ? bc.obscuraInstallHint
+            : choice === "chromium"
+              ? bc.browserInstallHint
+              : `Obscura: ${bc.obscuraInstallHint}; Chromium: ${bc.browserInstallHint}`;
+        issues.push({
+          id: "browser.runtime_missing",
+          severity: "warn",
+          message: `browser control needs a managed headless engine on the daemon host — ${hint}`,
+          fixable: false,
+        });
+      }
     }
   }
 
