@@ -436,7 +436,7 @@
   "skillsTabWorkflows": "Workflows",
   "skillsTabSchedules": "Schedules",
   "skillsTabScenes": "Scenes",
-  "scenesHint": "When → do household automations (standing orders). Presence templates need Privacy Mode.",
+  "scenesHint": "When → do household automations (household rules). Presence templates need Privacy Mode.",
   "scenesWhenPresence": "Presence (no cron — sensor trigger)",
   "scenesNone": "No scenes yet.",
   "scenesAddMorning": "Add Good morning",

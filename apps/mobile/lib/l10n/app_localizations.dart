@@ -1911,7 +1911,7 @@ abstract class AppLocalizations {
   /// No description provided for @scenesHint.
   ///
   /// In en, this message translates to:
-  /// **'When → do household automations (standing orders). Presence templates need Privacy Mode.'**
+  /// **'When → do household automations (household rules). Presence templates need Privacy Mode.'**
   String get scenesHint;
 
   /// No description provided for @scenesWhenPresence.

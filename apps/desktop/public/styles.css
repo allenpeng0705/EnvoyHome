@@ -5333,6 +5333,25 @@ body[data-view="schedulesChat"] .schedules-pane-tabs {
   font-style: italic;
 }
 
+.standing-examples {
+  margin: 0.65rem 0 1rem;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.standing-examples p {
+  margin: 0 0 0.4rem;
+}
+
+.standing-examples-list {
+  margin: 0.25rem 0 0.65rem 1.1rem;
+  padding: 0;
+}
+
+.standing-examples-list li {
+  margin: 0.25rem 0;
+}
+
 .cron-schedule-field input {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   letter-spacing: 0.02em;

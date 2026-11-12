@@ -12520,6 +12520,15 @@ async function showView(id) {
         el.innerHTML = shell(`
           <h3>${escapeHtml(t("standing.title"))}</h3>
           <p class="muted">${escapeHtml(t("standing.hint"))}</p>
+          <div class="standing-examples muted">
+            <p><strong>${escapeHtml(t("standing.examplesTitle"))}</strong></p>
+            <ul class="standing-examples-list">
+              <li>${escapeHtml(t("standing.exampleTime"))}</li>
+              <li>${escapeHtml(t("standing.exampleEvent"))}</li>
+              <li>${escapeHtml(t("standing.exampleNotify"))}</li>
+            </ul>
+            <p>${escapeHtml(t("standing.vsSchedules"))}</p>
+          </div>
           ${rows}
           <h4>${escapeHtml(t("standing.addTitle"))}</h4>
           <form id="so-form" class="stack-form">

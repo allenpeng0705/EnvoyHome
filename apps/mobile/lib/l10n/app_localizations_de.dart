@@ -1009,7 +1009,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get scenesHint =>
-      'When → do household automations (standing orders). Presence templates need Privacy Mode.';
+      'When → do household automations (household rules). Presence templates need Privacy Mode.';
 
   @override
   String get scenesWhenPresence => 'Presence (no cron — sensor trigger)';
