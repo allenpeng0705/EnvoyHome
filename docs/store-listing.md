@@ -1,24 +1,31 @@
 # Store listing pack (iOS / Android)
 
+**Full release guide:** [`mobile-store-release.md`](mobile-store-release.md) — checklist, builds, reviewer path.  
+**Canonical pack:** [`apps/mobile/store-release/`](../apps/mobile/store-release/) — App Store + Google Play listing copy, icons, review notes (same layout as EnvoyDev / EnvoyGo).
+
+| Item | Path |
+|------|------|
+| Pack README | [`apps/mobile/store-release/README.md`](../apps/mobile/store-release/README.md) |
+| App Store Connect text | [`apps/mobile/store-release/appstore/listing.md`](../apps/mobile/store-release/appstore/listing.md) |
+| Play Console text | [`apps/mobile/store-release/googleplay/listing.md`](../apps/mobile/store-release/googleplay/listing.md) |
+| Review demo home + QR | [`apps/mobile/store-release/apple_google_reviewing.md`](../apps/mobile/store-release/apple_google_reviewing.md) |
+| Icons (brand source) | [`apps/branding/store/`](../apps/branding/store/) |
+| Privacy HTML (deploy) | [`sites/envoyhome/privacy.html`](../sites/envoyhome/privacy.html) |
+| Privacy draft | [`privacy-policy.md`](privacy-policy.md) |
+
 **Bundle / applicationId:** `com.envoymesh.envoyhome`  
-**App version (preview):** `0.1.0+1` — bump before public 1.0.  
-**Privacy policy URL:** host [`privacy-policy.md`](privacy-policy.md) (or equivalent HTML) and paste the public URL into App Store Connect / Play Console.
+**App version (preview):** `0.1.0+1` — bump before each store upload.  
+**Privacy policy URL (after deploy):** `https://www.envoymesh.cn/envoyhome/privacy.html`
 
 ## Short description (≤80 chars)
 
-Self-hosted home agent — pair to your EnvoyHome daemon over EnvoyMesh.
+```
+Self-hosted home agent on your phone. Pair by QR — no central account.
+```
 
-## Full description (draft)
+## Full description
 
-EnvoyHome is the phone thin client for your **self-hosted** home agent.
-
-- Pair with a QR code from desktop Settings (or hostname / SSH hop).
-- Chat with your household profiles; approve risky tools inline.
-- Open shared files over the home connection (no public URL required).
-- Optional push for approvals (APNs / FCM — configure on the home machine).
-- Home Assistant–gated Home chat when HA is connected on the daemon.
-
-Requires a running EnvoyHome daemon on your home network (or reachable hop). Not a cloud chatbot. Not a replacement for Home Assistant.
+Use the paste-ready blocks in the store-release `listing.md` files (agent / harness / workflows first; HA optional).
 
 ## Data safety / App Privacy (map)
 
@@ -33,19 +40,21 @@ Requires a running EnvoyHome daemon on your home network (or reachable hop). Not
 
 ## Screenshots (operator)
 
-Capture on a physical device after [`mobile-live-verify.md`](mobile-live-verify.md) PASS: pair, chat+approval, Home (HA), Settings hub, Files.
+Capture on a physical device after [`mobile-live-verify.md`](mobile-live-verify.md) PASS: pair, chat+approval, Settings hub, Schedules/Workflows. Drop files under `apps/mobile/store-release/{appstore,googleplay}/screenshots/`.
 
 ## Release signing
 
 | Platform | Doc |
 |----------|-----|
-| Android | [`apps/mobile/android/key.properties.example`](../apps/mobile/android/key.properties.example) — never commit real keystores |
+| Android | [`apps/mobile/android/key.properties.example`](../apps/mobile/android/key.properties.example) — never commit real keystores; Play steps in `store-release/googleplay/listing.md` |
 | iOS | Archive / TestFlight; Release uses `RunnerRelease.entitlements` (`aps-environment` = production). Daemon: unset `APNS_SANDBOX` |
 
 ## Checklist before submit
 
-- [ ] Live verify PASS  
-- [ ] Privacy policy URL live  
-- [ ] Release signing configured  
-- [ ] Prod push verified end-to-end  
-- [ ] Marketing matches early-adopter claim sheet (no Privacy Mode / IM-zoo overclaim)  
+- [ ] Live verify PASS ([`mobile-live-verify.md`](mobile-live-verify.md))
+- [ ] Privacy policy URL live (`sites/envoyhome/` deployed)
+- [ ] Release signing configured
+- [ ] Prod push verified end-to-end
+- [ ] Demo home online + pairing URI in review notes (`apple_google_reviewing.md`)
+- [ ] Screenshots at store resolutions
+- [ ] Marketing matches early-adopter claim sheet (no Privacy Mode / IM-zoo overclaim)

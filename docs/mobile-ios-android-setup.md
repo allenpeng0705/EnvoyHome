@@ -19,7 +19,7 @@ One checklist for the phone app (`com.envoymesh.envoyhome`) and home-daemon push
 3. On the phone: `cd apps/mobile && flutter pub get && flutter run`.
 4. Scan the QR (or paste the URI) → set **accountId** → confirm **Chat** works over WS (approvals appear **inline in Chat**, not a separate tab).
    - **iOS:** allow **Local Network** when prompted (pair screen probes early; required for LAN `ws://192.168.…`). Settings → EnvoyHome → Local Network if you denied it once.
-5. Optional live checklist: [`mobile-live-verify.md`](mobile-live-verify.md). Store / privacy: [`store-listing.md`](store-listing.md), [`privacy-policy.md`](privacy-policy.md).
+5. Optional live checklist: [`mobile-live-verify.md`](mobile-live-verify.md). Store release: [`mobile-store-release.md`](mobile-store-release.md) · [`store-listing.md`](store-listing.md) · [`privacy-policy.md`](privacy-policy.md).
 
 Push alerts only matter after step 4 succeeds and credentials below are configured on the **daemon host**.
 

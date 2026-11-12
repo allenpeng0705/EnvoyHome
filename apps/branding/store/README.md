@@ -15,14 +15,18 @@ Source: `../envoyhome-simple-b.jpg` → `master-1024-opaque.png` (indigo fill, n
 
 ## Upload to stores
 
+Full listing copy, review notes, and convenience icon copies live in
+[`apps/mobile/store-release/`](../../mobile/store-release/) (EnvoyDev / EnvoyGo layout).  
+Operator guide: [`docs/mobile-store-release.md`](../../../docs/mobile-store-release.md).
+
 ### Apple App Store Connect
-- **App icon:** `app-store/app-store-icon-1024.png` (1024×1024, no transparency)
-- Screenshots: capture from Simulator (not generated here)
+- **App icon:** `app-store/app-store-icon-1024.png` (1024×1024, no transparency) — also copied to `apps/mobile/store-release/appstore/icons/`
+- Screenshots: capture from Simulator / device (checklist in store-release)
 
 ### Google Play Console
 - **High-res icon:** `google-play/play-icon-512.png` (512×512)
 - **Feature graphic:** `google-play/feature-graphic-1024x500.png` (1024×500)
-- Screenshots: capture from emulator/device
+- Screenshots: capture from emulator/device (checklist in store-release)
 
 ## Regenerate
 

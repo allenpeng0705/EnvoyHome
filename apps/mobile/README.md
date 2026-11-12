@@ -24,6 +24,11 @@ pnpm mobile:test && pnpm mobile:flutter
 
 Daemon must be reachable (desktop Settings → Mint pairing → QR). Android Play releases: copy [`android/key.properties.example`](android/key.properties.example) → `android/key.properties` (gitignored).
 
+## Store release (App Store / Google Play)
+
+Operator guide: [`docs/mobile-store-release.md`](../../docs/mobile-store-release.md)  
+Paste-ready listings, icons, and review demo notes: [`store-release/README.md`](store-release/README.md) · [`docs/store-listing.md`](../../docs/store-listing.md)
+
 ## Navigation (Design §10.1 mirror)
 
 **Phone:** bottom **Chats · Schedules · Home? · Settings** (Home hidden until Home Assistant is configured + enabled).
