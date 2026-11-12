@@ -49,6 +49,18 @@ export const BUILTIN_TOOLS: Readonly<Record<string, ToolSpec>> = {
   extract_document: { name: "extract_document", risk: "write", grantable: true },
   /** Design §9.5j — copy Markdown into knowledge/ + reindex Doc KB. */
   promote_knowledge: { name: "promote_knowledge", risk: "write", grantable: true },
+  /** Design §9.5k — closed-op table transform → output/tables/. */
+  table_transform: { name: "table_transform", risk: "write", grantable: true },
+  /** Design §9.5k / P2-S2 — register jail csv/xlsx for local SQL. */
+  sql_load: { name: "sql_load", risk: "write", grantable: true },
+  /** Design §9.5k / P2-S2 — allow-listed DuckDB → output/tables/. */
+  sql_query: { name: "sql_query", risk: "write", grantable: true },
+  /** Design §9.5k — bar/line/pie chart → output/charts/*.png. */
+  chart_table: { name: "chart_table", risk: "write", grantable: true },
+  /** Design §9.5k/P2-P — closed Mermaid → output/diagrams/*.png. */
+  render_diagram: { name: "render_diagram", risk: "write", grantable: true },
+  /** Design §9.5k/P2-P — styled GFM table → PNG. */
+  render_table: { name: "render_table", risk: "write", grantable: true },
   exec: { name: "exec", risk: "exec", grantable: true },
   http_fetch: { name: "http_fetch", risk: "network", grantable: true },
   /** Design §9.5f — household web search (attendedAllow when enabled). */

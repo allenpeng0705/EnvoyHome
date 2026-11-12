@@ -5,7 +5,7 @@
 | **Document** | Single all-in-one design for EnvoyHome |
 | **Role** | Ground truth for **implementation** and **verification** |
 | **Status** | Living draft — refine in place; bump changelog |
-| **Last updated** | 2026-11-11h (Q6 license → MIT) |
+| **Last updated** | 2026-11-12l (P2-S4 local SQL Doctor/Settings/Privacy) |
 | **Not** | A port of HomeClaw; a clone of Hermes / OpenClaw / OpenHuman |
 
 **How to use this doc**
@@ -22,6 +22,18 @@
 
 | Date | Change |
 |------|--------|
+| 2026-11-12l | **Ship (P2-S4 / §9.5k):** Doctor + Settings honesty for DuckDB (`sql_*` absent until ready; prefer order). Skill Privacy note. V-OFFICE-43 — Privacy Mode local SQL OK / remote MCP blocked. Closes Plan **P2-S**. No wire bump. |
+| 2026-11-12k | **Ship (P2-S3 / §9.5k):** `sql_load`/`sql_query` **absent from turn catalogue** until DuckDB ready; workflow list marks `available: false` with Install hint. Standing prefer-order tip core→SQL→MCP. Privacy: local SQL OK; remote MCP still blocked. V-OFFICE-42. No wire bump. |
+| 2026-11-12j | **Ship (P2-S2 / §9.5k):** `sql_load` + `sql_query` builtins (`write`, grantable) — jail paths only; controlled DuckDB preamble; user SQL refuse corpus + caps; concurrency 1; results under `output/tables/`. V-OFFICE-40, V-OFFICE-41. Catalogue absent-until-ready remains P2-S3. No wire bump. |
+| 2026-11-12i | **Ship (P2-S0/S1 / §9.5k):** Freeze local SQL policy (statement allow/deny, caps). Managed **DuckDB 2.0.0** pin under `stateDir/localsql/`; Owner-explicit install RPCs `home.getLocalSqlStatus` / `installLocalSql` / `cancelLocalSqlInstall` (never silent). Settings System → Files card. V-OFFICE-39. `sql_load`/`sql_query` remain P2-S2. No wire bump (additive methods). |
+| 2026-11-12h | **Owner Accept (§9.5k heavy compute):** **C1 + C2** — (C1) Owner MCP remain the prefer path for remote/SaaS/sheets BI; (C2) optional **local SQL runtime** (pinned DuckDB-class) as Owner-opt-in daemon module (not silent; not core always-on; not a channel plugin). Closed `join` in core (**C3**) stays Deferred. Opens Plan **P2-S**. Docs tip shipped with Accept. No wire bump until P2-S tools land. |
+| 2026-11-12g | **Normative + Ship (§9.5k / P2-R):** Thin table prep — expand `table_transform` closed ops (`normalize`, richer `filter`, `dedupe`, `rename_columns`, `top_n`, `head`, `tail`, `pipeline`); RFC4180-ish CSV (quoted newlines). Owner MCP prefer honesty for heavy BI (not more core; no SQL/pandas/notebook). V-OFFICE-34…38. No wire bump. |
+| 2026-11-12f | **Normative + Ship (§9.5k / P2-P):** Markdown → PNG → pptx path. Builtins `render_diagram` (closed Mermaid subset → `output/diagrams/*.png`) and `render_table` (styled GFM → PNG). Caps + fail-closed; no Chromium for Office; no OOXML diagrams. V-OFFICE-30…33. No wire bump. |
+| 2026-11-12e | **Normative + Ship (§9.5k / P2-O):** PPT visual fidelity — quote/comparison parse correctness; 16:9 type/spacing floor; section/quote/comparison/chart chrome; built-in `default` \| `dark` presets. No new layout IDs; no OOXML master merge. V-OFFICE-26…29. No wire bump. |
+| 2026-11-12d | **Normative + Ship (§9.5k / P2-N):** Presentation polish — closed layouts `quote` \| `comparison`; speaker notes via `<!-- slide notes: … -->`; theme-derived pptxgenjs slide master (+ optional pack `master.pptx` presence note; no OOXML merge). V-OFFICE-22…25. Dogfood gate opened by Owner. No wire bump. |
+| 2026-11-12c | **Product (office dogfood):** Live-verify path `pnpm office:live-verify` + `docs/office-live-verify.md` (transform → chart → pptx embed). **P2-N** (pptx master / speaker notes / extra layouts) opens only if dogfood says decks still too thin. Heavy BI remains Owner MCP — not more core. No wire bump. |
+| 2026-11-12b | **Normative + Ship (§9.5k / P2-L→M):** Office presentation quality + thin compute on the Markdown pivot. PPT: closed slide `layout` directives, jail image embed, Owner template packs (`templateId` / theme JSON). Engine: layout/image decks prefer JS pptxgenjs. Builtins `table_transform` + `chart_table` (closed ops/chart types; caps). Prefer Owner Test-ok MCP for heavy BI. Lifts Owner template packs from Deferred. V-OFFICE-15…21. No wire bump. |
+| 2026-11-12 | **Ship (desktop supervise):** Process-alive is not enough — track turn-path liveness (`consecutiveInternalErrors` / `stale` / `suggestRestart` on `home.health` + HTTP `GET /health`). App-managed Tauri watchdog restarts when health is unreachable or turn-path is stale (idle, ≥3 consecutive *internal* turn errors, uptime ≥60s). Provider/API failures (401/429/bad key/model) do **not** count toward restart. Cooldown / rate limit; OS-service-managed daemons are not auto-killed. No wire bump (additive health fields). |
 | 2026-11-11h | **Normative (Q6 / §15.1):** Product license **MIT** (repo root `LICENSE`); was Apache-2.0. Dependencies still keep their own licenses; third-party skills still need separate review. No wire bump. |
 | 2026-11-11g | **Fix (§7 workflows catalogue UI + wire):** Appendix / `@envoyhome/protocol` `home.listWorkflowTools` `source` enum includes **`mcp`**. Settings tool browse groups + summary count MCP; `export_document` format choices stay tied to `EXPORT_FORMATS`; `browser`/`schedule`/`message` expose fuller `argChoices`. Web-clip howto layout is sequential (save → promote). Mobile insert uses canonical `name:`. No wire bump. |
 | 2026-11-11f | **Ship (§7 workflows + new tools):** `home.listWorkflowTools` includes Test-ok Owner **MCP** tools (`source: "mcp"`, `mcp__…`); put/validate/draft/schedules use the same set. `export_document` / `browser` expose `argChoices`. AI draft prompt teaches web_extract / web_research / promote pipelines. Settings howto adds **Web clip** sample (`web_extract` → summarize → `write_file` → `promote_knowledge`). Runtime already dispatched MCP via the harness path. No wire bump. |
@@ -513,7 +525,7 @@ Three transports carry `home.*`: the local/LAN WebSocket host (reuse-host), the 
 | **Profile / memory** | `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.recall`, `home.forget`, `home.listMemory`, `home.setMemorySettings`, `home.compactMemory`, `home.searchKnowledge`, `home.reindexKnowledge`, `home.promoteKnowledgeFile`, `home.getKnowledgeStatus`, `home.searchKnowYou`, `home.updateKnowYou`, `home.getKnowledgePolicy`, `home.setKnowledgePolicy` | Account-scoped |
 | **Home embed** | `home.getEmbedEngineStatus`, `home.enableEmbedEngine`, `home.disableEmbedEngine`, `home.downloadEmbedModel`, `home.cancelEmbedModelDownload`, `home.resumeEmbedModelDownload` | Owner-scope (:18793; Knowledge-RAG) |
 | **Learning** | `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn` | Gated skill/memory patches (§9.3) |
-| **Artifacts** | `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getDocumentExportStatus`, `home.installLibreOffice`, `home.cancelLibreOfficeInstall`, `home.setLibreOfficeInstallPreference`, `home.getMediaGenerateConfig`, `home.setMediaGenerateConfig` | Mesh-first bytes + folder browse + optional signed HTTP (§9.5 / §4.1b); LibreOffice export status + managed install (§9.5b); image_generate Owner config (§19.12 D2) |
+| **Artifacts** | `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getDocumentExportStatus`, `home.installLibreOffice`, `home.cancelLibreOfficeInstall`, `home.setLibreOfficeInstallPreference`, `home.getLocalSqlStatus`, `home.installLocalSql`, `home.cancelLocalSqlInstall`, `home.getMediaGenerateConfig`, `home.setMediaGenerateConfig` | Mesh-first bytes + folder browse + optional signed HTTP (§9.5 / §4.1b); LibreOffice (§9.5b); local SQL / DuckDB (§9.5k / P2-S); image_generate Owner config (§19.12 D2) |
 | **Doctor** | `home.doctor`, `home.doctorFix` | Config migrations |
 
 ### 3.5 Events (Normative initial set)
@@ -827,7 +839,7 @@ Verification: V-SEC-13, V-SEC-14, V-SEC-20; Settings on `account.detail` (§10.1
 | Scope | Methods | Rule |
 |-------|---------|------|
 | **loopback-owner** | `home.getDaemonLog`, `home.shutdown`, `home.getServiceStatus`, `home.installService`, `home.uninstallService`, `home.restartService` | Only from the home machine Settings window — never over mesh, never from a paired device. Host OS / process lifecycle. |
-| **owner-scope** | `home.mintPairing`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts`, `home.listPairedDevices`, `home.sendTestPush`, `home.transferHouseholdOwner`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig`, `home.getDocumentExportStatus`, `home.installLibreOffice`, `home.cancelLibreOfficeInstall`, `home.setLibreOfficeInstallPreference`, `home.listMcpServers`, `home.upsertMcpServer`, `home.removeMcpServer`, `home.setMcpServerEnabled`, `home.testMcpServer`, `home.listMcpTools`, `home.setBinding`, `home.removeBinding`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations`, `home.createAccount`, `home.deleteAccount`, `home.enableChannel`, `home.disableChannel`, `home.setChannelConfig`, `home.stopDemoHa`, `home.stopDemoMqtt`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.getEmbedEngineStatus`, `home.enableEmbedEngine`, `home.disableEmbedEngine`, `home.downloadEmbedModel`, `home.cancelEmbedModelDownload`, `home.resumeEmbedModelDownload`, `home.searchClawHubSkills`, `home.installSkill`, `home.verifySkill`, `home.removeSkill`, `home.setHarness`, `home.doctorFix`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate`, `home.getPrivacyMode`, `home.setPrivacyMode` | **`isHouseholdOwner(caller)`** (§4.1.1): loopback **or** device with `accountIds = [ownerAccountId]`. Mobile OK. `setWorkspace` filesystem root only for Owner seat (R3). |
+| **owner-scope** | `home.mintPairing`, `home.revokePairedDevice`, `home.forgetPairedDevice`, `home.setDeviceAccounts`, `home.listPairedDevices`, `home.sendTestPush`, `home.transferHouseholdOwner`, `home.setWorkspace`, `home.upsertWorkspaceMount`, `home.removeWorkspaceMount`, `home.clearWorkspace`, `home.getHomeFsInfo`, `home.listHomeFsEntries`, `home.getWebSearchConfig`, `home.setWebSearchConfig`, `home.getBrowserControlConfig`, `home.setBrowserControlConfig`, `home.getDocumentExportStatus`, `home.installLibreOffice`, `home.cancelLibreOfficeInstall`, `home.setLibreOfficeInstallPreference`, `home.getLocalSqlStatus`, `home.installLocalSql`, `home.cancelLocalSqlInstall`, `home.listMcpServers`, `home.upsertMcpServer`, `home.removeMcpServer`, `home.setMcpServerEnabled`, `home.testMcpServer`, `home.listMcpTools`, `home.setBinding`, `home.removeBinding`, `home.setSourceBinding`, `home.removeSourceBinding`, `home.listActuations`, `home.createAccount`, `home.deleteAccount`, `home.enableChannel`, `home.disableChannel`, `home.setChannelConfig`, `home.stopDemoHa`, `home.stopDemoMqtt`, `home.setProvider`, `home.removeProvider`, `home.setProviderSecret`, `home.testProvider`, `home.getLocalEngineStatus`, `home.downloadLocalModel`, `home.searchHuggingFaceModels`, `home.listHuggingFaceGgufFiles`, `home.downloadLocalModelUrl`, `home.cancelLocalModelDownload`, `home.resumeLocalModelDownload`, `home.enableLocalEngine`, `home.enableOllama`, `home.disableLocalEngine`, `home.getEmbedEngineStatus`, `home.enableEmbedEngine`, `home.disableEmbedEngine`, `home.downloadEmbedModel`, `home.cancelEmbedModelDownload`, `home.resumeEmbedModelDownload`, `home.searchClawHubSkills`, `home.installSkill`, `home.verifySkill`, `home.removeSkill`, `home.setHarness`, `home.doctorFix`, `home.reloadWorkflows`, `home.putWorkflow`, `home.removeWorkflow`, `home.setWorkflowEnabled`, `home.validateWorkflow`, `home.draftWorkflow`, `home.draftWorkflowPrompt`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate`, `home.getPrivacyMode`, `home.setPrivacyMode` | **`isHouseholdOwner(caller)`** (§4.1.1): loopback **or** device with `accountIds = [ownerAccountId]`. Mobile OK. `setWorkspace` filesystem root only for Owner seat (R3). |
 | **account-scoped** | bootstrap/negotiation: `home.hello`, `home.health`, `home.subscribe`, `home.meshStatus`, `home.registerPushToken`, `home.unregisterPushToken`. Reads of shared catalogs: `home.listAccounts`, `home.listChannels`, `home.getChannelStatus`, `home.listHarnesses`, `home.listProviders`, `home.listWorkflows`, `home.getWorkflow`, `home.listSkills`, `home.doctor`, `home.listWorkflowStepTemplates`, `home.getDemoHaStatus`, `home.getDemoMqttStatus`, `home.listSources` (household object registry — Design `2026-10-16l`), `home.getHouseholdOwner`. Seat-or-Owner (§4.1.1 `mayActForSeat`): `home.listGrants`, `home.revokeGrant`, `home.listBindings`, `home.updateAccount` (field rules: `toolPolicy` still Owner-only), `home.getWorkspace`. Own-account data: `home.getUsage`, `home.setModelMode`, `home.setDefaultProvider`, `home.setPlacementFilter`, `home.setAutoModelSwitch`, `home.listArtifacts`, `home.listSandboxEntries`, `home.getArtifactContent`, `home.getArtifactUrl`, `home.getMediaGenerateConfig`, `home.setMediaGenerateConfig`, `home.getProfile`, `home.updateProfile`, `home.getIdentity`, `home.setIdentity`, `home.listMemory`, `home.setMemorySettings`, `home.recall`, `home.forget`, `home.compactMemory`, `home.searchKnowledge`, `home.reindexKnowledge`, `home.promoteKnowledgeFile`, `home.getKnowledgeStatus`, `home.searchKnowYou`, `home.updateKnowYou`, `home.getKnowledgePolicy`, `home.setKnowledgePolicy`, `home.listPendingLearns`, `home.acceptLearn`, `home.rejectLearn`, `home.openSession`, `home.uploadChatMedia`, `home.sendMessage`, `home.cancelTurn`, `home.getTranscript`, `home.clearTranscript`, `home.deleteTranscriptMessages`, `home.archiveSession`, `home.unarchiveSession`, `home.removeSession`, `home.renameSession`, `home.listChoices`, `home.answerChoice`, `home.listSessions`, `home.listApprovals`, `home.answerApproval`, `home.listSchedules`, `home.proposeSchedule`, `home.confirmSchedule`, `home.cancelScheduleProposal`, `home.putSchedule`, `home.updateSchedule`, `home.removeSchedule`, `home.runSchedule`, `home.listScheduleReceipts`, `home.getHeartbeatConfig`, `home.setHeartbeatConfig`, `home.listStandingOrders`, `home.putStandingOrder`, `home.removeStandingOrder`, `home.setStandingOrderEnabled`, `home.runWorkflow`, `home.listWorkflowTools`, `home.startDemoHa`, `home.startDemoMqtt` | Default: device bound to that account (§4.1). **Seat-or-Owner** as §4.1.1. Zero-binding devices may still call bootstrap methods including push register/unregister. A method that appears in **none** of the three rows is a spec bug — `scripts/docs-lint.mjs` fails the build if a catalogued method is missing here. |
 
 A method's scope is **transport-independent** (§3.3.1), except loopback-owner methods which are refused on both remote transports. Owner-scope over mesh requires an **exclusive** Owner-bound device.
@@ -1743,7 +1755,7 @@ Rules:
 - `llm_fill` / `llm_summarize` are narrow calls — not open tool loops — and go through the daemon's `provider_handle`, so they obey the account's provider mode and mix rules (§8). Node kinds stay the closed set: `llm_fill` \| `tool` \| `llm_summarize` (`kind` is accepted as an alias for `type`; `tool:` is accepted as an alias for tool `name`).
 - **Prompt / args templates (Normative):** `llm_*` `prompt` strings may interpolate `{{step.<nodeId>}}`, `{{step.<nodeId>.<field>}}`, or `{{<outKey>}}` from prior node outputs. Tool `args_from` uses the same `step.*` refs. When a tool returns JSON, top-level string/number/boolean fields are also recorded as `nodeId.field` (e.g. `extract_document` → `{{step.extract.text}}` / `args_from: { markdown: step.summarize }`). This is how Office/PDF → Markdown → summarize → export chains work in workflows (§9.5b / §9.5c).
 - **Reusable LLM step templates (Normative):** users may save prompt-centric templates (id, label, `nodeType` ∈ {`llm_fill`,`llm_summarize`}, prompt, optional `out`) under global `workflows/step-templates.json` or account `accounts/<id>/workflow-step-templates.json` (account overlays same `id`). Templates do **not** add runtime node kinds — applying one inserts a normal `llm_*` node (optional UI `label`). Labels are purpose names (e.g. “Extract JSON”), not new kinds; **Custom step…** / **Save as step** write the **global** library by default so **Your steps** can reuse them in any workflow later; asks for name + prompt (defaults `nodeType` to `llm_fill`; change in inspector if needed). **Custom step…** also offers **Refine with AI** on the prompt via `home.draftWorkflowPrompt` (goal = step name when set). Skills still extend **tools** only. RPCs: `home.listWorkflowStepTemplates`, `home.putWorkflowStepTemplate`, `home.removeWorkflowStepTemplate`. Settings **Add step ▾** lists built-in Fill/Summarize blanks, **Custom step…**, and saved templates; inspector also offers **Refine with AI** and **Save as step**.
-- A `tool` node is a real tool call: `name` MUST appear in `home.listWorkflowTools` (builtins, verified `skill:<id>`, HA/MQTT decls, or Test-ok Owner **MCP** `mcp__…` — §9.5h). Unknown names are refused at put (`workflow.unknown_tool`). Runtime still goes through the account sandbox and §4.3/§4.4 — **a workflow is not an approval bypass.** Unavailable integrations fail closed (`envoyhome.tool_unavailable`). Verification: V-DAG-3. Builtin document tools `extract_document` / `export_document` / `promote_knowledge` (§9.5b/c/j), list/search `list_dir` / `search_files` (§9.5e), `web_search` / `web_extract` / `web_research` (§9.5f–§9.5f.3), and `browser` (§9.5g) are in that catalogue.
+- A `tool` node is a real tool call: `name` MUST appear in `home.listWorkflowTools` (builtins, verified `skill:<id>`, HA/MQTT decls, or Test-ok Owner **MCP** `mcp__…` — §9.5h). Unknown names are refused at put (`workflow.unknown_tool`). Runtime still goes through the account sandbox and §4.3/§4.4 — **a workflow is not an approval bypass.** Unavailable integrations fail closed (`envoyhome.tool_unavailable`). Verification: V-DAG-3. Builtin document tools `extract_document` / `export_document` / `promote_knowledge` (§9.5b/c/j), thin compute `table_transform` / `chart_table` / `render_diagram` / `render_table` (§9.5k), list/search `list_dir` / `search_files` (§9.5e), `web_search` / `web_extract` / `web_research` (§9.5f–§9.5f.3), and `browser` (§9.5g) are in that catalogue.
 - Authoring: Settings dual-mode (**Diagram** DAG canvas \| **YAML**; YAML is Normative on disk) / `home.putWorkflow` / `home.validateWorkflow` / `home.setWorkflowEnabled` / `home.removeWorkflow` / `home.listWorkflowTools`; attended drafts via `home.draftWorkflow` (NL → YAML, never writes; optional `currentYaml` to revise) and `home.draftWorkflowPrompt` (refine LLM node prompt) from **New** / Edit; step templates via `home.listWorkflowStepTemplates` / `home.putWorkflowStepTemplate` / `home.removeWorkflowStepTemplate`; reload via `home.reloadWorkflows`; attended test via `home.runWorkflow`. Optional node `x`/`y` are UI layout hints ignored by the executor.
 
 ### 7.3 Verification
@@ -2130,7 +2142,7 @@ Office / spreadsheet / presentation / PDF / EPUB attachments are **not** friendl
 | **Managed install (P2-K8)** | If no usable `soffice` at boot and auto is enabled (`ENVOYHOME_LIBREOFFICE_AUTO` not `0`, Owner not declined), start **one** background download+install into `stateDir/libreoffice/` (non-blocking; sync-locked). Catalog start URL is TDF https; MirrorBrain https redirects allowed; archive **sha256** + size cap verified before extract; managed `soffice` path is `safeJoin`-jailed. Persist `install.json` so silent does **not** retry every restart after failure. Owner **Setup** + **System → Files** (desktop + mobile) one-click Install / Not now / Cancel. Why-copy: print-ready exports stay local; without LO, simpler layout still works. |
 | **Guidance** | `home.getDocumentExportStatus` returns `libreOfficeRuntime` ∈ `ready`\|`missing`\|`downloading`\|`failed` + hint + progress + whyText. When export uses JS because LO is missing/downloading/failed, include `quality: "structure"` plus `installHint` / `qualityNote`. Doctor: downloading=info; failed=warn. |
 
-**Fidelity:** With LibreOffice present + `auto`/`libreoffice`, exports SHOULD use LO for print-oriented quality and return `quality: "print"`. With JS-only (or `engine: "js"`, or LO missing/downloading/fail), fidelity remains **content/structure** (`quality: "structure"` — honest fallback — never fail solely because LO is absent, except when `engine: "libreoffice"` was forced). `md` is always JS. Deferred: legacy binary `.doc`/`.xls` **generate**; cloud OCR; Owner template packs. Do **not** overwrite the original upload in place. See **§9.5j**.
+**Fidelity:** With LibreOffice present + `auto`/`libreoffice`, exports SHOULD use LO for print-oriented quality and return `quality: "print"`. With JS-only (or `engine: "js"`, or LO missing/downloading/fail), fidelity remains **content/structure** (`quality: "structure"` — honest fallback — never fail solely because LO is absent, except when `engine: "libreoffice"` was forced). `md` is always JS. **pptx with layout directives or jail images** MUST prefer the JS writer under `auto` (LO HTML→pptx flattens slide structure — §9.5k). Deferred: legacy binary `.doc`/`.xls` **generate**; cloud OCR. Owner template packs are Normative under **§9.5k** (lifted). Do **not** overwrite the original upload in place. See **§9.5j** / **§9.5k**.
 
 ### 9.5c Document extract tool (Normative)
 
@@ -2147,7 +2159,7 @@ Office / spreadsheet / presentation / PDF / EPUB attachments are **not** friendl
 
 Targeted slice (Normative): when `sheetName` / `slideIndex` / page range is set, the daemon slices the GFM by heading / page markers after extract (best-effort; if markers are absent, return full GFM with a note — never invent content).
 
-Chat-upload sidecars under `uploads/*.extract.md` stay as specified in §9.5a. Pair with §9.5b: extract → edit in Markdown → export. Fence-safe on every chat turn (with `read_file` / `write_file` / `list_dir` / `search_files` / `export_document` / `promote_knowledge`).
+Chat-upload sidecars under `uploads/*.extract.md` stay as specified in §9.5a. Pair with §9.5b: extract → edit in Markdown → export. Fence-safe on every chat turn (with `read_file` / `write_file` / `list_dir` / `search_files` / `export_document` / `extract_document` / `promote_knowledge` / `table_transform` / `chart_table` / `render_diagram` / `render_table`).
 
 **Workflows:** document tools appear in `home.listWorkflowTools`. Typical chain — `extract_document` → `llm_summarize` with `{{step.extract.text}}` → optional `export_document` via `args_from: { markdown: step.summarize }` (§7 prompt templates). Result JSON includes capped `text` for the LLM step; full GFM remains at `uri`.
 
@@ -2173,6 +2185,73 @@ upload / sandbox Office  →  extract (§9.5a/c)  →  GFM on disk
 **Invariants:** pure-JS writers always available; optional/managed local LibreOffice (never required to boot or export, never cloud); no Pandoc; no cloud OCR in core; originals kept; no silent overwrite of uploads; opaque binary `.dat` is **not** an Office format (structured siblings = `md`/`json`/`csv`/`html`/`rtf`).
 
 Verification: **V-OFFICE-1** … **V-OFFICE-14**.
+
+### 9.5k Office presentation + thin compute (Normative — `2026-11-12b` / P2-L→M)
+
+Extends §9.5j. Markdown remains the **only** interop pivot — no second Office object model, no Pandoc, no cloud convert, no notebook runtime in core.
+
+#### Presentation (P2-L)
+
+| Field | Normative |
+|-------|-----------|
+| **Slide starts** | H1/H2 still start slides |
+| **Layout directive** | Optional HTML comment immediately after the slide heading: `<!-- slide layout=<id> -->`. Closed enum: `title_bullets` \| `section` \| `two_column` \| `title_only` \| `table` \| `quote` \| `comparison`. Unknown → soft-fail to `title_bullets` + note in tool result (never invent layouts) |
+| **`quote`** | Large centered body from the first paragraph (else first bullet). Optional attribution = second paragraph, or a trailing bullet/para starting with `—` / `–` / `- `; also split inline `… — Name` so attribution is never mashed into the quote |
+| **`comparison`** | Two card columns + accent divider; bullets split mid. Headers from first two short paragraphs, or one para `A \| B` / `A vs B` / two short tokens (so adjacent one-liners without a blank line still work) |
+| **Speaker notes** | Optional `<!-- slide notes: … -->` in the same slide scope (with/after the heading). Cap ≤**2000** chars/slide. Written via pptxgenjs `addNotes`. Never Learn notes into standing memory |
+| **Jail images** | GFM `![alt](relPath)` resolved via `safeJoin` under account sandbox + effective workspace only. Embed into pptx. Caps: ≤**8** images/deck; ≤**2 MiB**/image; total export ≤**8 MiB**. Refuse path escape / non-image. Never Learn image bytes |
+| **Owner template packs** | Under `accounts/<accountId>/files/templates/office/<templateId>/` (and optional household `templates/office/` via `homePaths`). Pack = `theme.json` (+ optional blank `master.pptx`). `export_document` additive `templateId?` / `theme?`. Missing pack → default JS theme + honest note. **Never** download templates from the network in core |
+| **Slide master** | JS exporter **MUST** apply a theme-derived pptxgenjs `defineSlideMaster` (background; optional `theme.footer` bar; slide numbers unless `theme.slideNumber === false`). If pack contains `master.pptx` (≤**2 MiB**), surface `masterNote` — chrome still comes from `theme.json`; do **not** OOXML-merge the blank file (no round-trip). Deferred: true binary master merge |
+| **Visual fidelity (P2-O)** | JS decks use **16:9**; safe margins ~**0.5"**; content clears footer band. Type floor: titles **32–40**pt, body ≥**18**pt, quote ≥**28**pt italic. No thin accent-underline under every title — use whitespace, left accent rail, or section full-bleed panel. `section` = accent/dark panel + centered title/subtitle; `title_only`+image = image-dominant; `comparison` = card panels. Built-in presets `default` \| `dark` (via `theme.id` / pack). Still no new layout IDs; no OOXML merge; no Pandoc |
+| **Engine (pptx)** | When any layout directive, speaker-notes directive, or jail image is present, `engine: "auto"` **MUST** use JS (`pptxgenjs`) for structure fidelity. LO remains for typography-only decks without directives/images/notes. Forced `libreoffice` still attempts LO (may flatten) |
+| **Skill / howto** | Sample `office-documents` skill + Settings document howto include a “deck from outline” recipe (layouts + notes + template/master + visual fidelity) |
+
+#### Thin compute (P2-M / P2-R)
+
+| Tool | Role | Risk |
+|------|------|------|
+| **`table_transform`** | Input: sandbox `sourcePath` (`.csv` RFC4180-ish incl. quoted newlines / `.xlsx` first or `sheetName`) **or** inline GFM `markdown` table. **Closed ops** (no arbitrary code): `summarize` \| `normalize` \| `filter` \| `sort` \| `aggregate` \| `select_columns` \| `dedupe` \| `rename_columns` \| `top_n` \| `head` \| `tail` \| `pipeline`. `normalize`: trim; strip currency/thousands; `%` → fraction; blank/`n/a`/`-` → empty. `filter`: `equals`/`not_equals`/`contains`/`gt`/`gte`/`lt`/`lte`/`in`/`is_empty`. `pipeline`: ordered `steps[]` of the other closed ops (≤**16** steps; no nested `pipeline`). Output under `output/tables/*.csv` + capped GFM preview | `write`, `grantable: true` |
+| **`chart_table`** | Same table sources. Chart types closed: `bar` \| `line` \| `pie`. Output `output/charts/*.png` (+ optional stats JSON). Agent MAY then `export_document` pptx embedding that PNG via jail image path | `write`, `grantable: true` |
+| **`render_diagram`** | Input: Mermaid source (`mermaid` string) **or** jail `sourcePath` ending `.mmd`/`.md`. Closed kinds: `flowchart`/`graph`, `sequenceDiagram`, `pie`, `mindmap`. Output `output/diagrams/*.png`. Local SVG→PNG (no Chromium, no cloud). Refuse `click` / `%%{init` / script / javascript: | `write`, `grantable: true` |
+| **`render_table`** | Same table sources as `table_transform`. Styled presentation table → `output/diagrams/*.png` (or `output/tables/*.png`). Prefer editable pptx `addTable` for small plain tables; use this when the deck needs a **looks** table | `write`, `grantable: true` |
+
+**Caps:** ≤**10 000** rows; ≤**64** columns; diagram source ≤**8 KiB**; PNG ≤**2 MiB**; timeout ≤**30 s**; pure-JS / local WASM-or-native SVG raster in-daemon (no Python/R; Office path MUST NOT require Chromium). Fence-safe with document tools. In `home.listWorkflowTools`.
+
+**Prep recipe (skill/howto):** dirty extract → `table_transform` (`normalize` then `filter`/`aggregate` or one `pipeline`) → `chart_table` / `render_table` → `export_document` pptx.
+
+**Still not in always-on core:** pivots-as-product, Excel formula engine, pandas/Polars/notebook runtime, cloud ETL, general `exec` as the Office path, native OOXML SmartArt / complex merged tables, arbitrary PlantUML / ASCII art, closed multi-table `join` in `table_transform` (**C3 Deferred**).
+
+#### Heavy compute paths — Owner Accept `2026-11-12h` (C1 + C2)
+
+Two complementary paths for work beyond thin closed ops. Core prep tools stay zero-config.
+
+| Path | Role | Status |
+|------|------|--------|
+| **C1 — Owner MCP** | Remote / SaaS / sheets / any Test-ok BI server via §9.5h `mcp__…` | **Normative (shipped honesty)** |
+| **C2 — Local SQL runtime** | Optional pinned DuckDB-class engine on the home computer for offline joins / SQL | **Normative — shipped P2-S0…S4** (`2026-11-12l`) |
+| **C3 — Core `join` op** | Two-table closed join inside `table_transform` | **Deferred** (not chosen) |
+
+##### C1 — Owner MCP prefer (Normative)
+
+If the Owner has Test-ok MCP tools for sheets/BI (§9.5h), the agent **MUST prefer** `mcp__…` when the ask needs remote workbooks, SaaS BI, or a server the Owner already wired — and **SHOULD** say so honestly when core ops (and, once shipped, local SQL) are insufficient. Do **not** auto-install MCP; do **not** invent server ids; do **not** inject sandbox credentials into MCP env. Docs: [`docs/office-bi-paths.md`](../docs/office-bi-paths.md).
+
+##### C2 — Optional local SQL runtime (Normative / P2-S)
+
+Owner-opt-in **daemon module** (same family as managed LibreOffice — **not** a channel plugin, **not** always loaded):
+
+| Field | Normative |
+|-------|-----------|
+| **Engine** | Pinned **DuckDB CLI** `2.0.0` under `stateDir/localsql/` (`homePaths.localSql*`). Override: `ENVOYHOME_DUCKDB` / `ENVOYHOME_LOCALSQL` absolute path |
+| **Enable / install** | Owner-scope RPCs `home.getLocalSqlStatus` / `home.installLocalSql` / `home.cancelLocalSqlInstall`. Default **missing**. **MUST NOT** silent first-boot (unlike LO/Obscura). `autoInstallEnabled` always `false` |
+| **Download** | https GitHub `duckdb/duckdb` releases only (+ `*.githubusercontent.com`); sha256 verify; size cap |
+| **Tools (P2-S2)** | When runtime ready: `sql_load` + `sql_query` (`write`, grantable). Until then tools **absent** from catalogue |
+| **Jail** | All file paths through `safeJoin` / account sandbox (+ R3 workspace) |
+| **Statement class (P2-S0 freeze)** | Allow lead: `WITH` \| `SELECT` \| `CREATE [TEMP\|TEMPORARY] TABLE` \| `DESCRIBE` \| `SHOW` \| `SUMMARIZE` \| `EXPLAIN`. Refuse: `ATTACH`/`DETACH`, `INSTALL`/`LOAD` extensions, `COPY`/`EXPORT`/`IMPORT`, `PRAGMA`, `CALL`, `CHECKPOINT`/`VACUUM`, `http(s)`/`ftp`/`file`/`s3`/`gcs` URLs, `read_*`/`write_*`/`glob(`/`parquet_scan`/`csv_scan`, multi-statement `;`. One trailing `;` MAY be stripped. Caps: SQL ≤**16 KiB**; result ≤**10 000** rows; timeout ≤**30 s**; ≤**8** load files; concurrency **1** |
+| **Privacy Mode** | Local binary OK; MUST NOT call cloud. Remote MCP still blocked per V-P2-PRIV-1 |
+| **Agent prefer order** | (1) thin `table_transform` → (2) local SQL when ready → (3) Owner `mcp__…`. Never invent either |
+| **UI** | Settings → System → Files shows DuckDB status + Install (Owner) |
+
+Verification: **V-OFFICE-15** … **V-OFFICE-39** (S1); **V-OFFICE-40**…**43** (S2–S4).
 
 ### 9.5e Sandbox list / search tools (Normative)
 
@@ -2675,6 +2754,35 @@ Canonical memory IDs live in [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Des
 | V-OFFICE-12 | §9.5b/P2-K8: first boot with no LO starts managed download when auto enabled; daemon healthy; export still JS during download |
 | V-OFFICE-13 | §9.5b/P2-K8: failed install persists (no silent retry storm); Install retries; decline / `ENVOYHOME_LIBREOFFICE_AUTO=0` stops auto |
 | V-OFFICE-14 | §9.5b/P2-K8: managed runtime ready → `export_document` `engine: "libreoffice"` / `quality: "print"` |
+| V-OFFICE-15 | §9.5k: pptx layout directives (`title_bullets`/`section`/`two_column`/`title_only`/`table`); unknown → soft default + note |
+| V-OFFICE-16 | §9.5k: jail image embed in pptx; path escape / non-image refuse; image caps |
+| V-OFFICE-17 | §9.5k: Owner `templateId` / theme JSON under templates/office; missing → default + note |
+| V-OFFICE-18 | §9.5k: skill/howto document deck-from-outline; auto prefers JS when layouts/images present |
+| V-OFFICE-19 | §9.5k: `table_transform` closed ops; csv out under `output/tables/`; row/col caps |
+| V-OFFICE-20 | §9.5k: `chart_table` bar\|line\|pie → `output/charts/*.png` |
+| V-OFFICE-21 | §9.5k: both tools in workflow catalogue; MCP-prefer guidance in skill/howto |
+| V-OFFICE-22 | §9.5k/P2-N: `quote` \| `comparison` layouts; unknown still soft-defaults |
+| V-OFFICE-23 | §9.5k/P2-N: `<!-- slide notes: … -->` → pptx speaker notes; auto→JS |
+| V-OFFICE-24 | §9.5k/P2-N: theme-derived slide master; optional `master.pptx` → `masterNote` (no OOXML merge) |
+| V-OFFICE-25 | §9.5k/P2-N: skill/howto + live-verify cover notes / quote / comparison / master |
+| V-OFFICE-26 | §9.5k/P2-O: quote attribution not mashed into quote body |
+| V-OFFICE-27 | §9.5k/P2-O: comparison headers from adjacent one-liners / `A \| B` / `A vs B` |
+| V-OFFICE-28 | §9.5k/P2-O: 16:9 + body type ≥18pt; section/quote/comparison/chart chrome; default\|dark presets |
+| V-OFFICE-29 | §9.5k/P2-O: skill/howto + live-verify assert un-mashed quote/comparison |
+| V-OFFICE-30 | §9.5k/P2-P: `render_diagram` Mermaid subset → `output/diagrams/*.png`; refuse unsafe directives |
+| V-OFFICE-31 | §9.5k/P2-P: `render_table` styled GFM → PNG under diagrams/tables |
+| V-OFFICE-32 | §9.5k/P2-P: both tools fence + workflow catalogue; caps/timeout fail closed |
+| V-OFFICE-33 | §9.5k/P2-P: skill/howto + live-verify diagram→pptx embed |
+| V-OFFICE-34 | §9.5k/P2-R: `normalize` + richer `filter` (gt/in/is_empty/…) closed |
+| V-OFFICE-35 | §9.5k/P2-R: `dedupe` / `rename_columns` / `top_n` / `head` / `tail` |
+| V-OFFICE-36 | §9.5k/P2-R: `pipeline` steps (≤16; no nested pipeline); caps still hold |
+| V-OFFICE-37 | §9.5k/P2-R: CSV quoted newlines parse; xlsx `sheetName` unchanged |
+| V-OFFICE-38 | §9.5k/P2-R: skill/howto prep recipe + MCP-prefer honesty (no auto-install) |
+| V-OFFICE-39 | §9.5k/P2-S: Owner explicit local SQL install; no silent first-boot; status RPC |
+| V-OFFICE-40 | §9.5k/P2-S: sql_load only jail/workspace paths |
+| V-OFFICE-41 | §9.5k/P2-S: sql_query caps + statement/path refuse corpus |
+| V-OFFICE-42 | §9.5k/P2-S: SQL tools absent until ready; prefer order core→SQL→MCP |
+| V-OFFICE-43 | §9.5k/P2-S: skill/Settings/Doctor; Privacy Mode local SQL OK / remote MCP blocked |
 | V-MCP-1 | Owner upserts any MCP transport config; non-Owner denied (§9.5h) |
 | V-MCP-2 | `testMcpServer` lists tools via initialize+tools/list; does not invoke mutating `tools/call` |
 | V-MCP-3 | Remote MCP URL SSRF refused (link-local / metadata / non-http(s)) |

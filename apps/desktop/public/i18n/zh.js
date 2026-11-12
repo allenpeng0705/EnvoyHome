@@ -984,7 +984,7 @@ export default {
   "workflows.toolsTitle": "浏览工具目录",
   "workflows.toolsSummary": "内置 {builtin} · 技能 {skill} · 智能家居 {smarthome} · MCP {mcp}",
   "workflows.toolsHint":
-    "只列出可用工具：内置、已验证技能、已启用频道的 HA/MQTT，以及通过「测试成功 + 启用」的 Owner MCP。在连接里启用 Home Assistant / MQTT，或在连接 → MCP 添加服务器。定时在「计划」页触发 — 不是这里的工具名。",
+    "只列出可用工具：内置、已验证技能、已启用频道的 HA/MQTT，以及通过「测试成功 + 启用」的 Owner MCP。sql_load/sql_query 需在「系统 → 文件」安装 DuckDB。定时在「计划」页触发 — 不是这里的工具名。未就绪工具单独列出且不可插入。",
   "workflows.toolsFilter": "筛选工具",
   "workflows.toolsFilterPlaceholder": "按名称或摘要筛选…",
   "workflows.toolsEmpty": "没有匹配的工具。",
@@ -994,7 +994,10 @@ export default {
   "workflows.toolsSourceSmarthome": "智能家居",
   "workflows.toolsSourceMcp": "MCP",
   "workflows.toolsAvailable": "可用",
-  "workflows.toolsUnavailable": "关闭",
+  "workflows.toolsUnavailable": "未就绪",
+  "workflows.toolsUnavailableTitle": "尚未就绪",
+  "workflows.toolsUnavailableHint":
+    "这些工具在就绪前不会进入定时运行（例如到「系统 → 文件」安装 DuckDB，或启用对应连接）。未就绪时不可插入。",
   "workflows.toolsInsert": "插入",
   "workflows.toolsInsertBar": "插入工具步骤",
   "workflows.toolsPickPlaceholder": "输入或选择工具名…",
@@ -1232,6 +1235,51 @@ export default {
   "artifacts.loProgress": "{received} / {total}",
   "artifacts.loOpenNudge":
     "此导出为结构级排版。若要印刷级效果，请在家庭电脑的「系统 → 文件」安装 LibreOffice。",
+  "artifacts.sqlTitle": "离线 SQL（DuckDB）",
+  "artifacts.sqlReady": "DuckDB 已就绪",
+  "artifacts.sqlMissing": "未安装（可选）",
+  "artifacts.sqlDownloading": "正在下载 DuckDB…",
+  "artifacts.sqlFailed": "DuckDB 安装失败",
+  "artifacts.sqlCancelled": "已取消下载",
+  "artifacts.sqlReadyGeneric": "DuckDB",
+  "artifacts.sqlWhy":
+    "安装 DuckDB（约 20–40 MB）可在沙箱文件上做离线 SQL 关联。绝不自动安装——由你点安装。优先用核心表格工具 → 本地 SQL → Owner MCP（远程 BI）。隐私模式下本地 SQL 可用，远程 MCP 仍会拦截。",
+  "artifacts.sqlHint": "仅 Owner 手动安装——启动时绝不静默安装。",
+  "artifacts.sqlReadyNote": "已就绪 — {version}。智能体可使用 sql_load / sql_query。",
+  "artifacts.sqlMissingNote": "可选。没有时请用 table_transform，或用 Owner MCP 做远程 BI。",
+  "artifacts.sqlDownloadingNote": "正在本机下载 — 仅保存在此电脑。",
+  "artifacts.sqlFailedNote": "安装失败 — 可重试安装，或设置 ENVOYHOME_DUCKDB（见下方复制）。",
+  "artifacts.sqlCancelledNote": "已取消下载 — 需要时再点安装。",
+  "artifacts.sqlToolsReady":
+    "sql_load / sql_query 已进入智能体工具目录。整洁预处理请优先用 table_transform。",
+  "artifacts.sqlToolsAbsent":
+    "在 DuckDB 就绪前，sql_load / sql_query 不会出现在智能体工具目录中。",
+  "artifacts.sqlInstallNote": "也可通过 ENVOYHOME_DUCKDB 指向本机 DuckDB CLI（绝对路径）：",
+  "artifacts.sqlCopyHint": "复制环境变量示例",
+  "artifacts.sqlHintCopied": "已复制 ENVOYHOME_DUCKDB 示例",
+  "artifacts.sqlProgress": "{received} / {total}",
+  "artifacts.sqlRefresh": "刷新状态",
+  "artifacts.sqlInstall": "安装 DuckDB",
+  "artifacts.sqlCancel": "取消下载",
+  "artifacts.dataPreferTitle": "数据处理路径（按优先级）",
+  "artifacts.dataPreferStrip":
+    "1）核心表格工具始终可用（清洗 → 图表 → 幻灯片）· 2）DuckDB 做离线关联 / SQL · 3）Owner MCP 做云表格 / SaaS BI。",
+  "artifacts.dataPreferJoinNeed": "聊天里做离线关联时需要。",
+  "artifacts.dataBrowseTables": "浏览 output/tables",
+  "artifacts.dataBrowseCharts": "浏览 output/charts",
+  "artifacts.dataBrowseEmpty": "这里还没有文件——table_transform / sql_query / chart_table 完成后聊天会出现打开芯片。",
+  "artifacts.dataBrowseFailed": "无法列出该文件夹。",
+  "artifacts.dataResultsTitle": "最近的数据结果",
+  "chat.dataAssistHint": "已附加表格——选下一步（只预填输入框；写入仍需审批）：",
+  "chat.dataAssistClean": "清洗并出图",
+  "chat.dataAssistAsk": "问这张表",
+  "chat.dataAssistJoin": "关联 / SQL",
+  "chat.dataAssistInstallDuckdb": "安装 DuckDB…",
+  "chat.dataAssistCleanSeed":
+    "用 table_transform 清洗附件表格（按需 normalize / filter / pipeline），再 chart_table，并给我 CSV 与图表的打开芯片。",
+  "chat.dataAssistAskSeed": "附件表格里有什么？总结列、行数和几行样例。",
+  "chat.dataAssistJoinSeed":
+    "用 sql_load 加载附件表格，再用 sql_query 回答（若再附加表则做关联）。结果 CSV 请给出打开芯片。",
   "smarthome.title": "智能家居",
   "smarthome.objectsTitle": "设备",
   "smarthome.health": "集成健康",
@@ -1311,7 +1359,8 @@ export default {
   "advanced.hint": "本机连接、后台服务与持久授权。",
   "advanced.privacyHint": "隐私模式在「模型 → 路由」里按档案设置。",
   "privacyMode.title": "隐私模式",
-  "privacyMode.hint": "强制本地推理，并拦截云端工具（搜索、浏览器、远程 MCP、生图）。主人权限。",
+  "privacyMode.hint":
+    "强制本地推理，并拦截云端工具（搜索、浏览器、远程 MCP、生图）。本机 DuckDB / sql_load / sql_query 仍可用。主人权限。",
   "privacyMode.enabled": "启用隐私模式",
   "privacyMode.blockEgress": "同时拦截智能家居执行与事件源通知",
   "privacyMode.egressHint": "开启后拒绝 HA/MQTT 执行与事件源出站（V-P2-PRIV-2）。",
@@ -1326,6 +1375,11 @@ export default {
   "advanced.listenHint": "当前正在运行的守护进程监听信息。",
   "advanced.daemonOk": "正常",
   "advanced.daemonBad": "不可达或降级",
+  "advanced.turnLiveness": "回合路径",
+  "advanced.turnLivenessOk": "正常",
+  "advanced.turnLivenessStale": "异常 — 监督进程可能重启",
+  "advanced.turnLivenessValue":
+    "连续内部错误 {internal} / 总错误 {errors} · 近期成功 {ok} / 失败 {fail}",
   "advanced.wsPort": "WebSocket 端口",
   "advanced.httpPort": "HTTP 端口",
   "advanced.publicBaseUrl": "公网基础 URL",
@@ -1478,6 +1532,23 @@ export default {
     "你会看到：extract_document → llm_summarize（{{step.extract.text}}）→ export_document。请先放好 documents/report.docx（或改 sourcePath）。仅练习。",
   "workflows.howtoLoadedDocs":
     "已打开文档示例。保存前请重命名 id。确保存在 documents/report.docx（或改 sourcePath）。",
+  "workflows.howtoDeck": "数据幻灯片示例",
+  "workflows.howtoDeckWhat":
+    "作用：整理小销售表（normalize / filter / top_n 或 pipeline）、渲染柱状图 PNG（也可选 Mermaid/表格 PNG），再导出带版式与备注的 pptx。优先：核心 → 本地 SQL（DuckDB 就绪后）→ Owner MCP（远程/SaaS BI）。",
+  "workflows.howtoDeckHint":
+    "你会看到：table_transform（预处理 / pipeline）→ chart_table（固定 output/charts/demo-sales.png）→ export_document pptx。关联/SQL：在「系统 → 文件」安装 DuckDB 后用 sql_load / sql_query。远程表格用 Owner MCP。仅练习。",
+  "workflows.howtoLoadedDeck":
+    "已打开幻灯片/数据示例。保存前请重命名 id。图表路径固定为 output/charts/demo-sales.png 以便 pptx 嵌入。",
+  "workflows.howtoSql": "SQL 关联示例（DuckDB）",
+  "workflows.howtoSqlWhat":
+    "作用：用 sql_load 加载两份本地 CSV，用 sql_query 关联，再 chart_table 出图。需在「系统 → 文件」安装并就绪 DuckDB。",
+  "workflows.howtoSqlHint":
+    "你会看到：sql_load ×2 → sql_query → chart_table。请先放好 documents/sales.csv 与 documents/regions.csv（或改路径）。仅练习。",
+  "workflows.howtoLoadedSql":
+    "已打开 SQL 关联示例。保存前请重命名 id。需要 DuckDB 就绪，且沙箱中有两份源 CSV。",
+  "workflows.howtoSqlNeedDuckdb":
+    "DuckDB 尚未就绪——请先到「系统 → 文件」安装。就绪前 sql_load / sql_query 不会出现在工具目录中。",
+  "workflows.howtoSqlInstall": "去文件页安装 DuckDB",
   "workflows.howtoWeb": "Web clip sample",
   "workflows.howtoWebWhat":
     "What it does: When someone asks to “clip page” / “summarize url”, the agent fetches https://example.com/ to Markdown (web_extract), summarizes it, saves documents/web-clip.md, then promotes that file into knowledge/.",

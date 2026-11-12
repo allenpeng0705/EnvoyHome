@@ -459,3 +459,29 @@ export {
   OBSCURA_CATALOG,
   obscuraCatalogEntryForHost,
 } from "./obscura-catalog.js";
+export {
+  LocalSqlInstallService,
+  getLocalSqlInstallService,
+  resolveEnvLocalSqlBinary,
+  isLocalSqlRuntimeReady,
+  __setLocalSqlInstallHooksForTests,
+  __resetLocalSqlInstallForTests,
+  type LocalSqlInstallStatus,
+} from "./localsql-install.js";
+export {
+  LOCALSQL_WHY_TEXT,
+  LOCALSQL_CATALOG_VERSION,
+  LOCALSQL_CATALOG,
+  localSqlCatalogEntryForHost,
+} from "./localsql-catalog.js";
+export {
+  assertSafeLocalSql,
+  LOCALSQL_MAX_RESULT_ROWS,
+  LOCALSQL_TIMEOUT_MS,
+} from "./localsql-policy.js";
+export {
+  runSqlLoad,
+  runSqlQuery,
+  LOCALSQL_REGISTRY_REL,
+  __setLocalSqlExecForTests,
+} from "./localsql-run.js";

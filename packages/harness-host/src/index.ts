@@ -53,6 +53,7 @@ export {
   isHomeOfferQuestion,
   parseAssistantToolCalls,
   formatSandboxToolResultLines,
+  humanizeSandboxToolError,
   appendMissingSandboxHandoffLines,
   formatScheduleToolOutput,
   normalizeSandboxEchoPath,

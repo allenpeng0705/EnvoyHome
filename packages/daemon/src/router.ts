@@ -36,6 +36,7 @@ import {
   type HouseholdStore,
 } from "./household.js";
 import type { MeshStatus } from "./mesh-host.js";
+import { turnLiveness } from "./turn-liveness.js";
 import { collectDoctorIssues, applyDoctorFixes } from "./doctor/index.js";
 import {
   ObjectRegistryError,
@@ -470,14 +471,22 @@ export function createDispatcher(deps: RouterDeps) {
       }
       case "home.health": {
         const uptimeSec = Math.floor((Date.now() - deps.startedAt.getTime()) / 1000);
+        const activeTurns = deps.activeTurns();
+        const liveness = turnLiveness.snapshot(activeTurns, uptimeSec);
+        const managedBy =
+          process.env.ENVOYHOME_MANAGED_BY === "service" ? "service" : "app";
         return {
           ok: true,
           uptimeSec,
           connections: deps.connections(),
-          activeTurns: deps.activeTurns(),
+          activeTurns,
           wsPort: deps.config.wsPort,
           httpPort: deps.config.httpPort,
           publicBaseUrl: deps.config.publicBaseUrl,
+          liveness,
+          managedBy,
+          pid: process.pid,
+          instanceId: deps.config.instanceId,
         };
       }
       case "home.subscribe": {
@@ -1386,6 +1395,43 @@ export function createDispatcher(deps: RouterDeps) {
             "bad_params",
             "libreoffice install service unavailable",
           );
+        }
+        return await svc.cancelInstall();
+      }
+      case "home.getLocalSqlStatus": {
+        const { getLocalSqlInstallService } = await import("./localsql-install.js");
+        const svc = getLocalSqlInstallService();
+        if (!svc) {
+          return {
+            localSqlRuntime: "missing",
+            localSqlInstallHint: "Local SQL service not started",
+            whyText: "DuckDB optional runtime not wired on this daemon.",
+            installSource: "none",
+            catalogVersion: "",
+            autoInstallEnabled: false,
+          };
+        }
+        return svc.getStatus();
+      }
+      case "home.installLocalSql": {
+        const { getLocalSqlInstallService } = await import("./localsql-install.js");
+        const svc = getLocalSqlInstallService();
+        if (!svc) {
+          throw Object.assign(new Error("envoyhome.localsql_unavailable"), {
+            code: -32000,
+            data: { messageKey: "envoyhome.localsql_unavailable" },
+          });
+        }
+        return await svc.startInstall();
+      }
+      case "home.cancelLocalSqlInstall": {
+        const { getLocalSqlInstallService } = await import("./localsql-install.js");
+        const svc = getLocalSqlInstallService();
+        if (!svc) {
+          throw Object.assign(new Error("envoyhome.localsql_unavailable"), {
+            code: -32000,
+            data: { messageKey: "envoyhome.localsql_unavailable" },
+          });
         }
         return await svc.cancelInstall();
       }

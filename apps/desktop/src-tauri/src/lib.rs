@@ -1,9 +1,11 @@
 use std::fs;
+use std::io::Read;
+use std::net::TcpStream;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::Manager;
 
 #[cfg(target_os = "macos")]
@@ -11,6 +13,129 @@ mod dmg_cleanup;
 
 struct DaemonState {
   child: Mutex<Option<Child>>,
+  /// Cooldown / rate-limit for logical (turn-stale) restarts.
+  restart_gate: Mutex<RestartGate>,
+}
+
+struct RestartGate {
+  last_restart: Option<Instant>,
+  recent: Vec<Instant>,
+}
+
+impl RestartGate {
+  fn new() -> Self {
+    Self {
+      last_restart: None,
+      recent: Vec::new(),
+    }
+  }
+
+  /// Allow at most 5 logical restarts / 15 min, and ≥60s between them.
+  fn allow_logical_restart(&mut self) -> bool {
+    let now = Instant::now();
+    self.recent.retain(|t| now.duration_since(*t) < Duration::from_secs(15 * 60));
+    if self.recent.len() >= 5 {
+      return false;
+    }
+    if let Some(last) = self.last_restart {
+      if now.duration_since(last) < Duration::from_secs(60) {
+        return false;
+      }
+    }
+    true
+  }
+
+  fn note_restart(&mut self) {
+    let now = Instant::now();
+    self.last_restart = Some(now);
+    self.recent.push(now);
+  }
+}
+
+#[derive(Debug)]
+enum HealthProbe {
+  Unreachable,
+  Ok {
+    active_turns: u64,
+    suggest_restart: bool,
+    managed_by_app: bool,
+  },
+}
+
+fn health_http_port() -> u16 {
+  std::env::var("ENVOYHOME_WS_PORT")
+    .ok()
+    .and_then(|s| s.parse::<u16>().ok())
+    .unwrap_or(4780)
+    .saturating_add(1)
+}
+
+/// Loopback HTTP GET /health — process-alive is not enough; body carries turn liveness.
+fn probe_daemon_health(http_port: u16) -> HealthProbe {
+  let Ok(addr) = format!("127.0.0.1:{http_port}").parse::<std::net::SocketAddr>() else {
+    return HealthProbe::Unreachable;
+  };
+  let Ok(mut stream) = TcpStream::connect_timeout(&addr, Duration::from_secs(2)) else {
+    return HealthProbe::Unreachable;
+  };
+  let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+  let _ = stream.set_write_timeout(Some(Duration::from_secs(2)));
+  let req = format!(
+    "GET /health HTTP/1.1\r\nHost: 127.0.0.1:{http_port}\r\nConnection: close\r\n\r\n"
+  );
+  if std::io::Write::write_all(&mut stream, req.as_bytes()).is_err() {
+    return HealthProbe::Unreachable;
+  }
+  let mut buf = Vec::new();
+  let _ = stream.read_to_end(&mut buf);
+  let text = String::from_utf8_lossy(&buf);
+  let Some(body) = text.split("\r\n\r\n").nth(1) else {
+    return HealthProbe::Unreachable;
+  };
+  let Ok(v) = serde_json::from_str::<serde_json::Value>(body.trim()) else {
+    // Old daemon: `{ok:true}` only — treat as reachable, not logically stale.
+    if body.contains("\"ok\"") {
+      return HealthProbe::Ok {
+        active_turns: 0,
+        suggest_restart: false,
+        managed_by_app: true,
+      };
+    }
+    return HealthProbe::Unreachable;
+  };
+  if v.get("ok").and_then(|x| x.as_bool()) != Some(true) {
+    return HealthProbe::Unreachable;
+  }
+  // healthExtra threw — still reachable; do not logical-restart (managedBy unknown → fail closed).
+  if v.get("healthExtraError").and_then(|x| x.as_bool()) == Some(true) {
+    return HealthProbe::Ok {
+      active_turns: 0,
+      suggest_restart: false,
+      managed_by_app: false,
+    };
+  }
+  let active_turns = v
+    .get("activeTurns")
+    .and_then(|x| x.as_u64())
+    .unwrap_or(0);
+  let liveness = v.get("liveness");
+  let suggest_restart = liveness
+    .and_then(|l| l.get("suggestRestart"))
+    .and_then(|x| x.as_bool())
+    .unwrap_or(false)
+    || liveness
+      .and_then(|l| l.get("stale"))
+      .and_then(|x| x.as_bool())
+      .unwrap_or(false);
+  let managed_by = v
+    .get("managedBy")
+    .and_then(|x| x.as_str())
+    .unwrap_or("app");
+  HealthProbe::Ok {
+    active_turns,
+    suggest_restart,
+    managed_by_app: managed_by != "service",
+  }
 }
 
 fn default_state_dir() -> PathBuf {
@@ -360,12 +485,93 @@ fn spawn_daemon(app: &tauri::AppHandle) -> Result<(), String> {
   Ok(())
 }
 
+/// Kill the supervised child so `spawn_daemon` will start a fresh process.
+fn force_restart_supervised_daemon(app: &tauri::AppHandle, reason: &str) {
+  eprintln!("EnvoyHome: restarting supervised daemon ({reason})");
+  stop_daemon(app);
+  // Free claim / ports from the just-killed child before respawn.
+  let state_dir = std::env::var("ENVOYHOME_STATE_DIR")
+    .map(PathBuf::from)
+    .unwrap_or_else(|_| default_state_dir());
+  stop_stale_claim_daemons(&state_dir);
+  let ws_port: u16 = std::env::var("ENVOYHOME_WS_PORT")
+    .ok()
+    .and_then(|s| s.parse().ok())
+    .unwrap_or(4780);
+  stop_orphan_daemon_on_port(ws_port);
+  stop_orphan_daemon_on_port(ws_port.saturating_add(1));
+  if let Err(err) = spawn_daemon(app) {
+    eprintln!("EnvoyHome: daemon restart failed: {err}");
+  }
+}
+
 /// Keep the Node daemon alive for the life of the Settings window.
+///
+/// Two layers:
+/// 1. Process exit → respawn (existing).
+/// 2. Logical staleness — HTTP `/health` reachable but turn-path `suggestRestart`
+///    (consecutive turn errors with no active turn) → kill + respawn with backoff.
+///    Also restart when `/health` is unreachable while we still hold a child (wedged).
 fn start_daemon_watchdog(app: tauri::AppHandle) {
-  thread::spawn(move || loop {
-    thread::sleep(Duration::from_secs(2));
-    if let Err(err) = spawn_daemon(&app) {
-      eprintln!("EnvoyHome: daemon watchdog: {err}");
+  thread::spawn(move || {
+    let mut unreachable_streak: u32 = 0;
+    loop {
+      thread::sleep(Duration::from_secs(2));
+      if let Err(err) = spawn_daemon(&app) {
+        eprintln!("EnvoyHome: daemon watchdog: {err}");
+        continue;
+      }
+
+      let http_port = health_http_port();
+      match probe_daemon_health(http_port) {
+        HealthProbe::Unreachable => {
+          unreachable_streak = unreachable_streak.saturating_add(1);
+          // Child may still be starting — give it a few probes.
+          let has_child = app
+            .state::<DaemonState>()
+            .child
+            .lock()
+            .map(|g| g.is_some())
+            .unwrap_or(false);
+          if has_child && unreachable_streak >= 3 {
+            let state = app.state::<DaemonState>();
+            let mut gate = match state.restart_gate.lock() {
+              Ok(g) => g,
+              Err(_) => continue,
+            };
+            if gate.allow_logical_restart() {
+              gate.note_restart();
+              drop(gate);
+              unreachable_streak = 0;
+              force_restart_supervised_daemon(&app, "health unreachable");
+            }
+          }
+        }
+        HealthProbe::Ok {
+          active_turns,
+          suggest_restart,
+          managed_by_app,
+        } => {
+          unreachable_streak = 0;
+          if !managed_by_app {
+            continue;
+          }
+          if !suggest_restart || active_turns > 0 {
+            continue;
+          }
+          let state = app.state::<DaemonState>();
+          let mut gate = match state.restart_gate.lock() {
+            Ok(g) => g,
+            Err(_) => continue,
+          };
+          if !gate.allow_logical_restart() {
+            continue;
+          }
+          gate.note_restart();
+          drop(gate);
+          force_restart_supervised_daemon(&app, "turn-path stale (suggestRestart)");
+        }
+      }
     }
   });
 }
@@ -482,6 +688,7 @@ pub fn run() {
   tauri::Builder::default()
     .manage(DaemonState {
       child: Mutex::new(None),
+      restart_gate: Mutex::new(RestartGate::new()),
     })
     .invoke_handler(tauri::generate_handler![
       daemon_status,

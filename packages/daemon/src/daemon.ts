@@ -9,6 +9,7 @@ import { DeviceCredentialStore } from "./auth.js";
 import { SubscriptionRegistry } from "./events.js";
 import { startWsHost, type HostHandle } from "./host.js";
 import { startHttpHatch } from "./http.js";
+import { turnLiveness } from "./turn-liveness.js";
 import { AccountStore } from "./accounts.js";
 import { HouseholdStore } from "./household.js";
 import { BindingStore } from "./bindings.js";
@@ -88,6 +89,7 @@ export interface RunningDaemon {
   knowledge: KnowledgeService;
   libreOfficeInstall: import("./libreoffice-install.js").LibreOfficeInstallService;
   obscuraInstall: import("./obscura-install.js").ObscuraInstallService;
+  localSqlInstall: import("./localsql-install.js").LocalSqlInstallService;
   mesh: MeshHostHandle;
   /** Live hosting peer when meshHostingEnabled (null when stub-only). */
   meshPeer: HomeMeshPeer | null;
@@ -626,6 +628,23 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     artifacts,
     artifactSecret: () => artifacts.ensureSecret(),
     production: process.env.NODE_ENV === "production",
+    healthExtra: () => {
+      const activeTurns = turns.activeTurnCount();
+      const uptimeSec = Math.floor((Date.now() - startedAt.getTime()) / 1000);
+      const liveness = turnLiveness.snapshot(activeTurns, uptimeSec);
+      const managedBy =
+        process.env.ENVOYHOME_MANAGED_BY === "service" ? "service" : "app";
+      return {
+        activeTurns,
+        uptimeSec,
+        liveness,
+        managedBy,
+        pid: process.pid,
+        instanceId: config.instanceId,
+        wsPort: config.wsPort,
+        httpPort: config.httpPort,
+      };
+    },
   });
   stoppers.push(
     () =>
@@ -674,6 +693,11 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
       );
     });
 
+  // P2-S1 — managed DuckDB: Owner-explicit only (never silent first-boot).
+  const { LocalSqlInstallService } = await import("./localsql-install.js");
+  const localSqlInstall = new LocalSqlInstallService(paths);
+  await localSqlInstall.load();
+
   return {
     config: { ...config, wsPort: ws.host.port, httpPort },
     logger,
@@ -705,6 +729,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
     knowledge,
     libreOfficeInstall,
     obscuraInstall,
+    localSqlInstall,
     mesh,
     meshPeer,
     subscriptions,

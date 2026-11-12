@@ -1789,6 +1789,14 @@ pre {
   margin-top: 0.85rem;
 }
 
+.wf-howto-block.is-disabled {
+  opacity: 0.72;
+}
+
+.wf-howto-block.is-disabled .wf-demo-canvas {
+  pointer-events: none;
+}
+
 .wf-howto-head {
   display: flex;
   flex-wrap: wrap;
@@ -5268,6 +5276,30 @@ body[data-view="schedulesChat"] .schedules-pane-tabs {
   margin: 0;
   font-size: 0.78rem;
   line-height: 1.35;
+}
+
+.chat-data-assist {
+  margin: 0 0 0.45rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--panel-2) 88%, transparent);
+}
+
+.chat-data-assist-hint {
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.chat-data-assist-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.artifacts-prefer-strip strong {
+  font-size: 0.95rem;
 }
 
 .chat-attach-list {

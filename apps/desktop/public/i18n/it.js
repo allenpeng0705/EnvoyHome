@@ -877,7 +877,7 @@ export default {
   "workflows.audienceAccount": "Questo profilo",
   "workflows.yamlLabel": "YAML del workflow",
   "workflows.toolsTitle": "Strumenti disponibili",
-  "workflows.toolsHint": "I nomi tool devono venire da questo catalogo. Inserisci esempio aggiunge uno step YAML. I tool non disponibili passano la validazione ma falliscono a runtime.",
+  "workflows.toolsHint": "Solo tool pronti: builtin, skill verificati, HA/MQTT se il canale è attivo, MCP Owner dopo Test-ok. DuckDB in Sistema → File per sql_load/sql_query. Esecuzioni temporizzate in Pianificazioni.",
   "workflows.toolsEmpty": "Nessuno strumento elencato.",
   "workflows.toolsSourceBuiltin": "Integrati",
   "workflows.toolsSourceSkill": "Skill",
@@ -993,7 +993,8 @@ export default {
   "advanced.hint": "Indirizzo del demone, servizio OS, stato mesh e altri controlli operatore per questo computer.",
   "advanced.privacyHint": "Privacy Mode is per profile under Models → Routing.",
   "privacyMode.title": "Privacy Mode",
-  "privacyMode.hint": "Forces local inference and blocks cloud tools. Owner-scope.",
+  "privacyMode.hint":
+    "Forza l’inferenza locale e blocca i tool cloud (ricerca, browser, MCP remoto, immagini). DuckDB/sql_* locali restano OK. Ambito Owner.",
   "privacyMode.enabled": "Enable Privacy Mode",
   "privacyMode.blockEgress": "Also block smart-home actuation & event-source notify",
   "privacyMode.egressHint": "When on, HA/MQTT actuation and event-source outbound are refused.",
@@ -1224,6 +1225,13 @@ export default {
     "Cosa vedrai: extract_document → llm_summarize ({{step.extract.text}}) → export_document. Metti prima documents/report.docx (o cambia sourcePath). Solo pratica.",
   "workflows.howtoLoadedDocs":
     "Esempio documento aperto. Rinomina l’id prima di Salva. documents/report.docx deve esistere (o cambia sourcePath).",
+  "workflows.howtoDeck": "Deck da dati (esempio)",
+  "workflows.howtoDeckWhat":
+    "Cosa fa: riepiloga una piccola tabella vendite, rende un PNG a barre (opz. Mermaid/tabella), poi esporta un pptx con layout e note.",
+  "workflows.howtoDeckHint":
+    "Cosa vedrai: table_transform → chart_table (output/charts/demo-sales.png) → export_document pptx. Join/SQL: DuckDB in Sistema → File, poi sql_load/sql_query. Remoto: MCP Owner. Solo pratica.",
+  "workflows.howtoLoadedDeck":
+    "Esempio deck/dati aperto. Rinomina l’id prima di Salva. Percorso chart: output/charts/demo-sales.png.",
   "workflows.howtoWeb": "Web clip sample",
   "workflows.howtoWebWhat":
     "What it does: When someone asks to “clip page” / “summarize url”, the agent fetches https://example.com/ to Markdown (web_extract), summarizes it, saves documents/web-clip.md, then promotes that file into knowledge/.",
@@ -1375,6 +1383,11 @@ export default {
   "advanced.listenHint": "Su cosa sta ascoltando il daemon in esecuzione in questo momento.",
   "advanced.daemonOk": "Integro",
   "advanced.daemonBad": "Irraggiungibile o degradato",
+  "advanced.turnLiveness": "Percorso turn",
+  "advanced.turnLivenessOk": "OK",
+  "advanced.turnLivenessStale": "Obsoleto — il supervisore può riavviare",
+  "advanced.turnLivenessValue":
+    "{internal} interni / {errors} errori consecutivi · recenti ok {ok} / err {fail}",
   "advanced.wsPort": "Porta WebSocket",
   "advanced.httpPort": "Porta HTTP",
   "advanced.publicBaseUrlEmpty": "Non impostato",

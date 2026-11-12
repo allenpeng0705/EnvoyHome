@@ -57,6 +57,8 @@ function buildWorkflowSystemPrompt(toolNames: string[]): string {
     "- llm_fill / llm_summarize need a prompt string; tool nodes need name and args as needed.",
     "- LLM prompts may use {{step.<id>}} or {{step.<id>.<field>}} from prior outputs (e.g. after extract_document use {{step.extract.text}}).",
     "- Document pipelines: extract_document (sourcePath) → llm_summarize → optional export_document (args_from markdown from the summarize step) or promote_knowledge.",
+    "- Deck pipelines: write Markdown with H1/H2 + optional <!-- slide layout=… --> and ![chart](output/charts/….png) → export_document format=pptx (JS when layouts/images present).",
+    "- Data pipelines: table_transform (normalize/filter/pipeline/…) → chart_table / render_table / render_diagram → export_document pptx. Prefer core → sql_query (when DuckDB ready) → Owner mcp__… for heavy BI — never invent MCP/local-SQL installs.",
     "- Web clip pipelines: web_extract (url) → llm_summarize with {{step.extract.markdown}} → write_file under documents/ and/or export_document / promote_knowledge.",
     "- Web research pipelines: web_research (query) → llm_summarize with {{step.research.organized}} → optional export_document (Owner must enable Web research).",
     "- Prefer catalogue tools that are available; mcp__* names are Owner MCP servers (Test-ok + enabled).",

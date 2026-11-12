@@ -21,6 +21,7 @@
     "fake:mqtt": "pnpm --filter @envoyhome/fake-mqtt build && pnpm --filter @envoyhome/fake-mqtt dev",
     "demo:ha-smoke": "node ./scripts/demo-ha-smoke.mjs",
     "ha:c4-diff": "./scripts/ha-c4-diff.sh",
+    "office:live-verify": "pnpm --filter @envoyhome/daemon build && node ./scripts/office-live-verify.mjs",
     "doctor:fresh": "./scripts/doctor-fresh.sh",
     "doctor:homeclaw": "./scripts/doctor-homeclaw-dryrun.sh",
     "smoke:rpc": "./scripts/smoke-rpc.sh",

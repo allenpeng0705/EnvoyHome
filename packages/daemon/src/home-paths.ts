@@ -39,6 +39,11 @@ export interface HomePaths {
   readonly obscuraRuntimeDir: string;
   readonly obscuraDownloadsDir: string;
   readonly obscuraInstallJson: string;
+  /** Managed DuckDB / local SQL runtime (Design §9.5k / P2-S). */
+  readonly localSqlDir: string;
+  readonly localSqlRuntimeDir: string;
+  readonly localSqlDownloadsDir: string;
+  readonly localSqlInstallJson: string;
   /** `accounts/<accountId>/` */
   accountRoot(accountId: string): string;
   /** Sandbox root: `accounts/<accountId>/files/` */
@@ -49,6 +54,13 @@ export interface HomePaths {
   readonly workflowStepTemplatesJson: string;
   /** Per-account LLM step templates: `accounts/<id>/workflow-step-templates.json`. */
   accountWorkflowStepTemplatesJson(accountId: string): string;
+  /**
+   * Owner office template packs (Design §9.5k) —
+   * `accounts/<id>/files/templates/office/<templateId>/`.
+   */
+  accountOfficeTemplatesDir(accountId: string): string;
+  /** Household-shared office templates: `templates/office/`. */
+  readonly officeTemplatesDir: string;
 }
 
 /**
@@ -86,6 +98,10 @@ export function homePaths(stateDir: string): HomePaths {
     obscuraRuntimeDir: join(stateDir, "obscura", "runtime"),
     obscuraDownloadsDir: join(stateDir, "obscura", "downloads"),
     obscuraInstallJson: join(stateDir, "obscura", "install.json"),
+    localSqlDir: join(stateDir, "localsql"),
+    localSqlRuntimeDir: join(stateDir, "localsql", "runtime"),
+    localSqlDownloadsDir: join(stateDir, "localsql", "downloads"),
+    localSqlInstallJson: join(stateDir, "localsql", "install.json"),
     accountRoot(accountId: string): string {
       return join(accountsDir, accountId);
     },
@@ -99,5 +115,9 @@ export function homePaths(stateDir: string): HomePaths {
     accountWorkflowStepTemplatesJson(accountId: string): string {
       return join(accountsDir, accountId, "workflow-step-templates.json");
     },
+    accountOfficeTemplatesDir(accountId: string): string {
+      return join(accountsDir, accountId, "files", "templates", "office");
+    },
+    officeTemplatesDir: join(stateDir, "templates", "office"),
   };
 }

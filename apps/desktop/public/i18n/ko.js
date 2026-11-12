@@ -877,7 +877,7 @@ export default {
   "workflows.audienceAccount": "이 프로필",
   "workflows.yamlLabel": "워크플로 YAML",
   "workflows.toolsTitle": "사용 가능한 도구",
-  "workflows.toolsHint": "tool 노드 이름은 이 목록에서 와야 합니다. 샘플 삽입은 YAML 단계를 추가합니다. 사용 불가 도구도 저장 검증은 되지만 실행 시 실패합니다.",
+  "workflows.toolsHint": "준비된 도구만: 내장, 검증된 스킬, 채널이 켜진 HA/MQTT, Test-ok Owner MCP. sql_load/sql_query는 시스템 → 파일에서 DuckDB 설치 후. 예약 실행은 스케줄.",
   "workflows.toolsEmpty": "도구가 없습니다.",
   "workflows.toolsSourceBuiltin": "내장",
   "workflows.toolsSourceSkill": "스킬",
@@ -993,7 +993,8 @@ export default {
   "advanced.hint": "이 컴퓨터의 데몬 주소, OS 서비스, mesh 상태 및 기타 운영 제어.",
   "advanced.privacyHint": "Privacy Mode is per profile under Models → Routing.",
   "privacyMode.title": "Privacy Mode",
-  "privacyMode.hint": "Forces local inference and blocks cloud tools. Owner-scope.",
+  "privacyMode.hint":
+    "로컬 추론을 강제하고 클라우드 도구(검색·브라우저·원격 MCP·이미지)를 차단합니다. 로컬 DuckDB/sql_*는 계속 사용 가능. Owner 전용.",
   "privacyMode.enabled": "Enable Privacy Mode",
   "privacyMode.blockEgress": "Also block smart-home actuation & event-source notify",
   "privacyMode.egressHint": "When on, HA/MQTT actuation and event-source outbound are refused.",
@@ -1224,6 +1225,13 @@ export default {
     "보이는 것: extract_document → llm_summarize({{step.extract.text}}) → export_document. 먼저 documents/report.docx를 두세요(또는 sourcePath 변경). 연습용.",
   "workflows.howtoLoadedDocs":
     "문서 샘플을 열었습니다. 저장 전 id를 바꾸세요. documents/report.docx가 필요합니다(또는 sourcePath 변경).",
+  "workflows.howtoDeck": "데이터로 덱 만들기(샘플)",
+  "workflows.howtoDeckWhat":
+    "하는 일: 작은 매출 표를 요약하고 막대 PNG(선택: Mermaid/표 PNG)를 만든 뒤 레이아웃·노트 pptx로보냅니다.",
+  "workflows.howtoDeckHint":
+    "보이는 것: table_transform → chart_table(output/charts/demo-sales.png) → export_document pptx. 조인/SQL은 시스템 → 파일에서 DuckDB 후 sql_load/sql_query. 원격은 Owner MCP. 연습용.",
+  "workflows.howtoLoadedDeck":
+    "덱/데이터 샘플을 열었습니다. 저장 전 id를 바꾸세요. 차트 경로: output/charts/demo-sales.png.",
   "workflows.howtoWeb": "Web clip sample",
   "workflows.howtoWebWhat":
     "What it does: When someone asks to “clip page” / “summarize url”, the agent fetches https://example.com/ to Markdown (web_extract), summarizes it, saves documents/web-clip.md, then promotes that file into knowledge/.",
@@ -1375,6 +1383,11 @@ export default {
   "advanced.listenHint": "실행 중인 데몬이 지금 수신 중인 주소.",
   "advanced.daemonOk": "정상",
   "advanced.daemonBad": "도달 불가 또는 저하",
+  "advanced.turnLiveness": "턴 경로",
+  "advanced.turnLivenessOk": "정상",
+  "advanced.turnLivenessStale": "정체 — 감독자가 재시작할 수 있음",
+  "advanced.turnLivenessValue":
+    "내부 {internal} / 전체 {errors} 연속 오류 · 최근 성공 {ok} / 실패 {fail}",
   "advanced.wsPort": "WebSocket 포트",
   "advanced.httpPort": "HTTP 포트",
   "advanced.publicBaseUrlEmpty": "설정 안 됨",

@@ -258,9 +258,10 @@ EnvoyHome/
 
 [`design_doc/reviews/2026-10-22-early-adopter-claims.md`](design_doc/reviews/2026-10-22-early-adopter-claims.md)
 
-预览姿态：桌面 + 手机；可选 HA/MQTT **演示 / 夹具**。在对应门槛关闭前，**不要**宣称 Privacy Mode 为成品开关、生产级 IM 动物园，或 agentskills.io 符合性。手机实地验证：[`docs/mobile-live-verify.md`](docs/mobile-live-verify.md)。
+预览姿态：桌面 + 手机；可选 HA/MQTT **演示 / 夹具**。在对应门槛关闭前，**不要**宣称 Privacy Mode 为成品开关、生产级 IM 动物园，或 agentskills.io 符合性。手机实地验证：[`docs/mobile-live-verify.md`](docs/mobile-live-verify.md)。办公文档/幻灯片：[`docs/office-live-verify.md`](docs/office-live-verify.md)（`pnpm office:live-verify`）。
 
-品牌 / 商店包：[`apps/branding/store/README.md`](apps/branding/store/README.md)。
+品牌 / 商店图标：[`apps/branding/store/README.md`](apps/branding/store/README.md)。  
+手机 App Store / Play：[`docs/mobile-store-release.md`](docs/mobile-store-release.md) · [`apps/mobile/store-release/`](apps/mobile/store-release/)。
 
 ---
 
@@ -270,7 +271,8 @@ EnvoyHome/
 - **图示：** [`docs/screens/`](docs/screens/)（标识 · 架构 · 应用族）
 - **Harness：** [envoy-harness](https://github.com/allenpeng0705/envoy-harness)
 - **智能家居（可选）：** [`docs/smart-home.md`](docs/smart-home.md) · HA · MQTT · [实地清单](docs/smart-home-live-checklist.md)
-- **手机：** [`apps/mobile/README.md`](apps/mobile/README.md) · [`docs/mobile-live-verify.md`](docs/mobile-live-verify.md) · [iOS/Android 配置](docs/mobile-ios-android-setup.md)
+- **办公（文档/幻灯片）：** [`docs/office-live-verify.md`](docs/office-live-verify.md) · `pnpm office:live-verify`（P2-N 以实地体验为准）
+- **手机：** [`apps/mobile/README.md`](apps/mobile/README.md) · [商店上架](docs/mobile-store-release.md) · [`docs/mobile-live-verify.md`](docs/mobile-live-verify.md) · [iOS/Android 配置](docs/mobile-ios-android-setup.md)
 - **桌面：** [`apps/desktop/README.md`](apps/desktop/README.md) · [`scripts/README.md`](scripts/README.md)
 - **同族仓库：** [EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh) · [EnvoyDev / EnvoyCoder](https://github.com/allenpeng0705/EnvoyCoder)
 - **官网（应用族）：** [www.envoymesh.cn](https://www.envoymesh.cn)

@@ -1115,7 +1115,7 @@ export default {
   "workflows.toolsSummary":
     "Built-in {builtin} · Skills {skill} · Smart home {smarthome} · MCP {mcp}",
   "workflows.toolsHint":
-    "Only ready tools: builtins, verified skills, HA/MQTT when that channel is enabled, and Owner MCP tools after Test-ok + enable. Enable Home Assistant or MQTT under Connections, or add MCP under Connections → MCP. Timed runs live under Schedules — not tools here.",
+    "Only ready tools: builtins, verified skills, HA/MQTT when that channel is enabled, and Owner MCP after Test-ok + enable. sql_load/sql_query need DuckDB under System → Files. Timed runs live under Schedules. Not-ready tools are listed separately and cannot be inserted.",
   "workflows.toolsFilter": "Filter tools",
   "workflows.toolsFilterPlaceholder": "Filter by name or summary…",
   "workflows.toolsEmpty": "No tools match.",
@@ -1125,7 +1125,10 @@ export default {
   "workflows.toolsSourceSmarthome": "Smart home",
   "workflows.toolsSourceMcp": "MCP",
   "workflows.toolsAvailable": "ready",
-  "workflows.toolsUnavailable": "off",
+  "workflows.toolsUnavailable": "not ready",
+  "workflows.toolsUnavailableTitle": "Not ready yet",
+  "workflows.toolsUnavailableHint":
+    "These tools stay out of timed runs until ready (e.g. Install DuckDB under System → Files, or enable a channel). They cannot be inserted while unavailable.",
   "workflows.toolsInsert": "Insert",
   "workflows.toolsInsertBar": "Insert tool step",
   "workflows.toolsPickPlaceholder": "Type or pick a tool name…",
@@ -1188,6 +1191,23 @@ export default {
     "What you’ll see: extract_document → llm_summarize ({{step.extract.text}}) → export_document. Put a file at documents/report.docx first (or change sourcePath). Practice only.",
   "workflows.howtoLoadedDocs":
     "Document sample opened in the editor. Rename the id before Save. Ensure documents/report.docx exists (or edit sourcePath).",
+  "workflows.howtoDeck": "Deck from data sample",
+  "workflows.howtoDeckWhat":
+    "What it does: Prep a small sales table (normalize / filter / top_n or a pipeline), render a bar chart PNG (and optionally Mermaid/table PNGs), then export a pptx with visual-fidelity layouts plus speaker notes. Prefer core → local SQL (DuckDB when ready) → Owner MCP for remote/SaaS BI.",
+  "workflows.howtoDeckHint":
+    "What you’ll see: table_transform (prep ops / pipeline) → chart_table (fixed output/charts/demo-sales.png) → export_document pptx. Joins/SQL: Install DuckDB under System → Files, then sql_load / sql_query. Remote sheets: Owner MCP. Practice only.",
+  "workflows.howtoLoadedDeck":
+    "Deck/data sample opened in the editor. Rename the id before Save. Chart path is fixed at output/charts/demo-sales.png so the pptx step can embed it.",
+  "workflows.howtoSql": "SQL join sample (DuckDB)",
+  "workflows.howtoSqlWhat":
+    "What it does: Load two local CSVs with sql_load, join them with sql_query, then chart the result. Requires DuckDB ready under System → Files.",
+  "workflows.howtoSqlHint":
+    "What you’ll see: sql_load ×2 → sql_query → chart_table. Put sample CSVs at documents/sales.csv and documents/regions.csv (or edit paths). Practice only.",
+  "workflows.howtoLoadedSql":
+    "SQL join sample opened in the editor. Rename the id before Save. Needs DuckDB ready and the two source CSVs in the jail.",
+  "workflows.howtoSqlNeedDuckdb":
+    "DuckDB is not ready — Install under System → Files first. sql_load / sql_query stay out of the catalogue until then.",
+  "workflows.howtoSqlInstall": "Install DuckDB in Files",
   "workflows.howtoWeb": "Web clip sample",
   "workflows.howtoWebWhat":
     "What it does: When someone asks to “clip page” / “summarize url”, the agent fetches https://example.com/ to Markdown (web_extract), summarizes it, saves documents/web-clip.md, then promotes that file into knowledge/.",
@@ -1391,6 +1411,54 @@ export default {
   "artifacts.loProgress": "{received} / {total}",
   "artifacts.loOpenNudge":
     "This export used structure-only layout. For print quality, install LibreOffice under System → Files on the home computer.",
+  "artifacts.sqlTitle": "Offline SQL (DuckDB)",
+  "artifacts.sqlReady": "DuckDB ready",
+  "artifacts.sqlMissing": "Not installed (optional)",
+  "artifacts.sqlDownloading": "Downloading DuckDB…",
+  "artifacts.sqlFailed": "DuckDB install failed",
+  "artifacts.sqlCancelled": "Download cancelled",
+  "artifacts.sqlReadyGeneric": "DuckDB",
+  "artifacts.sqlWhy":
+    "Install DuckDB (~20–40 MB) for offline SQL joins on jail files. Never automatic — you choose Install. Prefer core table tools → local SQL → Owner MCP for remote BI. Privacy Mode keeps local SQL; remote MCP stays blocked.",
+  "artifacts.sqlHint": "Owner Install only — never silent on boot.",
+  "artifacts.sqlReadyNote": "Ready — {version}. sql_load / sql_query are available to the agent.",
+  "artifacts.sqlMissingNote":
+    "Optional. Without it, use table_transform or Owner MCP for remote BI.",
+  "artifacts.sqlDownloadingNote": "Downloading on this home computer — stays local.",
+  "artifacts.sqlFailedNote": "Install failed — retry Install, or set ENVOYHOME_DUCKDB (copy below).",
+  "artifacts.sqlCancelledNote": "Download cancelled — Install again when ready.",
+  "artifacts.sqlToolsReady":
+    "sql_load / sql_query are in the agent catalogue. Prefer table_transform first for tidy prep.",
+  "artifacts.sqlToolsAbsent":
+    "sql_load / sql_query stay out of the agent catalogue until DuckDB is ready.",
+  "artifacts.sqlInstallNote":
+    "Or point at a local DuckDB CLI (absolute path) with ENVOYHOME_DUCKDB:",
+  "artifacts.sqlCopyHint": "Copy env override",
+  "artifacts.sqlHintCopied": "Copied ENVOYHOME_DUCKDB example",
+  "artifacts.sqlProgress": "{received} / {total}",
+  "artifacts.sqlRefresh": "Refresh status",
+  "artifacts.sqlInstall": "Install DuckDB",
+  "artifacts.sqlCancel": "Cancel download",
+  "artifacts.dataPreferTitle": "Data paths (prefer in order)",
+  "artifacts.dataPreferStrip":
+    "1) Core table tools always on (clean → chart → deck) · 2) DuckDB for offline joins / SQL · 3) Owner MCP for cloud sheets / SaaS BI.",
+  "artifacts.dataPreferJoinNeed": "Needed for offline joins in chat.",
+  "artifacts.dataBrowseTables": "Browse output/tables",
+  "artifacts.dataBrowseCharts": "Browse output/charts",
+  "artifacts.dataBrowseEmpty": "No files there yet — chat Open chips appear after table_transform / sql_query / chart_table.",
+  "artifacts.dataBrowseFailed": "Could not list that folder.",
+  "artifacts.dataResultsTitle": "Recent data results",
+  "chat.dataAssistHint": "Spreadsheet attached — pick a next step (seeds the composer; still needs Allow for writes):",
+  "chat.dataAssistClean": "Clean & chart",
+  "chat.dataAssistAsk": "Ask about this table",
+  "chat.dataAssistJoin": "Join / SQL",
+  "chat.dataAssistInstallDuckdb": "Install DuckDB…",
+  "chat.dataAssistCleanSeed":
+    "Clean the attached spreadsheet with table_transform (normalize / filter / pipeline as needed), then chart_table, and show me the Open chips for the CSV and chart.",
+  "chat.dataAssistAskSeed":
+    "What's in the attached spreadsheet? Summarize columns, row count, and a few sample rows.",
+  "chat.dataAssistJoinSeed":
+    "Load the attached spreadsheet with sql_load, then use sql_query to answer (join if I attach more tables). Show Open chips for any result CSV.",
   "smarthome.title": "Smart home",
   "smarthome.objectsTitle": "Devices",
   "smarthome.health": "Integration health",
@@ -1470,7 +1538,8 @@ export default {
   "advanced.hint": "Connection, background service, and standing approvals for this computer.",
   "advanced.privacyHint": "Privacy Mode is per profile under Models → Routing.",
   "privacyMode.title": "Privacy Mode",
-  "privacyMode.hint": "Forces local inference and blocks cloud tools (search, browser, remote MCP, image generate). Owner-scope.",
+  "privacyMode.hint":
+    "Forces local inference and blocks cloud tools (search, browser, remote MCP, image generate). Local DuckDB / sql_load / sql_query still work on this machine. Owner-scope.",
   "privacyMode.enabled": "Enable Privacy Mode",
   "privacyMode.blockEgress": "Also block smart-home actuation & event-source notify",
   "privacyMode.egressHint": "When on, HA/MQTT actuation and event-source outbound are refused (V-P2-PRIV-2).",
@@ -1485,6 +1554,11 @@ export default {
   "advanced.listenHint": "What the running daemon is listening on right now.",
   "advanced.daemonOk": "Healthy",
   "advanced.daemonBad": "Unreachable or degraded",
+  "advanced.turnLiveness": "Turn path",
+  "advanced.turnLivenessOk": "OK",
+  "advanced.turnLivenessStale": "Stale — supervisor may restart",
+  "advanced.turnLivenessValue":
+    "{internal} internal / {errors} total consecutive errors · recent ok {ok} / err {fail}",
   "advanced.wsPort": "WebSocket port",
   "advanced.httpPort": "HTTP port",
   "advanced.publicBaseUrl": "Public base URL",

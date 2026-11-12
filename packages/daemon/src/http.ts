@@ -26,6 +26,11 @@ export interface HatchDeps {
   artifacts?: ArtifactService;
   artifactSecret?: () => Promise<Buffer>;
   production?: boolean;
+  /**
+   * Desktop supervisor probe — richer than `{ok:true}` so a process-alive but
+   * turn-stale daemon can be detected without WS auth.
+   */
+  healthExtra?: () => Record<string, unknown>;
 }
 
 function readBody(req: IncomingMessage): Promise<string> {
@@ -75,7 +80,17 @@ export async function startHttpHatch(deps: HatchDeps): Promise<Server> {
   const server = createServer(async (req, res) => {
     const url = req.url ?? "/";
     if (req.method === "GET" && (url === "/health" || url.startsWith("/health?"))) {
-      sendJson(res, 200, { ok: true });
+      let extra: Record<string, unknown> = {};
+      try {
+        extra = deps.healthExtra?.() ?? {};
+      } catch (err) {
+        deps.logger.warn(
+          `GET /health healthExtra failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        sendJson(res, 200, { ok: true, healthExtraError: true });
+        return;
+      }
+      sendJson(res, 200, { ok: true, ...extra });
       return;
     }
 

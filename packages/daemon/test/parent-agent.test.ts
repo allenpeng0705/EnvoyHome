@@ -100,10 +100,20 @@ test("V-P2-AGENT-4: parentToolNamesForSurface respects schedules/home", () => {
   assert.ok(base.includes("read_file"));
   assert.ok(!base.includes("task"));
   assert.ok(!base.includes("ha_call_service"));
+  // V-OFFICE-42 — sql_* require explicit localSqlReady
+  assert.ok(!base.includes("sql_load"));
+  assert.ok(!base.includes("sql_query"));
 
   const home = parentToolNamesForSurface({ homeSurface: true, schedulesSurface: false });
   assert.ok(home.includes("ha_call_service"));
   assert.ok(home.includes("mqtt_publish"));
+
+  const withSql = parentToolNamesForSurface({
+    homeSurface: false,
+    schedulesSurface: false,
+    localSqlReady: true,
+  });
+  assert.ok(withSql.includes("sql_query"));
 
   const sched = parentToolNamesForSurface({ homeSurface: true, schedulesSurface: true });
   assert.deepEqual(sched, ["schedule"]);

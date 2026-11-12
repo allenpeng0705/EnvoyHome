@@ -104,7 +104,14 @@ function isSmartHomeToolName(tool: string): boolean {
 }
 
 /** Sandbox builtins safe to propose via the envoyhome-tools fence (never exec/http_fetch). */
-function isSandboxToolName(tool: string): boolean {
+function isSandboxToolName(
+  tool: string,
+  opts?: { allowLocalSql?: boolean },
+): boolean {
+  if (tool === "sql_load" || tool === "sql_query") {
+    // V-OFFICE-42 — absent from fence catalogue until DuckDB ready.
+    return opts?.allowLocalSql === true;
+  }
   return (
     tool === "read_file" ||
     tool === "write_file" ||
@@ -117,6 +124,10 @@ function isSandboxToolName(tool: string): boolean {
     tool === "export_document" ||
     tool === "extract_document" ||
     tool === "promote_knowledge" ||
+    tool === "table_transform" ||
+    tool === "chart_table" ||
+    tool === "render_diagram" ||
+    tool === "render_table" ||
     tool === "view_image"
   );
 }
@@ -199,6 +210,11 @@ export type ParseToolCallsOptions = {
    */
   allowExec?: boolean;
   allowHttpFetch?: boolean;
+  /**
+   * Design §9.5k / V-OFFICE-42 — include sql_load/sql_query in fence parse
+   * only when DuckDB is ready. Default false (absent until ready).
+   */
+  allowLocalSql?: boolean;
 };
 
 export async function dispatchTool(
@@ -504,6 +520,12 @@ export async function dispatchTool(
       req.tool === "export_document" ||
       req.tool === "extract_document" ||
       req.tool === "promote_knowledge" ||
+      req.tool === "table_transform" ||
+      req.tool === "sql_load" ||
+      req.tool === "sql_query" ||
+      req.tool === "chart_table" ||
+      req.tool === "render_diagram" ||
+      req.tool === "render_table" ||
       req.tool === "web_search" ||
       req.tool === "web_extract" ||
       req.tool === "web_research"
@@ -537,6 +559,8 @@ export interface RunTurnInput {
    * `envoyhome-tools` proposals from the assistant (home-surface fallthrough).
    */
   toolLoop?: boolean;
+  /** Design §9.5k / V-OFFICE-42 — DuckDB ready → fence may parse sql_*. */
+  localSqlReady?: boolean;
 }
 
 /**
@@ -672,6 +696,7 @@ export function parseAssistantToolCalls(
   const schedulesOnly = opts?.schedulesOnly === true;
   const allowExec = opts?.allowExec === true;
   const allowHttpFetch = opts?.allowHttpFetch === true;
+  const allowLocalSql = opts?.allowLocalSql === true;
   const fence = extractEnvoyhomeToolsFence(text);
   if (!fence?.body) {
     const bare = bareScheduleSteps(text);
@@ -701,7 +726,8 @@ export function parseAssistantToolCalls(
       if (!okSchedule) continue;
     } else {
       const okHome = allowSmartHome && isSmartHomeToolName(name);
-      const okSandbox = allowSandbox && isSandboxToolName(name);
+      const okSandbox =
+        allowSandbox && isSandboxToolName(name, { allowLocalSql });
       const okAgentNet = isAgentNetworkToolName(name);
       const okPhase2 = isPhase2AgentToolName(name);
       // Skills discovery is read-tier; allow whenever sandbox tools are allowed (not schedules-only).
@@ -841,6 +867,12 @@ function isFileHandoffToolName(tool: string): boolean {
     tool === "export_document" ||
     tool === "extract_document" ||
     tool === "promote_knowledge" ||
+    tool === "table_transform" ||
+    tool === "sql_load" ||
+    tool === "sql_query" ||
+    tool === "chart_table" ||
+    tool === "render_diagram" ||
+    tool === "render_table" ||
     tool === "image_generate" ||
     tool === "browser"
   );
@@ -911,6 +943,52 @@ export function appendMissingSandboxHandoffLines(
   if (!missing.length) return text;
   const base = text.trimEnd();
   return base ? `${base}\n\n${missing.join("\n")}` : missing.join("\n");
+}
+
+/**
+ * Owner-facing copy for common table/SQL refuse / cap errors.
+ * Returns undefined when the message is not a known data-tool failure.
+ */
+export function humanizeSandboxToolError(
+  tool: string,
+  reason: string,
+): string | undefined {
+  const msg = String(reason || "").trim();
+  if (!msg) return undefined;
+  const lower = msg.toLowerCase();
+  if (
+    /result exceeds\s*10[_\s]?000\s*rows/i.test(msg) ||
+    /exceeds\s*10[_\s]?000\s*rows/i.test(msg) ||
+    (lower.includes("10000") && lower.includes("row"))
+  ) {
+    return "Result over 10 000 rows — filter first with table_transform or split the ask.";
+  }
+  if (/exceeds\s*\d+\s*cols|max.*cols|64\s*cols/i.test(msg) && lower.includes("col")) {
+    return "Too many columns (cap 64) — select_columns / drop unused fields first.";
+  }
+  if (
+    tool === "sql_query" &&
+    (/not found|unknown table|catalog error|no such table/i.test(msg) ||
+      /registry/i.test(msg))
+  ) {
+    return "SQL table missing — call sql_load first (or pass tables[]), then sql_query.";
+  }
+  if (tool === "sql_load" && /registry exceeds|clear or drop/i.test(msg)) {
+    return "Too many registered SQL tables — sql_load with clear:true or drop unused names.";
+  }
+  if (
+    /localsql_not_ready|duckdb.*not|sql_.*absent|local.?sql.*not ready/i.test(msg)
+  ) {
+    return "DuckDB is not ready — Owner installs under System → Files (never silent).";
+  }
+  if (/attach|copy\s|http:\/\/|https:\/\/|read_csv|read_parquet/i.test(msg) && tool.startsWith("sql")) {
+    return "That SQL statement is refused (no ATTACH/COPY/remote URLs) — keep queries on loaded jail tables.";
+  }
+  if (/envoyhome\.bad_params:/i.test(msg)) {
+    const rest = msg.replace(/^[\s\S]*envoyhome\.bad_params:\s*/i, "").trim();
+    if (rest) return rest.slice(0, 240);
+  }
+  return undefined;
 }
 
 /** Human-readable lines for sandbox + schedule tool outputs (esp. export_document uri). */
@@ -995,6 +1073,131 @@ export function formatSandboxToolResultLines(
         /* fall through */
       }
       lines.push(`promote_knowledge → ${r.output.slice(0, 500)}`);
+    } else if (r.tool === "table_transform") {
+      try {
+        const j = JSON.parse(r.output) as {
+          uri?: string;
+          summary?: string;
+          preview?: string;
+          rows?: number;
+          cols?: number;
+        };
+        if (typeof j.uri === "string" && j.uri) {
+          const uri = normalizeSandboxEchoPath(j.uri);
+          if (isChipReadySandboxPath(uri)) {
+            const dims =
+              typeof j.rows === "number" && typeof j.cols === "number"
+                ? `${j.rows}×${j.cols}`
+                : "";
+            const summary =
+              typeof j.summary === "string" && j.summary.trim()
+                ? j.summary.trim().replace(/\n+/g, "; ")
+                : "";
+            const detail = [dims, summary].filter(Boolean).join(" — ");
+            lines.push(`Table transform: \`${uri}\`${detail ? ` — ${detail}` : ""}`);
+            continue;
+          }
+        }
+      } catch {
+        /* fall through */
+      }
+      const human = humanizeSandboxToolError("table_transform", r.output);
+      lines.push(human ?? `table_transform → ${r.output.slice(0, 500)}`);
+    } else if (r.tool === "sql_load") {
+      try {
+        const j = JSON.parse(r.output) as {
+          name?: string;
+          sourcePath?: string;
+          sheetName?: string;
+          tables?: string[];
+        };
+        if (typeof j.name === "string" && j.name) {
+          const src =
+            typeof j.sourcePath === "string" && j.sourcePath
+              ? ` from \`${normalizeSandboxEchoPath(j.sourcePath)}\``
+              : "";
+          const sheet =
+            typeof j.sheetName === "string" && j.sheetName.trim()
+              ? ` (sheet ${j.sheetName.trim()})`
+              : "";
+          lines.push(
+            `Loaded \`${j.name}\`${src}${sheet} — next: sql_query`,
+          );
+          continue;
+        }
+      } catch {
+        /* fall through */
+      }
+      const human = humanizeSandboxToolError("sql_load", r.output);
+      lines.push(human ?? `sql_load → ${r.output.slice(0, 500)}`);
+    } else if (r.tool === "sql_query") {
+      try {
+        const j = JSON.parse(r.output) as {
+          uri?: string;
+          summary?: string;
+          rows?: number;
+          cols?: number;
+        };
+        if (typeof j.uri === "string" && j.uri) {
+          const uri = normalizeSandboxEchoPath(j.uri);
+          if (isChipReadySandboxPath(uri)) {
+            const dims =
+              typeof j.rows === "number" && typeof j.cols === "number"
+                ? `${j.rows}×${j.cols}`
+                : typeof j.summary === "string"
+                  ? j.summary
+                  : "";
+            lines.push(`SQL query: \`${uri}\`${dims ? ` — ${dims}` : ""}`);
+            continue;
+          }
+        }
+        if (typeof j.summary === "string" && j.summary) {
+          lines.push(
+            j.summary.includes("non-SELECT")
+              ? `SQL query OK (no CSV chip) — ${j.summary}`
+              : `SQL query: ${j.summary}`,
+          );
+          continue;
+        }
+      } catch {
+        /* fall through */
+      }
+      const human = humanizeSandboxToolError("sql_query", r.output);
+      lines.push(human ?? `sql_query → ${r.output.slice(0, 500)}`);
+    } else if (r.tool === "chart_table") {
+      try {
+        const j = JSON.parse(r.output) as { uri?: string; chartType?: string };
+        if (typeof j.uri === "string" && j.uri) {
+          const uri = normalizeSandboxEchoPath(j.uri);
+          if (isChipReadySandboxPath(uri)) {
+            lines.push(
+              `Chart (${typeof j.chartType === "string" ? j.chartType : "png"}): \`${uri}\``,
+            );
+            continue;
+          }
+        }
+      } catch {
+        /* fall through */
+      }
+      lines.push(`chart_table → ${r.output.slice(0, 500)}`);
+    } else if (r.tool === "render_diagram" || r.tool === "render_table") {
+      try {
+        const j = JSON.parse(r.output) as { uri?: string; kind?: string };
+        if (typeof j.uri === "string" && j.uri) {
+          const uri = normalizeSandboxEchoPath(j.uri);
+          if (isChipReadySandboxPath(uri)) {
+            const label =
+              r.tool === "render_diagram"
+                ? `Diagram${typeof j.kind === "string" ? ` (${j.kind})` : ""}`
+                : "Table image";
+            lines.push(`${label}: \`${uri}\``);
+            continue;
+          }
+        }
+      } catch {
+        /* fall through */
+      }
+      lines.push(`${r.tool} → ${r.output.slice(0, 500)}`);
     } else if (r.tool === "write_file") {
       // Prefer echoed path (`Written: \`…\``) for chat Open chips.
       lines.push(
@@ -1106,9 +1309,11 @@ async function* dispatchPlannedTools(
       ...(step.summary !== undefined ? { summary: step.summary } : {}),
     });
     if (!result.ok) {
-      yield { kind: "error", text: result.reason };
+      const human =
+        humanizeSandboxToolError(step.tool, result.reason) ?? result.reason;
+      yield { kind: "error", text: human };
       activeTurnFailures.set(deps.ctx.turn_id, {
-        message: result.reason,
+        message: human,
         at: new Date().toISOString(),
       });
       return { ok: false, results };
@@ -1137,7 +1342,14 @@ async function completeAssistantText(
 }
 
 export async function* runTurn(input: RunTurnInput): AsyncGenerator<TurnEvent> {
-  const { deps, userText, plannedTools = [], history = [], toolLoop = false } = input;
+  const {
+    deps,
+    userText,
+    plannedTools = [],
+    history = [],
+    toolLoop = false,
+    localSqlReady = false,
+  } = input;
   const zhTurn = (assistant: string) =>
     /[\u4e00-\u9fff]/.test(assistant) || /[\u4e00-\u9fff]/.test(userText);
   const yieldText = function* (
@@ -1191,6 +1403,7 @@ export async function* runTurn(input: RunTurnInput): AsyncGenerator<TurnEvent> {
         allowSandbox: !schedulesOnly,
         allowSmartHome: toolLoop && !schedulesOnly,
         schedulesOnly,
+        ...(localSqlReady ? { allowLocalSql: true } : {}),
       });
       if (parsed.tools.length > 0) {
         const dispatched = yield* dispatchPlannedTools(deps, parsed.tools);

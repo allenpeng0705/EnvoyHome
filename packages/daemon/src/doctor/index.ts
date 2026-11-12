@@ -431,5 +431,38 @@ export async function collectDoctorIssues(
     }
   }
 
+  // Design §9.5k / P2-S4 — optional DuckDB (info only; never required).
+  {
+    const { getLocalSqlInstallService } = await import("../localsql-install.js");
+    const svc = getLocalSqlInstallService();
+    if (svc) {
+      const st = svc.getStatus();
+      if (st.localSqlRuntime === "downloading") {
+        issues.push({
+          id: "office.localsql_downloading",
+          severity: "info",
+          message:
+            "DuckDB is downloading — sql_load/sql_query stay absent until ready; core table_transform still works",
+          fixable: false,
+        });
+      } else if (st.localSqlRuntime === "failed") {
+        issues.push({
+          id: "office.localsql_failed",
+          severity: "info",
+          message: `DuckDB install failed — sql_load/sql_query absent. ${st.lastError ?? "unknown"}. Retry under System → Files, or set ENVOYHOME_DUCKDB.`,
+          fixable: false,
+        });
+      } else if (st.localSqlRuntime === "missing") {
+        issues.push({
+          id: "office.localsql_optional",
+          severity: "info",
+          message: `Optional DuckDB not installed — sql_load/sql_query absent from the agent catalogue until Owner installs (never automatic). Prefer table_transform, then Owner MCP for remote BI. ${st.localSqlInstallHint}`,
+          fixable: false,
+        });
+      }
+      // ready → silent (tools already in catalogue; Settings shows status)
+    }
+  }
+
   return issues;
 }

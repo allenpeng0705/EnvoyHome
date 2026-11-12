@@ -45,9 +45,9 @@ EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0
 **Next (after early-adopter ops):** Live HA checklist ([`docs/smart-home-live-checklist.md`](../docs/smart-home-live-checklist.md)); then **First-party IM live** (Telegram first) when Mesh phone path is solid  
 **Deferred from early-adopter claims:** Production IM zoo; Privacy Mode product toggle (`home.setPrivacyMode` stays Phase 2); agentskills.io conformance  
 
-**Active coding epic:** _(none)_ — Phase 2 board through **P2-K** shipped.
+**Active coding epic:** *(none — P2-S complete)* C3 Deferred. Next Owner pick after office BI path.
 
-**Last shipped:** Stage E Obscura-first auto (`2026-11-11e`, V-OUT-34); Stage D Obscura bundle + auto-install (`2026-11-11`, V-OUT-33); Stage B/C Obscura engine select (`2026-11-10r`)
+**Last shipped:** P2-S4 Doctor/Settings/Privacy (`2026-11-12l`, V-OFFICE-43); P2-S0…S3 (`2026-11-12i`…`k`)
 
 ## Key Decisions
 
@@ -210,10 +210,43 @@ Design ground truth: **§19.9–§19.13** (**Accepted 2026-10-20**); **P2-F** §
 | **P2-K6** ODT/ODS/EPUB generate | `[x]` | §9.5b/j | K4 | `export_document` `odt`/`ods`/`epub` (pdf already shipped) | V-OFFICE-9 |
 | **P2-K7** LibreOffice export quality | `[x]` | §9.5b | K6 | Optional local `soffice` convert; JS fallback; Doctor; `engine` arg | V-OFFICE-10 |
 | **P2-K8** Managed LO auto-install | `[x]` | §9.5b | K7 | Silent first-boot download; one-click fallback; Setup/Files why-copy | V-OFFICE-12…14 |
+| **P2-L0** §9.5k Design umbrella | `[x]` | §9.5k | Design `2026-11-12b` | PPT + thin compute Normative; V-OFFICE-15…21 | V-OFFICE-15…21 (index) |
+| **P2-L1** Slide layouts | `[x]` | §9.5k | L0 | Closed layout directives in `exportPptx` | V-OFFICE-15 |
+| **P2-L2** Jail images in pptx | `[x]` | §9.5k | L1 | GFM images via `safeJoin`; caps | V-OFFICE-16 |
+| **P2-L3** Owner template packs | `[x]` | §9.5k | L2 | `templateId` / theme JSON under `templates/office/` | V-OFFICE-17 |
+| **P2-L4** Skill / howto / engine note | `[x]` | §9.5k | L3 | Deck-from-outline; auto→JS when layouts/images | V-OFFICE-18 |
+| **P2-M1** `table_transform` | `[x]` | §9.5k | L4 | Closed ops; `output/tables/`; caps | V-OFFICE-19 |
+| **P2-M2** `chart_table` | `[x]` | §9.5k | M1 | bar\|line\|pie → `output/charts/*.png` | V-OFFICE-20 |
+| **P2-M3** Catalogue + MCP guidance | `[x]` | §9.5k | M2 | Workflow tools + skill/howto MCP-prefer | V-OFFICE-21 |
+| **P2-N0** §9.5k polish Design | `[x]` | §9.5k | Design `2026-11-12d` + dogfood open | quote/comparison + notes + master Normative; V-OFFICE-22…25 | V-OFFICE-22…25 (index) |
+| **P2-N1** Extra layouts | `[x]` | §9.5k | N0 | `quote` \| `comparison` in `exportPptx` | V-OFFICE-22 |
+| **P2-N2** Speaker notes | `[x]` | §9.5k | N0 | `<!-- slide notes: … -->` → `addNotes`; auto→JS | V-OFFICE-23 |
+| **P2-N3** Theme slide master | `[x]` | §9.5k | N0 | `defineSlideMaster` from theme; optional `master.pptx` note | V-OFFICE-24 |
+| **P2-N4** Tests / skill / live-verify | `[x]` | §9.5k | N1–N3 | corpus + skill/howto + `office:live-verify` | V-OFFICE-25 |
+| **P2-O0** Visual fidelity Design | `[x]` | §9.5k | Design `2026-11-12e` | Parse + visual Normative; V-OFFICE-26…29 | V-OFFICE-26…29 (index) |
+| **P2-O1** Quote/comparison parse | `[x]` | §9.5k | O0 | Attribution + header split | V-OFFICE-26, V-OFFICE-27 |
+| **P2-O2** Visual system | `[x]` | §9.5k | O0 | 16:9 type/spacing; section/quote/comparison/chart; presets | V-OFFICE-28 |
+| **P2-O3** Skill / howto / live-verify | `[x]` | §9.5k | O1–O2 | recipes + asserts; regen dogfood deck | V-OFFICE-29 |
+| **P2-O4** Tests | `[x]` | §9.5k | O1–O3 | V-OFFICE-26…29 green | V-OFFICE-26…29 |
+| **P2-P0** Diagram PNG Design | `[x]` | §9.5k | Design `2026-11-12f` | Mermaid/table→PNG Normative; V-OFFICE-30…33 | V-OFFICE-30…33 (index) |
+| **P2-P1** `render_diagram` | `[x]` | §9.5k | P0 | Closed Mermaid → `output/diagrams/*.png` | V-OFFICE-30 |
+| **P2-P2** `render_table` | `[x]` | §9.5k | P0 | Styled GFM table → PNG | V-OFFICE-31 |
+| **P2-P3** Catalogue / skill / live-verify | `[x]` | §9.5k | P1–P2 | fence + howto + embed asserts | V-OFFICE-32, V-OFFICE-33 |
+| **P2-P4** Tests | `[x]` | §9.5k | P1–P3 | V-OFFICE-30…33 green | V-OFFICE-30…33 |
+| **P2-R0** Thin prep Design | `[x]` | §9.5k | Design `2026-11-12g` | Prep ops + pipeline + MCP prefer; V-OFFICE-34…38 | V-OFFICE-34…38 (index) |
+| **P2-R1** Prep ops + CSV | `[x]` | §9.5k | R0 | normalize/filter+/dedupe/rename/top_n/head/tail; quoted CSV newlines | V-OFFICE-34, V-OFFICE-35, V-OFFICE-37 |
+| **P2-R2** `pipeline` | `[x]` | §9.5k | R1 | ordered steps ≤16; no nest | V-OFFICE-36 |
+| **P2-R3** Skill / howto / MCP honesty | `[x]` | §9.5k | R1–R2 | prep recipe + MUST prefer MCP when over core | V-OFFICE-38 |
+| **P2-R4** Tests | `[x]` | §9.5k | R1–R3 | V-OFFICE-34…38 green | V-OFFICE-34…38 |
+| **P2-S0** Local SQL Design detail | `[x]` | §9.5k | Design `2026-11-12i` | Statement allow/deny + paths + RPCs | V-OFFICE-39 (policy) |
+| **P2-S1** Managed DuckDB install | `[x]` | §9.5k | S0 | Owner explicit install; no silent boot; status RPC; Files UI | V-OFFICE-39 |
+| **P2-S2** `sql_load` / `sql_query` + jail | `[x]` | §9.5k | S1 | Caps; path refuse corpus | V-OFFICE-40, V-OFFICE-41 |
+| **P2-S3** Catalogue / prefer order / Privacy | `[x]` | §9.5k | S2 | tools absent until ready; agent order core→SQL→MCP | V-OFFICE-42 |
+| **P2-S4** Skill / Settings / tests | `[x]` | §9.5k | S1–S3 | Doctor + remaining V-IDs | V-OFFICE-43 |
 
-**Ship order:** P2-A → … → P2-J → **P2-K0…K8**.
+**Ship order:** P2-A → … → P2-R → **P2-S0…S4** (C1 docs with Accept; C3 Deferred).
 
-**Package touch points (at code time):** `packages/harness-host` (policy + parse), `packages/daemon` (turn-service, choice-store, **browser-control** form/handoff + payment wall + file apply; **document-export** / **document-extract**; knowledge promote), `packages/protocol` (additive methods), mobile/desktop chat choice + artifact UI, skills-samples, Doctor issues.
+**Package touch points (at code time):** `packages/harness-host` (policy + parse), `packages/daemon` (turn-service, choice-store, **browser-control** form/handoff + payment wall + file apply; **document-export** / **document-extract**; **table-transform** / **chart-table**; knowledge promote), `packages/protocol` (additive methods), mobile/desktop chat choice + artifact UI, skills-samples, Doctor issues.
 
 **Soft risks (owning epic):**
 
@@ -244,6 +277,17 @@ Design ground truth: **§19.9–§19.13** (**Accepted 2026-10-20**); **P2-F** §
 | Oversized Office tables / pptx layout fantasy | P2-K | Caps 2 MiB MD / 8 MiB out; JS structure fidelity + optional LO; refuse upload overwrite (V-OFFICE-1…3, V-OFFICE-10) |
 | Silent LO download size / elevation / retry storm | P2-K8 | Managed under stateDir; one silent attempt; Owner retry; AUTO=0 / decline; JS forever (V-OFFICE-12…14) |
 | Promote non-md / Learn file bytes | P2-K | `promote_knowledge` Markdown-only; never Learn bytes (V-OFFICE-6/7) |
+| Layout fantasy / unknown directives | P2-L | Closed layout enum; soft-fail unknown (V-OFFICE-15) |
+| Image / template path escape | P2-L | `safeJoin` + caps; never Learn image bytes (V-OFFICE-16/17) |
+| Compute DoS / arbitrary code | P2-M | Closed ops; row/col/time caps; no user code (V-OFFICE-19/20) |
+| MCP vs core confusion | P2-M | Core always works; prefer MCP only when Owner Test-ok (V-OFFICE-21) |
+| Binary master fantasy / OOXML merge | P2-N | Theme-derived `defineSlideMaster` only; `master.pptx` → note, never merge (V-OFFICE-24) |
+| Notes / layout directive sprawl | P2-N | Closed `notes:` comment + closed layout enum; soft-fail unknown (V-OFFICE-22/23) |
+| Mashed quote/comparison / thin type | P2-O | Attribution + header split; 16:9 type floor; no new layout IDs (V-OFFICE-26…28) |
+| Mermaid script / Chromium coupling / DoS | P2-P | Closed kinds; refuse click/init/script; size/time caps; no Chromium for Office (V-OFFICE-30…32) |
+| Prep ops creep into BI engine | P2-R | Closed enum only; no SQL/pandas; pipeline cap 16; prefer Owner MCP (V-OFFICE-34…38) |
+| Local SQL path escape / silent install / DoS | P2-S | Owner opt-in only; no silent boot; safeJoin; statement deny list; caps; concurrency 1 (V-OFFICE-39…) |
+| Agent picks MCP vs SQL wrongly | P2-S | Prefer order core→local SQL→MCP in skill/docs (V-OFFICE-42) |
 | Unattended file upload | P2-J | Refuse any card with `file` field unattended (V-OUT-27) |
 | `message` spam / cross-account leak | P2-C | Bound target + same account only; grantable; Privacy Mode (V-P2-MSG-*) |
 | Patch path escape / huge diff | P2-A | Jail + size cap (V-P2-EDIT-1) |
@@ -632,6 +676,35 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-OFFICE-12 | **P2-K8** | Silent first-boot managed LO download; JS during download |
 | V-OFFICE-13 | **P2-K8** | Failed persists; Install retry; decline / AUTO=0 |
 | V-OFFICE-14 | **P2-K8** | Managed ready → print-quality export |
+| V-OFFICE-15 | **P2-L1** | pptx layout directives; unknown → soft default + note |
+| V-OFFICE-16 | **P2-L2** | jail image embed; escape/non-image refuse |
+| V-OFFICE-17 | **P2-L3** | Owner templateId / theme; missing → default + note |
+| V-OFFICE-18 | **P2-L4** | skill/howto deck recipe; auto→JS when layouts/images |
+| V-OFFICE-19 | **P2-M1** | `table_transform` closed ops + caps |
+| V-OFFICE-20 | **P2-M2** | `chart_table` → PNG under `output/charts/` |
+| V-OFFICE-21 | **P2-M3** | catalogue + MCP-prefer guidance |
+| V-OFFICE-22 | **P2-N1** | `quote` \| `comparison` layouts |
+| V-OFFICE-23 | **P2-N2** | speaker notes directive → pptx notes; auto→JS |
+| V-OFFICE-24 | **P2-N3** | theme slide master; optional master.pptx note |
+| V-OFFICE-25 | **P2-N4** | skill/howto + live-verify polish coverage |
+| V-OFFICE-26 | **P2-O1** | quote attribution not mashed |
+| V-OFFICE-27 | **P2-O1** | comparison headers from one-liners / vs / \| |
+| V-OFFICE-28 | **P2-O2** | 16:9 + type floor + chrome + presets |
+| V-OFFICE-29 | **P2-O3/O4** | skill/howto + live-verify un-mashed asserts |
+| V-OFFICE-30 | **P2-P1** | render_diagram Mermaid subset → PNG |
+| V-OFFICE-31 | **P2-P2** | render_table styled GFM → PNG |
+| V-OFFICE-32 | **P2-P3** | fence + catalogue + caps |
+| V-OFFICE-33 | **P2-P3/P4** | skill/howto + live-verify diagram→pptx |
+| V-OFFICE-34 | **P2-R1** | normalize + richer filter |
+| V-OFFICE-35 | **P2-R1** | dedupe / rename / top_n / head / tail |
+| V-OFFICE-36 | **P2-R2** | pipeline ≤16; no nest |
+| V-OFFICE-37 | **P2-R1** | CSV quoted newlines |
+| V-OFFICE-38 | **P2-R3/R4** | skill/howto prep + MCP prefer |
+| V-OFFICE-39 | **P2-S1** | Owner explicit DuckDB install; no silent boot; status RPC |
+| V-OFFICE-40 | **P2-S2** | sql_load jail paths only |
+| V-OFFICE-41 | **P2-S2** | sql_query caps + statement refuse corpus |
+| V-OFFICE-42 | **P2-S3** | tools absent until ready; prefer order core→SQL→MCP |
+| V-OFFICE-43 | **P2-S4** | skill/Settings/Doctor + Privacy local-ok |
 | V-MCP-1 | **P2-F** | Owner upsert MCP config; non-Owner denied |
 | V-MCP-2 | **P2-F** | testMcpServer = initialize+tools/list only (no mutating call) |
 | V-MCP-3 | **P2-F** | Remote MCP URL SSRF refused |
@@ -901,6 +974,14 @@ If you need to change the answer to "in what order we build," edit this doc and 
 
 | Date | Change |
 |------|--------|
+| 2026-11-12i | **P2-S0/S1 shipped:** local SQL policy freeze + managed DuckDB install RPCs/UI; V-OFFICE-39. Aligns Design `2026-11-12i`. |
+| 2026-11-12h | **C1+C2 Accept:** Owner MCP prefer (C1 docs) + optional local SQL (C2 → **P2-S**). C3 Deferred. Aligns Design `2026-11-12h`. |
+| 2026-11-12g | **P2-R shipped:** thin table prep + MCP prefer (R0–R4); V-OFFICE-34…38 green. Aligns Design `2026-11-12g`. (Letter **R** — historical P2-Q* was product Qs.) |
+| 2026-11-12f | **P2-P opened:** diagram/table→PNG board P0–P4; V-OFFICE-30…33. Aligns Design `2026-11-12f`. |
+| 2026-11-12e | **P2-O opened:** visual fidelity board O0–O4; V-OFFICE-26…29. Aligns Design `2026-11-12e`. |
+| 2026-11-12d | **P2-N opened:** board N0–N4 (quote/comparison, speaker notes, theme master); V-OFFICE-22…25. Aligns Design `2026-11-12d`. |
+| 2026-11-12c | **Office dogfood gate:** `pnpm office:live-verify` + [`docs/office-live-verify.md`](../docs/office-live-verify.md); P2-N deferred until decks feel too thin; heavy BI = Owner MCP. |
+| 2026-11-12b | **P2-L→M shipped:** §9.5k Office presentation + thin compute (`table_transform` / `chart_table`); V-OFFICE-15…21 green. Aligns Design `2026-11-12b`. |
 | 2026-11-11e | **Stage E:** `extractBackend`/`serpBrowserEngine`/`managedEngine` default `auto`; Obscura-first with fetch/Chromium fallback; V-OUT-34. Aligns Design `2026-11-11e`. |
 | 2026-11-11 | **Stage D:** desktop bundles pinned Obscura; managed silent first-boot under `stateDir/obscura/`; `obscura:fetch` / `obscura:fetch:all`; V-OUT-33. Aligns Design `2026-11-11`. |
 | 2026-11-10r | **Stage B+C:** `serpBrowserEngine` + `managedEngine` (defaults chromium); Owner select Obscura for SERP HTML / managed CDP; V-OUT-31/32. Appendix C.5 still gates **default flip**. Aligns Design `2026-11-10r`. |

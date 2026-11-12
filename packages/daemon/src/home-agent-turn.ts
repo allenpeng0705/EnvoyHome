@@ -16,6 +16,7 @@ import {
   applyReminderHonestyGuard,
   claimsActuationWithoutTools,
   dispatchTool,
+  humanizeSandboxToolError,
   isHomeOfferQuestion,
   BUILTIN_TOOLS,
   type HistoryMessage,
@@ -60,14 +61,24 @@ const HOME_SMART_HOME_TOOLS = [
   "mqtt_publish",
 ] as const;
 
+const LOCAL_SQL_TOOLS = new Set(["sql_load", "sql_query"]);
+
 export function parentToolNamesForSurface(opts: {
   homeSurface: boolean;
   schedulesSurface: boolean;
   /** Design §9.5h — ready MCP catalogue names (`mcp__…`). */
   mcpTools?: string[];
+  /**
+   * Design §9.5k / V-OFFICE-42 — when false, omit sql_load/sql_query.
+   * When omitted, callers should pass an explicit ready bit from the daemon.
+   */
+  localSqlReady?: boolean;
 }): string[] {
   if (opts.schedulesSurface) return ["schedule"];
-  const names = Object.keys(BUILTIN_TOOLS).filter((n) => n !== "task");
+  const sqlReady = opts.localSqlReady === true;
+  const names = Object.keys(BUILTIN_TOOLS).filter(
+    (n) => n !== "task" && (sqlReady || !LOCAL_SQL_TOOLS.has(n)),
+  );
   if (opts.homeSurface) {
     for (const t of HOME_SMART_HOME_TOOLS) {
       if (!names.includes(t)) names.push(t);
@@ -226,7 +237,10 @@ async function finalizeHomeText(input: {
         ...(step.summary !== undefined ? { summary: step.summary } : {}),
       });
       if (!result.ok) {
-        queue.push({ kind: "error", text: result.reason });
+        queue.push({
+          kind: "error",
+          text: humanizeSandboxToolError(step.tool, result.reason) ?? result.reason,
+        });
         return;
       }
       queue.toolsDispatched = true;
@@ -283,6 +297,8 @@ export interface RunAgentTurnInput {
   meshSubmitter?: MeshSubmitter;
   /** Ready MCP tool names for this turn (§9.5h). */
   mcpTools?: string[];
+  /** Design §9.5k / V-OFFICE-42 — DuckDB ready → include sql_load/sql_query. */
+  localSqlReady?: boolean;
 }
 
 /**
@@ -308,6 +324,7 @@ export async function* runAgentTurn(
     homeSurface,
     schedulesSurface,
     ...(input.mcpTools?.length ? { mcpTools: input.mcpTools } : {}),
+    localSqlReady: input.localSqlReady === true,
   });
 
   const adapterOpts: HomeModelAdapterOptions = {
@@ -317,6 +334,7 @@ export async function* runAgentTurn(
     // Parent general/home: fence may propose exec; ApprovalSink asks / grants.
     allowExec: !schedulesSurface,
     allowHttpFetch: !schedulesSurface,
+    ...(input.localSqlReady === true ? { allowLocalSql: true } : {}),
     normalizeTaskArgs: true,
   };
 

@@ -34,8 +34,56 @@ import {
   exportMimeType,
   isExportEnginePreference,
   isExportFormat,
+  loadOfficeThemeFromDir,
+  detectMasterPptxNote,
+  markdownNeedsJsPptx,
   resolveExportEnginePreference,
+  resolveOfficeTheme,
+  type OfficeTheme,
 } from "./document-export.js";
+import {
+  assertTableCaps,
+  assertTableOutputPath,
+  defaultTableUri,
+  isTableTransformOp,
+  isTableTransformStepOp,
+  parseCsvText,
+  parseGfmTable,
+  runTableTransform,
+  tableToCsv,
+  tableToGfm,
+  TABLE_TRANSFORM_OPS,
+  TABLE_TRANSFORM_TIMEOUT_MS,
+  type TableData,
+  type TableTransformArgs,
+} from "./table-transform.js";
+import { runSqlLoad, runSqlQuery } from "./localsql-run.js";
+import { LOCALSQL_TIMEOUT_MS } from "./localsql-policy.js";
+import { isLocalSqlRuntimeReady } from "./localsql-install.js";
+import {
+  assertChartOutputPath,
+  defaultChartUri,
+  extractChartSeries,
+  isChartType,
+  renderChartPng,
+  CHART_TYPES,
+  CHART_TABLE_TIMEOUT_MS,
+} from "./chart-table.js";
+import {
+  assertDiagramOutputPath,
+  assertSafeMermaidSource,
+  defaultDiagramUri,
+  renderDiagramPng,
+  DIAGRAM_KINDS,
+  DIAGRAM_TIMEOUT_MS,
+} from "./render-diagram.js";
+import {
+  assertRenderTableOutputPath,
+  defaultRenderTableUri,
+  renderTablePng,
+  RENDER_TABLE_TIMEOUT_MS,
+} from "./render-table-image.js";
+import ExcelJS from "exceljs";
 import { resolveSandboxPath, type WorkspaceMode } from "./fs-jail.js";
 import { isHomeAssistantReady, isMqttReady } from "./home-intent.js";
 import type { HomePaths } from "./home-paths.js";
@@ -253,11 +301,12 @@ const BUILTIN_META: Record<
   },
   export_document: {
     summary:
-      "Export Markdown to docx/xlsx/csv/pdf/pptx/md/html/rtf/odt/ods/epub under output/exports/ (Design §9.5b/j); optional engine auto|js|libreoffice",
+      "Export Markdown to docx/xlsx/csv/pdf/pptx/md/html/rtf/odt/ods/epub under output/exports/ (Design §9.5b/j/k); pptx layouts/notes/images; optional templateId; engine auto|js|libreoffice",
     sampleArgs: {
-      format: "docx",
-      markdown: "# Report\n\n| A | B |\n|---|---|\n| 1 | 2 |\n",
-      title: "Report",
+      format: "pptx",
+      markdown:
+        "# Review\n<!-- slide layout=section -->\n\n## Highlights\n<!-- slide layout=title_bullets -->\n- One\n- Two\n",
+      title: "Review",
       engine: "auto",
     },
     argChoices: {
@@ -278,6 +327,69 @@ const BUILTIN_META: Record<
     summary:
       "Copy jail Markdown into knowledge/ and reindex Doc KB (Design §9.5j)",
     sampleArgs: { sourcePath: "output/extracts/report-abc.md" },
+  },
+  table_transform: {
+    summary:
+      "Closed-op table prep (normalize|filter|sort|aggregate|select_columns|dedupe|rename_columns|top_n|head|tail|pipeline|summarize) → output/tables/*.csv (Design §9.5k/P2-R). Prefer core → local SQL (when ready) → Owner MCP.",
+    sampleArgs: {
+      op: "pipeline",
+      steps: [
+        { op: "normalize" },
+        { op: "filter", column: "Qty", gte: "2" },
+        { op: "top_n", column: "Qty", n: 5 },
+      ],
+      markdown:
+        "| Name | Qty |\n|------|-----|\n| apple | $3 |\n| banana | 2 |\n",
+    },
+    argChoices: { op: [...TABLE_TRANSFORM_OPS] },
+  },
+  sql_load: {
+    summary:
+      "Register a jail .csv/.xlsx as a named temp table for sql_query (Design §9.5k/P2-S2). Requires Owner-installed DuckDB.",
+    sampleArgs: {
+      name: "sales",
+      sourcePath: "uploads/sales.csv",
+      sheetName: "Sheet1",
+    },
+  },
+  sql_query: {
+    summary:
+      "Run allow-listed SQL against sql_load tables (or inline tables[]) → output/tables/*.csv (Design §9.5k/P2-S2). No ATTACH/COPY/read_*/remote URLs.",
+    sampleArgs: {
+      sql: "SELECT region, SUM(CAST(qty AS DOUBLE)) AS total FROM sales GROUP BY 1",
+    },
+  },
+  chart_table: {
+    summary:
+      "Render bar|line|pie chart PNG under output/charts/ from csv/xlsx/GFM table (Design §9.5k)",
+    sampleArgs: {
+      chartType: "bar",
+      markdown:
+        "| Name | Qty |\n|------|-----|\n| apple | 3 |\n| banana | 2 |\n",
+    },
+    argChoices: { chartType: [...CHART_TYPES] },
+  },
+  render_diagram: {
+    summary:
+      "Render closed Mermaid (flowchart|graph|sequenceDiagram|pie|mindmap) → output/diagrams/*.png for pptx embed (Design §9.5k/P2-P)",
+    sampleArgs: {
+      mermaid: "flowchart LR\n  A[Start] --> B[Done]",
+      theme: "default",
+    },
+    argChoices: {
+      theme: ["default", "dark"],
+    },
+  },
+  render_table: {
+    summary:
+      "Render styled GFM/csv/xlsx table → PNG under output/diagrams/ for pptx embed (Design §9.5k/P2-P)",
+    sampleArgs: {
+      markdown:
+        "| Region | Sales |\n|--------|------:|\n| North | 12 |\n| South | 9 |\n",
+      title: "Sales",
+      theme: "default",
+    },
+    argChoices: { theme: ["default", "dark"] },
   },
   message: {
     summary:
@@ -592,6 +704,25 @@ export async function listWorkflowTools(input: {
       };
       if (!available && unavailableReason) browserRow.unavailableReason = unavailableReason;
       out.push(browserRow);
+      continue;
+    }
+    // Design §9.5k / V-OFFICE-42 — sql_* unavailable until DuckDB ready (turn catalogue omits).
+    if (spec.name === "sql_load" || spec.name === "sql_query") {
+      const ready = isLocalSqlRuntimeReady();
+      out.push({
+        name: spec.name,
+        risk: spec.risk,
+        source: "builtin",
+        summary: meta?.summary ?? spec.name,
+        ...metaExtras(meta),
+        available: ready,
+        ...(ready
+          ? {}
+          : {
+              unavailableReason:
+                "DuckDB not ready — Owner Install under System → Files (or set ENVOYHOME_DUCKDB)",
+            }),
+      });
       continue;
     }
     out.push({
@@ -1135,6 +1266,24 @@ export async function runExtendedWorkflowTool(input: {
   if (tool === "promote_knowledge") {
     return runPromoteKnowledgeTool(input);
   }
+  if (tool === "table_transform") {
+    return runTableTransformTool(input);
+  }
+  if (tool === "sql_load") {
+    return runSqlLoadTool(input);
+  }
+  if (tool === "sql_query") {
+    return runSqlQueryTool(input);
+  }
+  if (tool === "chart_table") {
+    return runChartTableTool(input);
+  }
+  if (tool === "render_diagram") {
+    return runRenderDiagramTool(input);
+  }
+  if (tool === "render_table") {
+    return runRenderTableTool(input);
+  }
   if (
     tool === "message" ||
     tool === "sessions_list" ||
@@ -1454,9 +1603,103 @@ async function runExportDocumentTool(input: {
     );
   }
   const enginePref = resolveExportEnginePreference(input.args.engine);
+
+  // §9.5k Owner template packs
+  let theme: OfficeTheme | undefined;
+  let templateNote: string | undefined;
+  let masterNote: string | undefined;
+  const templateId =
+    typeof input.args.templateId === "string" && input.args.templateId.trim()
+      ? input.args.templateId.trim().replace(/[^a-zA-Z0-9_-]/g, "")
+      : undefined;
+  if (templateId) {
+    const accountDir = join(
+      input.paths.accountOfficeTemplatesDir(input.accountId),
+      templateId,
+    );
+    const householdDir = join(input.paths.officeTemplatesDir, templateId);
+    theme =
+      (await loadOfficeThemeFromDir(accountDir)) ??
+      (await loadOfficeThemeFromDir(householdDir)) ??
+      undefined;
+    if (!theme) {
+      templateNote = `templateId "${templateId}" not found; using default theme`;
+      theme = resolveOfficeTheme({ id: "default" });
+    } else {
+      templateNote = `templateId "${templateId}" applied`;
+      masterNote =
+        (await detectMasterPptxNote(accountDir)) ??
+        (await detectMasterPptxNote(householdDir));
+    }
+  } else if (input.args.theme && typeof input.args.theme === "object") {
+    // Preset ids (`default` | `dark`) must pick up full color/font floors (P2-O).
+    const raw = input.args.theme as OfficeTheme;
+    theme = resolveOfficeTheme({
+      ...raw,
+      id: typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : "custom",
+    });
+  } else if (
+    typeof input.args.theme === "string" &&
+    (input.args.theme === "default" || input.args.theme === "dark")
+  ) {
+    theme = resolveOfficeTheme({ id: input.args.theme });
+  }
+
+  const IMAGE_EXT = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp"]);
+  const looksLikeImage = (buf: Buffer): boolean => {
+    if (buf.length < 12) return false;
+    // PNG
+    if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) {
+      return true;
+    }
+    // JPEG
+    if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return true;
+    // GIF
+    if (buf.subarray(0, 6).toString("ascii") === "GIF87a" ||
+        buf.subarray(0, 6).toString("ascii") === "GIF89a") {
+      return true;
+    }
+    // WEBP (RIFF....WEBP)
+    if (
+      buf.subarray(0, 4).toString("ascii") === "RIFF" &&
+      buf.subarray(8, 12).toString("ascii") === "WEBP"
+    ) {
+      return true;
+    }
+    return false;
+  };
+  const resolveImage = async (relPath: string): Promise<Buffer | null> => {
+    const cleaned = relPath.replace(/\\/g, "/").replace(/^\.\/+/, "");
+    if (
+      cleaned.includes("..") ||
+      cleaned.startsWith("/") ||
+      /^[A-Za-z]:[\\/]/.test(cleaned)
+    ) {
+      return null;
+    }
+    const ext = extname(cleaned).toLowerCase();
+    if (!IMAGE_EXT.has(ext)) return null;
+    try {
+      const resolved = resolveSandboxPath(
+        toolPathOpts(input.paths, input.accountId!, input, false, cleaned),
+      );
+      const buf = await readFile(resolved.absolute);
+      if (buf.length > 2 * 1024 * 1024) return null;
+      if (!looksLikeImage(buf)) return null;
+      return buf;
+    } catch {
+      return null;
+    }
+  };
+
   const exported = await exportDocument(formatRaw, markdown, {
     ...(title ? { title } : {}),
     engine: enginePref,
+    ...(theme ? { theme } : {}),
+    ...(formatRaw === "pptx" ? { resolveImage } : {}),
+    ...(templateId ? { templateId } : {}),
+    ...(templateNote ? { templateNote } : {}),
+    ...(masterNote ? { masterNote } : {}),
   });
   const buf = exported.buffer;
   const out = resolveSandboxPath(
@@ -1474,6 +1717,36 @@ async function runExportDocumentTool(input: {
     engine: exported.engine,
     quality,
   };
+  if (
+    formatRaw === "pptx" &&
+    enginePref === "libreoffice" &&
+    markdownNeedsJsPptx(markdown)
+  ) {
+    result.qualityNote =
+      "Forced libreoffice may flatten slide layouts and drop jail images; prefer engine auto/js for deck fidelity";
+  }
+  if (exported.pptxNotes) {
+    if (exported.pptxNotes.unknownLayouts.length) {
+      result.layoutNotes = `unknown layouts soft-defaulted: ${exported.pptxNotes.unknownLayouts.join(", ")}`;
+    }
+    if (exported.pptxNotes.imageCount || exported.pptxNotes.imageSkipped.length) {
+      result.imageCount = exported.pptxNotes.imageCount;
+      if (exported.pptxNotes.imageSkipped.length) {
+        result.imageSkipped = exported.pptxNotes.imageSkipped;
+      }
+    }
+    if (exported.pptxNotes.templateNote) {
+      result.templateNote = exported.pptxNotes.templateNote;
+    }
+    if (exported.pptxNotes.masterNote) {
+      result.masterNote = exported.pptxNotes.masterNote;
+    }
+    if (exported.pptxNotes.speakerNotesCount) {
+      result.speakerNotesCount = exported.pptxNotes.speakerNotesCount;
+    }
+  } else if (templateNote) {
+    result.templateNote = templateNote;
+  }
   // At-need guidance when structure-only (Design §9.5b / V-OFFICE-11).
   if (quality === "structure" && formatRaw !== "md") {
     const { getDocumentExportStatus } = await import("./document-export-lo.js");
@@ -1491,6 +1764,440 @@ async function runExportDocumentTool(input: {
   }
 
   return JSON.stringify(result);
+}
+
+async function loadTableFromToolArgs(input: {
+  args: Record<string, unknown>;
+  paths: HomePaths;
+  accountId: string;
+  workspaceRoot?: string | null;
+  workspaceMode?: WorkspaceMode | null;
+  workspaceMounts?: Array<{ id: string; hostPath: string; mode: WorkspaceMode }> | null;
+}): Promise<TableData> {
+  if (typeof input.args.markdown === "string" && input.args.markdown.trim()) {
+    return parseGfmTable(input.args.markdown);
+  }
+  if (typeof input.args.sourcePath === "string" && input.args.sourcePath.trim()) {
+    const src = input.args.sourcePath.trim().replace(/\\/g, "/");
+    const ext = extname(src).toLowerCase();
+    const resolved = resolveSandboxPath(
+      toolPathOpts(input.paths, input.accountId, input, false, src),
+    );
+    if (ext === ".csv") {
+      const text = await readFile(resolved.absolute, "utf8");
+      return parseCsvText(text);
+    }
+    if (ext === ".xlsx") {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.readFile(resolved.absolute);
+      const sheetName =
+        typeof input.args.sheetName === "string" && input.args.sheetName.trim()
+          ? input.args.sheetName.trim()
+          : undefined;
+      const sheet = sheetName
+        ? wb.getWorksheet(sheetName)
+        : wb.worksheets[0];
+      if (!sheet) {
+        throw new Error("envoyhome.bad_params: worksheet not found");
+      }
+      const headers: string[] = [];
+      const rows: string[][] = [];
+      sheet.eachRow((row, rowNumber) => {
+        const vals = (row.values as unknown[])
+          .slice(1)
+          .map((v) => (v == null ? "" : String(v)));
+        if (rowNumber === 1) headers.push(...vals);
+        else rows.push(vals);
+      });
+      const table = { headers, rows };
+      assertTableCaps(table);
+      return table;
+    }
+    throw new Error(
+      "envoyhome.bad_params: sourcePath must be .csv or .xlsx (or pass markdown table)",
+    );
+  }
+  throw new Error(
+    "envoyhome.bad_params: table tool requires markdown or sourcePath",
+  );
+}
+
+function withTimeout<T>(ms: number, work: () => Promise<T>, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`envoyhome.timeout: ${label} exceeded ${ms}ms`));
+    }, ms);
+    work()
+      .then((v) => {
+        clearTimeout(timer);
+        resolve(v);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
+/** Parse closed-op table_transform args (Design §9.5k / P2-R). */
+function parseTableTransformArgs(
+  raw: Record<string, unknown>,
+  allowPipeline = true,
+): TableTransformArgs {
+  if (!isTableTransformOp(raw.op)) {
+    throw new Error(
+      `envoyhome.bad_params: op must be one of ${TABLE_TRANSFORM_OPS.join(", ")}`,
+    );
+  }
+  if (raw.op === "pipeline" && !allowPipeline) {
+    throw new Error("envoyhome.bad_params: nested pipeline refused");
+  }
+  const columns = Array.isArray(raw.columns)
+    ? raw.columns.filter((c): c is string => typeof c === "string")
+    : undefined;
+  const values = Array.isArray(raw.values)
+    ? raw.values.filter((c): c is string => typeof c === "string")
+    : undefined;
+  const aggRaw = raw.agg;
+  const agg =
+    aggRaw === "sum" ||
+    aggRaw === "avg" ||
+    aggRaw === "count" ||
+    aggRaw === "min" ||
+    aggRaw === "max"
+      ? aggRaw
+      : undefined;
+  let rename: Record<string, string> | undefined;
+  if (raw.rename && typeof raw.rename === "object" && !Array.isArray(raw.rename)) {
+    rename = {};
+    for (const [k, v] of Object.entries(raw.rename as Record<string, unknown>)) {
+      if (typeof v === "string") rename[k] = v;
+    }
+  }
+  let steps: TableTransformArgs[] | undefined;
+  if (raw.op === "pipeline") {
+    if (!Array.isArray(raw.steps)) {
+      throw new Error("envoyhome.bad_params: pipeline requires steps[]");
+    }
+    steps = raw.steps.map((s, i) => {
+      if (!s || typeof s !== "object" || Array.isArray(s)) {
+        throw new Error(`envoyhome.bad_params: pipeline step ${i} invalid`);
+      }
+      const step = s as Record<string, unknown>;
+      if (!isTableTransformStepOp(step.op)) {
+        throw new Error(
+          `envoyhome.bad_params: pipeline step ${i} op invalid or nested pipeline`,
+        );
+      }
+      return parseTableTransformArgs(step, false);
+    });
+  }
+  const n =
+    typeof raw.n === "number" && Number.isFinite(raw.n) ? raw.n : undefined;
+  const out: TableTransformArgs = { op: raw.op };
+  if (typeof raw.column === "string") out.column = raw.column;
+  if (typeof raw.equals === "string") out.equals = raw.equals;
+  if (typeof raw.notEquals === "string") out.notEquals = raw.notEquals;
+  if (typeof raw.contains === "string") out.contains = raw.contains;
+  if (typeof raw.gt === "string") out.gt = raw.gt;
+  if (typeof raw.gte === "string") out.gte = raw.gte;
+  if (typeof raw.lt === "string") out.lt = raw.lt;
+  if (typeof raw.lte === "string") out.lte = raw.lte;
+  if (values) out.values = values;
+  if (typeof raw.isEmpty === "boolean") out.isEmpty = raw.isEmpty;
+  if (typeof raw.ascending === "boolean") out.ascending = raw.ascending;
+  if (agg) out.agg = agg;
+  if (typeof raw.groupBy === "string") out.groupBy = raw.groupBy;
+  if (columns) out.columns = columns;
+  if (rename) out.rename = rename;
+  if (n !== undefined) out.n = n;
+  if (steps) out.steps = steps;
+  return out;
+}
+
+/** Design §9.5k — closed-op table transform. */
+async function runTableTransformTool(input: {
+  args: Record<string, unknown>;
+  paths: HomePaths;
+  accountId?: string;
+  workspaceRoot?: string | null;
+  workspaceMode?: WorkspaceMode | null;
+  workspaceMounts?: Array<{ id: string; hostPath: string; mode: WorkspaceMode }> | null;
+}): Promise<string> {
+  return withTimeout(TABLE_TRANSFORM_TIMEOUT_MS, async () => {
+    if (!input.accountId) {
+      throw new Error("envoyhome.bad_params: accountId required for table_transform");
+    }
+    if (!isTableTransformOp(input.args.op)) {
+      throw new Error(
+        `envoyhome.bad_params: op must be one of ${TABLE_TRANSFORM_OPS.join(", ")}`,
+      );
+    }
+    const table = await loadTableFromToolArgs({
+      ...input,
+      accountId: input.accountId,
+    });
+    const transformArgs = parseTableTransformArgs(input.args);
+    const outTable = runTableTransform(table, transformArgs);
+    const uri =
+      typeof input.args.path === "string" && input.args.path.trim()
+        ? assertTableOutputPath(input.args.path.trim())
+        : defaultTableUri(
+            typeof input.args.op === "string" ? input.args.op : "table",
+          );
+    const out = resolveSandboxPath(
+      toolPathOpts(input.paths, input.accountId, input, true, uri),
+    );
+    await mkdir(dirname(out.absolute), { recursive: true });
+    const csv = tableToCsv(outTable.table);
+    await writeFile(out.absolute, csv, "utf8");
+    return JSON.stringify({
+      uri,
+      bytes: Buffer.byteLength(csv, "utf8"),
+      op: input.args.op,
+      summary: outTable.summary,
+      preview: tableToGfm(outTable.table),
+      rows: outTable.table.rows.length,
+      cols: outTable.table.headers.length,
+    });
+  }, "table_transform");
+}
+
+/** Design §9.5k / P2-S2 — register jail table for local SQL. */
+async function runSqlLoadTool(input: {
+  args: Record<string, unknown>;
+  paths: HomePaths;
+  accountId?: string;
+  workspaceRoot?: string | null;
+  workspaceMode?: WorkspaceMode | null;
+  workspaceMounts?: Array<{ id: string; hostPath: string; mode: WorkspaceMode }> | null;
+}): Promise<string> {
+  return withTimeout(LOCALSQL_TIMEOUT_MS, async () => {
+    if (!input.accountId) {
+      throw new Error("envoyhome.bad_params: accountId required for sql_load");
+    }
+    return runSqlLoad({
+      args: input.args,
+      paths: input.paths,
+      accountId: input.accountId,
+      ...(input.workspaceRoot !== undefined
+        ? { workspaceRoot: input.workspaceRoot }
+        : {}),
+      ...(input.workspaceMode !== undefined
+        ? { workspaceMode: input.workspaceMode }
+        : {}),
+      ...(input.workspaceMounts !== undefined
+        ? { workspaceMounts: input.workspaceMounts }
+        : {}),
+    });
+  }, "sql_load");
+}
+
+/** Design §9.5k / P2-S2 — allow-listed DuckDB query. */
+async function runSqlQueryTool(input: {
+  args: Record<string, unknown>;
+  paths: HomePaths;
+  accountId?: string;
+  workspaceRoot?: string | null;
+  workspaceMode?: WorkspaceMode | null;
+  workspaceMounts?: Array<{ id: string; hostPath: string; mode: WorkspaceMode }> | null;
+}): Promise<string> {
+  return withTimeout(LOCALSQL_TIMEOUT_MS + 5_000, async () => {
+    if (!input.accountId) {
+      throw new Error("envoyhome.bad_params: accountId required for sql_query");
+    }
+    return runSqlQuery({
+      args: input.args,
+      paths: input.paths,
+      accountId: input.accountId,
+      ...(input.workspaceRoot !== undefined
+        ? { workspaceRoot: input.workspaceRoot }
+        : {}),
+      ...(input.workspaceMode !== undefined
+        ? { workspaceMode: input.workspaceMode }
+        : {}),
+      ...(input.workspaceMounts !== undefined
+        ? { workspaceMounts: input.workspaceMounts }
+        : {}),
+    });
+  }, "sql_query");
+}
+
+/** Design §9.5k — chart PNG. */
+async function runChartTableTool(input: {
+  args: Record<string, unknown>;
+  paths: HomePaths;
+  accountId?: string;
+  workspaceRoot?: string | null;
+  workspaceMode?: WorkspaceMode | null;
+  workspaceMounts?: Array<{ id: string; hostPath: string; mode: WorkspaceMode }> | null;
+}): Promise<string> {
+  return withTimeout(CHART_TABLE_TIMEOUT_MS, async () => {
+    if (!input.accountId) {
+      throw new Error("envoyhome.bad_params: accountId required for chart_table");
+    }
+    if (!isChartType(input.args.chartType)) {
+      throw new Error(
+        `envoyhome.bad_params: chartType must be one of ${CHART_TYPES.join(", ")}`,
+      );
+    }
+    const table = await loadTableFromToolArgs({
+      ...input,
+      accountId: input.accountId,
+    });
+    const series = extractChartSeries(table, {
+      ...(typeof input.args.labelColumn === "string"
+        ? { labelColumn: input.args.labelColumn }
+        : {}),
+      ...(typeof input.args.valueColumn === "string"
+        ? { valueColumn: input.args.valueColumn }
+        : {}),
+    });
+    const title =
+      typeof input.args.title === "string" && input.args.title.trim()
+        ? input.args.title.trim()
+        : undefined;
+    const { png, stats } = renderChartPng(input.args.chartType, series, {
+      ...(title ? { title } : {}),
+    });
+    const uri =
+      typeof input.args.path === "string" && input.args.path.trim()
+        ? assertChartOutputPath(input.args.path.trim())
+        : defaultChartUri(input.args.chartType);
+    const out = resolveSandboxPath(
+      toolPathOpts(input.paths, input.accountId, input, true, uri),
+    );
+    await mkdir(dirname(out.absolute), { recursive: true });
+    await writeFile(out.absolute, png);
+    const statsUri = uri.replace(/\.png$/i, ".json");
+    const statsOut = resolveSandboxPath(
+      toolPathOpts(input.paths, input.accountId, input, true, statsUri),
+    );
+    await writeFile(statsOut.absolute, JSON.stringify(stats, null, 2), "utf8");
+    return JSON.stringify({
+      uri,
+      statsUri,
+      bytes: png.length,
+      mimeType: "image/png",
+      chartType: input.args.chartType,
+      points: series.values.length,
+    });
+  }, "chart_table");
+}
+
+/** Design §9.5k/P2-P — Mermaid → PNG. */
+async function runRenderDiagramTool(input: {
+  args: Record<string, unknown>;
+  paths: HomePaths;
+  accountId?: string;
+  workspaceRoot?: string | null;
+  workspaceMode?: WorkspaceMode | null;
+  workspaceMounts?: Array<{ id: string; hostPath: string; mode: WorkspaceMode }> | null;
+}): Promise<string> {
+  return withTimeout(DIAGRAM_TIMEOUT_MS, async () => {
+    if (!input.accountId) {
+      throw new Error("envoyhome.bad_params: accountId required for render_diagram");
+    }
+    let mermaid = "";
+    if (typeof input.args.mermaid === "string" && input.args.mermaid.trim()) {
+      mermaid = input.args.mermaid;
+    } else if (
+      typeof input.args.sourcePath === "string" &&
+      input.args.sourcePath.trim()
+    ) {
+      const src = input.args.sourcePath.trim().replace(/\\/g, "/");
+      const ext = extname(src).toLowerCase();
+      if (ext !== ".mmd" && ext !== ".md" && ext !== ".txt") {
+        throw new Error(
+          "envoyhome.bad_params: render_diagram sourcePath must be .mmd/.md/.txt",
+        );
+      }
+      const resolved = resolveSandboxPath(
+        toolPathOpts(input.paths, input.accountId, input, false, src),
+      );
+      mermaid = await readFile(resolved.absolute, "utf8");
+    } else {
+      throw new Error(
+        "envoyhome.bad_params: render_diagram requires mermaid or sourcePath",
+      );
+    }
+    // Validate early for clear errors
+    assertSafeMermaidSource(mermaid);
+    const theme =
+      input.args.theme === "dark" ? "dark" : ("default" as const);
+    const { png, kind, width, height } = await renderDiagramPng(mermaid, {
+      theme,
+    });
+    const uri =
+      typeof input.args.path === "string" && input.args.path.trim()
+        ? assertDiagramOutputPath(input.args.path.trim())
+        : defaultDiagramUri(kind);
+    const out = resolveSandboxPath(
+      toolPathOpts(input.paths, input.accountId, input, true, uri),
+    );
+    await mkdir(dirname(out.absolute), { recursive: true });
+    await writeFile(out.absolute, png);
+    return JSON.stringify({
+      uri,
+      bytes: png.length,
+      mimeType: "image/png",
+      kind,
+      width,
+      height,
+      theme,
+      kinds: [...DIAGRAM_KINDS],
+    });
+  }, "render_diagram");
+}
+
+/** Design §9.5k/P2-P — styled table → PNG. */
+async function runRenderTableTool(input: {
+  args: Record<string, unknown>;
+  paths: HomePaths;
+  accountId?: string;
+  workspaceRoot?: string | null;
+  workspaceMode?: WorkspaceMode | null;
+  workspaceMounts?: Array<{ id: string; hostPath: string; mode: WorkspaceMode }> | null;
+}): Promise<string> {
+  return withTimeout(RENDER_TABLE_TIMEOUT_MS, async () => {
+    if (!input.accountId) {
+      throw new Error("envoyhome.bad_params: accountId required for render_table");
+    }
+    const table = await loadTableFromToolArgs({
+      ...input,
+      accountId: input.accountId,
+    });
+    assertTableCaps(table);
+    const title =
+      typeof input.args.title === "string" && input.args.title.trim()
+        ? input.args.title.trim()
+        : undefined;
+    const theme =
+      input.args.theme === "dark" ? "dark" : ("default" as const);
+    const { png, rows, cols, width, height } = renderTablePng(table, {
+      theme,
+      ...(title ? { title } : {}),
+    });
+    const uri =
+      typeof input.args.path === "string" && input.args.path.trim()
+        ? assertRenderTableOutputPath(input.args.path.trim())
+        : defaultRenderTableUri("table");
+    const out = resolveSandboxPath(
+      toolPathOpts(input.paths, input.accountId, input, true, uri),
+    );
+    await mkdir(dirname(out.absolute), { recursive: true });
+    await writeFile(out.absolute, png);
+    return JSON.stringify({
+      uri,
+      bytes: png.length,
+      mimeType: "image/png",
+      rows,
+      cols,
+      width,
+      height,
+      theme,
+    });
+  }, "render_table");
 }
 
 /** Design §9.5c — sandbox Office/PDF → GFM under output/extracts/. */

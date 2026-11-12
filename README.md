@@ -258,9 +258,10 @@ Spine **B0–B14** is on `main`. Design gate **G1** and plan gate **G6** are acc
 
 [`design_doc/reviews/2026-10-22-early-adopter-claims.md`](design_doc/reviews/2026-10-22-early-adopter-claims.md)
 
-Preview posture: desktop + phone; optional HA/MQTT **demo/fixture**. Do **not** claim Privacy Mode as a finished product toggle, a production IM zoo, or agentskills.io conformance until those bars close. Mobile live verify: [`docs/mobile-live-verify.md`](docs/mobile-live-verify.md).
+Preview posture: desktop + phone; optional HA/MQTT **demo/fixture**. Do **not** claim Privacy Mode as a finished product toggle, a production IM zoo, or agentskills.io conformance until those bars close. Mobile live verify: [`docs/mobile-live-verify.md`](docs/mobile-live-verify.md). Office deck/compute: [`docs/office-live-verify.md`](docs/office-live-verify.md) (`pnpm office:live-verify`).
 
-Branding / store pack: [`apps/branding/store/README.md`](apps/branding/store/README.md).
+Branding / store icons: [`apps/branding/store/README.md`](apps/branding/store/README.md).  
+Mobile App Store / Play: [`docs/mobile-store-release.md`](docs/mobile-store-release.md) · [`apps/mobile/store-release/`](apps/mobile/store-release/).
 
 ---
 
@@ -269,8 +270,9 @@ Branding / store pack: [`apps/branding/store/README.md`](apps/branding/store/REA
 - **Start here:** [`QuickStart.md`](QuickStart.md)
 - **Diagrams:** [`docs/screens/`](docs/screens/) (logo · architecture · family)
 - **Harness:** [envoy-harness](https://github.com/allenpeng0705/envoy-harness)
+- **Office (docs/decks):** [`docs/office-live-verify.md`](docs/office-live-verify.md) · `pnpm office:live-verify` (P2-N dogfood-gated)
 - **Smart home (optional):** [`docs/smart-home.md`](docs/smart-home.md) · HA · MQTT · [live checklist](docs/smart-home-live-checklist.md)
-- **Mobile:** [`apps/mobile/README.md`](apps/mobile/README.md) · [`docs/mobile-live-verify.md`](docs/mobile-live-verify.md) · [iOS/Android setup](docs/mobile-ios-android-setup.md)
+- **Mobile:** [`apps/mobile/README.md`](apps/mobile/README.md) · [store release](docs/mobile-store-release.md) · [`docs/mobile-live-verify.md`](docs/mobile-live-verify.md) · [iOS/Android setup](docs/mobile-ios-android-setup.md)
 - **Desktop:** [`apps/desktop/README.md`](apps/desktop/README.md) · [`scripts/README.md`](scripts/README.md)
 - **Family peers:** [EnvoyMesh](https://github.com/allenpeng0705/EnvoyMesh) · [EnvoyDev / EnvoyCoder](https://github.com/allenpeng0705/EnvoyCoder)
 - **Website (family):** [www.envoymesh.cn](https://www.envoymesh.cn)

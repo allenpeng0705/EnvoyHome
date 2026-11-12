@@ -159,9 +159,134 @@ steps:
 `;
 
 /**
+ * Deck + data demo: table_transform → chart_table (fixed path) → export_document pptx.
+ * Prefer core → local SQL (DuckDB when ready) → Owner MCP (Design §9.5k).
+ * Chart uses a fixed path so the pptx markdown can reference it without args_from.
+ */
+const WORKFLOW_HOWTO_DECK = `id: demo_deck_from_data
+enabled: false
+match:
+  keywords: ["deck from data", "pptx chart"]
+steps:
+  - id: transform
+    type: tool
+    name: table_transform
+    args:
+      op: summarize
+      markdown: |
+        | Region | Sales |
+        |--------|------:|
+        | North | 12 |
+        | South | 9 |
+        | East | 15 |
+    x: 40
+    y: 80
+  - id: chart
+    type: tool
+    name: chart_table
+    args:
+      chartType: bar
+      title: Sales by region
+      path: output/charts/demo-sales.png
+      markdown: |
+        | Region | Sales |
+        |--------|------:|
+        | North | 12 |
+        | South | 9 |
+        | East | 15 |
+    x: 300
+    y: 80
+  - id: export
+    type: tool
+    name: export_document
+    args:
+      format: pptx
+      title: Sales deck
+      markdown: |
+        # Sales review
+        <!-- slide layout=section -->
+        <!-- slide notes: Open with the regional story -->
+
+        ## By region
+        <!-- slide layout=title_bullets -->
+        - North / South / East
+        - See chart on next slide
+
+        ## Build vs buy
+        <!-- slide layout=comparison -->
+        Build | Buy
+        - Own the stack
+        - Faster iterate
+        - Lower ops
+        - Vendor roadmap
+
+        ## Customer voice
+        <!-- slide layout=quote -->
+        Customers love the simplicity.
+        — Jane, Owner
+
+        ## Chart
+        <!-- slide layout=title_only -->
+        ![Sales](output/charts/demo-sales.png)
+    x: 560
+    y: 80
+`;
+
+/**
+ * Offline SQL join demo — greyed in UI until DuckDB ready (catalogue available).
+ * Prefer after core table_transform when a true join is needed (Design §9.5k / P2-S).
+ */
+const WORKFLOW_HOWTO_SQL = `id: demo_sql_join_chart
+enabled: false
+match:
+  keywords: ["sql join", "duckdb join", "join csv"]
+steps:
+  - id: load_sales
+    type: tool
+    name: sql_load
+    args:
+      name: sales
+      sourcePath: documents/sales.csv
+    x: 40
+    y: 60
+  - id: load_regions
+    type: tool
+    name: sql_load
+    args:
+      name: regions
+      sourcePath: documents/regions.csv
+    x: 40
+    y: 200
+  - id: join
+    type: tool
+    name: sql_query
+    args:
+      sql: |
+        SELECT r.region, SUM(s.amount) AS total
+        FROM sales s
+        JOIN regions r ON s.region_id = r.id
+        GROUP BY r.region
+        ORDER BY total DESC
+      path: output/tables/demo-sql-join.csv
+    x: 300
+    y: 120
+  - id: chart
+    type: tool
+    name: chart_table
+    args:
+      chartType: bar
+      title: Sales by region
+      path: output/charts/demo-sql-join.png
+      sourcePath: output/tables/demo-sql-join.csv
+    x: 560
+    y: 120
+`;
+
+/**
  * Web clip demo: https page → readable Markdown → summarize → documents/ + promote.
  * Needs Connections → Web search enabled (fetch/Obscura extract). Uses {{step.extract.markdown}}.
  */
+
 const WORKFLOW_HOWTO_WEB = `id: demo_web_clip
 enabled: false
 match:
@@ -2174,6 +2299,48 @@ function chatAttachChipsHtml(files) {
       </li>`,
     )
     .join("")}</ul>`;
+}
+
+/** @param {string} name */
+function isChatDataSpreadsheetName(name) {
+  return /\.(csv|xlsx)$/i.test(String(name || ""));
+}
+
+/**
+ * Compact CSV/XLSX assist strip — seeds composer only (no approval bypass).
+ * @param {Array<{ name?: string }>} files
+ * @param {boolean} sqlReady
+ */
+function chatDataAssistHtml(files, sqlReady) {
+  if (!files.some((f) => isChatDataSpreadsheetName(f.name || ""))) return "";
+  const joinLabel = sqlReady
+    ? t("chat.dataAssistJoin")
+    : t("chat.dataAssistInstallDuckdb");
+  return `<div class="chat-data-assist" id="chat-data-assist">
+    <p class="muted chat-data-assist-hint">${escapeHtml(t("chat.dataAssistHint"))}</p>
+    <div class="chat-data-assist-actions">
+      <button type="button" class="secondary" data-data-assist="clean">${escapeHtml(t("chat.dataAssistClean"))}</button>
+      <button type="button" class="secondary" data-data-assist="ask">${escapeHtml(t("chat.dataAssistAsk"))}</button>
+      <button type="button" class="secondary" data-data-assist="${sqlReady ? "join" : "install-sql"}">${escapeHtml(joinLabel)}</button>
+    </div>
+  </div>`;
+}
+
+/** Cached DuckDB ready flag for chat assist (refreshed on attach UI). */
+let chatLocalSqlReadyCache = false;
+let chatLocalSqlReadyFetchedAt = 0;
+
+async function refreshChatLocalSqlReady() {
+  const now = Date.now();
+  if (now - chatLocalSqlReadyFetchedAt < 15_000) return chatLocalSqlReadyCache;
+  chatLocalSqlReadyFetchedAt = now;
+  try {
+    const body = await rpc("home.getLocalSqlStatus", {});
+    chatLocalSqlReadyCache = body?.result?.localSqlRuntime === "ready";
+  } catch {
+    chatLocalSqlReadyCache = false;
+  }
+  return chatLocalSqlReadyCache;
 }
 
 /** Web Speech API (macOS WKWebView → Apple Speech; WebView2 often cloud). */
@@ -5666,6 +5833,7 @@ async function showView(id) {
         : "";
       const attachControls = allowAttach
         ? `${chatAttachChipsHtml(pendingFiles)}
+                ${chatDataAssistHtml(pendingFiles, chatLocalSqlReadyCache)}
                 <div class="chat-composer-row">
                   <input type="file" id="chat-file" multiple hidden />
                   <button type="button" class="secondary chat-attach-btn" id="chat-attach" title="${escapeHtml(t("chat.attachHint"))}" aria-label="${escapeHtml(t("chat.attach"))}">${chatAttachIconSvg()}</button>
@@ -6013,8 +6181,44 @@ async function showView(id) {
       document.getElementById("chat-voice")?.addEventListener("click", () => {
         toggleChatSpeech(/** @type {HTMLInputElement | null} */ (document.getElementById("chat-input")));
       });
-      const refreshAttachUi = () => {
+      const seedComposerText = (text) => {
+        const input = /** @type {HTMLInputElement | null} */ (document.getElementById("chat-input"));
+        if (!input) return;
+        input.value = text;
+        input.focus();
+        try {
+          input.setSelectionRange(text.length, text.length);
+        } catch {
+          /* ignore */
+        }
+      };
+      const wireDataAssist = () => {
+        document.querySelectorAll("[data-data-assist]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const act = btn.getAttribute("data-data-assist");
+            if (act === "clean") {
+              seedComposerText(t("chat.dataAssistCleanSeed"));
+              return;
+            }
+            if (act === "ask") {
+              seedComposerText(t("chat.dataAssistAskSeed"));
+              return;
+            }
+            if (act === "join") {
+              seedComposerText(t("chat.dataAssistJoinSeed"));
+              return;
+            }
+            if (act === "install-sql") {
+              systemTab = "files";
+              await showView("system");
+              showToast(t("workflows.howtoSqlNeedDuckdb"), "ok");
+            }
+          });
+        });
+      };
+      const refreshAttachUi = async () => {
         const list = document.getElementById("chat-attach-list");
+        const assist = document.getElementById("chat-data-assist");
         const wrap = document.querySelector(".chat-composer-main");
         const files = pendingFilesForView(purpose);
         const html = chatAttachChipsHtml(files);
@@ -6024,6 +6228,18 @@ async function showView(id) {
         } else if (html && wrap) {
           wrap.insertAdjacentHTML("afterbegin", html);
         }
+        const sqlReady = files.some((f) => isChatDataSpreadsheetName(f.name || ""))
+          ? await refreshChatLocalSqlReady()
+          : chatLocalSqlReadyCache;
+        const assistHtml = chatDataAssistHtml(files, sqlReady);
+        if (assist) {
+          if (assistHtml) assist.outerHTML = assistHtml;
+          else assist.remove();
+        } else if (assistHtml && wrap) {
+          const chips = document.getElementById("chat-attach-list");
+          if (chips) chips.insertAdjacentHTML("afterend", assistHtml);
+          else wrap.insertAdjacentHTML("afterbegin", assistHtml);
+        }
         document.querySelectorAll("[data-attach-remove]").forEach((btn) => {
           btn.addEventListener("click", () => {
             const rid = btn.getAttribute("data-attach-remove");
@@ -6031,9 +6247,10 @@ async function showView(id) {
               purpose,
               pendingFilesForView(purpose).filter((f) => f.id !== rid),
             );
-            refreshAttachUi();
+            void refreshAttachUi();
           });
         });
+        wireDataAssist();
       };
       document.getElementById("chat-attach")?.addEventListener("click", () => fileInput?.click());
       fileInput?.addEventListener("change", () => {
@@ -6067,7 +6284,7 @@ async function showView(id) {
           added += 1;
         }
         setPendingFilesForView(purpose, next);
-        refreshAttachUi();
+        void refreshAttachUi();
         if (added > 0) {
           showToast(
             t("chat.attachAdded", {
@@ -6079,7 +6296,7 @@ async function showView(id) {
           );
         }
       });
-      refreshAttachUi();
+      void refreshAttachUi();
       form?.addEventListener("submit", async (ev) => {
         ev.preventDefault();
         stopChatSpeech();
@@ -6113,7 +6330,7 @@ async function showView(id) {
         log.push({ role: "system", text: t("chat.thinking") });
         if (input) input.value = "";
         setPendingFilesForView(purpose, []);
-        refreshAttachUi();
+        void refreshAttachUi();
         renderChatLogDom(log, emptyKey);
         /** @type {Array<{ kind: string, uri: string, fileName?: string, mimeType?: string, bytes?: number }>} */
         let media = [];
@@ -10651,6 +10868,10 @@ async function showView(id) {
         const toolByName = new Map(catalogueTools.map((row) => [row.name, row]));
         /** Ready tools only — HA/MQTT appear after those channels are enabled. */
         const readyTools = catalogueTools.filter((r) => r.available !== false);
+        /** Unavailable catalogue rows (e.g. sql_* before DuckDB) — show with reason, no insert. */
+        const unavailableTools = catalogueTools.filter((r) => r.available === false);
+        /** DuckDB local SQL tools present in catalogue when runtime is ready. */
+        const sqlToolsReady = readyTools.some((r) => r.name === "sql_load");
         const countBySource = (src) => readyTools.filter((r) => r.source === src).length;
         const toolsSummaryText = t("workflows.toolsSummary", {
           builtin: String(countBySource("builtin")),
@@ -10858,6 +11079,48 @@ async function showView(id) {
               <details class="wf-demo-yaml">
                 <summary>${escapeHtml(t("workflows.howtoViewYaml"))}</summary>
                 <pre class="skill-howto-md"><code>${escapeHtml(WORKFLOW_HOWTO_DOCS)}</code></pre>
+              </details>
+            </div>
+            <div class="wf-howto-block" data-wf-demo="deck">
+              <div class="wf-howto-head">
+                <h4 class="muted">${escapeHtml(t("workflows.howtoDeck"))}</h4>
+                <span class="wf-howto-actions">
+                  <button type="button" class="secondary" id="wf-test-deck">${escapeHtml(t("workflows.howtoTest"))}</button>
+                  <button type="button" id="wf-try-deck">${escapeHtml(t("workflows.howtoTry"))}</button>
+                </span>
+              </div>
+              <p class="wf-howto-what">${escapeHtml(t("workflows.howtoDeckWhat"))}</p>
+              <p class="muted wf-howto-blurb">${escapeHtml(t("workflows.howtoDeckHint"))}</p>
+              <div class="wf-demo-saved" id="wf-saved-deck" hidden></div>
+              <div class="wf-demo-canvas" id="wf-demo-deck"></div>
+              <div class="wf-demo-run" id="wf-run-deck" hidden></div>
+              <details class="wf-demo-yaml">
+                <summary>${escapeHtml(t("workflows.howtoViewYaml"))}</summary>
+                <pre class="skill-howto-md"><code>${escapeHtml(WORKFLOW_HOWTO_DECK)}</code></pre>
+              </details>
+            </div>
+            <div class="wf-howto-block${sqlToolsReady ? "" : " is-disabled"}" data-wf-demo="sql">
+              <div class="wf-howto-head">
+                <h4 class="muted">${escapeHtml(t("workflows.howtoSql"))}</h4>
+                <span class="wf-howto-actions">
+                  ${
+                    sqlToolsReady
+                      ? `<button type="button" class="secondary" id="wf-test-sql">${escapeHtml(t("workflows.howtoTest"))}</button>
+                  <button type="button" id="wf-try-sql">${escapeHtml(t("workflows.howtoTry"))}</button>`
+                      : `<button type="button" class="secondary" id="wf-sql-install">${escapeHtml(t("workflows.howtoSqlInstall"))}</button>`
+                  }
+                </span>
+              </div>
+              <p class="wf-howto-what">${escapeHtml(t("workflows.howtoSqlWhat"))}</p>
+              <p class="muted wf-howto-blurb">${escapeHtml(
+                sqlToolsReady ? t("workflows.howtoSqlHint") : t("workflows.howtoSqlNeedDuckdb"),
+              )}</p>
+              <div class="wf-demo-saved" id="wf-saved-sql" hidden></div>
+              <div class="wf-demo-canvas" id="wf-demo-sql"></div>
+              <div class="wf-demo-run" id="wf-run-sql" hidden></div>
+              <details class="wf-demo-yaml">
+                <summary>${escapeHtml(t("workflows.howtoViewYaml"))}</summary>
+                <pre class="skill-howto-md"><code>${escapeHtml(WORKFLOW_HOWTO_SQL)}</code></pre>
               </details>
             </div>
             <div class="wf-howto-block" data-wf-demo="web">
@@ -11273,19 +11536,23 @@ async function showView(id) {
           if (!host) return;
           const filterEl = /** @type {HTMLInputElement | null} */ (document.getElementById("wf-tools-filter"));
           const q = (filterEl?.value || "").trim().toLowerCase();
-          const filtered = readyTools.filter((row) => {
+          const matchRow = (row) => {
             if (!q) return true;
             const hay =
-              `${row.name} ${row.summary || ""} ${row.risk || ""} ${row.source || ""}`.toLowerCase();
+              `${row.name} ${row.summary || ""} ${row.risk || ""} ${row.source || ""} ${row.unavailableReason || ""}`.toLowerCase();
             return hay.includes(q);
-          });
-          if (!filtered.length) {
+          };
+          const filtered = readyTools.filter(matchRow);
+          const filteredOff = unavailableTools.filter(matchRow);
+          if (!filtered.length && !filteredOff.length) {
             host.innerHTML = `<p class="muted">${escapeHtml(
-              readyTools.length ? t("workflows.toolsEmpty") : t("workflows.toolsEmptyCatalogue"),
+              readyTools.length || unavailableTools.length
+                ? t("workflows.toolsEmpty")
+                : t("workflows.toolsEmptyCatalogue"),
             )}</p>`;
             return;
           }
-          host.innerHTML = ["builtin", "skill", "smarthome", "mcp"]
+          const readyHtml = ["builtin", "skill", "smarthome", "mcp"]
             .map((src) => {
               const rows = filtered.filter((r) => r.source === src);
               if (!rows.length) return "";
@@ -11295,6 +11562,7 @@ async function showView(id) {
                     <div class="wf-tool-main">
                       <code>${escapeHtml(row.name)}</code>
                       <span class="muted wf-tool-risk">${escapeHtml(row.risk)}</span>
+                      <span class="pill ok" style="margin-left:0.35rem">${escapeHtml(t("workflows.toolsAvailable"))}</span>
                     </div>
                     <p class="muted wf-tool-summary">${escapeHtml(row.summary || "")}</p>
                     <button type="button" class="secondary" data-wf-insert-tool="${escapeHtml(row.name)}">${escapeHtml(t("workflows.toolsInsert"))}</button>
@@ -11307,6 +11575,25 @@ async function showView(id) {
               </div>`;
             })
             .join("");
+          const offHtml = filteredOff.length
+            ? `<div class="wf-tool-group wf-tool-group-off">
+                <h4 class="muted">${escapeHtml(t("workflows.toolsUnavailableTitle"))} (${filteredOff.length})</h4>
+                <p class="muted wf-tools-hint">${escapeHtml(t("workflows.toolsUnavailableHint"))}</p>
+                <ul class="wf-tool-list">${filteredOff
+                  .map((row) => {
+                    return `<li class="wf-tool-row wf-tool-row-off" title="${escapeHtml(row.unavailableReason || row.summary || "")}">
+                      <div class="wf-tool-main">
+                        <code>${escapeHtml(row.name)}</code>
+                        <span class="muted wf-tool-risk">${escapeHtml(row.risk)}</span>
+                        <span class="pill muted" style="margin-left:0.35rem">${escapeHtml(t("workflows.toolsUnavailable"))}</span>
+                      </div>
+                      <p class="muted wf-tool-summary">${escapeHtml(row.unavailableReason || row.summary || "")}</p>
+                    </li>`;
+                  })
+                  .join("")}</ul>
+              </div>`
+            : "";
+          host.innerHTML = `${readyHtml}${offHtml}`;
           host.querySelectorAll("[data-wf-insert-tool]").forEach((btn) => {
             btn.addEventListener("click", () => {
               const name = btn.getAttribute("data-wf-insert-tool");
@@ -11450,6 +11737,8 @@ async function showView(id) {
         mountHowtoDemo("branch", "wf-demo-branch", WORKFLOW_HOWTO_BRANCH);
         mountHowtoDemo("linear", "wf-demo-linear", WORKFLOW_HOWTO_LINEAR);
         mountHowtoDemo("docs", "wf-demo-docs", WORKFLOW_HOWTO_DOCS);
+        mountHowtoDemo("deck", "wf-demo-deck", WORKFLOW_HOWTO_DECK);
+        mountHowtoDemo("sql", "wf-demo-sql", WORKFLOW_HOWTO_SQL);
         mountHowtoDemo("web", "wf-demo-web", WORKFLOW_HOWTO_WEB);
 
         const DEMO_SAMPLES = [
@@ -11457,6 +11746,8 @@ async function showView(id) {
           ["branch", WORKFLOW_HOWTO_BRANCH],
           ["linear", WORKFLOW_HOWTO_LINEAR],
           ["docs", WORKFLOW_HOWTO_DOCS],
+          ["deck", WORKFLOW_HOWTO_DECK],
+          ["sql", WORKFLOW_HOWTO_SQL],
           ["web", WORKFLOW_HOWTO_WEB],
         ];
 
@@ -11489,7 +11780,7 @@ async function showView(id) {
         }
 
         const showDemoRunPanel = (sampleKey, html) => {
-          for (const key of ["complex", "branch", "linear"]) {
+          for (const key of ["complex", "branch", "linear", "docs", "deck", "sql", "web"]) {
             const other = document.getElementById(`wf-run-${key}`);
             if (other && key !== sampleKey) {
               other.hidden = true;
@@ -11626,6 +11917,22 @@ async function showView(id) {
           openEditor("create", WORKFLOW_HOWTO_DOCS.trim() + "\n", "account", { practiceDemo: true });
           setWfMsg(`<p class="muted">${escapeHtml(t("workflows.howtoLoadedDocs"))}</p>`);
         });
+        document.getElementById("wf-try-deck")?.addEventListener("click", () => {
+          openEditor("create", WORKFLOW_HOWTO_DECK.trim() + "\n", "account", { practiceDemo: true });
+          setWfMsg(`<p class="muted">${escapeHtml(t("workflows.howtoLoadedDeck"))}</p>`);
+        });
+        document.getElementById("wf-try-sql")?.addEventListener("click", () => {
+          if (!sqlToolsReady) {
+            setWfMsg(`<p class="le-error">${escapeHtml(t("workflows.howtoSqlNeedDuckdb"))}</p>`);
+            return;
+          }
+          openEditor("create", WORKFLOW_HOWTO_SQL.trim() + "\n", "account", { practiceDemo: true });
+          setWfMsg(`<p class="muted">${escapeHtml(t("workflows.howtoLoadedSql"))}</p>`);
+        });
+        document.getElementById("wf-sql-install")?.addEventListener("click", async () => {
+          systemTab = "files";
+          await showView("system");
+        });
         document.getElementById("wf-try-web")?.addEventListener("click", () => {
           openEditor("create", WORKFLOW_HOWTO_WEB.trim() + "\n", "account", { practiceDemo: true });
           setWfMsg(`<p class="muted">${escapeHtml(t("workflows.howtoLoadedWeb"))}</p>`);
@@ -11641,6 +11948,16 @@ async function showView(id) {
         });
         document.getElementById("wf-test-docs")?.addEventListener("click", () => {
           testDemoWorkflow(WORKFLOW_HOWTO_DOCS, "docs");
+        });
+        document.getElementById("wf-test-deck")?.addEventListener("click", () => {
+          testDemoWorkflow(WORKFLOW_HOWTO_DECK, "deck");
+        });
+        document.getElementById("wf-test-sql")?.addEventListener("click", () => {
+          if (!sqlToolsReady) {
+            setWfMsg(`<p class="le-error">${escapeHtml(t("workflows.howtoSqlNeedDuckdb"))}</p>`);
+            return;
+          }
+          testDemoWorkflow(WORKFLOW_HOWTO_SQL, "sql");
         });
         document.getElementById("wf-test-web")?.addEventListener("click", () => {
           testDemoWorkflow(WORKFLOW_HOWTO_WEB, "web");
@@ -12994,9 +13311,10 @@ async function showView(id) {
           wireTabs();
           return;
         }
-        const [body, exportSt] = await Promise.all([
+        const [body, exportSt, sqlSt] = await Promise.all([
           rpc("home.listArtifacts", { accountId: aid }),
           rpc("home.getDocumentExportStatus", {}).catch(() => null),
+          rpc("home.getLocalSqlStatus", {}).catch(() => null),
         ]);
         if (body.error) {
           el.innerHTML = shell(
@@ -13075,6 +13393,89 @@ async function showView(id) {
             <button type="button" class="ghost" id="artifacts-lo-copy" style="margin-top:0.5rem">${escapeHtml(t("artifacts.loCopyHint"))}</button>`
             }
           </div>`;
+        const sql = sqlSt?.result || {};
+        const sqlRuntime = sql.localSqlRuntime || "missing";
+        const sqlReady = sqlRuntime === "ready";
+        const sqlDownloading = sqlRuntime === "downloading";
+        const sqlCancelled =
+          sqlRuntime === "failed" &&
+          /localsql_cancelled|cancelled/i.test(String(sql.lastError || ""));
+        const sqlFailed = sqlRuntime === "failed" && !sqlCancelled;
+        const sqlBadge = sqlReady
+          ? `<span class="pill ok">${escapeHtml(t("artifacts.sqlReady"))}</span>`
+          : sqlDownloading
+            ? `<span class="pill warn">${escapeHtml(t("artifacts.sqlDownloading"))}</span>`
+            : sqlCancelled
+              ? `<span class="pill muted">${escapeHtml(t("artifacts.sqlCancelled"))}</span>`
+              : sqlFailed
+                ? `<span class="pill warn">${escapeHtml(t("artifacts.sqlFailed"))}</span>`
+                : `<span class="pill muted">${escapeHtml(t("artifacts.sqlMissing"))}</span>`;
+        const sqlStatusNote = sqlReady
+          ? t("artifacts.sqlReadyNote", {
+              version: sql.versionLine || t("artifacts.sqlReadyGeneric"),
+            })
+          : sqlDownloading
+            ? t("artifacts.sqlDownloadingNote")
+            : sqlCancelled
+              ? t("artifacts.sqlCancelledNote")
+              : sqlFailed
+                ? t("artifacts.sqlFailedNote")
+                : t("artifacts.sqlMissingNote");
+        const sqlDl = sql.download || {};
+        const sqlRecv = Number(sqlDl.bytesReceived) || 0;
+        const sqlTot =
+          Number(sqlDl.bytesTotal) || Number(sql.approxBytes) || 0;
+        const sqlProgressLine =
+          sqlDownloading && sqlTot > 0
+            ? `<p class="muted" id="artifacts-sql-progress">${escapeHtml(
+                t("artifacts.sqlProgress", {
+                  received: fmtBytes(sqlRecv),
+                  total: fmtBytes(sqlTot),
+                }),
+              )}</p>`
+            : sqlDownloading
+              ? `<p class="muted" id="artifacts-sql-progress">${escapeHtml(fmtBytes(sqlRecv))}…</p>`
+              : "";
+        const sqlBtns = sqlReady
+          ? `<button type="button" class="ghost" id="artifacts-sql-refresh">${escapeHtml(t("artifacts.sqlRefresh"))}</button>`
+          : sqlDownloading
+            ? `<button type="button" class="secondary" id="artifacts-sql-cancel">${escapeHtml(t("artifacts.sqlCancel"))}</button>
+               <button type="button" class="ghost" id="artifacts-sql-refresh" style="margin-left:0.5rem">${escapeHtml(t("artifacts.sqlRefresh"))}</button>`
+            : `<button type="button" class="primary" id="artifacts-sql-install">${escapeHtml(t("artifacts.sqlInstall"))}</button>
+               <button type="button" class="ghost" id="artifacts-sql-refresh" style="margin-left:0.5rem">${escapeHtml(t("artifacts.sqlRefresh"))}</button>`;
+        const sqlToolsNote = sqlReady
+          ? t("artifacts.sqlToolsReady")
+          : t("artifacts.sqlToolsAbsent");
+        const sqlEnvHint = "export ENVOYHOME_DUCKDB=/absolute/path/to/duckdb";
+        const sqlCard = `<div class="card" id="artifacts-sql-card" style="margin:0 0 1.25rem">
+            <div class="card-row" style="align-items:center;gap:0.75rem;margin-bottom:0.5rem">
+              <strong>${escapeHtml(t("artifacts.sqlTitle"))}</strong>
+              ${sqlBadge}
+            </div>
+            <p class="muted" style="margin:0 0 0.5rem">${escapeHtml(t("artifacts.sqlWhy"))}</p>
+            <p class="muted" style="margin:0 0 0.5rem">${escapeHtml(sqlStatusNote)}</p>
+            ${
+              sqlReady
+                ? ""
+                : `<p class="muted" style="margin:0 0 0.5rem">${escapeHtml(t("artifacts.dataPreferJoinNeed"))}</p>`
+            }
+            <p class="muted" style="margin:0 0 0.5rem">${escapeHtml(sqlToolsNote)}</p>
+            <p class="muted" style="margin:0 0 0.5rem">${escapeHtml(sql.localSqlInstallHint || t("artifacts.sqlHint"))}</p>
+            ${
+              (sqlFailed || sqlCancelled) && sql.lastError
+                ? `<p class="le-error" style="margin:0 0 0.5rem">${escapeHtml(String(sql.lastError).slice(0, 240))}</p>`
+                : ""
+            }
+            ${sqlProgressLine}
+            <div class="row" style="margin:0.5rem 0">${sqlBtns}</div>
+            ${
+              sqlReady
+                ? ""
+                : `<p class="muted" style="margin:0.75rem 0 0.5rem">${escapeHtml(t("artifacts.sqlInstallNote"))}</p>
+            <code id="artifacts-sql-hint" style="display:block;user-select:all;word-break:break-all">${escapeHtml(sqlEnvHint)}</code>
+            <button type="button" class="ghost" id="artifacts-sql-copy" style="margin-top:0.5rem">${escapeHtml(t("artifacts.sqlCopyHint"))}</button>`
+            }
+          </div>`;
         const formatWhen = (iso) => {
           if (!iso) return "";
           const d = new Date(iso);
@@ -13101,13 +13502,74 @@ async function showView(id) {
               )
               .join("")}</ul>`
           : `<p class="muted sys-empty">${escapeHtml(t("artifacts.none"))}</p>`;
+        const preferStrip = `<div class="card artifacts-prefer-strip" style="margin:0.75rem 0 1rem">
+            <strong>${escapeHtml(t("artifacts.dataPreferTitle"))}</strong>
+            <p class="muted" style="margin:0.4rem 0 0.65rem">${escapeHtml(t("artifacts.dataPreferStrip"))}</p>
+            <div class="row" style="flex-wrap:wrap;gap:0.5rem">
+              <button type="button" class="secondary" id="artifacts-browse-tables">${escapeHtml(t("artifacts.dataBrowseTables"))}</button>
+              <button type="button" class="secondary" id="artifacts-browse-charts">${escapeHtml(t("artifacts.dataBrowseCharts"))}</button>
+            </div>
+            ${
+              sqlReady
+                ? ""
+                : `<p class="muted" style="margin:0.65rem 0 0">${escapeHtml(t("artifacts.dataPreferJoinNeed"))}</p>`
+            }
+          </div>`;
         el.innerHTML = shell(`
           <h3>${escapeHtml(t("artifacts.title"))}</h3>
           <p class="muted">${escapeHtml(t("artifacts.hint"))}</p>
+          ${preferStrip}
           ${loCard}
+          ${sqlCard}
+          <h4 class="muted" style="margin:1rem 0 0.5rem">${escapeHtml(t("artifacts.dataResultsTitle"))}</h4>
+          <div id="artifacts-data-browse"></div>
           ${rows}
           <div id="art-url" class="sys-link-panel" hidden></div>`);
         wireTabs();
+        const renderSandboxBrowse = async (relPath) => {
+          const host = document.getElementById("artifacts-data-browse");
+          if (!host) return;
+          const body = await rpc("home.listSandboxEntries", {
+            accountId: aid,
+            path: relPath,
+          });
+          if (body.error) {
+            host.innerHTML = `<p class="le-error">${escapeHtml(errMsg(body) || t("artifacts.dataBrowseFailed"))}</p>`;
+            return;
+          }
+          const entries = Array.isArray(body.result?.entries) ? body.result.entries : [];
+          const files = entries.filter((e) => e && e.kind !== "dir");
+          if (!files.length) {
+            host.innerHTML = `<p class="muted">${escapeHtml(t("artifacts.dataBrowseEmpty"))}</p>`;
+            return;
+          }
+          host.innerHTML = `<p class="muted" style="margin:0 0 0.4rem">${escapeHtml(relPath)}/</p>
+            <ul class="sys-list sys-list-compact">${files
+              .slice(0, 24)
+              .map(
+                (e) => `<li class="sys-row">
+                  <div class="sys-row-main">
+                    <span class="sys-row-title">${escapeHtml(e.name || fileLabel(e.path))}</span>
+                    <span class="sys-row-meta muted">${escapeHtml(e.path || "")}</span>
+                  </div>
+                  <button type="button" class="secondary" data-path="${escapeHtml(e.path || "")}">${escapeHtml(t("artifacts.open"))}</button>
+                </li>`,
+              )
+              .join("")}</ul>`;
+          host.querySelectorAll("[data-path]").forEach((btn) => {
+            btn.addEventListener("click", async () => {
+              const path = btn.getAttribute("data-path");
+              if (!path) return;
+              await openArtifactViewer({ accountId: aid, path, forceModal: true });
+            });
+          });
+        };
+        document.getElementById("artifacts-browse-tables")?.addEventListener("click", () => {
+          void renderSandboxBrowse("output/tables");
+        });
+        document.getElementById("artifacts-browse-charts")?.addEventListener("click", () => {
+          void renderSandboxBrowse("output/charts");
+        });
         document.getElementById("artifacts-lo-copy")?.addEventListener("click", async () => {
           try {
             await navigator.clipboard.writeText(loHint);
@@ -13135,7 +13597,30 @@ async function showView(id) {
           await rpc("home.setLibreOfficeInstallPreference", { declined: true, auto: false });
           await showView("system");
         });
-        if (loDownloading) {
+        document.getElementById("artifacts-sql-copy")?.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(sqlEnvHint);
+            showToast(t("artifacts.sqlHintCopied"), "ok");
+          } catch {
+            showToast(t("artifacts.copyFailed"), "err");
+          }
+        });
+        document.getElementById("artifacts-sql-refresh")?.addEventListener("click", async () => {
+          await showView("system");
+        });
+        document.getElementById("artifacts-sql-install")?.addEventListener("click", async () => {
+          const ans = await rpc("home.installLocalSql", {});
+          if (ans.error) {
+            showToast(errMsg(ans) || t("artifacts.loadFailed"), "err");
+            return;
+          }
+          await showView("system");
+        });
+        document.getElementById("artifacts-sql-cancel")?.addEventListener("click", async () => {
+          await rpc("home.cancelLocalSqlInstall", {});
+          await showView("system");
+        });
+        if (loDownloading || sqlDownloading) {
           setTimeout(() => {
             if (systemTab === "files") void showView("system");
           }, 2000);
@@ -13370,6 +13855,22 @@ async function showView(id) {
                   }),
                 ),
               )}
+              ${(() => {
+                const live = h.liveness ?? {};
+                const stale = live.stale === true || live.suggestRestart === true;
+                const detail = t("advanced.turnLivenessValue", {
+                  internal: String(live.consecutiveInternalErrors ?? live.consecutiveTurnErrors ?? 0),
+                  errors: String(live.consecutiveTurnErrors ?? 0),
+                  ok: String(live.recentTurnOk ?? 0),
+                  fail: String(live.recentTurnError ?? 0),
+                });
+                return dlRow(
+                  t("advanced.turnLiveness"),
+                  `<span class="status-pill ${stale ? "bad" : "ok"}">${escapeHtml(
+                    stale ? t("advanced.turnLivenessStale") : t("advanced.turnLivenessOk"),
+                  )}</span> <span class="muted">${escapeHtml(detail)}</span>`,
+                );
+              })()}
             </dl>
           </section>
 

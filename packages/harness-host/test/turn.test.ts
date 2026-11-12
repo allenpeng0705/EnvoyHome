@@ -12,6 +12,7 @@ import {
   clearExtraToolSpecsForTests,
   dispatchTool,
   formatSandboxToolResultLines,
+  humanizeSandboxToolError,
   appendMissingSandboxHandoffLines,
   formatScheduleToolOutput,
   claimsReminderWithoutPropose,
@@ -1283,6 +1284,73 @@ test("formatSandboxToolResultLines: extract_document uri", () => {
   assert.equal(lines.length, 1);
   assert.match(lines[0]!, /output\/extracts\/note-abc\.md/);
   assert.match(lines[0]!, /documents\/note\.docx/);
+});
+
+test("formatSandboxToolResultLines: sql_load / sql_query / table_transform human lines", () => {
+  const load = formatSandboxToolResultLines([
+    {
+      tool: "sql_load",
+      output: JSON.stringify({
+        name: "sales",
+        sourcePath: "uploads/sales.xlsx",
+        sheetName: "Sales",
+        tables: ["sales"],
+      }),
+    },
+  ]);
+  assert.equal(load.length, 1);
+  assert.match(load[0]!, /Loaded `sales`/);
+  assert.match(load[0]!, /uploads\/sales\.xlsx/);
+  assert.match(load[0]!, /sheet Sales/);
+  assert.match(load[0]!, /next: sql_query/);
+
+  const query = formatSandboxToolResultLines([
+    {
+      tool: "sql_query",
+      output: JSON.stringify({
+        uri: "output/tables/q-1.csv",
+        rows: 3,
+        cols: 2,
+        summary: "rows=3 cols=2",
+      }),
+    },
+  ]);
+  assert.equal(query.length, 1);
+  assert.match(query[0]!, /output\/tables\/q-1\.csv/);
+  assert.match(query[0]!, /3×2/);
+
+  const transform = formatSandboxToolResultLines([
+    {
+      tool: "table_transform",
+      output: JSON.stringify({
+        uri: "output/tables/t-1.csv",
+        rows: 5,
+        cols: 4,
+        summary: "normalize cols=4",
+      }),
+    },
+  ]);
+  assert.equal(transform.length, 1);
+  assert.match(transform[0]!, /output\/tables\/t-1\.csv/);
+  assert.match(transform[0]!, /5×4/);
+});
+
+test("humanizeSandboxToolError: row cap + load-first", () => {
+  assert.match(
+    humanizeSandboxToolError(
+      "sql_query",
+      "envoyhome.bad_params: result exceeds 10000 rows",
+    )!,
+    /10\s*000 rows/,
+  );
+  assert.match(
+    humanizeSandboxToolError("sql_query", "Catalog Error: Table with name sales does not exist")!,
+    /sql_load first/,
+  );
+  assert.match(
+    humanizeSandboxToolError("sql_load", "envoyhome.localsql_not_ready")!,
+    /DuckDB is not ready/,
+  );
 });
 
 test("V-CRON-11: formatScheduleToolOutput / sandbox lines surface resolvedLocal", () => {

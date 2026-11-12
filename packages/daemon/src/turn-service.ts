@@ -34,6 +34,7 @@ import {
 import { isFilesystemRoot, resolveSandboxPath, safeJoin } from "./fs-jail.js";
 import { isHarnessAgentSystemPromptLeak } from "./home-agent-session.js";
 import type { HomePaths } from "./home-paths.js";
+import { turnLiveness } from "./turn-liveness.js";
 import { listSandboxDir, searchSandboxFiles } from "./sandbox-fs-browse.js";
 import type { WebSearchService } from "./web-search.js";
 import {
@@ -97,6 +98,7 @@ import {
   runExtendedWorkflowTool,
   workflowHttpFetch,
 } from "./workflow-tools.js";
+import { isLocalSqlRuntimeReady } from "./localsql-install.js";
 import {
   buildBoundObjectCard,
   consumeStickyTurn,
@@ -134,6 +136,8 @@ export interface TurnCompleteInfo {
   locale?: string;
   /** KnowYou write gate (V-KY-3) — owner/agent only; untrusted → no ADD. */
   memoryTrust?: "owner" | "agent" | "untrusted";
+  /** Captured when status=error for turn-liveness / supervisor. */
+  errorSummary?: string;
 }
 
 interface ActiveTurn {
@@ -2036,6 +2040,15 @@ ${lines.join("\n")}
       return;
     }
     finished.add(info.turnId);
+    // Logical liveness for the desktop supervisor (process-alive ≠ turn-path healthy).
+    try {
+      turnLiveness.record(
+        info.status,
+        info.status === "error" ? info.errorSummary : undefined,
+      );
+    } catch {
+      /* tracker must never break finishTurn */
+    }
     // Preview for interactive push (Design 2026-10-24) — best-effort; empty is fine.
     let preview: string | undefined;
     if (info.status === "ok") {
@@ -2462,6 +2475,7 @@ ${lines.join("\n")}
 
     let replyText = "";
     let status: "ok" | "cancelled" | "error" = "ok";
+    let turnErrorSummary: string | undefined;
     try {
       const results = await executeWorkflow(input.workflow, {
         tool: async (name, args) => {
@@ -2505,8 +2519,13 @@ ${lines.join("\n")}
         workflowId: input.workflow.id,
       });
       await this.sessions.touch(input.accountId, input.sessionId);
-    } catch {
+    } catch (err) {
       status = "error";
+      turnErrorSummary = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[envoyhome] workflow turn error turnId=${input.turnId}`,
+        err instanceof Error ? err.stack ?? err.message : err,
+      );
     } finally {
       await this.finishTurn({
         turnId: input.turnId,
@@ -2515,6 +2534,7 @@ ${lines.join("\n")}
         status: input.abort.signal.aborted ? "cancelled" : status,
         replyText,
         origin,
+        ...(turnErrorSummary && status === "error" ? { errorSummary: turnErrorSummary } : {}),
         ...(input.channel !== undefined ? { channel: input.channel } : {}),
         ...(input.rawRef !== undefined ? { rawRef: input.rawRef } : {}),
         ...(input.deviceId ? { deviceId: input.deviceId } : {}),
@@ -2912,6 +2932,7 @@ ${lines.join("\n")}
     let replyText = "";
     let status: "ok" | "cancelled" | "error" = "ok";
     let sessionPlanTouched = false;
+    let turnErrorSummary: string | undefined;
     try {
       const turnDeps = {
         ctx,
@@ -3176,12 +3197,31 @@ ${lines.join("\n")}
         purposeNow !== "schedules" && this.mcpHub
           ? await this.mcpHub.listReadyToolNames()
           : [];
-      // ENVOYHOME_PARENT_AGENT=0 (runTurn): surface ready MCP names in standing inject.
-      if (!useParentAgent && mcpTools.length > 0) {
-        const tip = `Owner MCP tools (envoyhome-tools fence, approvals apply): ${mcpTools.slice(0, 48).join(", ")}`;
-        ctx.standing_inject = ctx.standing_inject
-          ? `${ctx.standing_inject}\n\n${tip}`
-          : tip;
+      const localSqlReady =
+        purposeNow !== "schedules" && isLocalSqlRuntimeReady();
+      // Prefer order tip (V-OFFICE-42) + MCP names for fence/runTurn path.
+      if (purposeNow !== "schedules") {
+        const tips: string[] = [];
+        if (localSqlReady) {
+          tips.push(
+            "Office data prefer order: table_transform → sql_load/sql_query → Owner mcp__… for remote/SaaS. Never invent MCP or DuckDB installs. Privacy Mode: local SQL OK; remote MCP still blocked.",
+          );
+        } else {
+          tips.push(
+            "Office data prefer order: table_transform → Owner mcp__… for remote/SaaS or heavy BI. Local SQL tools absent until Owner installs DuckDB (System → Files). Never invent installs.",
+          );
+        }
+        if (!useParentAgent && mcpTools.length > 0) {
+          tips.push(
+            `Owner MCP tools (envoyhome-tools fence, approvals apply): ${mcpTools.slice(0, 48).join(", ")}`,
+          );
+        }
+        if (tips.length) {
+          const tip = tips.join("\n\n");
+          ctx.standing_inject = ctx.standing_inject
+            ? `${ctx.standing_inject}\n\n${tip}`
+            : tip;
+        }
       }
 
       if (useParentAgent) {
@@ -3200,6 +3240,7 @@ ${lines.join("\n")}
               : {}),
             ...(resumePreamble ? { resumePreamble } : {}),
             ...(mcpTools.length ? { mcpTools } : {}),
+            ...(localSqlReady ? { localSqlReady: true } : {}),
             emitIncompleteCue: emitCueFirstHop,
             onIterationCap: () =>
               markIterationCap(
@@ -3260,6 +3301,7 @@ ${lines.join("\n")}
                 ? { maxIterations: resolvedMaxIterations }
                 : {}),
               ...(mcpTools.length ? { mcpTools } : {}),
+              ...(localSqlReady ? { localSqlReady: true } : {}),
               resumePreamble:
                 "Auto-continue after step limit. Finish the unfinished task from the transcript. This is the only automatic hop — prefer completing over starting new work.",
               emitIncompleteCue: true,
@@ -3316,6 +3358,7 @@ ${lines.join("\n")}
             deps: turnDeps,
             ...(plannedTools !== undefined ? { plannedTools } : {}),
             ...(toolLoop ? { toolLoop: true } : {}),
+            ...(localSqlReady ? { localSqlReady: true } : {}),
           }),
         );
       }
@@ -3378,8 +3421,14 @@ ${lines.join("\n")}
           iterationCapHit,
         });
       }
-    } catch {
+    } catch (err) {
       status = "error";
+      // Swallow must not stay silent — UI only sees status=error with an empty reply.
+      turnErrorSummary = err instanceof Error ? err.message : String(err);
+      console.error(
+        `[envoyhome] turn error turnId=${input.turnId} session=${input.sessionId}`,
+        err instanceof Error ? err.stack ?? err.message : err,
+      );
     } finally {
       await this.finishTurn({
         turnId: input.turnId,
@@ -3388,6 +3437,7 @@ ${lines.join("\n")}
         status: input.abort.signal.aborted ? "cancelled" : status,
         replyText,
         origin,
+        ...(turnErrorSummary && status === "error" ? { errorSummary: turnErrorSummary } : {}),
         ...(input.channel !== undefined ? { channel: input.channel } : {}),
         ...(input.rawRef !== undefined ? { rawRef: input.rawRef } : {}),
         ...(input.deviceId ? { deviceId: input.deviceId } : {}),
@@ -4647,7 +4697,12 @@ ${lines.join("\n")}
         reply = out.text;
         if (round === MAX_ROUNDS || allow.size === 0) break;
 
-        const parsed = parseAssistantToolCalls(reply, { allowSandbox: true });
+        const parsed = parseAssistantToolCalls(reply, {
+          allowSandbox: true,
+          ...(allow.has("sql_query") || allow.has("sql_load")
+            ? { allowLocalSql: true }
+            : {}),
+        });
         const steps = parsed.tools.filter(
           (t) => allow.has(t.tool) && t.tool !== "spawn_helper",
         );

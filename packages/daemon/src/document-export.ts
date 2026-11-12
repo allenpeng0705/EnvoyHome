@@ -1,5 +1,5 @@
 /**
- * Markdown → Office-ish export (Design §9.5b / §9.5j / P2-K7).
+ * Markdown → Office-ish export (Design §9.5b / §9.5j / §9.5k / P2-K7 / P2-L).
  * Pure JS writers always available; optional local LibreOffice for print quality.
  */
 
@@ -19,7 +19,36 @@ import {
 import ExcelJS from "exceljs";
 import JSZip from "jszip";
 import PDFDocument from "pdfkit";
-import PptxGenJS from "pptxgenjs";
+import {
+  buildPptxFromBlocks,
+  markdownNeedsJsPptx,
+  parseImageLine,
+  parseSlideDirectiveLine,
+  parseSlideNotesLine,
+  isAttributionLine,
+  type OfficeTheme,
+  type PptxExportNotes,
+  type PptxMdBlock,
+} from "./office-pptx.js";
+
+export {
+  SLIDE_LAYOUTS,
+  isSlideLayout,
+  markdownNeedsJsPptx,
+  parseSlideNotesLine,
+  isAttributionLine,
+  splitQuoteContent,
+  resolveComparisonHeaders,
+  resolveOfficeTheme,
+  VISUAL,
+  DEFAULT_OFFICE_THEME,
+  DARK_OFFICE_THEME,
+  loadOfficeThemeFromDir,
+  detectMasterPptxNote,
+  type SlideLayout,
+  type OfficeTheme,
+  type PptxExportNotes,
+} from "./office-pptx.js";
 
 export type ExportFormat =
   | "docx"
@@ -134,6 +163,21 @@ export type ExportEngineUsed = "js" | "libreoffice";
 export interface ExportDocumentResult {
   buffer: Buffer;
   engine: ExportEngineUsed;
+  /** Additive §9.5k pptx notes (layouts / images / templates). */
+  pptxNotes?: PptxExportNotes;
+}
+
+export interface ExportDocumentOpts {
+  title?: string;
+  engine?: ExportEnginePreference;
+  env?: NodeJS.ProcessEnv;
+  theme?: OfficeTheme;
+  resolveImage?: (relPath: string) => Promise<Buffer | null>;
+  /** When set, surfaces in pptxNotes.templateNote if theme applied. */
+  templateId?: string;
+  templateNote?: string;
+  /** When set, surfaces in pptxNotes.masterNote (P2-N; no OOXML merge). */
+  masterNote?: string;
 }
 
 export function isExportEnginePreference(
@@ -158,18 +202,49 @@ type MdBlock =
   | { kind: "paragraph"; text: string }
   | { kind: "list"; ordered: boolean; items: string[] }
   | { kind: "table"; rows: string[][] }
-  | { kind: "code"; text: string };
+  | { kind: "code"; text: string }
+  | { kind: "slide_directive"; layout: string }
+  | { kind: "slide_notes"; text: string }
+  | { kind: "image"; alt: string; path: string };
+
+export interface ExportDocumentJsResult {
+  buffer: Buffer;
+  pptxNotes?: PptxExportNotes;
+}
 
 /** Pure-JS writers only (always available). */
 export async function exportDocumentJs(
   format: ExportFormat,
   markdown: string,
-  opts?: { title?: string },
+  opts?: {
+    title?: string;
+    theme?: OfficeTheme;
+    resolveImage?: (relPath: string) => Promise<Buffer | null>;
+    templateNote?: string;
+    masterNote?: string;
+  },
 ): Promise<Buffer> {
+  const { buffer } = await exportDocumentJsDetailed(format, markdown, opts);
+  return buffer;
+}
+
+/** Like exportDocumentJs but returns pptx notes when format is pptx. */
+export async function exportDocumentJsDetailed(
+  format: ExportFormat,
+  markdown: string,
+  opts?: {
+    title?: string;
+    theme?: OfficeTheme;
+    resolveImage?: (relPath: string) => Promise<Buffer | null>;
+    templateNote?: string;
+    masterNote?: string;
+  },
+): Promise<ExportDocumentJsResult> {
   assertMarkdownSize(markdown);
   const title = opts?.title?.trim() || undefined;
   const blocks = parseMarkdownBlocks(markdown);
   let buf: Buffer;
+  let pptxNotes: PptxExportNotes | undefined;
   switch (format) {
     case "docx":
       buf = await exportDocx(blocks, title);
@@ -183,9 +258,19 @@ export async function exportDocumentJs(
     case "pdf":
       buf = await exportPdf(blocks, title);
       break;
-    case "pptx":
-      buf = await exportPptx(blocks, title);
+    case "pptx": {
+      const built = await buildPptxFromBlocks(blocks as PptxMdBlock[], {
+        ...(title ? { title } : {}),
+        ...(opts?.theme ? { theme: opts.theme } : {}),
+        ...(opts?.resolveImage ? { resolveImage: opts.resolveImage } : {}),
+        ...(opts?.masterNote ? { masterNote: opts.masterNote } : {}),
+      });
+      buf = built.buffer;
+      pptxNotes = built.notes;
+      if (opts?.templateNote) pptxNotes.templateNote = opts.templateNote;
+      if (opts?.masterNote) pptxNotes.masterNote = opts.masterNote;
       break;
+    }
     case "md":
       buf = Buffer.from(exportMarkdown(markdown, title), "utf8");
       break;
@@ -206,7 +291,7 @@ export async function exportDocumentJs(
       break;
   }
   assertOutputSize(buf);
-  return buf;
+  return pptxNotes ? { buffer: buf, pptxNotes } : { buffer: buf };
 }
 
 /**
@@ -217,16 +302,30 @@ export async function exportDocumentJs(
 export async function exportDocument(
   format: ExportFormat,
   markdown: string,
-  opts?: { title?: string; engine?: ExportEnginePreference; env?: NodeJS.ProcessEnv },
+  opts?: ExportDocumentOpts,
 ): Promise<ExportDocumentResult> {
   const preference = opts?.engine ?? "auto";
   const env = opts?.env ?? process.env;
   const title = opts?.title?.trim() || undefined;
-  const titleOpt = title ? { title } : undefined;
+  const jsOpts = {
+    ...(title ? { title } : {}),
+    ...(opts?.theme ? { theme: opts.theme } : {}),
+    ...(opts?.resolveImage ? { resolveImage: opts.resolveImage } : {}),
+    ...(opts?.templateNote ? { templateNote: opts.templateNote } : {}),
+    ...(opts?.masterNote ? { masterNote: opts.masterNote } : {}),
+  };
 
-  if (format === "md" || preference === "js") {
-    const buffer = await exportDocumentJs(format, markdown, titleOpt);
-    return { buffer, engine: "js" };
+  // §9.5k: layout/image decks prefer JS under auto (LO HTML flattens slides).
+  const forceJsPptx =
+    format === "pptx" && preference === "auto" && markdownNeedsJsPptx(markdown);
+
+  if (format === "md" || preference === "js" || forceJsPptx) {
+    const detailed = await exportDocumentJsDetailed(format, markdown, jsOpts);
+    return {
+      buffer: detailed.buffer,
+      engine: "js",
+      ...(detailed.pptxNotes ? { pptxNotes: detailed.pptxNotes } : {}),
+    };
   }
 
   const { probeLibreOffice, convertWithLibreOffice, intermediateKindForFormat } =
@@ -239,8 +338,12 @@ export async function exportDocument(
         "envoyhome.libreoffice_unavailable: LibreOffice not installed (set ENVOYHOME_LIBREOFFICE or install soffice)",
       );
     }
-    const buffer = await exportDocumentJs(format, markdown, titleOpt);
-    return { buffer, engine: "js" };
+    const detailed = await exportDocumentJsDetailed(format, markdown, jsOpts);
+    return {
+      buffer: detailed.buffer,
+      engine: "js",
+      ...(detailed.pptxNotes ? { pptxNotes: detailed.pptxNotes } : {}),
+    };
   }
 
   try {
@@ -268,8 +371,12 @@ export async function exportDocument(
   } catch (err) {
     if (preference === "libreoffice") throw err;
     // auto: honest JS fallback on LO failure
-    const buffer = await exportDocumentJs(format, markdown, titleOpt);
-    return { buffer, engine: "js" };
+    const detailed = await exportDocumentJsDetailed(format, markdown, jsOpts);
+    return {
+      buffer: detailed.buffer,
+      engine: "js",
+      ...(detailed.pptxNotes ? { pptxNotes: detailed.pptxNotes } : {}),
+    };
   }
 }
 
@@ -283,11 +390,22 @@ function sanitizeStem(title: string | undefined): string {
     .slice(0, 48);
 }
 
+/** Short title-like lines under comparison/two_column stay separate paras (P2-O). */
+function shouldSplitShortHeaderLine(cur: string, next: string): boolean {
+  if (!(cur.length > 0 && cur.length <= 40 && next.length <= 40)) return false;
+  if (/[.!?。！？]$/.test(cur) || /[.!?。！？]$/.test(next)) return false;
+  // English sentence continuation → keep joining.
+  if (/^[a-z]/.test(next) || /^[,;:]/.test(next)) return false;
+  return true;
+}
+
 /** Lightweight GFM block parse — headings, paragraphs, lists, tables, fenced code. */
 export function parseMarkdownBlocks(markdown: string): MdBlock[] {
   const lines = markdown.replace(/\r\n/g, "\n").split("\n");
   const blocks: MdBlock[] = [];
   let i = 0;
+  /** Last `<!-- slide layout=… -->` — drives comparison header split (P2-O). */
+  let lastSlideLayout: string | undefined;
   while (i < lines.length) {
     const line = lines[i] ?? "";
     if (!line.trim()) {
@@ -305,9 +423,40 @@ export function parseMarkdownBlocks(markdown: string): MdBlock[] {
       blocks.push({ kind: "code", text: code.join("\n") });
       continue;
     }
+    const slideDir = parseSlideDirectiveLine(line);
+    if (slideDir) {
+      lastSlideLayout = slideDir;
+      blocks.push({ kind: "slide_directive", layout: slideDir });
+      i++;
+      continue;
+    }
+    const slideNotes = parseSlideNotesLine(line);
+    if (slideNotes !== undefined) {
+      blocks.push({ kind: "slide_notes", text: slideNotes });
+      i++;
+      continue;
+    }
+    const image = parseImageLine(line);
+    if (image) {
+      blocks.push({ kind: "image", alt: image.alt, path: image.path });
+      i++;
+      continue;
+    }
     const heading = /^(#{1,6})\s+(.+)$/.exec(line);
     if (heading) {
       const level = Math.min(6, heading[1]!.length) as 1 | 2 | 3 | 4 | 5 | 6;
+      // New slide: clear layout unless a directive (and optional notes) already
+      // queued for this slide — `<!-- slide layout=comparison -->` may precede H2.
+      if (level <= 2) {
+        let keepLayout: string | undefined;
+        for (let j = blocks.length - 1; j >= 0; j--) {
+          const prev = blocks[j]!;
+          if (prev.kind === "slide_notes") continue;
+          if (prev.kind === "slide_directive") keepLayout = prev.layout;
+          break;
+        }
+        lastSlideLayout = keepLayout;
+      }
       blocks.push({ kind: "heading", level, text: stripInline(heading[2]!) });
       i++;
       continue;
@@ -332,6 +481,12 @@ export function parseMarkdownBlocks(markdown: string): MdBlock[] {
       blocks.push({ kind: "list", ordered, items });
       continue;
     }
+    // Attribution lines stay their own paragraph (P2-O quote fidelity).
+    if (isAttributionLine(line)) {
+      blocks.push({ kind: "paragraph", text: line.trim() });
+      i++;
+      continue;
+    }
     const para: string[] = [line];
     i++;
     while (
@@ -340,8 +495,25 @@ export function parseMarkdownBlocks(markdown: string): MdBlock[] {
       !/^(#{1,6})\s+/.test(lines[i] ?? "") &&
       !(lines[i] ?? "").startsWith("```") &&
       !/^\s*([-*+]|\d+\.)\s+/.test(lines[i] ?? "") &&
+      !parseSlideDirectiveLine(lines[i] ?? "") &&
+      parseSlideNotesLine(lines[i] ?? "") === undefined &&
+      !parseImageLine(lines[i] ?? "") &&
+      !isAttributionLine(lines[i] ?? "") &&
       !(isTableRow(lines[i] ?? "") && i + 1 < lines.length && isTableSep(lines[i + 1] ?? ""))
     ) {
+      // Short one-liner headers (comparison): keep as separate paras (P2-O).
+      // Under comparison/two_column, allow multi-word titles ("Option A").
+      // Elsewhere, only split single-token lines (Build/Buy) so prose stays joined.
+      const next = (lines[i] ?? "").trim();
+      const cur = (para[para.length - 1] ?? "").trim();
+      const comparisonish =
+        lastSlideLayout === "comparison" || lastSlideLayout === "two_column";
+      if (
+        shouldSplitShortHeaderLine(cur, next) &&
+        (comparisonish || !cur.includes(" "))
+      ) {
+        break;
+      }
       para.push(lines[i] ?? "");
       i++;
     }
@@ -398,6 +570,47 @@ async function exportDocx(blocks: MdBlock[], title?: string): Promise<Buffer> {
     );
   }
   for (const b of blocks) {
+    if (b.kind === "slide_directive") {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `[slide layout=${b.layout}]`,
+              italics: true,
+              color: "666666",
+            }),
+          ],
+        }),
+      );
+      continue;
+    }
+    if (b.kind === "slide_notes") {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `[slide notes: ${b.text}]`,
+              italics: true,
+              color: "666666",
+            }),
+          ],
+        }),
+      );
+      continue;
+    }
+    if (b.kind === "image") {
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: `[image: ${b.path}${b.alt ? ` — ${b.alt}` : ""}]`,
+              italics: true,
+            }),
+          ],
+        }),
+      );
+      continue;
+    }
     if (b.kind === "heading") {
       children.push(
         new Paragraph({
@@ -557,93 +770,6 @@ function inlineRuns(text: string): TextRun[] {
   return runs.length ? runs : [new TextRun("")];
 }
 
-/** H1/H2 start slides; body blocks fill the current slide (V-OFFICE-1). */
-async function exportPptx(blocks: MdBlock[], title?: string): Promise<Buffer> {
-  const pptx = new PptxGenJS();
-  pptx.author = "EnvoyHome";
-  if (title) pptx.title = title;
-
-  type SlideBody = {
-    title: string;
-    bullets: string[];
-    paras: string[];
-    tables: string[][];
-  };
-  const slides: SlideBody[] = [];
-  let cur: SlideBody | null = title
-    ? { title, bullets: [], paras: [], tables: [] }
-    : null;
-
-  const ensure = (t: string) => {
-    if (!cur) {
-      cur = { title: t || "Slide", bullets: [], paras: [], tables: [] };
-      slides.push(cur);
-    }
-  };
-  const pushSlide = (t: string) => {
-    cur = { title: t || "Slide", bullets: [], paras: [], tables: [] };
-    slides.push(cur);
-  };
-
-  for (const b of blocks) {
-    if (b.kind === "heading" && b.level <= 2) {
-      pushSlide(b.text);
-    } else if (b.kind === "heading") {
-      ensure(title || "Slide");
-      cur!.paras.push(b.text);
-    } else if (b.kind === "list") {
-      ensure(title || "Slide");
-      cur!.bullets.push(...b.items.map(stripInline));
-    } else if (b.kind === "table") {
-      ensure(title || "Slide");
-      cur!.tables.push(...b.rows);
-    } else if (b.kind === "paragraph" || b.kind === "code") {
-      ensure(title || "Slide");
-      cur!.paras.push(b.kind === "code" ? b.text : stripInline(b.text));
-    }
-  }
-  if (slides.length === 0) {
-    slides.push({ title: title || "Slide", bullets: [], paras: [""], tables: [] });
-  }
-
-  for (const s of slides) {
-    const slide = pptx.addSlide();
-    slide.addText(s.title, {
-      x: 0.5,
-      y: 0.3,
-      w: 9,
-      h: 0.8,
-      fontSize: 28,
-      bold: true,
-    });
-    let y = 1.2;
-    if (s.bullets.length) {
-      slide.addText(
-        s.bullets.map((t) => ({ text: t, options: { bullet: true } })),
-        { x: 0.5, y, w: 9, h: Math.min(4.5, 0.35 * s.bullets.length + 0.2), fontSize: 16 },
-      );
-      y += Math.min(4.5, 0.35 * s.bullets.length + 0.4);
-    }
-    for (const p of s.paras.slice(0, 8)) {
-      if (y > 5.2) break;
-      slide.addText(p, { x: 0.5, y, w: 9, h: 0.4, fontSize: 14 });
-      y += 0.4;
-    }
-    if (s.tables.length && y < 5) {
-      const cols = Math.max(...s.tables.map((r) => r.length), 1);
-      slide.addTable(
-        s.tables.map((row) =>
-          Array.from({ length: cols }, (_, i) => ({ text: row[i] ?? "" })),
-        ),
-        { x: 0.5, y, w: 9, colW: Array.from({ length: cols }, () => 9 / cols), fontSize: 12 },
-      );
-    }
-  }
-
-  const out = (await pptx.write({ outputType: "nodebuffer" })) as Buffer;
-  return Buffer.isBuffer(out) ? out : Buffer.from(out);
-}
-
 function exportMarkdown(markdown: string, title?: string): string {
   const body = markdown.replace(/\r\n/g, "\n").trim();
   if (title && !body.startsWith("# ")) {
@@ -690,6 +816,20 @@ function exportHtml(blocks: MdBlock[], title?: string): string {
   ];
   if (title) parts.push(`<h1>${escapeHtml(title)}</h1>`);
   for (const b of blocks) {
+    if (b.kind === "slide_directive") {
+      parts.push(`<!-- slide layout=${escapeHtml(b.layout)} -->`);
+      continue;
+    }
+    if (b.kind === "slide_notes") {
+      parts.push(`<!-- slide notes: ${escapeHtml(b.text)} -->`);
+      continue;
+    }
+    if (b.kind === "image") {
+      parts.push(
+        `<p><em>[image: ${escapeHtml(b.path)}${b.alt ? ` — ${escapeHtml(b.alt)}` : ""}]</em></p>`,
+      );
+      continue;
+    }
     if (b.kind === "heading") {
       parts.push(`<h${b.level}>${escapeHtml(b.text)}</h${b.level}>`);
     } else if (b.kind === "paragraph") {
@@ -1011,18 +1151,43 @@ async function exportPdf(blocks: MdBlock[], title?: string): Promise<Buffer> {
     }
 
     for (const b of blocks) {
+      if (b.kind === "slide_directive") {
+        doc
+          .fontSize(9)
+          .font("Helvetica-Oblique")
+          .fillColor("#666666")
+          .text(`[slide layout=${b.layout}]`, { paragraphGap: 4 });
+        doc.fillColor("#000000");
+        continue;
+      }
+      if (b.kind === "slide_notes") {
+        doc
+          .fontSize(9)
+          .font("Helvetica-Oblique")
+          .fillColor("#666666")
+          .text(`[slide notes: ${b.text}]`, { paragraphGap: 4 });
+        doc.fillColor("#000000");
+        continue;
+      }
+      if (b.kind === "image") {
+        doc
+          .fontSize(10)
+          .font("Helvetica-Oblique")
+          .text(`[image: ${b.path}${b.alt ? ` — ${b.alt}` : ""}]`, { paragraphGap: 6 });
+        continue;
+      }
       if (b.kind === "heading") {
         const size = Math.max(11, 20 - b.level * 1.5);
         doc.fontSize(size).font("Helvetica-Bold").text(b.text, { paragraphGap: 8 });
       } else if (b.kind === "paragraph") {
-        doc.fontSize(11).font("Helvetica").text(b.text, { paragraphGap: 8 });
+        doc.fontSize(11).font("Helvetica").text(stripInline(b.text), { paragraphGap: 8 });
       } else if (b.kind === "code") {
         doc.fontSize(9).font("Courier").text(b.text || " ", { paragraphGap: 8 });
       } else if (b.kind === "list") {
         doc.fontSize(11).font("Helvetica");
         b.items.forEach((item, idx) => {
           const bullet = b.ordered ? `${idx + 1}. ` : "• ";
-          doc.text(`${bullet}${item}`, { paragraphGap: 2 });
+          doc.text(`${bullet}${stripInline(item)}`, { paragraphGap: 2 });
         });
         doc.moveDown(0.4);
       } else if (b.kind === "table") {

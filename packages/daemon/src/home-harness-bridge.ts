@@ -163,6 +163,8 @@ export interface HomeModelAdapterOptions {
   /** Parent attended turns — fence MAY propose exec (ApprovalSink still asks). */
   allowExec?: boolean;
   allowHttpFetch?: boolean;
+  /** Design §9.5k / V-OFFICE-42 — fence may parse sql_* when DuckDB ready. */
+  allowLocalSql?: boolean;
   /** Rewrite Home-style task fences into harness TaskInput. */
   normalizeTaskArgs?: boolean;
 }
@@ -196,6 +198,7 @@ export class HomeModelAdapter implements ModelAdapter {
       schedulesOnly: this.opts.schedulesOnly === true,
       allowExec: this.opts.allowExec === true,
       allowHttpFetch: this.opts.allowHttpFetch === true,
+      ...(this.opts.allowLocalSql ? { allowLocalSql: true } : {}),
     });
     const calls = tools.filter((t) => allowed.has(t.tool));
     if (calls.length > 0) {
