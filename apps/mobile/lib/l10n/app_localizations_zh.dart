@@ -1698,6 +1698,97 @@ class AppLocalizationsZh extends AppLocalizations {
   String get artifactsLoInstallNote => '托管安装在家庭守护进程主机上执行，不在本手机上。';
 
   @override
+  String get artifactsDataPreferTitle => '数据处理路径（按优先级）';
+
+  @override
+  String get artifactsDataPreferStrip =>
+      '1）核心表格工具始终可用 · 2）DuckDB 做离线关联 / SQL · 3）Owner MCP 做云表格 / SaaS BI。';
+
+  @override
+  String get artifactsDataPreferJoinNeed => '聊天里做离线关联时需要。';
+
+  @override
+  String get artifactsDataBrowseTables => '浏览 output/tables';
+
+  @override
+  String get artifactsDataBrowseCharts => '浏览 output/charts';
+
+  @override
+  String get artifactsSqlTitle => '离线 SQL（DuckDB）';
+
+  @override
+  String get artifactsSqlWhy =>
+      '在家庭电脑安装 DuckDB，可对沙箱文件做离线 SQL 关联。绝不自动安装——由你点安装。';
+
+  @override
+  String get artifactsSqlReady => '已就绪';
+
+  @override
+  String get artifactsSqlMissing => '未安装（可选）';
+
+  @override
+  String get artifactsSqlDownloading => '下载中…';
+
+  @override
+  String get artifactsSqlFailed => '安装失败';
+
+  @override
+  String get artifactsSqlCancelled => '已取消下载';
+
+  @override
+  String get artifactsSqlInstall => '在家庭电脑安装 DuckDB';
+
+  @override
+  String get artifactsSqlCancel => '取消下载';
+
+  @override
+  String get artifactsSqlRefresh => '刷新状态';
+
+  @override
+  String artifactsSqlProgress(String received, String total) {
+    return '$received / $total';
+  }
+
+  @override
+  String get artifactsSqlToolsReady => '智能体可使用 sql_load / sql_query。';
+
+  @override
+  String get artifactsSqlToolsAbsent =>
+      '在 DuckDB 就绪前，sql_load / sql_query 不会出现在智能体工具目录中。';
+
+  @override
+  String get artifactsSqlInstallNote => '托管安装在家庭守护进程主机上执行，不在本手机上。';
+
+  @override
+  String get chatDataAssistHint => '已附加表格——选下一步（只预填输入框；写入仍需审批）：';
+
+  @override
+  String get chatDataAssistClean => '清洗并出图';
+
+  @override
+  String get chatDataAssistAsk => '问这张表';
+
+  @override
+  String get chatDataAssistJoin => '关联 / SQL';
+
+  @override
+  String get chatDataAssistInstallDuckdb => '安装 DuckDB…';
+
+  @override
+  String get chatDataAssistCleanSeed =>
+      '用 table_transform 清洗附件表格（按需 normalize / filter / pipeline），再 chart_table，并给我 CSV 与图表的打开芯片。';
+
+  @override
+  String get chatDataAssistAskSeed => '附件表格里有什么？总结列、行数和几行样例。';
+
+  @override
+  String get chatDataAssistJoinSeed =>
+      '用 sql_load 加载附件表格，再用 sql_query 回答（若再附加表则做关联）。结果 CSV 请给出打开芯片。';
+
+  @override
+  String get chatDataAssistNeedDuckdb => 'DuckDB 尚未就绪——请到「系统 → 文件」在家庭电脑上安装。';
+
+  @override
   String chatOpenFile(String name) {
     return '打开 $name';
   }

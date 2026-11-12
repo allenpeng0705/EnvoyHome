@@ -743,6 +743,40 @@
   "artifactsLoHintCopied": "Install hint copied",
   "artifactsLoCopyHint": "Copy manual install hint",
   "artifactsLoInstallNote": "Managed install runs on the home daemon host — not on this phone.",
+  "artifactsDataPreferTitle": "Data paths (prefer in order)",
+  "artifactsDataPreferStrip": "1) Core table tools always on · 2) DuckDB for offline joins / SQL · 3) Owner MCP for cloud sheets / SaaS BI.",
+  "artifactsDataPreferJoinNeed": "Needed for offline joins in chat.",
+  "artifactsDataBrowseTables": "Browse output/tables",
+  "artifactsDataBrowseCharts": "Browse output/charts",
+  "artifactsSqlTitle": "Offline SQL (DuckDB)",
+  "artifactsSqlWhy": "Install DuckDB on the home computer for offline SQL joins on jail files. Never automatic — you choose Install.",
+  "artifactsSqlReady": "Ready",
+  "artifactsSqlMissing": "Not installed (optional)",
+  "artifactsSqlDownloading": "Downloading…",
+  "artifactsSqlFailed": "Install failed",
+  "artifactsSqlCancelled": "Download cancelled",
+  "artifactsSqlInstall": "Install DuckDB on home computer",
+  "artifactsSqlCancel": "Cancel download",
+  "artifactsSqlRefresh": "Refresh status",
+  "artifactsSqlProgress": "{received} / {total}",
+  "@artifactsSqlProgress": {
+    "placeholders": {
+      "received": { "type": "String" },
+      "total": { "type": "String" }
+    }
+  },
+  "artifactsSqlToolsReady": "sql_load / sql_query are available to the agent.",
+  "artifactsSqlToolsAbsent": "sql_load / sql_query stay out of the agent catalogue until DuckDB is ready.",
+  "artifactsSqlInstallNote": "Managed install runs on the home daemon host — not on this phone.",
+  "chatDataAssistHint": "Spreadsheet attached — pick a next step (seeds the composer; writes still need Allow):",
+  "chatDataAssistClean": "Clean & chart",
+  "chatDataAssistAsk": "Ask about this table",
+  "chatDataAssistJoin": "Join / SQL",
+  "chatDataAssistInstallDuckdb": "Install DuckDB…",
+  "chatDataAssistCleanSeed": "Clean the attached spreadsheet with table_transform (normalize / filter / pipeline as needed), then chart_table, and show me the Open chips for the CSV and chart.",
+  "chatDataAssistAskSeed": "What's in the attached spreadsheet? Summarize columns, row count, and a few sample rows.",
+  "chatDataAssistJoinSeed": "Load the attached spreadsheet with sql_load, then use sql_query to answer (join if I attach more tables). Show Open chips for any result CSV.",
+  "chatDataAssistNeedDuckdb": "DuckDB is not ready — Install under System → Files on the home computer.",
   "@artifactsOpenFailed": {
     "placeholders": {
       "error": {

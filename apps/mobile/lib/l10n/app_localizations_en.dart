@@ -1734,6 +1734,102 @@ class AppLocalizationsEn extends AppLocalizations {
       'Managed install runs on the home daemon host — not on this phone.';
 
   @override
+  String get artifactsDataPreferTitle => 'Data paths (prefer in order)';
+
+  @override
+  String get artifactsDataPreferStrip =>
+      '1) Core table tools always on · 2) DuckDB for offline joins / SQL · 3) Owner MCP for cloud sheets / SaaS BI.';
+
+  @override
+  String get artifactsDataPreferJoinNeed => 'Needed for offline joins in chat.';
+
+  @override
+  String get artifactsDataBrowseTables => 'Browse output/tables';
+
+  @override
+  String get artifactsDataBrowseCharts => 'Browse output/charts';
+
+  @override
+  String get artifactsSqlTitle => 'Offline SQL (DuckDB)';
+
+  @override
+  String get artifactsSqlWhy =>
+      'Install DuckDB on the home computer for offline SQL joins on jail files. Never automatic — you choose Install.';
+
+  @override
+  String get artifactsSqlReady => 'Ready';
+
+  @override
+  String get artifactsSqlMissing => 'Not installed (optional)';
+
+  @override
+  String get artifactsSqlDownloading => 'Downloading…';
+
+  @override
+  String get artifactsSqlFailed => 'Install failed';
+
+  @override
+  String get artifactsSqlCancelled => 'Download cancelled';
+
+  @override
+  String get artifactsSqlInstall => 'Install DuckDB on home computer';
+
+  @override
+  String get artifactsSqlCancel => 'Cancel download';
+
+  @override
+  String get artifactsSqlRefresh => 'Refresh status';
+
+  @override
+  String artifactsSqlProgress(String received, String total) {
+    return '$received / $total';
+  }
+
+  @override
+  String get artifactsSqlToolsReady =>
+      'sql_load / sql_query are available to the agent.';
+
+  @override
+  String get artifactsSqlToolsAbsent =>
+      'sql_load / sql_query stay out of the agent catalogue until DuckDB is ready.';
+
+  @override
+  String get artifactsSqlInstallNote =>
+      'Managed install runs on the home daemon host — not on this phone.';
+
+  @override
+  String get chatDataAssistHint =>
+      'Spreadsheet attached — pick a next step (seeds the composer; writes still need Allow):';
+
+  @override
+  String get chatDataAssistClean => 'Clean & chart';
+
+  @override
+  String get chatDataAssistAsk => 'Ask about this table';
+
+  @override
+  String get chatDataAssistJoin => 'Join / SQL';
+
+  @override
+  String get chatDataAssistInstallDuckdb => 'Install DuckDB…';
+
+  @override
+  String get chatDataAssistCleanSeed =>
+      'Clean the attached spreadsheet with table_transform (normalize / filter / pipeline as needed), then chart_table, and show me the Open chips for the CSV and chart.';
+
+  @override
+  String get chatDataAssistAskSeed =>
+      'What\'s in the attached spreadsheet? Summarize columns, row count, and a few sample rows.';
+
+  @override
+  String get chatDataAssistJoinSeed =>
+      'Load the attached spreadsheet with sql_load, then use sql_query to answer (join if I attach more tables). Show Open chips for any result CSV.';
+
+  @override
+  String get chatDataAssistNeedDuckdb =>
+      'DuckDB is not ready — Install under System → Files on the home computer.';
+
+  @override
   String chatOpenFile(String name) {
     return 'Open $name';
   }

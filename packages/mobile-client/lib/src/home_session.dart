@@ -544,6 +544,16 @@ class EnvoyHomeSession {
     return _call('home.setLibreOfficeInstallPreference', params);
   }
 
+  /// Local DuckDB on the **home** daemon host (Design §9.5k / P2-S).
+  Future<Map<String, dynamic>> getLocalSqlStatus() =>
+      _call('home.getLocalSqlStatus', {});
+
+  Future<Map<String, dynamic>> installLocalSql() =>
+      _call('home.installLocalSql', {});
+
+  Future<Map<String, dynamic>> cancelLocalSqlInstall() =>
+      _call('home.cancelLocalSqlInstall', {});
+
   Future<Map<String, dynamic>> listProviders({String? accountId}) async {
     final params = <String, dynamic>{};
     if (accountId != null && accountId.isNotEmpty) {

@@ -28,8 +28,10 @@ class _ArtifactsTabState extends State<ArtifactsTab> {
   String? _error;
   bool _loading = false;
   Map<String, dynamic>? _loStatus;
+  Map<String, dynamic>? _sqlStatus;
   bool _loBusy = false;
-  Timer? _loPoll;
+  bool _sqlBusy = false;
+  Timer? _enginePoll;
 
   @override
   void initState() {
@@ -38,14 +40,14 @@ class _ArtifactsTabState extends State<ArtifactsTab> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         unawaited(_loadPath(''));
-        unawaited(_loadLoStatus());
+        unawaited(_loadEngineStatus());
       }
     });
   }
 
   @override
   void dispose() {
-    _loPoll?.cancel();
+    _enginePoll?.cancel();
     widget.session.removeListener(_onSession);
     super.dispose();
   }
@@ -53,28 +55,42 @@ class _ArtifactsTabState extends State<ArtifactsTab> {
   void _onSession() {
     if (mounted) {
       unawaited(_loadPath(_path));
-      unawaited(_loadLoStatus());
+      unawaited(_loadEngineStatus());
     }
   }
 
-  Future<void> _loadLoStatus() async {
+  Future<void> _loadEngineStatus() async {
     final home = widget.session.session;
     if (home == null) return;
+    var downloading = false;
     try {
       final st = await home.getDocumentExportStatus();
       if (!mounted) return;
       setState(() => _loStatus = st);
-      final runtime = st['libreOfficeRuntime']?.toString();
-      _loPoll?.cancel();
-      if (runtime == 'downloading') {
-        _loPoll = Timer(const Duration(seconds: 2), () {
-          if (mounted) unawaited(_loadLoStatus());
-        });
+      if (st['libreOfficeRuntime']?.toString() == 'downloading') {
+        downloading = true;
       }
     } catch (_) {
       /* Owner-scope; non-owner / older daemon — leave card empty */
     }
+    try {
+      final st = await home.getLocalSqlStatus();
+      if (!mounted) return;
+      setState(() => _sqlStatus = st);
+      final runtime = st['localSqlRuntime']?.toString();
+      if (runtime == 'downloading') downloading = true;
+    } catch (_) {
+      /* optional; older daemon */
+    }
+    _enginePoll?.cancel();
+    if (downloading) {
+      _enginePoll = Timer(const Duration(seconds: 2), () {
+        if (mounted) unawaited(_loadEngineStatus());
+      });
+    }
   }
+
+  Future<void> _loadLoStatus() => _loadEngineStatus();
 
   Future<void> _loInstall() async {
     final home = widget.session.session;
@@ -132,6 +148,189 @@ class _ArtifactsTabState extends State<ArtifactsTab> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(l10n.artifactsLoHintCopied)),
+    );
+  }
+
+  Future<void> _sqlInstall() async {
+    final home = widget.session.session;
+    if (home == null || _sqlBusy) return;
+    setState(() => _sqlBusy = true);
+    try {
+      await home.installLocalSql();
+      await _loadEngineStatus();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _sqlBusy = false);
+    }
+  }
+
+  Future<void> _sqlCancel() async {
+    final home = widget.session.session;
+    if (home == null || _sqlBusy) return;
+    setState(() => _sqlBusy = true);
+    try {
+      await home.cancelLocalSqlInstall();
+      await _loadEngineStatus();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      }
+    } finally {
+      if (mounted) setState(() => _sqlBusy = false);
+    }
+  }
+
+  Widget _dataPreferStrip(ThemeData theme, AppLocalizations l10n) {
+    final sqlReady = _sqlStatus?['localSqlRuntime']?.toString() == 'ready';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(l10n.artifactsDataPreferTitle, style: theme.textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text(l10n.artifactsDataPreferStrip, style: theme.textTheme.bodySmall),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ActionChip(
+                  label: Text(l10n.artifactsDataBrowseTables),
+                  onPressed: () => unawaited(_loadPath('output/tables')),
+                ),
+                ActionChip(
+                  label: Text(l10n.artifactsDataBrowseCharts),
+                  onPressed: () => unawaited(_loadPath('output/charts')),
+                ),
+              ],
+            ),
+            if (!sqlReady) ...[
+              const SizedBox(height: 8),
+              Text(l10n.artifactsDataPreferJoinNeed, style: theme.textTheme.bodySmall),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _sqlCard(ThemeData theme, AppLocalizations l10n) {
+    final st = _sqlStatus;
+    if (st == null) return const SizedBox.shrink();
+    final runtime = st['localSqlRuntime']?.toString() ?? 'missing';
+    final ready = runtime == 'ready';
+    final downloading = runtime == 'downloading';
+    final failed = runtime == 'failed';
+    final cancelled = runtime == 'cancelled';
+    final badge = ready
+        ? l10n.artifactsSqlReady
+        : downloading
+            ? l10n.artifactsSqlDownloading
+            : failed
+                ? l10n.artifactsSqlFailed
+                : cancelled
+                    ? l10n.artifactsSqlCancelled
+                    : l10n.artifactsSqlMissing;
+    final dl = st['download'];
+    String? progress;
+    if (downloading && dl is Map) {
+      final recv = (dl['bytesReceived'] is num)
+          ? (dl['bytesReceived'] as num).toInt()
+          : 0;
+      final tot = (dl['bytesTotal'] is num)
+          ? (dl['bytesTotal'] as num).toInt()
+          : (st['approxBytes'] is num ? (st['approxBytes'] as num).toInt() : 0);
+      progress = l10n.artifactsSqlProgress(_fmtBytes(recv), _fmtBytes(tot));
+    }
+    final lastError =
+        (failed || cancelled) ? st['lastError']?.toString() : null;
+    final version = st['versionLine']?.toString();
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(l10n.artifactsSqlTitle, style: theme.textTheme.titleMedium),
+                ),
+                Chip(label: Text(badge)),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(l10n.artifactsSqlWhy, style: theme.textTheme.bodySmall),
+            if (ready && version != null && version.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(version, style: theme.textTheme.bodySmall),
+            ],
+            const SizedBox(height: 6),
+            Text(
+              ready ? l10n.artifactsSqlToolsReady : l10n.artifactsSqlToolsAbsent,
+              style: theme.textTheme.bodySmall,
+            ),
+            if (!ready) ...[
+              const SizedBox(height: 6),
+              Text(l10n.artifactsDataPreferJoinNeed, style: theme.textTheme.bodySmall),
+            ],
+            if (progress != null) ...[
+              const SizedBox(height: 6),
+              Text(progress, style: theme.textTheme.bodySmall),
+            ],
+            if (lastError != null && lastError.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                lastError.length > 240 ? lastError.substring(0, 240) : lastError,
+                style: TextStyle(color: theme.colorScheme.error, fontSize: 12),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (ready)
+                  FilledButton.tonal(
+                    onPressed: _sqlBusy ? null : () => unawaited(_loadEngineStatus()),
+                    child: Text(l10n.artifactsSqlRefresh),
+                  )
+                else if (downloading) ...[
+                  FilledButton.tonal(
+                    onPressed: _sqlBusy ? null : () => unawaited(_sqlCancel()),
+                    child: Text(l10n.artifactsSqlCancel),
+                  ),
+                  TextButton(
+                    onPressed: _sqlBusy ? null : () => unawaited(_loadEngineStatus()),
+                    child: Text(l10n.artifactsSqlRefresh),
+                  ),
+                ] else ...[
+                  FilledButton(
+                    onPressed: _sqlBusy ? null : () => unawaited(_sqlInstall()),
+                    child: Text(l10n.artifactsSqlInstall),
+                  ),
+                  TextButton(
+                    onPressed: _sqlBusy ? null : () => unawaited(_loadEngineStatus()),
+                    child: Text(l10n.artifactsSqlRefresh),
+                  ),
+                ],
+              ],
+            ),
+            if (!ready) ...[
+              const SizedBox(height: 8),
+              Text(l10n.artifactsSqlInstallNote, style: theme.textTheme.bodySmall),
+            ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -354,7 +553,7 @@ class _ArtifactsTabState extends State<ArtifactsTab> {
 
     return RefreshIndicator(
       onRefresh: () async {
-        await Future.wait([_loadPath(_path), _loadLoStatus()]);
+        await Future.wait([_loadPath(_path), _loadEngineStatus()]);
       },
       child: ListView(
         padding: const EdgeInsets.all(16),
@@ -363,7 +562,11 @@ class _ArtifactsTabState extends State<ArtifactsTab> {
           const SizedBox(height: 4),
           Text(l10n.artifactsHint, style: theme.textTheme.bodySmall),
           const SizedBox(height: 12),
-          if (atRoots) _loCard(theme, l10n),
+          if (atRoots) ...[
+            _dataPreferStrip(theme, l10n),
+            _loCard(theme, l10n),
+            _sqlCard(theme, l10n),
+          ],
           if (!atRoots) ...[
             Text(
               _path,

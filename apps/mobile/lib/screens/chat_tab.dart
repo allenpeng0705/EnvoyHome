@@ -19,6 +19,7 @@ import '../sandbox_paths.dart';
 import '../state/session_controller.dart';
 import '../utils/open_external_url.dart';
 import 'artifact_viewer_screen.dart';
+import 'system_screen.dart';
 
 const _kChatAttachMaxFiles = 8;
 const _kChatAttachMaxBytes = 8 * 1024 * 1024;
@@ -67,6 +68,11 @@ String? _mimeFromBrowserFormFileName(String name) {
   final dot = lower.lastIndexOf('.');
   if (dot < 0) return null;
   return _kBrowserFormFileExtMime[lower.substring(dot)];
+}
+
+bool _isDataSpreadsheetName(String name) {
+  final lower = name.toLowerCase();
+  return lower.endsWith('.csv') || lower.endsWith('.xlsx');
 }
 
 /// Align daemon `matchesBrowserFormFileAccept`.
@@ -206,6 +212,8 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
   final _unsubs = <void Function()>[];
   final _pendingFiles = <_PendingAttach>[];
   final _speech = SpeechToText();
+  bool _localSqlReady = false;
+  DateTime? _localSqlFetchedAt;
 
   String? _sessionId;
   /// Optional title chosen at New chat; applied on first `openSession`.
@@ -2046,11 +2054,122 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
       added++;
     }
     setState(() {});
+    if (_pendingFiles.any((f) => _isDataSpreadsheetName(f.name))) {
+      unawaited(_refreshLocalSqlReady());
+    }
     if (added > 0 && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(l10n.chatAttachAdded(added))),
       );
     }
+  }
+
+  bool get _hasDataSpreadsheetPending =>
+      _pendingFiles.any((f) => _isDataSpreadsheetName(f.name));
+
+  Future<void> _refreshLocalSqlReady({bool force = false}) async {
+    final now = DateTime.now();
+    if (!force &&
+        _localSqlFetchedAt != null &&
+        now.difference(_localSqlFetchedAt!) < const Duration(seconds: 15)) {
+      return;
+    }
+    _localSqlFetchedAt = now;
+    final home = widget.session.session;
+    if (home == null) {
+      if (mounted) setState(() => _localSqlReady = false);
+      return;
+    }
+    try {
+      final st = await home.getLocalSqlStatus();
+      final ready = st['localSqlRuntime']?.toString() == 'ready';
+      if (mounted) setState(() => _localSqlReady = ready);
+    } catch (_) {
+      if (mounted) setState(() => _localSqlReady = false);
+    }
+  }
+
+  void _seedComposer(String text) {
+    _textCtrl.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    _inputFocus.requestFocus();
+  }
+
+  void _openFilesForDuckdb() {
+    final l10n = AppLocalizations.of(context);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(l10n.chatDataAssistNeedDuckdb)),
+    );
+    unawaited(
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => SystemScreen(
+            session: widget.session,
+            initialTab: 1,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _dataAssistStrip(ThemeData theme, AppLocalizations l10n) {
+    if (!_hasDataSpreadsheetPending) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border.all(color: theme.dividerColor),
+          borderRadius: BorderRadius.circular(10),
+          color: theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.45),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(l10n.chatDataAssistHint, style: theme.textTheme.bodySmall),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ActionChip(
+                    label: Text(l10n.chatDataAssistClean),
+                    onPressed: _sending
+                        ? null
+                        : () => _seedComposer(l10n.chatDataAssistCleanSeed),
+                  ),
+                  ActionChip(
+                    label: Text(l10n.chatDataAssistAsk),
+                    onPressed: _sending
+                        ? null
+                        : () => _seedComposer(l10n.chatDataAssistAskSeed),
+                  ),
+                  ActionChip(
+                    label: Text(
+                      _localSqlReady
+                          ? l10n.chatDataAssistJoin
+                          : l10n.chatDataAssistInstallDuckdb,
+                    ),
+                    onPressed: _sending
+                        ? null
+                        : () {
+                            if (_localSqlReady) {
+                              _seedComposer(l10n.chatDataAssistJoinSeed);
+                            } else {
+                              _openFilesForDuckdb();
+                            }
+                          },
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   String? _mimeFromExt(String ext) {
@@ -3929,6 +4048,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
               ],
             ),
           ),
+        if (!_isSchedules) _dataAssistStrip(theme, l10n),
         Material(
           color: theme.scaffoldBackgroundColor,
           // Scaffold already shrinks for the keyboard — only keep home-indicator

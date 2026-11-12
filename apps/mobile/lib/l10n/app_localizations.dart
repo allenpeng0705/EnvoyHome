@@ -3264,6 +3264,174 @@ abstract class AppLocalizations {
   /// **'Managed install runs on the home daemon host — not on this phone.'**
   String get artifactsLoInstallNote;
 
+  /// No description provided for @artifactsDataPreferTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Data paths (prefer in order)'**
+  String get artifactsDataPreferTitle;
+
+  /// No description provided for @artifactsDataPreferStrip.
+  ///
+  /// In en, this message translates to:
+  /// **'1) Core table tools always on · 2) DuckDB for offline joins / SQL · 3) Owner MCP for cloud sheets / SaaS BI.'**
+  String get artifactsDataPreferStrip;
+
+  /// No description provided for @artifactsDataPreferJoinNeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Needed for offline joins in chat.'**
+  String get artifactsDataPreferJoinNeed;
+
+  /// No description provided for @artifactsDataBrowseTables.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse output/tables'**
+  String get artifactsDataBrowseTables;
+
+  /// No description provided for @artifactsDataBrowseCharts.
+  ///
+  /// In en, this message translates to:
+  /// **'Browse output/charts'**
+  String get artifactsDataBrowseCharts;
+
+  /// No description provided for @artifactsSqlTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline SQL (DuckDB)'**
+  String get artifactsSqlTitle;
+
+  /// No description provided for @artifactsSqlWhy.
+  ///
+  /// In en, this message translates to:
+  /// **'Install DuckDB on the home computer for offline SQL joins on jail files. Never automatic — you choose Install.'**
+  String get artifactsSqlWhy;
+
+  /// No description provided for @artifactsSqlReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get artifactsSqlReady;
+
+  /// No description provided for @artifactsSqlMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Not installed (optional)'**
+  String get artifactsSqlMissing;
+
+  /// No description provided for @artifactsSqlDownloading.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading…'**
+  String get artifactsSqlDownloading;
+
+  /// No description provided for @artifactsSqlFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Install failed'**
+  String get artifactsSqlFailed;
+
+  /// No description provided for @artifactsSqlCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'Download cancelled'**
+  String get artifactsSqlCancelled;
+
+  /// No description provided for @artifactsSqlInstall.
+  ///
+  /// In en, this message translates to:
+  /// **'Install DuckDB on home computer'**
+  String get artifactsSqlInstall;
+
+  /// No description provided for @artifactsSqlCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel download'**
+  String get artifactsSqlCancel;
+
+  /// No description provided for @artifactsSqlRefresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh status'**
+  String get artifactsSqlRefresh;
+
+  /// No description provided for @artifactsSqlProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{received} / {total}'**
+  String artifactsSqlProgress(String received, String total);
+
+  /// No description provided for @artifactsSqlToolsReady.
+  ///
+  /// In en, this message translates to:
+  /// **'sql_load / sql_query are available to the agent.'**
+  String get artifactsSqlToolsReady;
+
+  /// No description provided for @artifactsSqlToolsAbsent.
+  ///
+  /// In en, this message translates to:
+  /// **'sql_load / sql_query stay out of the agent catalogue until DuckDB is ready.'**
+  String get artifactsSqlToolsAbsent;
+
+  /// No description provided for @artifactsSqlInstallNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Managed install runs on the home daemon host — not on this phone.'**
+  String get artifactsSqlInstallNote;
+
+  /// No description provided for @chatDataAssistHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Spreadsheet attached — pick a next step (seeds the composer; writes still need Allow):'**
+  String get chatDataAssistHint;
+
+  /// No description provided for @chatDataAssistClean.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean & chart'**
+  String get chatDataAssistClean;
+
+  /// No description provided for @chatDataAssistAsk.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask about this table'**
+  String get chatDataAssistAsk;
+
+  /// No description provided for @chatDataAssistJoin.
+  ///
+  /// In en, this message translates to:
+  /// **'Join / SQL'**
+  String get chatDataAssistJoin;
+
+  /// No description provided for @chatDataAssistInstallDuckdb.
+  ///
+  /// In en, this message translates to:
+  /// **'Install DuckDB…'**
+  String get chatDataAssistInstallDuckdb;
+
+  /// No description provided for @chatDataAssistCleanSeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Clean the attached spreadsheet with table_transform (normalize / filter / pipeline as needed), then chart_table, and show me the Open chips for the CSV and chart.'**
+  String get chatDataAssistCleanSeed;
+
+  /// No description provided for @chatDataAssistAskSeed.
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s in the attached spreadsheet? Summarize columns, row count, and a few sample rows.'**
+  String get chatDataAssistAskSeed;
+
+  /// No description provided for @chatDataAssistJoinSeed.
+  ///
+  /// In en, this message translates to:
+  /// **'Load the attached spreadsheet with sql_load, then use sql_query to answer (join if I attach more tables). Show Open chips for any result CSV.'**
+  String get chatDataAssistJoinSeed;
+
+  /// No description provided for @chatDataAssistNeedDuckdb.
+  ///
+  /// In en, this message translates to:
+  /// **'DuckDB is not ready — Install under System → Files on the home computer.'**
+  String get chatDataAssistNeedDuckdb;
+
   /// No description provided for @chatOpenFile.
   ///
   /// In en, this message translates to:

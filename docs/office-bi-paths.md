@@ -41,6 +41,6 @@ Two-table closed join inside `table_transform` was **not** chosen. Do not implem
 
 ### Where to click (Owner UX)
 
-- **Install joins:** Settings → System → Files → Offline SQL (DuckDB) → Install.
-- **What to do with this CSV (Chat):** attach `.csv`/`.xlsx` → strip **Clean & chart** / **Ask** / **Join / SQL** (or Install DuckDB when missing). Seeds the composer only; writes still need Allow.
+- **Install joins:** Settings → System → Files → Offline SQL (DuckDB) → Install (desktop **and** mobile).
+- **What to do with this CSV (Chat):** attach `.csv`/`.xlsx` → strip **Clean & chart** / **Ask** / **Join / SQL** (or Install DuckDB when missing). Seeds the composer only; writes still need Allow. Same strip on phone Chat.
 - **Recent results:** System → Files → Browse `output/tables` / `output/charts`.

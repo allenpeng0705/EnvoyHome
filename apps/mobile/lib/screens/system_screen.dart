@@ -9,14 +9,23 @@ import 'profiles_screen.dart';
 
 /// System: Profiles | Files | Health | Grants | This machine (Design §10.1).
 class SystemScreen extends StatelessWidget {
-  const SystemScreen({super.key, required this.session});
+  const SystemScreen({
+    super.key,
+    required this.session,
+    this.initialTab = 0,
+  });
 
   final SessionController session;
+
+  /// 0 Profiles · 1 Files · 2 Health · 3 Grants · 4 Machine
+  final int initialTab;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final start = initialTab.clamp(0, 4);
     return DefaultTabController(
+      initialIndex: start,
       length: 5,
       child: Scaffold(
         appBar: AppBar(
