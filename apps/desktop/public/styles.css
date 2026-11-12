@@ -5302,6 +5302,42 @@ body[data-view="schedulesChat"] .schedules-pane-tabs {
   font-size: 0.95rem;
 }
 
+.cron-schedule-help {
+  margin: 0.35rem 0 0.85rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.cron-schedule-help p {
+  margin: 0 0 0.4rem;
+}
+
+.cron-ex-title {
+  margin-top: 0.55rem !important;
+}
+
+.cron-ex-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0.5rem;
+}
+
+.cron-ex-chip {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.55rem;
+}
+
+.cron-tip {
+  margin-top: 0.35rem !important;
+  font-style: italic;
+}
+
+.cron-schedule-field input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.02em;
+}
+
 .chat-attach-list {
   list-style: none;
   margin: 0;

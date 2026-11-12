@@ -1914,6 +1914,12 @@ abstract class AppLocalizations {
   /// **'When → do household automations (standing orders). Presence templates need Privacy Mode.'**
   String get scenesHint;
 
+  /// No description provided for @scenesWhenPresence.
+  ///
+  /// In en, this message translates to:
+  /// **'Presence (no cron — sensor trigger)'**
+  String get scenesWhenPresence;
+
   /// No description provided for @scenesNone.
   ///
   /// In en, this message translates to:

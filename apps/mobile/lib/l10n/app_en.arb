@@ -437,6 +437,7 @@
   "skillsTabSchedules": "Schedules",
   "skillsTabScenes": "Scenes",
   "scenesHint": "When → do household automations (standing orders). Presence templates need Privacy Mode.",
+  "scenesWhenPresence": "Presence (no cron — sensor trigger)",
   "scenesNone": "No scenes yet.",
   "scenesAddMorning": "Add Good morning",
   "scenesPrivacyRequired": "Enable Privacy Mode (LLM → Routing) before presence scenes.",

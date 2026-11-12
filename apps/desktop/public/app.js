@@ -2269,6 +2269,82 @@ function setPendingFilesForView(which, next) {
   else chatPendingFiles = next;
 }
 
+/**
+ * Editable cron field + Owner-facing help (only render when the user can change it).
+ * @param {{ inputId?: string, name?: string, value?: string }} [opts]
+ */
+function cronScheduleFieldHtml(opts = {}) {
+  const inputId = opts.inputId || "cron-expr";
+  const name = opts.name || "cron";
+  const value = opts.value != null ? String(opts.value) : "";
+  const examples = [
+    ["standing.cronExDaily", "standing.cronExDailyVal"],
+    ["standing.cronExWeekdays", "standing.cronExWeekdaysVal"],
+    ["standing.cronExMonday", "standing.cronExMondayVal"],
+    ["standing.cronExHourly", "standing.cronExHourlyVal"],
+  ];
+  const chips = examples
+    .map(([labelKey, valKey]) => {
+      const expr = t(valKey);
+      return `<button type="button" class="ghost cron-ex-chip" data-cron-fill="${escapeHtml(expr)}" data-cron-target="${escapeHtml(inputId)}" title="${escapeHtml(expr)}">${escapeHtml(t(labelKey))}</button>`;
+    })
+    .join("");
+  return `<label class="cron-schedule-field" for="${escapeHtml(inputId)}">${escapeHtml(t("standing.cron"))}
+              <input type="text" name="${escapeHtml(name)}" id="${escapeHtml(inputId)}" value="${escapeHtml(value)}" placeholder="${escapeHtml(t("standing.cronPlaceholder"))}" autocomplete="off" spellcheck="false" />
+            </label>
+            <div class="cron-schedule-help muted">
+              <p>${escapeHtml(t("standing.cronExplain"))}</p>
+              <p>${escapeHtml(t("standing.cronFields"))}</p>
+              <p>${escapeHtml(t("standing.cronStar"))}</p>
+              <p class="cron-ex-title"><strong>${escapeHtml(t("standing.cronExamplesTitle"))}</strong></p>
+              <div class="cron-ex-row">${chips}</div>
+              <p class="cron-tip">${escapeHtml(t("standing.cronTip"))}</p>
+            </div>`;
+}
+
+/** Wire example chips from {@link cronScheduleFieldHtml}. */
+function wireCronScheduleExamples(root = document) {
+  root.querySelectorAll("[data-cron-fill]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const expr = btn.getAttribute("data-cron-fill") || "";
+      const targetId = btn.getAttribute("data-cron-target") || "";
+      const input = /** @type {HTMLInputElement | null} */ (
+        targetId ? document.getElementById(targetId) : null
+      );
+      if (!input || !expr) return;
+      input.value = expr;
+      input.focus();
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  });
+}
+
+/**
+ * Human WHEN for a 5-field cron (list rows — never show raw "cron" alone).
+ * @param {string} expr
+ */
+function humanCronExprLabel(expr) {
+  const parts = String(expr || "").trim().split(/\s+/);
+  if (parts.length < 5) return expr || "";
+  const [minute, hour, dom, month, dow] = parts;
+  const clock =
+    hour !== "*" && minute !== "*"
+      ? `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
+      : "";
+  if (dom === "*" && month === "*" && dow === "*" && clock) {
+    return `${t("jobs.kindDaily")} ${clock}`;
+  }
+  if (dom === "*" && month === "*" && dow === "1-5" && clock) {
+    return `${t("jobs.kindWeekdays")} ${clock}`;
+  }
+  if (dom === "*" && month === "*" && /^\d$/.test(dow || "") && clock) {
+    const names = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const name = names[Number(dow)] || dow;
+    return `${t("jobs.kindWeekly")} ${name} ${clock}`;
+  }
+  return expr;
+}
+
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -12227,14 +12303,19 @@ async function showView(id) {
         const rows = sceneOrders.length
           ? `<ul class="sys-list">${sceneOrders
               .map((o) => {
-                const whenKind =
-                  o.when && typeof o.when === "object" && o.when.kind
-                    ? String(o.when.kind)
-                    : "?";
+                const when =
+                  o.when && typeof o.when === "object" ? o.when : null;
+                const whenKind = when?.kind ? String(when.kind) : "?";
+                let whenLabel = whenKind;
+                if (whenKind === "cron" && when?.cronExpr) {
+                  whenLabel = humanCronExprLabel(String(when.cronExpr));
+                } else if (whenKind === "smarthome_event") {
+                  whenLabel = t("scenes.source");
+                }
                 return `<li class="sys-row">
                   <div class="sys-row-main">
                     <span class="sys-row-title">${escapeHtml(o.name || o.id)}</span>
-                    <span class="sys-row-meta muted">${escapeHtml(whenKind)}${
+                    <span class="sys-row-meta muted">${escapeHtml(whenLabel)}${
                       o.enabled ? "" : ` · ${escapeHtml(t("standing.disabled"))}`
                     }</span>
                   </div>
@@ -12279,9 +12360,11 @@ async function showView(id) {
             <label>${escapeHtml(t("scenes.name"))}
               <input type="text" name="name" maxlength="120" placeholder="" />
             </label>
-            <label id="scene-cron-wrap">${escapeHtml(t("standing.cron"))}
-              <input type="text" name="cron" id="scene-cron" />
-            </label>
+            <div id="scene-cron-wrap">${cronScheduleFieldHtml({
+              inputId: "scene-cron",
+              name: "cron",
+              value: "",
+            })}</div>
             <label id="scene-source-wrap" hidden>${escapeHtml(t("scenes.source"))}
               <select name="sourceId" id="scene-source">${sourceOpts}</select>
             </label>
@@ -12290,6 +12373,7 @@ async function showView(id) {
           <div id="scene-banner"></div>
         `);
         wireTabs();
+        wireCronScheduleExamples(el);
         const setBanner = (html) => {
           const b = el.querySelector("#scene-banner");
           if (b) b.innerHTML = html;
@@ -12309,7 +12393,7 @@ async function showView(id) {
           if (tpl?.whenKind === "cron") {
             if (cronWrap) cronWrap.hidden = false;
             if (sourceWrap) sourceWrap.hidden = true;
-            if (cronInput && !cronInput.value) cronInput.value = tpl.cronExpr || "";
+            if (cronInput) cronInput.value = tpl.cronExpr || "";
           } else {
             if (cronWrap) cronWrap.hidden = true;
             if (sourceWrap) sourceWrap.hidden = false;
@@ -12405,14 +12489,21 @@ async function showView(id) {
         const rows = orders.length
           ? `<ul class="sys-list">${orders
               .map((o) => {
-                const whenKind =
-                  o.when && typeof o.when === "object" && o.when.kind
-                    ? String(o.when.kind)
-                    : "?";
+                const when =
+                  o.when && typeof o.when === "object" ? o.when : null;
+                const whenKind = when?.kind ? String(when.kind) : "?";
+                let whenLabel = whenKind;
+                if (whenKind === "cron" && when?.cronExpr) {
+                  whenLabel = humanCronExprLabel(String(when.cronExpr));
+                } else if (whenKind === "smarthome_event") {
+                  whenLabel = t("scenes.source");
+                } else if (whenKind === "channel_event") {
+                  whenLabel = whenKind;
+                }
                 return `<li class="sys-row">
                   <div class="sys-row-main">
                     <span class="sys-row-title">${escapeHtml(o.name || o.id)}</span>
-                    <span class="sys-row-meta muted">${escapeHtml(whenKind)}${
+                    <span class="sys-row-meta muted">${escapeHtml(whenLabel)}${
                       o.enabled ? "" : ` · ${escapeHtml(t("standing.disabled"))}`
                     }</span>
                   </div>
@@ -12435,9 +12526,7 @@ async function showView(id) {
             <label>${escapeHtml(t("standing.name"))}
               <input type="text" name="name" required maxlength="120" />
             </label>
-            <label>${escapeHtml(t("standing.cron"))}
-              <input type="text" name="cron" placeholder="0 9 * * *" />
-            </label>
+            ${cronScheduleFieldHtml({ inputId: "so-cron", name: "cron" })}
             <label>${escapeHtml(t("standing.prompt"))}
               <textarea name="prompt" rows="3" required></textarea>
             </label>
@@ -12446,6 +12535,7 @@ async function showView(id) {
           <div id="so-banner"></div>
         `);
         wireTabs();
+        wireCronScheduleExamples(el);
         const setBanner = (html) => {
           const b = el.querySelector("#so-banner");
           if (b) b.innerHTML = html;

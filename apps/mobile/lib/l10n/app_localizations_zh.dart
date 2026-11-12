@@ -988,6 +988,9 @@ class AppLocalizationsZh extends AppLocalizations {
       'When → do household automations (standing orders). Presence templates need Privacy Mode.';
 
   @override
+  String get scenesWhenPresence => '在场触发（无 Cron — 传感器）';
+
+  @override
   String get scenesNone => 'No scenes yet.';
 
   @override

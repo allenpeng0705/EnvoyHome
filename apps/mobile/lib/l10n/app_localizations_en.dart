@@ -1011,6 +1011,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'When → do household automations (standing orders). Presence templates need Privacy Mode.';
 
   @override
+  String get scenesWhenPresence => 'Presence (no cron — sensor trigger)';
+
+  @override
   String get scenesNone => 'No scenes yet.';
 
   @override

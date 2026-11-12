@@ -1080,16 +1080,44 @@ class _ScenesTabState extends State<_ScenesTab> {
           Text(l10n.scenesNone)
         else
           ..._scenes.map(
-            (s) => ListTile(
-              title: Text(s['name']?.toString() ?? s['id']?.toString() ?? '?'),
-              subtitle: Text(
-                (s['when'] is Map ? (s['when'] as Map)['kind'] : '?').toString(),
-              ),
-              trailing: IconButton(
-                icon: const Icon(Icons.delete_outline),
-                onPressed: _busy ? null : () => _remove(s['id']?.toString() ?? ''),
-              ),
-            ),
+            (s) {
+              final when = s['when'];
+              String subtitle = '?';
+              if (when is Map) {
+                final kind = when['kind']?.toString() ?? '';
+                if (kind == 'cron') {
+                  final expr = when['cronExpr']?.toString() ?? '';
+                  final parts = expr.trim().split(RegExp(r'\s+'));
+                  if (parts.length >= 5 &&
+                      parts[0] != '*' &&
+                      parts[1] != '*' &&
+                      parts[2] == '*' &&
+                      parts[3] == '*' &&
+                      parts[4] == '*') {
+                    final clock =
+                        '${parts[1].padLeft(2, '0')}:${parts[0].padLeft(2, '0')}';
+                    subtitle = '${l10n.schedKindDaily} $clock';
+                  } else if (expr.isNotEmpty) {
+                    subtitle = '${l10n.schedKindRepeating} $expr';
+                  } else {
+                    subtitle = l10n.schedKindRepeating;
+                  }
+                } else if (kind == 'smarthome_event') {
+                  subtitle = l10n.scenesWhenPresence;
+                } else {
+                  subtitle = kind;
+                }
+              }
+              return ListTile(
+                title: Text(s['name']?.toString() ?? s['id']?.toString() ?? '?'),
+                subtitle: Text(subtitle),
+                trailing: IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed:
+                      _busy ? null : () => _remove(s['id']?.toString() ?? ''),
+                ),
+              );
+            },
           ),
       ],
     );
