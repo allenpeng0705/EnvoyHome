@@ -170,7 +170,7 @@
   "connTabBrowser": "Navigateur",
   "browserControlLede": "Contrôlez un navigateur géré sur l’ordinateur domestique (Auto préfère Obscura, sinon Chromium), ou connectez Chrome personnel / CDP distant. Désactivé par défaut.",
   "browserControlEnabled": "Activer l’outil navigateur",
-  "browserControlUnattended": "Allow for schedules",
+  "browserControlUnattended": "Autoriser le profil géré pour les plannings",
   "browserControlReady": "Prêt",
   "browserControlNotReady": "Pas prêt",
   "browserControlSave": "Enregistrer",
@@ -975,5 +975,21 @@
   "mcpArgs": "Arguments (séparés par des espaces, facultatif)",
   "mcpUrl": "URL",
   "mcpAuthToken": "Jeton d’auth (facultatif)",
-  "mcpEnv": "Env (KEY=value par ligne, facultatif)"
+  "mcpEnv": "Env (KEY=value par ligne, facultatif)",
+  "mcpUnknownError": "inconnu",
+  "connDeviceRevoked": "révoqué",
+  "connDeviceSubtitle": "{id} · {accounts}{revokedSuffix}",
+  "@connDeviceSubtitle": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      },
+      "accounts": {
+        "type": "String"
+      },
+      "revokedSuffix": {
+        "type": "String"
+      }
+    }
+  }
 }

@@ -657,6 +657,17 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get mcpUnknownError => '未知';
+
+  @override
+  String get connDeviceRevoked => '已撤销';
+
+  @override
+  String connDeviceSubtitle(String id, String accounts, String revokedSuffix) {
+    return '$id · $accounts$revokedSuffix';
+  }
+
+  @override
   String get mcpLabel => '标签';
 
   @override
@@ -686,7 +697,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get browserControlEnabled => '启用 browser 工具';
 
   @override
-  String get browserControlUnattended => '允许计划任务使用';
+  String get browserControlUnattended => '允许托管配置用于计划任务';
 
   @override
   String get browserControlReady => '就绪';

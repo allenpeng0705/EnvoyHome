@@ -275,11 +275,15 @@ class _PairingTabState extends State<_PairingTab> {
             (d) {
               final id = d['deviceId']?.toString() ?? d['id']?.toString() ?? '?';
               final revoked = d['revoked'] == true;
+              final accounts = '${d['accountIds'] ?? d['accounts'] ?? ''}';
               return ListTile(
                 title: Text(d['label']?.toString() ?? id),
                 subtitle: Text(
-                  '$id · ${d['accountIds'] ?? d['accounts'] ?? ''}'
-                  '${revoked ? ' · revoked' : ''}',
+                  l10n.connDeviceSubtitle(
+                    id,
+                    accounts,
+                    revoked ? ' · ${l10n.connDeviceRevoked}' : '',
+                  ),
                 ),
                 trailing: _isOwnerDevice
                     ? PopupMenuButton<String>(
@@ -1751,7 +1755,7 @@ class _McpServersTabState extends State<_McpServersTab> {
   @override
   void initState() {
     super.initState();
-    _reload();
+    unawaited(_reload());
   }
 
   @override
@@ -1880,7 +1884,7 @@ class _McpServersTabState extends State<_McpServersTab> {
       setState(() {
         _testResult = ok
             ? l10n.mcpTestOk(n)
-            : l10n.mcpTestFailed(err ?? 'unknown');
+            : l10n.mcpTestFailed(err ?? l10n.mcpUnknownError);
       });
       await _reload();
     } catch (e) {

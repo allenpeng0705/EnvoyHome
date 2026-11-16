@@ -692,6 +692,17 @@ class AppLocalizationsFr extends AppLocalizations {
   }
 
   @override
+  String get mcpUnknownError => 'inconnu';
+
+  @override
+  String get connDeviceRevoked => 'révoqué';
+
+  @override
+  String connDeviceSubtitle(String id, String accounts, String revokedSuffix) {
+    return '$id · $accounts$revokedSuffix';
+  }
+
+  @override
   String get mcpLabel => 'Libellé';
 
   @override
@@ -721,7 +732,8 @@ class AppLocalizationsFr extends AppLocalizations {
   String get browserControlEnabled => 'Activer l’outil navigateur';
 
   @override
-  String get browserControlUnattended => 'Allow for schedules';
+  String get browserControlUnattended =>
+      'Autoriser le profil géré pour les plannings';
 
   @override
   String get browserControlReady => 'Prêt';

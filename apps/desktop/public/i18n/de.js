@@ -247,8 +247,7 @@ export default {
   "profile.pick": "Profil wählen.",
   "profile.openProfiles": "Profile öffnen",
   "profile.workspaceTitle": "Workspace folder",
-  "profile.workspaceHint":
-    "Optional host folder the agent may use via workspace/… paths (outside the private sandbox). Set on this desktop only — phones can use it after pairing. To control the whole computer from mobile, choose the computer root (/ or C:\).",
+  "profile.workspaceHint": "Host-Ordner außerhalb der privaten Sandbox. Fügen Sie Projektverzeichnisse hinzu (oder die Computerwurzel für Ganzrechner-Zugriff von einem gekoppelten Telefon).",
   "profile.workspaceUnset": "Not set (sandbox only)",
   "profile.workspaceSet": "Configured",
   "profile.workspaceWholeMachine": "Ganzer Rechner",

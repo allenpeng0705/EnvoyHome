@@ -247,8 +247,7 @@ export default {
   "profile.pick": "プロフィールを選んでください。",
   "profile.openProfiles": "プロフィールを開く",
   "profile.workspaceTitle": "Workspace folder",
-  "profile.workspaceHint":
-    "Optional host folder the agent may use via workspace/… paths (outside the private sandbox). Set on this desktop only — phones can use it after pairing. To control the whole computer from mobile, choose the computer root (/ or C:\).",
+  "profile.workspaceHint": "プライベートサンドボックス外のホストフォルダーです。プロジェクトディレクトリを追加してください（ペアリングしたスマホからマシン全体にアクセスする場合はコンピュータのルート）。",
   "profile.workspaceUnset": "Not set (sandbox only)",
   "profile.workspaceSet": "Configured",
   "profile.workspaceWholeMachine": "コンピュータ全体",

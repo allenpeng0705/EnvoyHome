@@ -663,6 +663,17 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get mcpUnknownError => '不明';
+
+  @override
+  String get connDeviceRevoked => '取り消し済み';
+
+  @override
+  String connDeviceSubtitle(String id, String accounts, String revokedSuffix) {
+    return '$id · $accounts$revokedSuffix';
+  }
+
+  @override
   String get mcpLabel => 'ラベル';
 
   @override
@@ -692,7 +703,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get browserControlEnabled => 'ブラウザツールを有効化';
 
   @override
-  String get browserControlUnattended => 'Allow for schedules';
+  String get browserControlUnattended => 'スケジュールに管理プロファイルを許可';
 
   @override
   String get browserControlReady => '準備完了';

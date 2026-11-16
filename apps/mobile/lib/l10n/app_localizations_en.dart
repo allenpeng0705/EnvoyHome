@@ -683,6 +683,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get mcpUnknownError => 'unknown';
+
+  @override
+  String get connDeviceRevoked => 'revoked';
+
+  @override
+  String connDeviceSubtitle(String id, String accounts, String revokedSuffix) {
+    return '$id · $accounts$revokedSuffix';
+  }
+
+  @override
   String get mcpLabel => 'Label';
 
   @override

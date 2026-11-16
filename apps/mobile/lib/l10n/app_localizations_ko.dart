@@ -664,6 +664,17 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get mcpUnknownError => '알 수 없음';
+
+  @override
+  String get connDeviceRevoked => '철회됨';
+
+  @override
+  String connDeviceSubtitle(String id, String accounts, String revokedSuffix) {
+    return '$id · $accounts$revokedSuffix';
+  }
+
+  @override
   String get mcpLabel => '레이블';
 
   @override
@@ -693,7 +704,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get browserControlEnabled => '브라우저 도구 사용';
 
   @override
-  String get browserControlUnattended => 'Allow for schedules';
+  String get browserControlUnattended => '일정에 관리형 프로필 허용';
 
   @override
   String get browserControlReady => '준비됨';

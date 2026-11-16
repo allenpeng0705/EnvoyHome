@@ -170,7 +170,7 @@
   "connTabBrowser": "브라우저",
   "browserControlLede": "가정 PC의 관리 브라우저(Auto는 Obscura 우선, 없으면 Chromium)를 제어하거나 개인 Chrome / 원격 CDP를 연결합니다. 기본 꺼짐.",
   "browserControlEnabled": "브라우저 도구 사용",
-  "browserControlUnattended": "Allow for schedules",
+  "browserControlUnattended": "일정에 관리형 프로필 허용",
   "browserControlReady": "준비됨",
   "browserControlNotReady": "준비 안 됨",
   "browserControlSave": "저장",
@@ -975,5 +975,21 @@
   "mcpArgs": "인수(공백 구분, 선택)",
   "mcpUrl": "URL",
   "mcpAuthToken": "인증 토큰(선택)",
-  "mcpEnv": "환경 변수(줄마다 KEY=value, 선택)"
+  "mcpEnv": "환경 변수(줄마다 KEY=value, 선택)",
+  "mcpUnknownError": "알 수 없음",
+  "connDeviceRevoked": "철회됨",
+  "connDeviceSubtitle": "{id} · {accounts}{revokedSuffix}",
+  "@connDeviceSubtitle": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      },
+      "accounts": {
+        "type": "String"
+      },
+      "revokedSuffix": {
+        "type": "String"
+      }
+    }
+  }
 }

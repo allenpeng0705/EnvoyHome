@@ -170,7 +170,7 @@
   "connTabBrowser": "ブラウザ",
   "browserControlLede": "ホーム PC の管理ブラウザ（Auto は Obscura 優先、なければ Chromium）、または個人 Chrome / リモート CDP を接続。既定はオフ。",
   "browserControlEnabled": "ブラウザツールを有効化",
-  "browserControlUnattended": "Allow for schedules",
+  "browserControlUnattended": "スケジュールに管理プロファイルを許可",
   "browserControlReady": "準備完了",
   "browserControlNotReady": "未準備",
   "browserControlSave": "保存",
@@ -975,5 +975,21 @@
   "mcpArgs": "引数（スペース区切り、任意）",
   "mcpUrl": "URL",
   "mcpAuthToken": "認証トークン（任意）",
-  "mcpEnv": "環境変数（1行に KEY=value、任意）"
+  "mcpEnv": "環境変数（1行に KEY=value、任意）",
+  "mcpUnknownError": "不明",
+  "connDeviceRevoked": "取り消し済み",
+  "connDeviceSubtitle": "{id} · {accounts}{revokedSuffix}",
+  "@connDeviceSubtitle": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      },
+      "accounts": {
+        "type": "String"
+      },
+      "revokedSuffix": {
+        "type": "String"
+      }
+    }
+  }
 }

@@ -171,7 +171,7 @@
   "browserControlLede": "在家庭电脑上控制托管浏览器（自动优先 Obscura，否则 Chromium），或连接个人 Chrome / 远程 CDP。默认关闭。",
   "browserControlDaemonHostNote": "浏览器会话在家庭电脑上运行。此处设置与桌面「连接 → 浏览器」同步。",
   "browserControlEnabled": "启用 browser 工具",
-  "browserControlUnattended": "允许计划任务使用",
+  "browserControlUnattended": "允许托管配置用于计划任务",
   "browserControlReady": "就绪",
   "browserControlNotReady": "未就绪",
   "browserControlSave": "保存",
@@ -975,5 +975,21 @@
   "mcpArgs": "参数（空格分隔，可选）",
   "mcpUrl": "URL",
   "mcpAuthToken": "认证令牌（可选）",
-  "mcpEnv": "环境变量（每行 KEY=value，可选）"
+  "mcpEnv": "环境变量（每行 KEY=value，可选）",
+  "mcpUnknownError": "未知",
+  "connDeviceRevoked": "已撤销",
+  "connDeviceSubtitle": "{id} · {accounts}{revokedSuffix}",
+  "@connDeviceSubtitle": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      },
+      "accounts": {
+        "type": "String"
+      },
+      "revokedSuffix": {
+        "type": "String"
+      }
+    }
+  }
 }

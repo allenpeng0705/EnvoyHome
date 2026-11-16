@@ -346,6 +346,16 @@
       "error": {"type": "String"}
     }
   },
+  "mcpUnknownError": "unknown",
+  "connDeviceRevoked": "revoked",
+  "connDeviceSubtitle": "{id} · {accounts}{revokedSuffix}",
+  "@connDeviceSubtitle": {
+    "placeholders": {
+      "id": {"type": "String"},
+      "accounts": {"type": "String"},
+      "revokedSuffix": {"type": "String"}
+    }
+  },
   "mcpLabel": "Label",
   "mcpCommand": "Command",
   "mcpArgs": "Args (space-separated, optional)",

@@ -1,7 +1,10 @@
 /**
- * Apply translation JSON maps onto desktop locale JS + mobile ARB files.
+ * Maintainer-only helper: apply translation JSON maps onto desktop locale JS +
+ * mobile ARB files. **Not a CI step** — review the diff, then run
+ * `pnpm i18n:check` before committing.
  *
- * Expects /tmp/eh-i18n-fix/{desktop,mobile}-translated-{locale}.json
+ * Expects $ENVOYHOME_I18N_FIX_DIR (default /tmp/eh-i18n-fix):
+ *   {desktop,mobile}-translated-{locale}.json
  * as flat { key: translatedString } maps (mobile keys are ARB message names).
  *
  * Usage (repo root):

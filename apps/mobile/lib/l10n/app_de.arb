@@ -170,7 +170,7 @@
   "connTabBrowser": "Browser",
   "browserControlLede": "Verwalteten Browser auf dem Heimcomputer steuern (Auto bevorzugt Obscura, sonst Chromium) oder persönliches Chrome / Remote-CDP anbinden. Standardmäßig aus.",
   "browserControlEnabled": "Browser-Tool aktivieren",
-  "browserControlUnattended": "Allow for schedules",
+  "browserControlUnattended": "Verwaltetes Profil für Zeitpläne erlauben",
   "browserControlReady": "Bereit",
   "browserControlNotReady": "Nicht bereit",
   "browserControlSave": "Speichern",
@@ -975,5 +975,21 @@
   "mcpArgs": "Argumente (leerzeichengetrennt, optional)",
   "mcpUrl": "URL",
   "mcpAuthToken": "Auth-Token (optional)",
-  "mcpEnv": "Env (KEY=value pro Zeile, optional)"
+  "mcpEnv": "Env (KEY=value pro Zeile, optional)",
+  "mcpUnknownError": "unbekannt",
+  "connDeviceRevoked": "widerrufen",
+  "connDeviceSubtitle": "{id} · {accounts}{revokedSuffix}",
+  "@connDeviceSubtitle": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      },
+      "accounts": {
+        "type": "String"
+      },
+      "revokedSuffix": {
+        "type": "String"
+      }
+    }
+  }
 }

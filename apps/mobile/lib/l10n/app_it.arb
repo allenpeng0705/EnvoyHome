@@ -170,7 +170,7 @@
   "connTabBrowser": "Browser",
   "browserControlLede": "Controlli un browser gestito sul computer domestico (Auto preferisce Obscura, altrimenti Chromium), oppure collega Chrome personale / CDP remoto. Disattivato di default.",
   "browserControlEnabled": "Abilita strumento browser",
-  "browserControlUnattended": "Allow for schedules",
+  "browserControlUnattended": "Consenti profilo gestito per le pianificazioni",
   "browserControlReady": "Pronto",
   "browserControlNotReady": "Non pronto",
   "browserControlSave": "Salva",
@@ -975,5 +975,21 @@
   "mcpArgs": "Argomenti (separati da spazi, facoltativo)",
   "mcpUrl": "URL",
   "mcpAuthToken": "Token di autenticazione (facoltativo)",
-  "mcpEnv": "Env (KEY=value per riga, facoltativo)"
+  "mcpEnv": "Env (KEY=value per riga, facoltativo)",
+  "mcpUnknownError": "sconosciuto",
+  "connDeviceRevoked": "revocato",
+  "connDeviceSubtitle": "{id} · {accounts}{revokedSuffix}",
+  "@connDeviceSubtitle": {
+    "placeholders": {
+      "id": {
+        "type": "String"
+      },
+      "accounts": {
+        "type": "String"
+      },
+      "revokedSuffix": {
+        "type": "String"
+      }
+    }
+  }
 }

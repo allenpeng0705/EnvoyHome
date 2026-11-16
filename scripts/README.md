@@ -30,7 +30,9 @@ pnpm version:desktop:check       # fail if anything drifted (also run by ./scrip
 Mobile is separate: bump `apps/mobile/pubspec.yaml` on its own.
 
 Locale catalogs (desktop `public/i18n/*.js` + mobile `lib/l10n/app_*.arb`) must
-cover every English key — `pnpm i18n:check` (also run by `./scripts/ci.sh`).
+cover every English key — `pnpm i18n:check` (also run by `./scripts/ci.sh` and
+GitHub Actions). Maintainer bulk apply: `node scripts/i18n-apply-translations.mjs`
+(not CI — review the diff, then re-run `pnpm i18n:check`).
 
 Installer builds call `sync-desktop-version.mjs` first so the DMG/EXE name and
 the app metadata stay on the same number.

@@ -330,7 +330,7 @@ export default {
   "profile.pick": "请选择个人资料。",
   "profile.openProfiles": "打开个人资料",
   "profile.workspaceTitle": "工作区文件夹",
-  "profile.workspaceHint": "可选：让智能体通过 workspace/… 访问沙箱外的主机文件夹。仅在本桌面配置；手机配对后即可使用。若要从手机操控整台电脑，请选择电脑根目录（/ 或 C:\）。",
+  "profile.workspaceHint": "沙箱外的主机文件夹。可添加项目目录（或电脑根目录，以便配对手机访问整机）。",
   "profile.workspaceUnset": "未设置（仅私有沙箱）",
   "profile.workspaceSet": "已配置",
   "profile.workspaceWholeMachine": "整机",

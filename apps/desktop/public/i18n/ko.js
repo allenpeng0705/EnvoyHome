@@ -247,8 +247,7 @@ export default {
   "profile.pick": "프로필을 선택하세요.",
   "profile.openProfiles": "프로필 열기",
   "profile.workspaceTitle": "Workspace folder",
-  "profile.workspaceHint":
-    "Optional host folder the agent may use via workspace/… paths (outside the private sandbox). Set on this desktop only — phones can use it after pairing. To control the whole computer from mobile, choose the computer root (/ or C:\).",
+  "profile.workspaceHint": "개인 샌드박스 밖의 호스트 폴더입니다. 프로젝트 디렉터리를 추가하세요(페어링된 폰에서 전체 기기에 접근하려면 컴퓨터 루트).",
   "profile.workspaceUnset": "Not set (sandbox only)",
   "profile.workspaceSet": "Configured",
   "profile.workspaceWholeMachine": "전체 컴퓨터",

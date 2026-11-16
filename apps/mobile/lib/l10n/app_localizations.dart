@@ -1308,6 +1308,24 @@ abstract class AppLocalizations {
   /// **'Failed: {error}'**
   String mcpTestFailed(String error);
 
+  /// No description provided for @mcpUnknownError.
+  ///
+  /// In en, this message translates to:
+  /// **'unknown'**
+  String get mcpUnknownError;
+
+  /// No description provided for @connDeviceRevoked.
+  ///
+  /// In en, this message translates to:
+  /// **'revoked'**
+  String get connDeviceRevoked;
+
+  /// No description provided for @connDeviceSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{id} · {accounts}{revokedSuffix}'**
+  String connDeviceSubtitle(String id, String accounts, String revokedSuffix);
+
   /// No description provided for @mcpLabel.
   ///
   /// In en, this message translates to:

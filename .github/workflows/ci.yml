@@ -33,6 +33,13 @@ jobs:
       - name: docs:lint (design-doc cross-references)
         run: node scripts/docs-lint.mjs
 
+      # Same early gates as scripts/ci.sh (no siblings / install required).
+      - name: version:desktop:check
+        run: node scripts/sync-desktop-version.mjs --check
+
+      - name: i18n:check (desktop + mobile locale key parity)
+        run: node scripts/i18n-check.mjs
+
       # EnvoyHome links @envoymesh/* and @envoymesh/envoy-harness with pnpm
       # `link:` + `overrides` (pnpm-workspace.yaml). They are not workspace
       # members and not on the npm registry, so `pnpm install` cannot run until
