@@ -10,7 +10,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "peers:check": "./scripts/peers-check.sh",
+    "peers:check": "node ./scripts/peers-check.mjs",
+    "peers:fetch": "node ./scripts/fetch-peers.mjs",
     "docs:lint": "node scripts/docs-lint.mjs",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",

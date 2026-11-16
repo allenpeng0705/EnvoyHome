@@ -1,17 +1,18 @@
 # Build the Windows installer (NSIS EXE).
 #
-# PowerShell twin of scripts/build-desktop.sh for Windows (EnvoyMesh naming +
-# EnvoyCoder build-exe.ps1 flow).
+# Single entry point for Windows — PowerShell twin of scripts/build-desktop.sh.
+# Calls the other scripts:
+#   sync-desktop-version → fetch-peers (local first, then git) → peers-check →
+#   stage-desktop-bundle → tauri build (NSIS) → release/
 #
 # Run this on Windows, from the EnvoyHome checkout:
 #   .\scripts\build-desktop.ps1
 #
-# Needs: git, Node.js >= 22, pnpm, Rust, Visual Studio C++ build tools,
-#        sibling ../EnvoyMesh (linked @envoymesh/*).
-# envoy-harness: auto-cloned from scripts/envoy-harness.pin when missing
-# (same idea as EnvoyCoder). Override: ENVOY_HARNESS_DIR / ENVOY_HARNESS_COMMIT.
-# First-time EnvoyMesh: ENVOYHOME_PEERS_GIT_BASE + .\scripts\fetch-peers.sh
-# (QuickStart.md §1). peers:check needs bash (Git for Windows) or pnpm peers:check.
+# Needs: git, Node.js >= 22, pnpm, Rust, Visual Studio C++ build tools.
+# Prefer sibling ../EnvoyMesh + ../envoy-harness beside EnvoyHome (this script
+# fetches missing peers). Override harness: ENVOY_HARNESS_DIR / ENVOY_HARNESS_COMMIT.
+# Optional: ENVOYHOME_PEERS_GIT_BASE (else https://github.com/allenpeng0705).
+# macOS/Linux: ./scripts/build-desktop.sh
 #
 # Push: stages push-config.json + AuthKey_*.p8 + serviceAccountKey.json into
 # resources\push\ (REQUIRE_PUSH_CREDENTIALS=1 by default). Set
@@ -82,7 +83,19 @@ Write-Host "  Version: $Version"
 Write-Host "============================================"
 Write-Host ""
 
-Write-Host "[1/3] Staging Node runtime + packaged daemon + Obscura..."
+Write-Host "[1/4] Peers (local siblings first, then git)..."
+node (Join-Path $Root "scripts\fetch-peers.mjs")
+if ($LASTEXITCODE -ne 0) {
+  Write-Error "fetch-peers failed. Put EnvoyMesh (+ envoy-harness) beside EnvoyHome, or set ENVOYHOME_PEERS_GIT_BASE."
+  exit $LASTEXITCODE
+}
+node (Join-Path $Root "scripts\peers-check.mjs")
+if ($LASTEXITCODE -ne 0) {
+  Write-Error "peers:check failed (wrong branch or incomplete sibling). See messages above."
+  exit $LASTEXITCODE
+}
+
+Write-Host "[2/4] Staging Node runtime + packaged daemon + Obscura..."
 node (Join-Path $Root "scripts\stage-desktop-bundle.mjs")
 if ($LASTEXITCODE -ne 0) {
   Write-Error @"
@@ -138,7 +151,7 @@ Staging did not produce resources\obscura\obscura.exe (or obscura).
   }
 }
 
-Write-Host "[2/3] Building the app and the EXE..."
+Write-Host "[3/4] Building the app and the EXE..."
 $TauriCandidates = @(
   (Join-Path $Root "apps\desktop\node_modules\.bin\tauri.cmd"),
   (Join-Path $Root "node_modules\.bin\tauri.cmd")
@@ -178,7 +191,7 @@ try {
   Pop-Location
 }
 
-Write-Host "[3/3] Publishing the EXE to repo-root release folder..."
+Write-Host "[4/4] Publishing the EXE to repo-root release folder..."
 Write-Host "  → $Out"
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 $found = Get-ChildItem -Path (Join-Path $Root "apps\desktop\src-tauri\target") -Recurse -Filter "*-setup.exe" -ErrorAction SilentlyContinue |

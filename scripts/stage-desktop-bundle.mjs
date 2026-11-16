@@ -174,13 +174,13 @@ function peersHint() {
     "EnvoyHome still needs a sibling EnvoyMesh checkout (linked @envoymesh/* — not on npm):",
     `  ${parent}/EnvoyMesh`,
     "",
-    "envoy-harness is fetched automatically from scripts/envoy-harness.pin when missing.",
+    "Prefer local siblings beside EnvoyHome (EnvoyMesh + envoy-harness). Then:",
+    "  pnpm peers:fetch && pnpm peers:check",
+    "  # Windows: .\\scripts\\fetch-peers.ps1 ; .\\scripts\\peers-check.ps1",
     "",
-    "Clone EnvoyMesh (QuickStart §1), then re-run:",
-    "  export ENVOYHOME_PEERS_GIT_BASE='git@github.com:YOUR_ORG'",
-    "  ./scripts/fetch-peers.sh && ./scripts/peers-check.sh",
-    "",
-    "Or: git clone <url> ../EnvoyMesh   (branch main / ENVOYHOME_PEER_BRANCH)",
+    "fetch-peers uses local copies first; if missing it clones from",
+    "ENVOYHOME_PEERS_GIT_BASE or https://github.com/allenpeng0705.",
+    "envoy-harness is also auto-checked out from scripts/envoy-harness.pin when missing.",
   ].join("\n");
 }
 
@@ -256,31 +256,29 @@ function ensureHarnessCheckout() {
 
 function ensurePeers() {
   // Harness first — auto-clone from pin so packagers need not clone it by hand.
+  // build-desktop.sh / .ps1 already run fetch-peers + peers-check; this remains
+  // the safety net for `pnpm desktop:stage` and other direct callers.
   ensureHarnessCheckout();
 
   if (process.env.ENVOYHOME_SKIP_PEERS === "1") {
     say("ENVOYHOME_SKIP_PEERS=1 — skipping peers:check (not for release builds).");
     return;
   }
-  const check = path.join(root, "scripts", "peers-check.sh");
+  const check = path.join(root, "scripts", "peers-check.mjs");
+  const fetch = path.join(root, "scripts", "fetch-peers.mjs");
   if (!existsSync(check)) return;
+
   say("Checking peer checkouts (EnvoyMesh + envoy-harness)…");
-  let ok = spawnTool("pnpm", ["run", "peers:check"], { cwd: root, stdio: "inherit" }).status === 0;
-  if (!ok) {
-    const bash = whichOnPath("bash") ?? "bash";
-    ok = spawnSync(bash, [check], { cwd: root, stdio: "inherit" }).status === 0;
-  }
+  let ok = spawnSync(process.execPath, [check], { cwd: root, stdio: "inherit" }).status === 0;
   if (ok) return;
 
-  const fetch = path.join(root, "scripts", "fetch-peers.sh");
-  if (existsSync(fetch) && (process.env.ENVOYHOME_PEERS_GIT_BASE ?? "").trim()) {
-    say("peers:check failed — trying ./scripts/fetch-peers.sh…");
-    const bash = whichOnPath("bash") ?? "bash";
-    const fetched = spawnSync(bash, [fetch], { cwd: root, stdio: "inherit" });
+  // Local siblings first; clone only what is still missing (Node — no bash).
+  if (existsSync(fetch)) {
+    say("peers:check failed — trying fetch-peers (local first, then git)…");
+    const fetched = spawnSync(process.execPath, [fetch], { cwd: root, stdio: "inherit" });
     if (fetched.status === 0) {
-      // Harness may have been missing before fetch; pin checkout already ran.
       ensureHarnessCheckout();
-      ok = spawnTool("pnpm", ["run", "peers:check"], { cwd: root, stdio: "inherit" }).status === 0;
+      ok = spawnSync(process.execPath, [check], { cwd: root, stdio: "inherit" }).status === 0;
       if (ok) return;
     }
   }

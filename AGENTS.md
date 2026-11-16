@@ -96,7 +96,7 @@ Siblings are linked with `link:` in each `package.json` **plus** an `overrides:`
 - `../envoy-harness` → `@envoymesh/envoy-harness` (default harness; **not** published to npm)
 - `../EnvoyCoder` → reference patterns only (Settings, host-bridge, daemon claim file); **not** a linked dependency
 
-`./scripts/peers-check.sh` is **fail-closed**: it exits non-zero if a linked sibling package is missing, is not a git checkout, or is on the wrong branch (`ENVOYHOME_PEER_BRANCH`, default `main`). `./scripts/fetch-peers.sh` clones the siblings when `ENVOYHOME_PEERS_GIT_BASE` is set.
+`pnpm peers:check` / `node ./scripts/peers-check.mjs` is **fail-closed**: it exits non-zero if a linked sibling package is missing, is not a git checkout, or is on the wrong branch (`ENVOYHOME_PEER_BRANCH`, default `main`). `pnpm peers:fetch` prefers local siblings, then clones missing ones from `ENVOYHOME_PEERS_GIT_BASE` or the public default (`https://github.com/allenpeng0705`).
 
 ## PR title: `[B<stage-id>] <short>`
 

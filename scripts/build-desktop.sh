@@ -6,20 +6,22 @@
 #
 # Windows is NOT supported here — use scripts/build-desktop.ps1 on a Windows host.
 #
+# Single entry point for macOS/Linux installers — calls the other scripts:
+#   sync-desktop-version → fetch-peers (local first, then git) → peers-check →
+#   stage-desktop-bundle → tauri build → (macOS) sign + package-macos-dmg → release/
+#
 # Usage (from the EnvoyHome checkout):
 #   ./scripts/build-desktop.sh [macos|linux|all]
 #
 #   all  = native host only (darwin→macos, linux→linux). Not a cross-compile.
 #
-# Needs: Node.js >= 22, pnpm, Rust, and sibling ../EnvoyMesh (linked @envoymesh/*).
-# envoy-harness: auto-cloned from scripts/envoy-harness.pin when ../envoy-harness
-# is missing (EnvoyCoder pattern). Override: ENVOY_HARNESS_DIR / ENVOY_HARNESS_COMMIT.
-# First-time EnvoyMesh (QuickStart §1):
-#   export ENVOYHOME_PEERS_GIT_BASE='git@github.com:YOUR_ORG'
-#   ./scripts/fetch-peers.sh && ./scripts/peers-check.sh
+# Needs: Node.js >= 22, pnpm, Rust. Prefer sibling ../EnvoyMesh + ../envoy-harness
+# beside EnvoyHome (this script fetches missing peers). Override harness with
+# ENVOY_HARNESS_DIR / ENVOY_HARNESS_COMMIT. Optional: ENVOYHOME_PEERS_GIT_BASE.
 #   macOS: Xcode Command Line Tools
 #   Linux: libwebkit2gtk-4.1-dev, libgtk-3-dev, librsvg2-dev, patchelf, …
 #          (see https://v2.tauri.app/start/prerequisites/)
+# Windows EXE: .\scripts\build-desktop.ps1 (same peer + stage flow).
 #
 # Push (iOS APNs + Android FCM): stage-desktop-bundle.mjs copies repo-root (or
 # ~/.envoyhome) push-config.json + AuthKey_*.p8 + serviceAccountKey.json into
@@ -232,7 +234,17 @@ echo "  Version: ${VERSION}  Target: ${TARGET}"
 echo "============================================"
 echo ""
 
-echo "[1/3] Staging Node runtime + packaged daemon + Obscura…"
+echo "[1/4] Peers (local siblings first, then git)…"
+if ! node "$ROOT/scripts/fetch-peers.mjs"; then
+  echo "error: fetch-peers failed. Put EnvoyMesh (+ envoy-harness) beside EnvoyHome, or set ENVOYHOME_PEERS_GIT_BASE." >&2
+  exit 1
+fi
+if ! node "$ROOT/scripts/peers-check.mjs"; then
+  echo "error: peers:check failed (wrong branch or incomplete sibling). See messages above." >&2
+  exit 1
+fi
+
+echo "[2/4] Staging Node runtime + packaged daemon + Obscura…"
 if ! node "$ROOT/scripts/stage-desktop-bundle.mjs"; then
   echo "error: stage-desktop-bundle.mjs failed (see messages above)." >&2
   echo "  Obscura retry: pnpm obscura:fetch" >&2
@@ -294,11 +306,11 @@ fi
 
 if [ "${TARGET}" = "macos" ]; then
   require_apple_signing_env
-  echo "[1.5/3] Signing nested Mach-O in staged resources…"
+  echo "[2.5/4] Signing nested Mach-O in staged resources…"
   bash "$ROOT/scripts/sign-macos-staged-resources.sh"
 fi
 
-echo "[2/3] Building the Tauri app…"
+echo "[3/4] Building the Tauri app…"
 cd "$ROOT/apps/desktop"
 TAURI="$(resolve_tauri)" || {
   echo "The Tauri CLI is not installed. From the repo root run: pnpm install" >&2
@@ -332,7 +344,7 @@ case "${TARGET}" in
         exit 1
       fi
       echo ""
-      echo "[2.5/3] Signing EnvoyHome.app (deferred from Tauri)…"
+      echo "[3.5/4] Signing EnvoyHome.app (deferred from Tauri)…"
       bash "$ROOT/scripts/sign-macos-app-bundle.sh" "$app"
       echo ""
       echo "Packaging DMG from signed .app (not tauri bundle — preserves Developer ID)…"
@@ -351,7 +363,7 @@ case "${TARGET}" in
     ;;
 esac
 
-echo "[3/3] Publishing installers to repo-root release folder…"
+echo "[4/4] Publishing installers to repo-root release folder…"
 echo "  → $OUT"
 mkdir -p "$OUT"
 copied=0

@@ -26,7 +26,7 @@ node scripts/docs-lint.mjs
 node scripts/sync-desktop-version.mjs --check
 
 # 2. Siblings present, on the expected branch, with the linked packages. Fail closed.
-./scripts/peers-check.sh
+node ./scripts/peers-check.mjs
 
 # 3. Install with CI explicitly unset (R9 strict-mode trap). Note: GitHub Actions
 #    sets CI=true in the environment, so `env -u CI` is required here, not just

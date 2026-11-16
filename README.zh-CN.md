@@ -160,8 +160,9 @@ parent/
 ### 安装
 
 ```bash
-# 失败即退出的并列仓库检查（或设置 ENVOYHOME_PEERS_GIT_BASE 后 ./scripts/fetch-peers.sh）
-./scripts/peers-check.sh
+# 优先使用本地并列仓库。桌面构建会自行拉取 peers：
+#   ./scripts/build-desktop.sh macos   |   .\scripts\build-desktop.ps1
+# 手动：pnpm peers:fetch && pnpm peers:check
 
 # 切勿在 CI=true 下安装（pnpm 严格模式陷阱 — 约定 R9）
 env -u CI pnpm install

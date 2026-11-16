@@ -31,17 +31,8 @@ Installer scripts re-sync from `VERSION` before bundling. Mobile
 
 ### Release installers (EnvoyCoder / EnvoyMesh pattern)
 
-**Peers:** you need sibling **`../EnvoyMesh`**. **`envoy-harness` is auto-cloned** from `scripts/envoy-harness.pin` when missing (EnvoyCoder-style), then built and **esbuild-inlined** into the daemon.
-
-```bash
-# EnvoyMesh only (if not already beside this repo)
-export ENVOYHOME_PEERS_GIT_BASE='git@github.com:YOUR_ORG'
-./scripts/fetch-peers.sh && ./scripts/peers-check.sh
-```
-
-Bump the shipped harness by editing `scripts/envoy-harness.pin` (full 40-char sha). Overrides: `ENVOY_HARNESS_DIR`, `ENVOY_HARNESS_COMMIT`, `ENVOYHOME_HARNESS_FORCE_PIN=1`.
-
-From the **repo root** (stages Node + packaged daemon into `src-tauri/resources/`, then Tauri):
+**Single entry points** (peers + stage + Tauri + publish). Prefer local
+`../EnvoyMesh` + `../envoy-harness`; missing peers are fetched automatically.
 
 ```bash
 ./scripts/build-desktop.sh macos    # → <repo>/release/envoyhome-desktop-{ver}-macos-{arch}.dmg
@@ -49,15 +40,14 @@ From the **repo root** (stages Node + packaged daemon into `src-tauri/resources/
 ./scripts/build-desktop.sh          # native host only (macos or linux)
 ```
 
-Installers are copied into the **repo-root** `release/` folder (not under `src-tauri/target`). Override with `OUT_DIR=…`.
-
-Windows (PowerShell, on a Windows host):
-
 ```powershell
 .\scripts\build-desktop.ps1         # → <repo>\release\envoyhome-desktop-{ver}-windows-{arch}-setup.exe
 ```
 
-Optional: `pnpm desktop:stage` only stages resources; `pnpm desktop:build` runs the shell script.
+Installers land in repo-root `release/` (override with `OUT_DIR=…`). Harness pin:
+`scripts/envoy-harness.pin` (overrides: `ENVOY_HARNESS_DIR`, `ENVOY_HARNESS_COMMIT`,
+`ENVOYHOME_HARNESS_FORCE_PIN=1`). Optional: `pnpm desktop:stage` stages only;
+`pnpm desktop:build` runs `build-desktop.sh`.
 
 **macOS signing:** release DMGs require Developer ID + notarization (same as
 EnvoyMesh / EnvoyCoder EnvoyDev). Copy `scripts/sign-macos-release.env.example` →

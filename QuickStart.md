@@ -37,19 +37,16 @@ parent/
   EnvoyCoder/          # optional; patterns only
 ```
 
-```bash
-# From EnvoyHome root — fail-closed gate
-./scripts/peers-check.sh
+Prefer local siblings beside EnvoyHome. Desktop builders call peers for you:
 
-# Or clone when ENVOYHOME_PEERS_GIT_BASE is set (e.g. git@github.com:you)
-export ENVOYHOME_PEERS_GIT_BASE='git@github.com:YOUR_ORG'
-./scripts/fetch-peers.sh
-./scripts/peers-check.sh
+```bash
+./scripts/build-desktop.sh macos       # DMG — fetch-peers → stage → sign → release/
+# Windows: .\scripts\build-desktop.ps1 # EXE — same peer + stage flow
 ```
 
-Default expected peer branch: `main` (override with `ENVOYHOME_PEER_BRANCH`).
-
-For **desktop installers**, you mainly need **EnvoyMesh**; `./scripts/build-desktop.sh` will fetch **envoy-harness** at the commit in `scripts/envoy-harness.pin` if `../envoy-harness` is absent.
+Manual peers (optional): `pnpm peers:fetch && pnpm peers:check`.
+Optional private clone base: `ENVOYHOME_PEERS_GIT_BASE` (else `https://github.com/allenpeng0705`).
+Default expected peer branch: `main` (`ENVOYHOME_PEER_BRANCH`).
 
 ## 2. Install
 

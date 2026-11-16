@@ -160,8 +160,9 @@ parent/
 ### Install
 
 ```bash
-# Fail-closed sibling check (or set ENVOYHOME_PEERS_GIT_BASE and ./scripts/fetch-peers.sh)
-./scripts/peers-check.sh
+# Prefer local siblings beside EnvoyHome. Desktop builders call peers for you:
+#   ./scripts/build-desktop.sh macos   |   .\scripts\build-desktop.ps1
+# Manual: pnpm peers:fetch && pnpm peers:check
 
 # Never install with CI=true (pnpm strict-mode trap — conventions R9)
 env -u CI pnpm install

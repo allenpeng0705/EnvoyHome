@@ -33,14 +33,18 @@ the app metadata stay on the same number.
 
 ## Desktop installers
 
-Needs sibling **`../EnvoyMesh`** (`link:` `@envoymesh/*` — not on npm).
-**envoy-harness** is auto-cloned from `scripts/envoy-harness.pin` when missing.
+**Entry points only:** `./scripts/build-desktop.sh` (macOS/Linux) and
+`.\scripts\build-desktop.ps1` (Windows). They call the other scripts for you:
+peers (local first, then git) → stage → Tauri → publish (macOS also signs/notarizes).
+
+Prefer sibling **`../EnvoyMesh`** + **`../envoy-harness`** beside EnvoyHome
+(`link:` `@envoymesh/*` — not on npm). Missing peers are fetched automatically.
 
 ```bash
-# EnvoyMesh (once), if not already beside this repo:
-export ENVOYHOME_PEERS_GIT_BASE='git@github.com:YOUR_ORG'
-./scripts/fetch-peers.sh && ./scripts/peers-check.sh
-pnpm install
+pnpm install   # R9: unset CI
+./scripts/build-desktop.sh macos          # DMG
+# Windows: .\scripts\build-desktop.ps1    # EXE
+# Optional private clone base: ENVOYHOME_PEERS_GIT_BASE=git@github.com:YOUR_ORG
 ```
 
 | OS | Command | Output (repo-root **`release/`**) |
@@ -51,7 +55,7 @@ pnpm install
 
 Override the output folder with `OUT_DIR=…` (relative → under repo root, or absolute).
 
-What the scripts do: sync version → stage Node + packaged daemon (+ push credentials) → Tauri bundle → copy installer into `release/`.
+Manual peers (optional): `pnpm peers:fetch` / `pnpm peers:check`.
 
 ### Harness pin
 
