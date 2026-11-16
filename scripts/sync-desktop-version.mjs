@@ -2,13 +2,14 @@
  * One place to set the EnvoyHome **desktop** product version (EnvoyCoder pattern).
  *
  * Source of truth: the `VERSION` file at the repo root (one line, semver).
- * This script writes that number into every place the desktop installer and
- * window must agree on:
+ * This script writes that number into every place the desktop installer,
+ * window, and packaged daemon must agree on:
  *
  *   - package.json (root — release artifact names)
  *   - apps/desktop/package.json
  *   - apps/desktop/src-tauri/tauri.conf.json
  *   - apps/desktop/src-tauri/Cargo.toml (+ the `envoyhome` entry in Cargo.lock)
+ *   - packages/daemon/src/product-version.ts (`home.hello` / MCP clientInfo)
  *
  * Usage:
  *   echo 0.1.0 > VERSION && pnpm version:desktop
@@ -33,6 +34,7 @@ const targets = {
   tauriConf: path.join(root, "apps/desktop/src-tauri/tauri.conf.json"),
   cargoToml: path.join(root, "apps/desktop/src-tauri/Cargo.toml"),
   cargoLock: path.join(root, "apps/desktop/src-tauri/Cargo.lock"),
+  daemonProductVersion: path.join(root, "packages/daemon/src/product-version.ts"),
 };
 
 function fail(message) {
@@ -67,6 +69,35 @@ function readCargoLockEnvoyhomeVersion(file) {
   return match[1];
 }
 
+function readDaemonProductVersion(file) {
+  if (!existsSync(file)) {
+    fail(`${path.relative(root, file)} is missing (expected PRODUCT_VERSION export).`);
+  }
+  const text = readFileSync(file, "utf8");
+  const match = text.match(/export const PRODUCT_VERSION = "([^"]+)"/);
+  if (!match) fail(`${path.relative(root, file)} has no export const PRODUCT_VERSION = "…".`);
+  return match[1];
+}
+
+function writeDaemonProductVersion(file, version) {
+  if (!existsSync(file)) {
+    fail(`${path.relative(root, file)} is missing (expected PRODUCT_VERSION export).`);
+  }
+  const raw = readFileSync(file, "utf8");
+  const next = raw.replace(
+    /export const PRODUCT_VERSION = "[^"]+"/,
+    `export const PRODUCT_VERSION = "${version}"`,
+  );
+  if (next === raw) {
+    if (!raw.includes(`export const PRODUCT_VERSION = "${version}"`)) {
+      fail(`${path.relative(root, file)} has no export const PRODUCT_VERSION = "…" to update.`);
+    }
+    return false;
+  }
+  writeFileSync(file, next);
+  return true;
+}
+
 function currentMap() {
   return {
     VERSION: readVersionFile(),
@@ -75,6 +106,7 @@ function currentMap() {
     "apps/desktop/src-tauri/tauri.conf.json": readJsonVersion(targets.tauriConf),
     "apps/desktop/src-tauri/Cargo.toml": readCargoPackageVersion(targets.cargoToml),
     "apps/desktop/src-tauri/Cargo.lock (envoyhome)": readCargoLockEnvoyhomeVersion(targets.cargoLock),
+    "packages/daemon/src/product-version.ts": readDaemonProductVersion(targets.daemonProductVersion),
   };
 }
 
@@ -114,6 +146,9 @@ function sync(version) {
   if (writeCargoTomlVersion(targets.cargoToml, version)) touched.push("apps/desktop/src-tauri/Cargo.toml");
   if (writeCargoLockEnvoyhomeVersion(targets.cargoLock, version)) {
     touched.push("apps/desktop/src-tauri/Cargo.lock");
+  }
+  if (writeDaemonProductVersion(targets.daemonProductVersion, version)) {
+    touched.push("packages/daemon/src/product-version.ts");
   }
   return touched;
 }

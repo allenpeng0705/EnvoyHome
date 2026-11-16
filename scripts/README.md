@@ -25,6 +25,7 @@ pnpm version:desktop:check       # fail if anything drifted (also run by ./scrip
 | `apps/desktop/src-tauri/tauri.conf.json` | Tauri / installer metadata |
 | `apps/desktop/src-tauri/Cargo.toml` | Rust crate version |
 | `apps/desktop/src-tauri/Cargo.lock` | `envoyhome` package entry |
+| `packages/daemon/src/product-version.ts` | daemon `home.hello` / MCP clientInfo |
 
 Mobile is separate: bump `apps/mobile/pubspec.yaml` on its own.
 

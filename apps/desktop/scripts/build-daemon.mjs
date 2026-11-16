@@ -182,8 +182,17 @@ function isVirtualStorePath(dir) {
   return dir.includes(`${sep}node_modules${sep}`);
 }
 
-function copyPackage(name, dest, seen, missing, required, prefer) {
-  if (seen.has(name)) return;
+/**
+ * Copy an npm package into the staged node_modules tree.
+ *
+ * Flatten when safe; if the same package name is already at the intended place
+ * with a **different version**, nest under the parent (Node resolution). This
+ * fixes lazystream → readable-stream@2 (`passthrough`) when another dep already
+ * pulled readable-stream@3 into the flat tree (Windows/Mac DMG crash loop).
+ *
+ * `seen` keys are `name@version` so multiple majors can coexist.
+ */
+function copyPackage(name, dest, seen, missing, required, prefer, parentDir = null) {
   const found = locatePackage(name, prefer);
   if (!found) {
     if (required) missing.push(name);
@@ -197,24 +206,105 @@ function copyPackage(name, dest, seen, missing, required, prefer) {
     }
     return;
   }
-  seen.add(name);
-  const target = join(dest, ...name.split("/"));
+  const version = String(found.pkg.version ?? "0.0.0");
+  const key = `${name}@${version}`;
+  const topLevel = join(dest, ...name.split("/"));
+
+  // Already materialized this exact version somewhere. If the parent cannot see
+  // it (sibling nest), copy once under the parent — but do NOT walkDeps again
+  // (that caused infinite nest A→B→A while packaging).
+  if (seen.has(key)) {
+    if (parentDir && !resolvesInsideTree(parentDir, name, version, dest)) {
+      materializeAt(found.dir, join(parentDir, "node_modules", ...name.split("/")));
+    }
+    return;
+  }
+
+  let target = topLevel;
+  if (parentDir) {
+    const topVer = readPkgVersion(topLevel);
+    if (topVer && topVer !== version) {
+      target = join(parentDir, "node_modules", ...name.split("/"));
+    } else if (topVer === version || resolvesInsideTree(parentDir, name, version, dest)) {
+      // Dep already staged where Node would find it *inside the package tree*.
+      // Do not treat ~/node_modules (or other ambient installs) as satisfied —
+      // that made DMGs "work" in the checkout and crash under /Applications.
+      seen.add(key);
+      walkDeps(found.pkg, dest, seen, missing, createRequire(join(found.dir, "package.json")), parentDir);
+      return;
+    }
+  }
+
+  if (existsSync(join(target, "package.json")) && readPkgVersion(target) === version) {
+    seen.add(key);
+    walkDeps(found.pkg, dest, seen, missing, createRequire(join(found.dir, "package.json")), target);
+    return;
+  }
+
+  seen.add(key);
+  materializeAt(found.dir, target);
+  walkDeps(found.pkg, dest, seen, missing, createRequire(join(found.dir, "package.json")), target);
+}
+
+/** Copy package files without nested node_modules (pnpm store is flattened via walkDeps). */
+function materializeAt(sourceDir, target) {
+  if (existsSync(join(target, "package.json")) && readPkgVersion(target)) return;
   mkdirSync(dirname(target), { recursive: true });
-  cpSync(found.dir, target, {
+  const root = resolve(sourceDir);
+  cpSync(sourceDir, target, {
     recursive: true,
     dereference: true,
-    filter: (src) => !relative(found.dir, src).split(sep).includes("node_modules"),
+    filter: (src) => {
+      try {
+        const rel = relative(root, resolve(src));
+        if (!rel || rel.startsWith(`..${sep}`) || rel === "..") return true;
+        return !rel.split(sep).includes("node_modules");
+      } catch {
+        return true;
+      }
+    },
   });
-  const next = createRequire(join(found.dir, "package.json"));
-  const dependencies = found.pkg.dependencies ?? {};
-  const optional = { ...found.pkg.optionalDependencies, ...found.pkg.peerDependencies };
+}
+
+function readPkgVersion(pkgDir) {
+  const pkgFile = join(pkgDir, "package.json");
+  if (!existsSync(pkgFile)) return "";
+  try {
+    return String(JSON.parse(readFileSync(pkgFile, "utf8")).version ?? "");
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * True if `name` resolves from parentDir to the expected version **and** the
+ * resolved directory lives under the staged `dest` tree. Ambient installs
+ * (e.g. ~/node_modules) must not count — packaged apps under /Applications
+ * cannot see them.
+ */
+function resolvesInsideTree(parentDir, name, version, dest) {
+  try {
+    const req = createRequire(join(parentDir, "package.json"));
+    const pkgFile = req.resolve(`${name}/package.json`);
+    const resolvedDir = resolve(dirname(pkgFile));
+    const root = resolve(dest);
+    if (resolvedDir !== root && !resolvedDir.startsWith(root + sep)) return false;
+    return readPkgVersion(resolvedDir) === version;
+  } catch {
+    return false;
+  }
+}
+
+function walkDeps(pkg, dest, seen, missing, prefer, parentDir) {
+  const dependencies = pkg.dependencies ?? {};
+  const optional = { ...pkg.optionalDependencies, ...pkg.peerDependencies };
   for (const dep of Object.keys(dependencies)) {
     if (isWorkspaceSpec(dependencies[dep])) continue;
-    copyPackage(dep, dest, seen, missing, true, next);
+    copyPackage(dep, dest, seen, missing, true, prefer, parentDir);
   }
   for (const dep of Object.keys(optional)) {
-    if (seen.has(dep) || isWorkspaceSpec(optional[dep])) continue;
-    copyPackage(dep, dest, seen, missing, false, next);
+    if (isWorkspaceSpec(optional[dep])) continue;
+    copyPackage(dep, dest, seen, missing, false, prefer, parentDir);
   }
 }
 

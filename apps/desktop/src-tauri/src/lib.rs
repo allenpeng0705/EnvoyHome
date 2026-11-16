@@ -1,7 +1,7 @@
-use std::fs;
-use std::io::Read;
+use std::fs::{self, File, OpenOptions};
+use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use std::thread;
@@ -144,6 +144,21 @@ fn default_state_dir() -> PathBuf {
     .map(PathBuf::from)
     .unwrap_or_else(|| PathBuf::from("."));
   home.join(".envoyhome")
+}
+
+/// Cap before rotating `logs/daemon.log` → `daemon.log.1` (EnvoyDev pattern).
+const DAEMON_LOG_CAP_BYTES: u64 = 2 * 1024 * 1024;
+
+fn open_daemon_log(state_dir: &Path) -> Option<File> {
+  let dir = state_dir.join("logs");
+  fs::create_dir_all(&dir).ok()?;
+  let path = dir.join("daemon.log");
+  if let Ok(metadata) = fs::metadata(&path) {
+    if metadata.len() >= DAEMON_LOG_CAP_BYTES {
+      let _ = fs::rename(&path, dir.join("daemon.log.1"));
+    }
+  }
+  OpenOptions::new().create(true).append(true).open(path).ok()
 }
 
 fn resolve_daemon_js(app: &tauri::AppHandle) -> Option<PathBuf> {
@@ -460,14 +475,28 @@ fn spawn_daemon(app: &tauri::AppHandle) -> Result<(), String> {
   stop_orphan_daemon_on_port(ws_port);
   stop_orphan_daemon_on_port(ws_port.saturating_add(1));
 
+  let log = open_daemon_log(&state_dir);
+  let log_err = log.as_ref().and_then(|f| f.try_clone().ok());
+  if let Some(mut banner) = log.as_ref().and_then(|f| f.try_clone().ok()) {
+    let _ = writeln!(
+      banner,
+      "\n---- EnvoyHome daemon spawn {} ----\nnode={}\nscript={}\nstate_dir={}",
+      chrono_like_now(),
+      node.display(),
+      script.display(),
+      state_dir.display(),
+    );
+  }
+
   let mut cmd = Command::new(&node);
   cmd
     .arg(&script)
     .env("ENVOYHOME_STATE_DIR", &state_dir)
     .env("ENVOYHOME_MANAGED_BY", "app")
-    .stdout(Stdio::null())
-    // Inherit stderr so EADDRINUSE / claim errors show in the Tauri console.
-    .stderr(Stdio::inherit());
+    .stdin(Stdio::null())
+    // Prefer file log (EnvoyDev pattern). Inherit only if the log file cannot open.
+    .stdout(log.map(Stdio::from).unwrap_or_else(Stdio::null))
+    .stderr(log_err.map(Stdio::from).unwrap_or_else(Stdio::inherit));
   // Packaged push credentials (APNs + FCM) — see scripts/stage-desktop-bundle.mjs.
   if let Some(push_config) = resolve_push_config(app) {
     cmd.env("ENVOYHOME_PUSH_CONFIG", &push_config);
@@ -476,6 +505,22 @@ fn spawn_daemon(app: &tauri::AppHandle) -> Result<(), String> {
   if let Some(obscura) = resolve_obscura_bundle(app) {
     cmd.env("ENVOYHOME_OBSCURA_BUNDLE", &obscura);
   }
+
+  // Windows: node.exe is a console subsystem binary. Without CREATE_NO_WINDOW,
+  // a blank console flashes beside the GUI and dies with the crash-loop.
+  #[cfg(windows)]
+  {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x0000_0200;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
+  }
+  #[cfg(unix)]
+  {
+    use std::os::unix::process::CommandExt;
+    cmd.process_group(0);
+  }
+
   let child = cmd
     .spawn()
     .map_err(|e| format!("spawn daemon ({node:?}): {e}"))?;
@@ -483,6 +528,15 @@ fn spawn_daemon(app: &tauri::AppHandle) -> Result<(), String> {
   let mut guard = state.child.lock().map_err(|e| e.to_string())?;
   *guard = Some(child);
   Ok(())
+}
+
+/// Local timestamp for daemon.log banners (avoid a chrono dependency).
+fn chrono_like_now() -> String {
+  use std::time::SystemTime;
+  match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+    Ok(d) => format!("unix_ms={}", d.as_millis()),
+    Err(_) => "unix_ms=?".to_string(),
+  }
 }
 
 /// Kill the supervised child so `spawn_daemon` will start a fresh process.

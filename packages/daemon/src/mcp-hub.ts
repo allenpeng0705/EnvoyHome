@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
 import type { HomePaths } from "./home-paths.js";
 import { isBlockedHostname } from "./skill-remote.js";
+import { PRODUCT_VERSION } from "./product-version.js";
 import { clearMcpToolSpecs, registerToolSpec } from "@envoyhome/harness-host";
 
 export const MCP_MAX_SERVERS = 16;
@@ -256,7 +257,7 @@ async function defaultStdioSession(
   await rpc("initialize", {
     protocolVersion: "2024-11-05",
     capabilities: {},
-    clientInfo: { name: "envoyhome", version: "0.0.0" },
+    clientInfo: { name: "envoyhome", version: PRODUCT_VERSION },
   });
   child.stdin.write(
     `${JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" })}\n`,
@@ -340,7 +341,7 @@ async function defaultHttpSession(
   await rpc("initialize", {
     protocolVersion: "2024-11-05",
     capabilities: {},
-    clientInfo: { name: "envoyhome", version: "0.0.0" },
+    clientInfo: { name: "envoyhome", version: PRODUCT_VERSION },
   });
   try {
     await rpc("notifications/initialized", {});

@@ -37,6 +37,7 @@ import { ProviderStore } from "./providers-store.js";
 import { HarnessStore } from "./harness-store.js";
 import { TurnService } from "./turn-service.js";
 import { homePaths } from "./home-paths.js";
+import { PRODUCT_VERSION } from "./product-version.js";
 import { ActuationService } from "./actuation-service.js";
 import { PushTokenStore } from "./push-tokens.js";
 import { PushDispatcher } from "./push-dispatch.js";
@@ -434,7 +435,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   }
   const subscriptions = new SubscriptionRegistry();
   const startedAt = new Date();
-  const packageVersion = options.packageVersion ?? "0.0.0";
+  const packageVersion = options.packageVersion ?? PRODUCT_VERSION;
   const hatchBinding = { accounts: options.hatchBoundAccounts ?? [] };
 
   await mkdir(config.stateDir, { recursive: true });
