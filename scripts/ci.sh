@@ -25,6 +25,9 @@ node scripts/docs-lint.mjs
 #     (EnvoyCoder version:desktop:check).
 node scripts/sync-desktop-version.mjs --check
 
+# 1c. Locale catalogs: every non-en desktop/mobile locale must cover English keys.
+node scripts/i18n-check.mjs
+
 # 2. Siblings present, on the expected branch, with the linked packages. Fail closed.
 node ./scripts/peers-check.mjs
 

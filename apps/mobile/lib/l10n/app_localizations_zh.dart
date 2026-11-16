@@ -145,54 +145,54 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get shellCreateProfile => 'Create';
+  String get shellCreateProfile => '创建';
 
   @override
-  String get shellProfileDisplayName => 'Display name';
+  String get shellProfileDisplayName => '显示名称';
 
   @override
-  String get shellProfileIdOptional => 'Account id (optional)';
+  String get shellProfileIdOptional => '账户 ID（可选）';
 
   @override
-  String get shellCancel => 'Cancel';
+  String get shellCancel => '取消';
 
   @override
-  String get shellCreate => 'Create';
+  String get shellCreate => '创建';
 
   @override
-  String get shellProfileCreated => 'Profile created';
+  String get shellProfileCreated => '已创建配置文件';
 
   @override
   String shellProfileCreateFailed(String error) {
-    return 'Create failed: $error';
+    return '创建失败：$error';
   }
 
   @override
   String get navChat => '对话';
 
   @override
-  String get navHomeChat => 'Home';
+  String get navHomeChat => '首页';
 
   @override
   String get navSchedulesChat => '日程';
 
   @override
-  String get navSettings => 'Settings';
+  String get navSettings => '设置';
 
   @override
   String get navLlm => 'LLM';
 
   @override
-  String get navConnections => 'Connections';
+  String get navConnections => '连接';
 
   @override
-  String get navSkills => 'Skills';
+  String get navSkills => '技能';
 
   @override
-  String get navSystem => 'System';
+  String get navSystem => '系统';
 
   @override
-  String get navProfiles => 'Profiles';
+  String get navProfiles => '配置文件';
 
   @override
   String get navApprovals => '审批';
@@ -208,11 +208,10 @@ class AppLocalizationsZh extends AppLocalizations {
       'Configure the home daemon from your phone. Some owner-only actions need a trusted device.';
 
   @override
-  String get settingsProfilesSubtitle =>
-      'Owner, workspace folders, tool policy';
+  String get settingsProfilesSubtitle => '户主、工作区文件夹、工具策略';
 
   @override
-  String get settingsLlmSubtitle => 'Models, Local, Routing, Memory';
+  String get settingsLlmSubtitle => '模型、本地、路由、记忆';
 
   @override
   String get settingsConnectionsSubtitle =>
@@ -225,40 +224,38 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsWorkflowsSubtitle => '工作流 — 起草、校验、运行';
 
   @override
-  String get settingsSystemSubtitle => 'Profiles, Shared files, Health, Grants';
+  String get settingsSystemSubtitle => '配置文件、共享文件、健康、授权';
 
   @override
   String get settingsNeedConnect => '先连接家庭主机，再配置 LLM、连接、技能与系统。';
 
   @override
-  String get profilesIntro =>
-      'Each person has a profile. The household Owner configures workspace folders and can transfer ownership.';
+  String get profilesIntro => '每人拥有一个配置文件。户主可配置工作区文件夹并转让所有权。';
 
   @override
-  String get profilesMemberHint =>
-      'This device is not the household Owner — workspace is read-only here.';
+  String get profilesMemberHint => '本设备不是户主 — 此处工作区为只读。';
 
   @override
-  String get profilesRefresh => 'Refresh';
+  String get profilesRefresh => '刷新';
 
   @override
-  String get profilesAddTitle => 'Add profile';
+  String get profilesAddTitle => '添加配置文件';
 
   @override
-  String get profilesOwnerBadge => 'Owner';
+  String get profilesOwnerBadge => '户主';
 
   @override
-  String get profilesActiveBadge => 'Active';
+  String get profilesActiveBadge => '当前';
 
   @override
-  String get profilesWorkspaceTitle => 'Workspace folders';
+  String get profilesWorkspaceTitle => '工作区文件夹';
 
   @override
   String get profilesWorkspaceHint =>
       '每个资料仅一个主机文件夹。浏览选择即可；智能体通过 workspace/… 访问。';
 
   @override
-  String get profilesWorkspacePath => 'Host path';
+  String get profilesWorkspacePath => '主机路径';
 
   @override
   String get profilesWorkspaceBrowse => '浏览文件夹';
@@ -267,73 +264,70 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profilesWorkspaceBrowseHint => '点按浏览家庭电脑上的文件夹';
 
   @override
-  String get profilesWorkspaceUnset => 'Not set (sandbox only)';
+  String get profilesWorkspaceUnset => '未设置（仅沙箱）';
 
   @override
-  String get profilesWorkspaceSet => 'Configured';
+  String get profilesWorkspaceSet => '已配置';
 
   @override
-  String get profilesWorkspaceWholeMachine => 'Whole machine';
+  String get profilesWorkspaceWholeMachine => '整台电脑';
 
   @override
-  String get profilesWorkspaceRo => 'Read only';
+  String get profilesWorkspaceRo => '只读';
 
   @override
-  String get profilesWorkspaceRw => 'Read & write';
+  String get profilesWorkspaceRw => '读写';
 
   @override
-  String get profilesWorkspaceUseRoot => 'Add computer root';
+  String get profilesWorkspaceUseRoot => '添加电脑根目录';
 
   @override
-  String get profilesWorkspaceClear => 'Clear all';
+  String get profilesWorkspaceClear => '全部清除';
 
   @override
-  String get profilesWorkspaceRemove => 'Remove';
+  String get profilesWorkspaceRemove => '移除';
 
   @override
-  String get profilesWorkspaceApply => 'Add';
+  String get profilesWorkspaceApply => '添加';
 
   @override
-  String get profilesWorkspaceEdit => 'Add folder';
+  String get profilesWorkspaceEdit => '添加文件夹';
 
   @override
-  String get profilesWorkspaceRootTitle => 'Allow whole-computer access?';
+  String get profilesWorkspaceRootTitle => '允许访问整台电脑？';
 
   @override
   String get profilesWorkspaceRootBody =>
-      'This lets the agent read (and write, if selected) files under the computer root via workspace/… — including from this phone.';
+      '允许代理通过 workspace/… 读取（若已选则还包括写入）电脑根目录下的文件 — 包括从此手机访问。';
 
   @override
-  String get profilesWorkspaceRootOk => 'Allow';
+  String get profilesWorkspaceRootOk => '允许';
 
   @override
-  String get profilesWorkspaceMemberNote =>
-      'Only the household Owner can change workspace folders.';
+  String get profilesWorkspaceMemberNote => '仅户主可更改工作区文件夹。';
 
   @override
-  String get profilesWorkspaceCrossTitle =>
-      'Add workspace folder for another profile?';
+  String get profilesWorkspaceCrossTitle => '为其他配置文件添加工作区文件夹？';
 
   @override
   String profilesWorkspaceCrossBody(String name) {
-    return 'This adds a host folder for $name. Continue only if you intend to configure their workspace.';
+    return '将为 $name 添加主机文件夹。仅在你确要为其配置工作区时继续。';
   }
 
   @override
-  String get profilesWorkspaceDenied => 'Not visible on this device';
+  String get profilesWorkspaceDenied => '本设备不可见';
 
   @override
-  String get profilesWorkspaceInactive =>
-      'Configured but inactive (filesystem-root only applies to Owner)';
+  String get profilesWorkspaceInactive => '已配置但未激活（仅文件系统根目录对户主生效）';
 
   @override
-  String get profilesRename => 'Rename';
+  String get profilesRename => '重命名';
 
   @override
-  String get profilesRenameTitle => 'Rename profile';
+  String get profilesRenameTitle => '重命名配置文件';
 
   @override
-  String get profilesRenameSave => 'Save';
+  String get profilesRenameSave => '保存';
 
   @override
   String get profilesTimeZoneUnset => '时区：未设置（日程使用主机默认）';
@@ -374,111 +368,107 @@ class AppLocalizationsZh extends AppLocalizations {
   String get profilesShareLocationOn => '已在本设备开启位置共享';
 
   @override
-  String get profilesDelete => 'Delete';
+  String get profilesDelete => '删除';
 
   @override
-  String get profilesDeleteTitle => 'Delete profile?';
+  String get profilesDeleteTitle => '删除配置文件？';
 
   @override
   String profilesDeleteBody(String name) {
-    return 'Delete $name? Their sandbox and workspace config are removed. This cannot be undone.';
+    return '删除 $name？其沙箱与工作区配置将被移除，且无法撤销。';
   }
 
   @override
-  String get profilesDeleteConfirm => 'Delete';
+  String get profilesDeleteConfirm => '删除';
 
   @override
   String profilesDeleteDone(String name) {
-    return 'Deleted $name';
+    return '已删除 $name';
   }
 
   @override
-  String get profilesDeleteOwnerBlocked =>
-      'Cannot delete the household Owner. Transfer ownership first.';
+  String get profilesDeleteOwnerBlocked => '无法删除户主。请先转让所有权。';
 
   @override
-  String get profilesTransferTitle => 'Transfer household Owner?';
+  String get profilesTransferTitle => '转让户主？';
 
   @override
   String profilesTransferBody(String name) {
-    return 'Make $name the household Owner. They will control pairing, bindings, and household Settings.';
+    return '将 $name 设为户主。其将管理配对、绑定与家庭设置。';
   }
 
   @override
-  String get profilesTransferConfirm => 'Transfer';
+  String get profilesTransferConfirm => '转让';
 
   @override
   String profilesTransferDone(String name) {
-    return 'Owner is now $name';
+    return '户主现为 $name';
   }
 
   @override
   String profilesTransferFailed(String error) {
-    return 'Transfer failed: $error';
+    return '转让失败：$error';
   }
 
   @override
   String profilesTransferTo(String name) {
-    return 'Transfer to $name';
+    return '转让给 $name';
   }
 
   @override
-  String get profilesToolPolicy => 'Tool policy';
+  String get profilesToolPolicy => '工具策略';
 
   @override
-  String get profilesToolPolicyStandard => 'Standard';
+  String get profilesToolPolicyStandard => '标准';
 
   @override
-  String get profilesToolPolicyRestricted => 'Restricted';
+  String get profilesToolPolicyRestricted => '受限';
 
   @override
-  String get connMintPairing => 'Mint pairing code';
+  String get connMintPairing => '生成配对码';
 
   @override
-  String get connMintOk => 'Pairing code minted';
+  String get connMintOk => '已生成配对码';
 
   @override
-  String get connMintUriHint => 'Scan or paste this URI on the new device.';
+  String get connMintUriHint => '在新设备上扫描或粘贴此 URI。';
 
   @override
-  String get connPairingOwnerOnly =>
-      'Mint / revoke pairing requires the household Owner device.';
+  String get connPairingOwnerOnly => '生成/吊销配对码需要户主设备。';
 
   @override
-  String get connRevokeDevice => 'Revoke';
+  String get connRevokeDevice => '吊销';
 
   @override
-  String get connForgetDevice => 'Forget';
+  String get connForgetDevice => '遗忘';
 
   @override
   String connRevokeConfirm(String id) {
-    return 'Revoke device $id? It will need to pair again.';
+    return '吊销设备 $id？需重新配对。';
   }
 
   @override
   String connForgetConfirm(String id) {
-    return 'Forget device $id? The pairing record is removed permanently.';
+    return '遗忘设备 $id？配对记录将永久删除。';
   }
 
   @override
-  String get connOwnerWriteOnly =>
-      'Only the household Owner device can change this setting.';
+  String get connOwnerWriteOnly => '仅户主设备可更改此设置。';
 
   @override
-  String get connAccountsHint => 'Household profiles';
+  String get connAccountsHint => '家庭配置文件';
 
   @override
-  String get homeChatSessionTitle => 'Phone home chat';
+  String get homeChatSessionTitle => '手机家庭聊天';
 
   @override
-  String get homeChatEmptyTitle => 'Talk to your home';
+  String get homeChatEmptyTitle => '与家庭对话';
 
   @override
-  String get homeChatEmptyHint =>
-      'Smart-home tools stay available here. Approvals still gate actuations.';
+  String get homeChatEmptyHint => '智能家居工具在此可用。执行操作仍需审批。';
 
   @override
-  String get homeChatHint => 'Ask about lights, locks, climate…';
+  String get homeChatHint => '可询问灯光、门锁、温控…';
 
   @override
   String get schedulesChatSessionTitle => '日程';
@@ -493,131 +483,126 @@ class AppLocalizationsZh extends AppLocalizations {
   String get schedulesChatHint => '提醒我…';
 
   @override
-  String get chatAttach => 'Attach';
+  String get chatAttach => '附加';
 
   @override
   String chatAttachTooMany(int n) {
-    return 'At most $n files';
+    return '最多 $n 个文件';
   }
 
   @override
   String chatAttachTooLarge(String name, String mb) {
-    return '$name exceeds $mb MB';
+    return '$name 超过 $mb MB';
   }
 
   @override
   String chatAttachAdded(int n) {
-    return 'Attached $n file(s)';
+    return '已附加 $n 个文件';
   }
 
   @override
-  String get chatAttachedOnly => '(attachment)';
+  String get chatAttachedOnly => '（附件）';
 
   @override
-  String get chatVoiceStart => 'Dictate';
+  String get chatVoiceStart => '听写';
 
   @override
-  String get chatVoiceStop => 'Stop dictation';
+  String get chatVoiceStop => '停止听写';
 
   @override
-  String get chatVoiceUnsupported =>
-      'Speech recognition is not available on this device.';
+  String get chatVoiceUnsupported => '此设备不支持语音识别。';
 
   @override
-  String get llmTabModels => 'Models';
+  String get llmTabModels => '模型';
 
   @override
-  String get llmTabLocal => 'Local';
+  String get llmTabLocal => '本地';
 
   @override
-  String get llmTabRouting => 'Routing';
+  String get llmTabRouting => '路由';
 
   @override
-  String get llmTabMemory => 'Memory';
+  String get llmTabMemory => '记忆';
 
   @override
-  String get llmLocalDownloadHint =>
-      'Search Hugging Face and download GGUF files onto the home machine.';
+  String get llmLocalDownloadHint => '在 Hugging Face 搜索并将 GGUF 文件下载到家庭主机。';
 
   @override
-  String get llmHfSearchHint => 'Search models…';
+  String get llmHfSearchHint => '搜索模型…';
 
   @override
-  String get llmSearch => 'Search';
+  String get llmSearch => '搜索';
 
   @override
-  String get llmCancelDownload => 'Cancel';
+  String get llmCancelDownload => '取消';
 
   @override
-  String get llmResumeDownload => 'Resume';
+  String get llmResumeDownload => '继续';
 
   @override
   String llmGgufFiles(String repo) {
-    return 'GGUF in $repo';
+    return '$repo 中的 GGUF';
   }
 
   @override
-  String get llmRoutingHint => 'Choose where turns may run for this profile.';
+  String get llmRoutingHint => '选择此配置文件允许的运行位置。';
 
   @override
-  String get llmFilterAny => 'Smart / any';
+  String get llmFilterAny => '智能 / 任意';
 
   @override
-  String get llmFilterCloud => 'Cloud only';
+  String get llmFilterCloud => '仅云端';
 
   @override
-  String get llmFilterLocal => 'Local only';
+  String get llmFilterLocal => '仅本地';
 
   @override
-  String get llmAutoSwitch => 'Auto model switch';
+  String get llmAutoSwitch => '自动切换模型';
 
   @override
-  String get privacyModeTitle => 'Privacy Mode';
+  String get privacyModeTitle => '隐私模式';
 
   @override
-  String get privacyModeHint =>
-      'Forces local inference and blocks cloud tools. Owner-scope.';
+  String get privacyModeHint => '强制本地推理并阻止云端工具。需户主权限。';
 
   @override
-  String get privacyModeEnabled => 'Enable Privacy Mode';
+  String get privacyModeEnabled => '启用隐私模式';
 
   @override
-  String get privacyModeBlockEgress =>
-      'Also block smart-home actuation & event-source notify';
+  String get privacyModeBlockEgress => '同时阻止智能家居执行与事件源通知';
 
   @override
-  String get privacyModeOwnerOnly =>
-      'Privacy Mode is Owner-only on this device.';
+  String get privacyModeOwnerOnly => '本设备上隐私模式仅限户主。';
 
   @override
-  String get llmCompactNow => 'Compact memory now';
+  String get llmCompactNow => '立即压缩记忆';
 
   @override
-  String get llmFlushEnabled => 'Flush standing notes';
+  String get llmFlushEnabled => '刷新常驻笔记';
 
   @override
-  String get llmReviewEnabled => 'Review before learn write';
+  String get llmReviewEnabled => '学习写入前先审核';
 
   @override
-  String get llmInjectMode => 'Inject budget mode';
+  String get llmInjectMode => '注入预算模式';
 
   @override
-  String get llmInjectAuto => 'Auto';
+  String get llmInjectAuto => '自动';
 
   @override
-  String get llmInjectBaseline => 'Baseline';
+  String get llmInjectBaseline => '基线';
 
   @override
-  String get llmInjectCustom => 'Custom';
+  String get llmInjectCustom => '自定义';
 
   @override
-  String get llmPendingLearns => 'Pending learns';
+  String get llmPendingLearns => '待学习项';
 
   @override
-  String get llmNoPendingLearns => 'No pending learns.';
+  String get llmNoPendingLearns => '无待学习项。';
 
   @override
-  String get connTabPairing => 'Pairing';
+  String get connTabPairing => '配对';
 
   @override
   String get connTabHa => 'Home Assistant';
@@ -626,7 +611,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connTabMqtt => 'MQTT';
 
   @override
-  String get connTabChannels => 'Channels';
+  String get connTabChannels => '频道';
 
   @override
   String get connTabWebSearch => '网页搜索';
@@ -636,6 +621,58 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get connTabBrowser => '浏览器';
+
+  @override
+  String get mcpLede =>
+      '可添加任意 MCP 服务器。启用前请先测试连接。Stdio 命令以守护进程主机用户运行。工具调用仍受审批约束。';
+
+  @override
+  String get mcpTest => '测试';
+
+  @override
+  String get mcpAddServer => '添加服务器';
+
+  @override
+  String get mcpSave => '保存';
+
+  @override
+  String get mcpReady => '就绪';
+
+  @override
+  String get mcpNotTested => '未测试';
+
+  @override
+  String mcpServerSubtitle(String transport, String status, int count) {
+    return '$transport · $status · $count 个工具';
+  }
+
+  @override
+  String mcpTestOk(int count) {
+    return '成功 — $count 个工具。就绪后可启用。';
+  }
+
+  @override
+  String mcpTestFailed(String error) {
+    return '失败：$error';
+  }
+
+  @override
+  String get mcpLabel => '标签';
+
+  @override
+  String get mcpCommand => '命令';
+
+  @override
+  String get mcpArgs => '参数（空格分隔，可选）';
+
+  @override
+  String get mcpUrl => 'URL';
+
+  @override
+  String get mcpAuthToken => '认证令牌（可选）';
+
+  @override
+  String get mcpEnv => '环境变量（每行 KEY=value，可选）';
 
   @override
   String get browserControlLede =>
@@ -667,64 +704,61 @@ class AppLocalizationsZh extends AppLocalizations {
   String get browserControlSaveFailed => '无法保存浏览器设置。';
 
   @override
-  String get browserControlDefaultProfile => 'Default profile';
+  String get browserControlDefaultProfile => '默认配置';
 
   @override
-  String get browserControlProfileManaged => 'Managed (isolated)';
+  String get browserControlProfileManaged => '托管（隔离）';
 
   @override
-  String get browserControlProfilePersonal => 'Personal Chrome';
+  String get browserControlProfilePersonal => '个人 Chrome';
 
   @override
-  String get browserControlProfileRemote => 'Remote CDP';
+  String get browserControlProfileRemote => '远程 CDP';
 
   @override
-  String get browserControlElevatedWarn =>
-      'Personal/remote can act as you on logged-in sites. Owner only; never schedules.';
+  String get browserControlElevatedWarn => '个人/远程可在已登录网站以你的身份操作。仅户主；不可定时任务。';
 
   @override
-  String get browserControlAcknowledge => 'I understand elevated browser risk';
+  String get browserControlAcknowledge => '我了解浏览器高风险模式';
 
   @override
-  String get browserControlPersonalEnabled => 'Enable personal Chrome';
+  String get browserControlPersonalEnabled => '启用个人 Chrome';
 
   @override
-  String get browserControlPersonalCdp => 'Personal CDP (loopback)';
+  String get browserControlPersonalCdp => '个人 CDP（本机回环）';
 
   @override
-  String get browserControlPersonalReady => 'Personal CDP up';
+  String get browserControlPersonalReady => '个人 CDP 已就绪';
 
   @override
-  String get browserControlPersonalNotReady => 'Personal CDP down';
+  String get browserControlPersonalNotReady => '个人 CDP 未就绪';
 
   @override
-  String get browserControlRemoteEnabled => 'Enable remote CDP';
+  String get browserControlRemoteEnabled => '启用远程 CDP';
 
   @override
-  String get browserControlRemoteCdp => 'Remote CDP URL';
+  String get browserControlRemoteCdp => '远程 CDP URL';
 
   @override
-  String get browserControlRemoteToken => 'Remote CDP token';
+  String get browserControlRemoteToken => '远程 CDP 令牌';
 
   @override
-  String get browserControlTokenSet => 'set';
+  String get browserControlTokenSet => '已设置';
 
   @override
-  String get browserControlTokenPlaceholder => 'Leave blank to keep';
+  String get browserControlTokenPlaceholder => '留空则保留原值';
 
   @override
-  String get browserControlRemoteReady => 'Remote CDP up';
+  String get browserControlRemoteReady => '远程 CDP 已就绪';
 
   @override
-  String get browserControlRemoteNotReady => 'Remote CDP down';
+  String get browserControlRemoteNotReady => '远程 CDP 未就绪';
 
   @override
-  String get browserControlOwnerOnly =>
-      'Only the household Owner device can change browser control settings.';
+  String get browserControlOwnerOnly => '仅户主设备可更改浏览器控制设置。';
 
   @override
-  String get browserControlAcknowledged =>
-      'Elevated risk acknowledged. Disable personal/remote to stop using them.';
+  String get browserControlAcknowledged => '已确认高风险。禁用个人/远程即可停止使用。';
 
   @override
   String get webSearchLede =>
@@ -737,7 +771,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get webSearchProvider => '提供商';
 
   @override
-  String get webSearchProviderBrowser => '浏览器（Bing / Google / 百度）';
+  String get webSearchProviderBrowser => '浏览器（Bing / Google / Baidu）';
 
   @override
   String get webSearchBrowserPrimaryHint =>
@@ -896,92 +930,90 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connPairingHint => '家庭 Owner 设备可在此签发或撤销配对。成员仅可查看状态。';
 
   @override
-  String get connNoDevices => 'No paired devices listed.';
+  String get connNoDevices => '暂无已配对设备。';
 
   @override
-  String get connEnabled => 'Enabled';
+  String get connEnabled => '已启用';
 
   @override
-  String get connDisabled => 'Disabled';
+  String get connDisabled => '已禁用';
 
   @override
-  String get connReady => 'Ready';
+  String get connReady => '就绪';
 
   @override
-  String get connHealthy => 'Healthy';
+  String get connHealthy => '健康';
 
   @override
-  String get connUnhealthy => 'Unhealthy';
+  String get connUnhealthy => '异常';
 
   @override
-  String get connHaUrl => 'HA base URL';
+  String get connHaUrl => 'HA 基础 URL';
 
   @override
-  String get connHaToken => 'Access token';
+  String get connHaToken => '访问令牌';
 
   @override
   String get connMqttUrl => 'Broker URL';
 
   @override
-  String get connMqttPassword => 'Password';
+  String get connMqttPassword => '密码';
 
   @override
-  String get connSaveEnable => 'Save & enable';
+  String get connSaveEnable => '保存并启用';
 
   @override
-  String get connBindTitle => 'Object bindings';
+  String get connBindTitle => '对象绑定';
 
   @override
   String connBoundTo(String id) {
-    return 'Bound to $id';
+    return '已绑定 $id';
   }
 
   @override
-  String get connUnbound => 'Unbound';
+  String get connUnbound => '未绑定';
 
   @override
-  String get connChannelsHint =>
-      'Paste a bot token and enable. Prefer desktop for first-time setup.';
+  String get connChannelsHint => '粘贴 Bot 令牌并启用。首次设置建议在桌面端完成。';
 
   @override
-  String get connBotToken => 'Bot token';
+  String get connBotToken => 'Bot 令牌';
 
   @override
-  String get connDisable => 'Disable';
+  String get connDisable => '禁用';
 
   @override
-  String get connSenderBinds => 'Sender → profile';
+  String get connSenderBinds => '发送方 → 配置文件';
 
   @override
-  String get connSenderBindsHint =>
-      'Link an IM sender id to the active profile.';
+  String get connSenderBindsHint => '将 IM 发送方 ID 关联到当前配置文件。';
 
   @override
-  String get connBindChannel => 'Channel';
+  String get connBindChannel => '频道';
 
   @override
-  String get connChannelAccount => 'Channel account';
+  String get connChannelAccount => '频道账户';
 
   @override
-  String get connSenderId => 'Sender id';
+  String get connSenderId => '发送方 ID';
 
   @override
-  String get connBindSender => 'Bind sender';
+  String get connBindSender => '绑定发送方';
 
   @override
-  String get skillsTabSkills => 'Skills';
+  String get skillsTabSkills => '技能';
 
   @override
-  String get skillsVerify => 'Verify';
+  String get skillsVerify => '验证';
 
   @override
-  String get skillsVerified => 'Skill verified';
+  String get skillsVerified => '技能已验证';
 
   @override
-  String get skillsTabWorkflows => 'Workflows';
+  String get skillsTabWorkflows => '工作流';
 
   @override
-  String get skillsTabSchedules => 'Schedules';
+  String get skillsTabSchedules => '日程';
 
   @override
   String get skillsTabScenes => '场景';
@@ -990,39 +1022,37 @@ class AppLocalizationsZh extends AppLocalizations {
   String get schedulesTabJobs => '任务';
 
   @override
-  String get scenesHint =>
-      'When → do household automations (household rules). Presence templates need Privacy Mode.';
+  String get scenesHint => '何时 → 执行家庭自动化（家庭规则）。在场模板需隐私模式。';
 
   @override
-  String get scenesWhenPresence => 'Presence (no cron — sensor trigger)';
+  String get scenesWhenPresence => '在场（无 cron — 传感器触发）';
 
   @override
-  String get scenesNone => 'No scenes yet.';
+  String get scenesNone => '暂无场景。';
 
   @override
-  String get scenesAddMorning => 'Add Good morning';
+  String get scenesAddMorning => '添加早安';
 
   @override
-  String get scenesPrivacyRequired =>
-      'Enable Privacy Mode (LLM → Routing) before presence scenes.';
+  String get scenesPrivacyRequired => '请先启用隐私模式（LLM → 路由）再使用在场场景。';
 
   @override
-  String get skillsInstallUrl => 'Install from URL';
+  String get skillsInstallUrl => '从 URL 安装';
 
   @override
-  String get skillsInstall => 'Install';
+  String get skillsInstall => '安装';
 
   @override
-  String get skillsClawHubSearch => 'ClawHub search';
+  String get skillsClawHubSearch => 'ClawHub 搜索';
 
   @override
-  String get schedWhenHint => 'When (natural language)';
+  String get schedWhenHint => '何时（自然语言）';
 
   @override
-  String get schedMessageHint => 'Reminder message';
+  String get schedMessageHint => '提醒内容';
 
   @override
-  String get schedPropose => 'Propose';
+  String get schedPropose => '提议';
 
   @override
   String get schedConfirm => 'Confirm reminder';
@@ -1046,25 +1076,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get scheduleCardFailed => '无法更新该提醒。';
 
   @override
-  String get schedKindNotify => 'Notify';
+  String get schedKindNotify => '通知';
 
   @override
-  String get schedKindWorkflow => 'Workflow';
+  String get schedKindWorkflow => '工作流';
 
   @override
-  String get schedKindTool => 'Tool';
+  String get schedKindTool => '工具';
 
   @override
-  String get schedWorkflowId => 'Workflow id';
+  String get schedWorkflowId => '工作流 ID';
 
   @override
-  String get schedToolName => 'Tool name';
+  String get schedToolName => '工具名称';
 
   @override
-  String get schedKindAgent => 'Agent';
+  String get schedKindAgent => '代理';
 
   @override
-  String get schedAgentPrompt => 'Agent prompt';
+  String get schedAgentPrompt => '代理提示词';
 
   @override
   String get schedTabRepeating => '重复';
@@ -1132,52 +1162,52 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get wfEditorTitle => 'Workflow';
+  String get wfEditorTitle => '工作流';
 
   @override
-  String get wfEnable => 'Enable';
+  String get wfEnable => '启用';
 
   @override
-  String get wfDisable => 'Disable';
+  String get wfDisable => '禁用';
 
   @override
-  String get wfTools => 'Insert tool';
+  String get wfTools => '插入工具';
 
   @override
-  String get wfId => 'Workflow id';
+  String get wfId => '工作流 ID';
 
   @override
-  String get wfAiPrompt => 'Describe the workflow';
+  String get wfAiPrompt => '描述工作流';
 
   @override
-  String get wfAiPromptHint => 'e.g. turn off lights at 11pm if nobody home';
+  String get wfAiPromptHint => '例如：若家中无人则在晚上 11 点关灯';
 
   @override
-  String get wfAiDraft => 'Draft with AI';
+  String get wfAiDraft => 'AI 起草';
 
   @override
-  String get wfDiagramNodes => 'Nodes (phone diagram)';
+  String get wfDiagramNodes => '节点（手机示意图）';
 
   @override
-  String get wfNoNodes => 'No nodes yet — draft or paste YAML.';
+  String get wfNoNodes => '尚无节点 — 请起草或粘贴 YAML。';
 
   @override
   String get wfYaml => 'YAML';
 
   @override
-  String get wfSave => 'Validate & save';
+  String get wfSave => '验证并保存';
 
   @override
-  String get wfRun => 'Test run';
+  String get wfRun => '试跑';
 
   @override
-  String get wfDrafted => 'Draft applied';
+  String get wfDrafted => '已应用草稿';
 
   @override
-  String get wfSaved => 'Saved';
+  String get wfSaved => '已保存';
 
   @override
-  String get wfRan => 'Run started';
+  String get wfRan => '已开始运行';
 
   @override
   String get sysTabFiles => '文件';
@@ -1248,21 +1278,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get wfDiagramEdge => '↓';
 
   @override
-  String get sysDoctorFix => 'Fix';
+  String get sysDoctorFix => '修复';
 
   @override
-  String get sysDoctorFixAll => 'Fix all';
+  String get sysDoctorFixAll => '全部修复';
 
   @override
   String sysDoctorFixed(String ids) {
-    return 'Fixed: $ids';
+    return '已修复：$ids';
   }
 
   @override
-  String get sysNoIssues => 'No doctor issues.';
+  String get sysNoIssues => '无诊断问题。';
 
   @override
-  String get sysNoGrants => 'No grants.';
+  String get sysNoGrants => '无授权。';
 
   @override
   String get chatNeedAccount => '请先在上方选择资料再聊天。';
@@ -1313,15 +1343,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chatOpenArtifact => '打开完整回复';
 
   @override
-  String get chatPromoteKnowledge => 'Add to Knowledge';
+  String get chatPromoteKnowledge => '加入知识库';
 
   @override
   String chatPromotedKnowledge(String path) {
-    return 'Saved to $path';
+    return '已保存至 $path';
   }
 
   @override
-  String get chatPromoteFailed => 'Could not add to Knowledge.';
+  String get chatPromoteFailed => '无法加入知识库。';
 
   @override
   String get chatRecents => '最近';
@@ -1595,19 +1625,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modelsOffLabel => '关';
 
   @override
-  String get modelsTest => 'Test';
+  String get modelsTest => '测试';
 
   @override
-  String get modelsSetDefault => 'Set default';
+  String get modelsSetDefault => '设为默认';
 
   @override
   String modelsTestOk(String id) {
-    return 'Tested $id';
+    return '已测试 $id';
   }
 
   @override
   String modelsDefaultSet(String id) {
-    return 'Default → $id';
+    return '默认 → $id';
   }
 
   @override
@@ -1634,8 +1664,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get artifactsTooLarge =>
-      'This file is larger than the 8 MB in-app open limit. Ask the agent for a smaller export, or open it on the home machine.';
+  String get artifactsTooLarge => '此文件超过应用内 8 MB 打开上限。请让代理导出较小文件，或在家庭主机上打开。';
 
   @override
   String get artifactsRefresh => '刷新';
@@ -1656,13 +1685,13 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get artifactsCopyLink => 'Copy signed link';
+  String get artifactsCopyLink => '复制签名链接';
 
   @override
-  String get artifactsLinkCopied => 'Signed link copied';
+  String get artifactsLinkCopied => '已复制签名链接';
 
   @override
-  String get artifactsCopyLinkFailed => 'Could not copy link';
+  String get artifactsCopyLinkFailed => '无法复制链接';
 
   @override
   String get artifactsOpenInBrowser => '在浏览器中打开';

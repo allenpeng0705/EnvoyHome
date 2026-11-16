@@ -59,13 +59,13 @@
       }
     }
   },
-  "shellCreateProfile": "Create",
-  "shellProfileDisplayName": "Display name",
-  "shellProfileIdOptional": "Account id (optional)",
-  "shellCancel": "Cancel",
-  "shellCreate": "Create",
-  "shellProfileCreated": "Profile created",
-  "shellProfileCreateFailed": "Create failed: {error}",
+  "shellCreateProfile": "创建",
+  "shellProfileDisplayName": "显示名称",
+  "shellProfileIdOptional": "账户 ID（可选）",
+  "shellCancel": "取消",
+  "shellCreate": "创建",
+  "shellProfileCreated": "已创建配置文件",
+  "shellProfileCreateFailed": "创建失败：{error}",
   "@shellProfileCreateFailed": {
     "placeholders": {
       "error": {
@@ -74,32 +74,32 @@
     }
   },
   "navChat": "对话",
-  "navHomeChat": "Home",
+  "navHomeChat": "首页",
   "navSchedulesChat": "日程",
-  "navSettings": "Settings",
+  "navSettings": "设置",
   "navLlm": "LLM",
-  "navConnections": "Connections",
-  "navSkills": "Skills",
-  "navSystem": "System",
+  "navConnections": "连接",
+  "navSkills": "技能",
+  "navSystem": "系统",
   "navApprovals": "审批",
   "navModels": "模型",
   "navArtifacts": "产物",
   "settingsHubHint": "Configure the home daemon from your phone. Some owner-only actions need a trusted device.",
-  "settingsLlmSubtitle": "Models, Local, Routing, Memory",
+  "settingsLlmSubtitle": "模型、本地、路由、记忆",
   "settingsConnectionsSubtitle": "Pairing, Home Assistant, MQTT, Channels",
   "settingsSkillsSubtitle": "安装与管理技能包",
   "settingsWorkflowsSubtitle": "工作流 — 起草、校验、运行",
-  "settingsSystemSubtitle": "Profiles, Shared files, Health, Grants",
-  "homeChatSessionTitle": "Phone home chat",
-  "homeChatEmptyTitle": "Talk to your home",
-  "homeChatEmptyHint": "Smart-home tools stay available here. Approvals still gate actuations.",
-  "homeChatHint": "Ask about lights, locks, climate…",
+  "settingsSystemSubtitle": "配置文件、共享文件、健康、授权",
+  "homeChatSessionTitle": "手机家庭聊天",
+  "homeChatEmptyTitle": "与家庭对话",
+  "homeChatEmptyHint": "智能家居工具在此可用。执行操作仍需审批。",
+  "homeChatHint": "可询问灯光、门锁、温控…",
   "schedulesChatSessionTitle": "日程",
   "schedulesChatEmptyTitle": "提醒",
   "schedulesChatEmptyHint": "这个对话专注提醒。时间会在启用前确认。",
   "schedulesChatHint": "提醒我…",
-  "chatAttach": "Attach",
-  "chatAttachTooMany": "At most {n} files",
+  "chatAttach": "附加",
+  "chatAttachTooMany": "最多 {n} 个文件",
   "@chatAttachTooMany": {
     "placeholders": {
       "n": {
@@ -107,7 +107,7 @@
       }
     }
   },
-  "chatAttachTooLarge": "{name} exceeds {mb} MB",
+  "chatAttachTooLarge": "{name} 超过 {mb} MB",
   "@chatAttachTooLarge": {
     "placeholders": {
       "name": {
@@ -118,7 +118,7 @@
       }
     }
   },
-  "chatAttachAdded": "Attached {n} file(s)",
+  "chatAttachAdded": "已附加 {n} 个文件",
   "@chatAttachAdded": {
     "placeholders": {
       "n": {
@@ -126,20 +126,20 @@
       }
     }
   },
-  "chatAttachedOnly": "(attachment)",
-  "chatVoiceStart": "Dictate",
-  "chatVoiceStop": "Stop dictation",
-  "chatVoiceUnsupported": "Speech recognition is not available on this device.",
-  "llmTabModels": "Models",
-  "llmTabLocal": "Local",
-  "llmTabRouting": "Routing",
-  "llmTabMemory": "Memory",
-  "llmLocalDownloadHint": "Search Hugging Face and download GGUF files onto the home machine.",
-  "llmHfSearchHint": "Search models…",
-  "llmSearch": "Search",
-  "llmCancelDownload": "Cancel",
-  "llmResumeDownload": "Resume",
-  "llmGgufFiles": "GGUF in {repo}",
+  "chatAttachedOnly": "（附件）",
+  "chatVoiceStart": "听写",
+  "chatVoiceStop": "停止听写",
+  "chatVoiceUnsupported": "此设备不支持语音识别。",
+  "llmTabModels": "模型",
+  "llmTabLocal": "本地",
+  "llmTabRouting": "路由",
+  "llmTabMemory": "记忆",
+  "llmLocalDownloadHint": "在 Hugging Face 搜索并将 GGUF 文件下载到家庭主机。",
+  "llmHfSearchHint": "搜索模型…",
+  "llmSearch": "搜索",
+  "llmCancelDownload": "取消",
+  "llmResumeDownload": "继续",
+  "llmGgufFiles": "{repo} 中的 GGUF",
   "@llmGgufFiles": {
     "placeholders": {
       "repo": {
@@ -147,24 +147,24 @@
       }
     }
   },
-  "llmRoutingHint": "Choose where turns may run for this profile.",
-  "llmFilterAny": "Smart / any",
-  "llmFilterCloud": "Cloud only",
-  "llmFilterLocal": "Local only",
-  "llmAutoSwitch": "Auto model switch",
-  "llmCompactNow": "Compact memory now",
-  "llmFlushEnabled": "Flush standing notes",
-  "llmReviewEnabled": "Review before learn write",
-  "llmInjectMode": "Inject budget mode",
-  "llmInjectAuto": "Auto",
-  "llmInjectBaseline": "Baseline",
-  "llmInjectCustom": "Custom",
-  "llmPendingLearns": "Pending learns",
-  "llmNoPendingLearns": "No pending learns.",
-  "connTabPairing": "Pairing",
+  "llmRoutingHint": "选择此配置文件允许的运行位置。",
+  "llmFilterAny": "智能 / 任意",
+  "llmFilterCloud": "仅云端",
+  "llmFilterLocal": "仅本地",
+  "llmAutoSwitch": "自动切换模型",
+  "llmCompactNow": "立即压缩记忆",
+  "llmFlushEnabled": "刷新常驻笔记",
+  "llmReviewEnabled": "学习写入前先审核",
+  "llmInjectMode": "注入预算模式",
+  "llmInjectAuto": "自动",
+  "llmInjectBaseline": "基线",
+  "llmInjectCustom": "自定义",
+  "llmPendingLearns": "待学习项",
+  "llmNoPendingLearns": "无待学习项。",
+  "connTabPairing": "配对",
   "connTabHa": "Home Assistant",
   "connTabMqtt": "MQTT",
-  "connTabChannels": "Channels",
+  "connTabChannels": "频道",
   "connTabWebSearch": "网页搜索",
   "connTabMcp": "MCP",
   "connTabBrowser": "浏览器",
@@ -177,29 +177,29 @@
   "browserControlSave": "保存",
   "browserControlSaved": "浏览器设置已保存。",
   "browserControlSaveFailed": "无法保存浏览器设置。",
-  "browserControlDefaultProfile": "Default profile",
-  "browserControlProfileManaged": "Managed (isolated)",
-  "browserControlProfilePersonal": "Personal Chrome",
-  "browserControlProfileRemote": "Remote CDP",
-  "browserControlElevatedWarn": "Personal/remote can act as you on logged-in sites. Owner only; never schedules.",
-  "browserControlAcknowledge": "I understand elevated browser risk",
-  "browserControlPersonalEnabled": "Enable personal Chrome",
-  "browserControlPersonalCdp": "Personal CDP (loopback)",
-  "browserControlPersonalReady": "Personal CDP up",
-  "browserControlPersonalNotReady": "Personal CDP down",
-  "browserControlRemoteEnabled": "Enable remote CDP",
-  "browserControlRemoteCdp": "Remote CDP URL",
-  "browserControlRemoteToken": "Remote CDP token",
-  "browserControlTokenSet": "set",
-  "browserControlTokenPlaceholder": "Leave blank to keep",
-  "browserControlRemoteReady": "Remote CDP up",
-  "browserControlRemoteNotReady": "Remote CDP down",
-  "browserControlOwnerOnly": "Only the household Owner device can change browser control settings.",
-  "browserControlAcknowledged": "Elevated risk acknowledged. Disable personal/remote to stop using them.",
+  "browserControlDefaultProfile": "默认配置",
+  "browserControlProfileManaged": "托管（隔离）",
+  "browserControlProfilePersonal": "个人 Chrome",
+  "browserControlProfileRemote": "远程 CDP",
+  "browserControlElevatedWarn": "个人/远程可在已登录网站以你的身份操作。仅户主；不可定时任务。",
+  "browserControlAcknowledge": "我了解浏览器高风险模式",
+  "browserControlPersonalEnabled": "启用个人 Chrome",
+  "browserControlPersonalCdp": "个人 CDP（本机回环）",
+  "browserControlPersonalReady": "个人 CDP 已就绪",
+  "browserControlPersonalNotReady": "个人 CDP 未就绪",
+  "browserControlRemoteEnabled": "启用远程 CDP",
+  "browserControlRemoteCdp": "远程 CDP URL",
+  "browserControlRemoteToken": "远程 CDP 令牌",
+  "browserControlTokenSet": "已设置",
+  "browserControlTokenPlaceholder": "留空则保留原值",
+  "browserControlRemoteReady": "远程 CDP 已就绪",
+  "browserControlRemoteNotReady": "远程 CDP 未就绪",
+  "browserControlOwnerOnly": "仅户主设备可更改浏览器控制设置。",
+  "browserControlAcknowledged": "已确认高风险。禁用个人/远程即可停止使用。",
   "webSearchLede": "在对话中搜索公开网页。默认：先 DuckDuckGo，失败或未配置时用浏览器打开 Bing/Google/百度（无需 API 密钥）。Brave / Tavily 需要 Owner 密钥。",
   "webSearchEnabled": "启用 web_search",
   "webSearchProvider": "提供商",
-  "webSearchProviderBrowser": "浏览器（Bing / Google / 百度）",
+  "webSearchProviderBrowser": "浏览器（Bing / Google / Baidu）",
   "webSearchBrowserPrimaryHint": "直接在守护进程主机的无头引擎打开 Bing/Google/百度（有 Obscura 优先，否则 Chromium）。对话中每次搜索会询问一次。",
   "webSearchDaemonHostNote": "搜索引擎与页面深入在运行 EnvoyHome 的家庭电脑上执行。手机只查看并由 Owner 编辑共享设置。",
   "webSearchEffectiveUnresolved": "尚未就绪",
@@ -216,7 +216,6 @@
   "webSearchResearchEnabled": "网页研究（搜索后再深入抓取前几条）",
   "webSearchResearchHint": "默认关闭。开启后提供 web_research：深入抓取前几条结果，返回整理摘要 + 链接列表。",
   "webSearchDigDepth": "深入条数（1–10）",
-
   "webSearchExtractBackend": "页面提取后端",
   "webSearchExtractBackendAuto": "自动（有 Obscura 则用，否则 HTTP）",
   "webSearchExtractBackendFetch": "HTTP 抓取",
@@ -250,19 +249,19 @@
   "webSearchCopyHint": "复制安装命令",
   "webSearchUnattendedBrowser": "允许计划任务使用浏览器回退",
   "connPairingHint": "家庭 Owner 设备可在此签发或撤销配对。成员仅可查看状态。",
-  "connNoDevices": "No paired devices listed.",
-  "connEnabled": "Enabled",
-  "connDisabled": "Disabled",
-  "connReady": "Ready",
-  "connHealthy": "Healthy",
-  "connUnhealthy": "Unhealthy",
-  "connHaUrl": "HA base URL",
-  "connHaToken": "Access token",
+  "connNoDevices": "暂无已配对设备。",
+  "connEnabled": "已启用",
+  "connDisabled": "已禁用",
+  "connReady": "就绪",
+  "connHealthy": "健康",
+  "connUnhealthy": "异常",
+  "connHaUrl": "HA 基础 URL",
+  "connHaToken": "访问令牌",
   "connMqttUrl": "Broker URL",
-  "connMqttPassword": "Password",
-  "connSaveEnable": "Save & enable",
-  "connBindTitle": "Object bindings",
-  "connBoundTo": "Bound to {id}",
+  "connMqttPassword": "密码",
+  "connSaveEnable": "保存并启用",
+  "connBindTitle": "对象绑定",
+  "connBoundTo": "已绑定 {id}",
   "@connBoundTo": {
     "placeholders": {
       "id": {
@@ -270,29 +269,29 @@
       }
     }
   },
-  "connUnbound": "Unbound",
-  "connChannelsHint": "Paste a bot token and enable. Prefer desktop for first-time setup.",
-  "connBotToken": "Bot token",
-  "connDisable": "Disable",
-  "connSenderBinds": "Sender → profile",
-  "connSenderBindsHint": "Link an IM sender id to the active profile.",
-  "connBindChannel": "Channel",
-  "connChannelAccount": "Channel account",
-  "connSenderId": "Sender id",
-  "connBindSender": "Bind sender",
-  "skillsTabSkills": "Skills",
-  "skillsVerify": "Verify",
-  "skillsVerified": "Skill verified",
-  "skillsTabWorkflows": "Workflows",
-  "skillsTabSchedules": "Schedules",
+  "connUnbound": "未绑定",
+  "connChannelsHint": "粘贴 Bot 令牌并启用。首次设置建议在桌面端完成。",
+  "connBotToken": "Bot 令牌",
+  "connDisable": "禁用",
+  "connSenderBinds": "发送方 → 配置文件",
+  "connSenderBindsHint": "将 IM 发送方 ID 关联到当前配置文件。",
+  "connBindChannel": "频道",
+  "connChannelAccount": "频道账户",
+  "connSenderId": "发送方 ID",
+  "connBindSender": "绑定发送方",
+  "skillsTabSkills": "技能",
+  "skillsVerify": "验证",
+  "skillsVerified": "技能已验证",
+  "skillsTabWorkflows": "工作流",
+  "skillsTabSchedules": "日程",
   "skillsTabScenes": "场景",
   "schedulesTabJobs": "任务",
-  "skillsInstallUrl": "Install from URL",
-  "skillsInstall": "Install",
-  "skillsClawHubSearch": "ClawHub search",
-  "schedWhenHint": "When (natural language)",
-  "schedMessageHint": "Reminder message",
-  "schedPropose": "Propose",
+  "skillsInstallUrl": "从 URL 安装",
+  "skillsInstall": "安装",
+  "skillsClawHubSearch": "ClawHub 搜索",
+  "schedWhenHint": "何时（自然语言）",
+  "schedMessageHint": "提醒内容",
+  "schedPropose": "提议",
   "schedConfirm": "Confirm reminder",
   "scheduleCardTitle": "设置这个提醒？",
   "scheduleCardConfirm": "确认",
@@ -300,13 +299,13 @@
   "scheduleCardConfirmedToast": "提醒已设置。",
   "scheduleCardCanceledToast": "提醒已取消。",
   "scheduleCardFailed": "无法更新该提醒。",
-  "schedKindNotify": "Notify",
-  "schedKindWorkflow": "Workflow",
-  "schedKindTool": "Tool",
-  "schedWorkflowId": "Workflow id",
-  "schedToolName": "Tool name",
-  "schedKindAgent": "Agent",
-  "schedAgentPrompt": "Agent prompt",
+  "schedKindNotify": "通知",
+  "schedKindWorkflow": "工作流",
+  "schedKindTool": "工具",
+  "schedWorkflowId": "工作流 ID",
+  "schedToolName": "工具名称",
+  "schedKindAgent": "代理",
+  "schedAgentPrompt": "代理提示词",
   "schedTabRepeating": "重复",
   "schedTabOnce": "一次",
   "schedTabHistory": "历史",
@@ -335,22 +334,22 @@
       }
     }
   },
-  "wfEditorTitle": "Workflow",
-  "wfEnable": "Enable",
-  "wfDisable": "Disable",
-  "wfTools": "Insert tool",
-  "wfId": "Workflow id",
-  "wfAiPrompt": "Describe the workflow",
-  "wfAiPromptHint": "e.g. turn off lights at 11pm if nobody home",
-  "wfAiDraft": "Draft with AI",
-  "wfDiagramNodes": "Nodes (phone diagram)",
-  "wfNoNodes": "No nodes yet — draft or paste YAML.",
+  "wfEditorTitle": "工作流",
+  "wfEnable": "启用",
+  "wfDisable": "禁用",
+  "wfTools": "插入工具",
+  "wfId": "工作流 ID",
+  "wfAiPrompt": "描述工作流",
+  "wfAiPromptHint": "例如：若家中无人则在晚上 11 点关灯",
+  "wfAiDraft": "AI 起草",
+  "wfDiagramNodes": "节点（手机示意图）",
+  "wfNoNodes": "尚无节点 — 请起草或粘贴 YAML。",
   "wfYaml": "YAML",
-  "wfSave": "Validate & save",
-  "wfRun": "Test run",
-  "wfDrafted": "Draft applied",
-  "wfSaved": "Saved",
-  "wfRan": "Run started",
+  "wfSave": "验证并保存",
+  "wfRun": "试跑",
+  "wfDrafted": "已应用草稿",
+  "wfSaved": "已保存",
+  "wfRan": "已开始运行",
   "sysTabFiles": "文件",
   "sysTabHealth": "健康检查",
   "sysTabGrants": "授权",
@@ -373,9 +372,9 @@
   "wfDiagramEdge": "↓",
   "sysTestPush": "发送测试推送",
   "sysTestPushSent": "已请求测试推送",
-  "sysDoctorFix": "Fix",
-  "sysDoctorFixAll": "Fix all",
-  "sysDoctorFixed": "Fixed: {ids}",
+  "sysDoctorFix": "修复",
+  "sysDoctorFixAll": "全部修复",
+  "sysDoctorFixed": "已修复：{ids}",
   "@sysDoctorFixed": {
     "placeholders": {
       "ids": {
@@ -383,8 +382,8 @@
       }
     }
   },
-  "sysNoIssues": "No doctor issues.",
-  "sysNoGrants": "No grants.",
+  "sysNoIssues": "无诊断问题。",
+  "sysNoGrants": "无授权。",
   "chatNeedAccount": "请先在上方选择资料再聊天。",
   "chatEmptyMessage": "消息为空。",
   "chatSessionTitle": "手机聊天",
@@ -520,9 +519,9 @@
   "modelsLocalOnlySet": "已设为仅本地路由",
   "modelsDefaultLabel": "默认",
   "modelsOffLabel": "关",
-  "modelsTest": "Test",
-  "modelsSetDefault": "Set default",
-  "modelsTestOk": "Tested {id}",
+  "modelsTest": "测试",
+  "modelsSetDefault": "设为默认",
+  "modelsTestOk": "已测试 {id}",
   "@modelsTestOk": {
     "placeholders": {
       "id": {
@@ -530,7 +529,7 @@
       }
     }
   },
-  "modelsDefaultSet": "Default → {id}",
+  "modelsDefaultSet": "默认 → {id}",
   "@modelsDefaultSet": {
     "placeholders": {
       "id": {
@@ -580,33 +579,33 @@
       }
     }
   },
-  "navProfiles": "Profiles",
-  "settingsProfilesSubtitle": "Owner, workspace folders, tool policy",
-  "profilesIntro": "Each person has a profile. The household Owner configures workspace folders and can transfer ownership.",
-  "profilesMemberHint": "This device is not the household Owner — workspace is read-only here.",
-  "profilesRefresh": "Refresh",
-  "profilesAddTitle": "Add profile",
-  "profilesOwnerBadge": "Owner",
-  "profilesActiveBadge": "Active",
-  "profilesWorkspaceTitle": "Workspace folders",
+  "navProfiles": "配置文件",
+  "settingsProfilesSubtitle": "户主、工作区文件夹、工具策略",
+  "profilesIntro": "每人拥有一个配置文件。户主可配置工作区文件夹并转让所有权。",
+  "profilesMemberHint": "本设备不是户主 — 此处工作区为只读。",
+  "profilesRefresh": "刷新",
+  "profilesAddTitle": "添加配置文件",
+  "profilesOwnerBadge": "户主",
+  "profilesActiveBadge": "当前",
+  "profilesWorkspaceTitle": "工作区文件夹",
   "profilesWorkspaceHint": "每个资料仅一个主机文件夹。浏览选择即可；智能体通过 workspace/… 访问。",
-  "profilesWorkspacePath": "Host path",
-  "profilesWorkspaceUnset": "Not set (sandbox only)",
-  "profilesWorkspaceSet": "Configured",
-  "profilesWorkspaceWholeMachine": "Whole machine",
-  "profilesWorkspaceRo": "Read only",
-  "profilesWorkspaceRw": "Read & write",
-  "profilesWorkspaceUseRoot": "Add computer root",
-  "profilesWorkspaceClear": "Clear all",
-  "profilesWorkspaceRemove": "Remove",
-  "profilesWorkspaceApply": "Add",
-  "profilesWorkspaceEdit": "Add folder",
-  "profilesWorkspaceRootTitle": "Allow whole-computer access?",
-  "profilesWorkspaceRootBody": "This lets the agent read (and write, if selected) files under the computer root via workspace/… — including from this phone.",
-  "profilesWorkspaceRootOk": "Allow",
-  "profilesWorkspaceMemberNote": "Only the household Owner can change workspace folders.",
-  "profilesTransferTitle": "Transfer household Owner?",
-  "profilesTransferBody": "Make {name} the household Owner. They will control pairing, bindings, and household Settings.",
+  "profilesWorkspacePath": "主机路径",
+  "profilesWorkspaceUnset": "未设置（仅沙箱）",
+  "profilesWorkspaceSet": "已配置",
+  "profilesWorkspaceWholeMachine": "整台电脑",
+  "profilesWorkspaceRo": "只读",
+  "profilesWorkspaceRw": "读写",
+  "profilesWorkspaceUseRoot": "添加电脑根目录",
+  "profilesWorkspaceClear": "全部清除",
+  "profilesWorkspaceRemove": "移除",
+  "profilesWorkspaceApply": "添加",
+  "profilesWorkspaceEdit": "添加文件夹",
+  "profilesWorkspaceRootTitle": "允许访问整台电脑？",
+  "profilesWorkspaceRootBody": "允许代理通过 workspace/… 读取（若已选则还包括写入）电脑根目录下的文件 — 包括从此手机访问。",
+  "profilesWorkspaceRootOk": "允许",
+  "profilesWorkspaceMemberNote": "仅户主可更改工作区文件夹。",
+  "profilesTransferTitle": "转让户主？",
+  "profilesTransferBody": "将 {name} 设为户主。其将管理配对、绑定与家庭设置。",
   "@profilesTransferBody": {
     "placeholders": {
       "name": {
@@ -614,8 +613,8 @@
       }
     }
   },
-  "profilesTransferConfirm": "Transfer",
-  "profilesTransferDone": "Owner is now {name}",
+  "profilesTransferConfirm": "转让",
+  "profilesTransferDone": "户主现为 {name}",
   "@profilesTransferDone": {
     "placeholders": {
       "name": {
@@ -623,7 +622,7 @@
       }
     }
   },
-  "profilesTransferFailed": "Transfer failed: {error}",
+  "profilesTransferFailed": "转让失败：{error}",
   "@profilesTransferFailed": {
     "placeholders": {
       "error": {
@@ -631,7 +630,7 @@
       }
     }
   },
-  "profilesTransferTo": "Transfer to {name}",
+  "profilesTransferTo": "转让给 {name}",
   "@profilesTransferTo": {
     "placeholders": {
       "name": {
@@ -639,18 +638,18 @@
       }
     }
   },
-  "profilesToolPolicy": "Tool policy",
-  "profilesToolPolicyStandard": "Standard",
-  "profilesToolPolicyRestricted": "Restricted",
-  "connMintPairing": "Mint pairing code",
-  "connMintOk": "Pairing code minted",
-  "connMintUriHint": "Scan or paste this URI on the new device.",
-  "connPairingOwnerOnly": "Mint / revoke pairing requires the household Owner device.",
-  "connRevokeDevice": "Revoke",
-  "connForgetDevice": "Forget",
-  "connAccountsHint": "Household profiles",
-  "profilesWorkspaceCrossTitle": "Add workspace folder for another profile?",
-  "profilesWorkspaceCrossBody": "This adds a host folder for {name}. Continue only if you intend to configure their workspace.",
+  "profilesToolPolicy": "工具策略",
+  "profilesToolPolicyStandard": "标准",
+  "profilesToolPolicyRestricted": "受限",
+  "connMintPairing": "生成配对码",
+  "connMintOk": "已生成配对码",
+  "connMintUriHint": "在新设备上扫描或粘贴此 URI。",
+  "connPairingOwnerOnly": "生成/吊销配对码需要户主设备。",
+  "connRevokeDevice": "吊销",
+  "connForgetDevice": "遗忘",
+  "connAccountsHint": "家庭配置文件",
+  "profilesWorkspaceCrossTitle": "为其他配置文件添加工作区文件夹？",
+  "profilesWorkspaceCrossBody": "将为 {name} 添加主机文件夹。仅在你确要为其配置工作区时继续。",
   "@profilesWorkspaceCrossBody": {
     "placeholders": {
       "name": {
@@ -658,11 +657,11 @@
       }
     }
   },
-  "profilesWorkspaceDenied": "Not visible on this device",
-  "profilesWorkspaceInactive": "Configured but inactive (filesystem-root only applies to Owner)",
-  "profilesRename": "Rename",
-  "profilesRenameTitle": "Rename profile",
-  "profilesRenameSave": "Save",
+  "profilesWorkspaceDenied": "本设备不可见",
+  "profilesWorkspaceInactive": "已配置但未激活（仅文件系统根目录对户主生效）",
+  "profilesRename": "重命名",
+  "profilesRenameTitle": "重命名配置文件",
+  "profilesRenameSave": "保存",
   "profilesTimeZoneUnset": "时区：未设置（日程使用主机默认）",
   "profilesTimeZoneValue": "时区：{tz}",
   "@profilesTimeZoneValue": {
@@ -688,9 +687,9 @@
   "profilesShareLocationSubtitle": "在聊天回合中附带大致 GPS，供日程/上下文使用。仅在此处请求一次系统权限，发送消息时不再弹窗。仅本回合注入，不写入记忆。",
   "profilesShareLocationDenied": "未获得定位权限，共享保持关闭。",
   "profilesShareLocationOn": "已在本设备开启位置共享",
-  "profilesDelete": "Delete",
-  "profilesDeleteTitle": "Delete profile?",
-  "profilesDeleteBody": "Delete {name}? Their sandbox and workspace config are removed. This cannot be undone.",
+  "profilesDelete": "删除",
+  "profilesDeleteTitle": "删除配置文件？",
+  "profilesDeleteBody": "删除 {name}？其沙箱与工作区配置将被移除，且无法撤销。",
   "@profilesDeleteBody": {
     "placeholders": {
       "name": {
@@ -698,8 +697,8 @@
       }
     }
   },
-  "profilesDeleteConfirm": "Delete",
-  "profilesDeleteDone": "Deleted {name}",
+  "profilesDeleteConfirm": "删除",
+  "profilesDeleteDone": "已删除 {name}",
   "@profilesDeleteDone": {
     "placeholders": {
       "name": {
@@ -707,8 +706,8 @@
       }
     }
   },
-  "profilesDeleteOwnerBlocked": "Cannot delete the household Owner. Transfer ownership first.",
-  "connRevokeConfirm": "Revoke device {id}? It will need to pair again.",
+  "profilesDeleteOwnerBlocked": "无法删除户主。请先转让所有权。",
+  "connRevokeConfirm": "吊销设备 {id}？需重新配对。",
   "@connRevokeConfirm": {
     "placeholders": {
       "id": {
@@ -716,7 +715,7 @@
       }
     }
   },
-  "connForgetConfirm": "Forget device {id}? The pairing record is removed permanently.",
+  "connForgetConfirm": "遗忘设备 {id}？配对记录将永久删除。",
   "@connForgetConfirm": {
     "placeholders": {
       "id": {
@@ -724,11 +723,11 @@
       }
     }
   },
-  "connOwnerWriteOnly": "Only the household Owner device can change this setting.",
-  "artifactsTooLarge": "This file is larger than the 8 MB in-app open limit. Ask the agent for a smaller export, or open it on the home machine.",
-  "artifactsCopyLink": "Copy signed link",
-  "artifactsLinkCopied": "Signed link copied",
-  "artifactsCopyLinkFailed": "Could not copy link",
+  "connOwnerWriteOnly": "仅户主设备可更改此设置。",
+  "artifactsTooLarge": "此文件超过应用内 8 MB 打开上限。请让代理导出较小文件，或在家庭主机上打开。",
+  "artifactsCopyLink": "复制签名链接",
+  "artifactsLinkCopied": "已复制签名链接",
+  "artifactsCopyLinkFailed": "无法复制链接",
   "artifactsOpenInBrowser": "在浏览器中打开",
   "artifactsOpenInBrowserFailed": "无法在浏览器中打开",
   "filesParent": "上级",
@@ -747,8 +746,12 @@
   "artifactsLoProgress": "{received} / {total}",
   "@artifactsLoProgress": {
     "placeholders": {
-      "received": { "type": "String" },
-      "total": { "type": "String" }
+      "received": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
     }
   },
   "artifactsLoHintCopied": "已复制安装提示",
@@ -772,8 +775,12 @@
   "artifactsSqlProgress": "{received} / {total}",
   "@artifactsSqlProgress": {
     "placeholders": {
-      "received": { "type": "String" },
-      "total": { "type": "String" }
+      "received": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
     }
   },
   "artifactsSqlToolsReady": "智能体可使用 sql_load / sql_query。",
@@ -807,7 +814,9 @@
   "choiceCardFilesChosen": "已选 {n} 个文件",
   "@choiceCardFilesChosen": {
     "placeholders": {
-      "n": { "type": "int" }
+      "n": {
+        "type": "int"
+      }
     }
   },
   "choiceCardNoFile": "未选择文件",
@@ -904,5 +913,67 @@
   "setupGuidePairLaterCta": "暂不配对",
   "setupGuideSkipCta": "先看看",
   "setupGuideDoneCta": "知道了",
-  "settingsSetupGuideSubtitle": "如何安装桌面应用并配对本手机。"
+  "settingsSetupGuideSubtitle": "如何安装桌面应用并配对本手机。",
+  "privacyModeTitle": "隐私模式",
+  "privacyModeHint": "强制本地推理并阻止云端工具。需户主权限。",
+  "privacyModeEnabled": "启用隐私模式",
+  "privacyModeBlockEgress": "同时阻止智能家居执行与事件源通知",
+  "privacyModeOwnerOnly": "本设备上隐私模式仅限户主。",
+  "scenesHint": "何时 → 执行家庭自动化（家庭规则）。在场模板需隐私模式。",
+  "scenesWhenPresence": "在场（无 cron — 传感器触发）",
+  "scenesNone": "暂无场景。",
+  "scenesAddMorning": "添加早安",
+  "scenesPrivacyRequired": "请先启用隐私模式（LLM → 路由）再使用在场场景。",
+  "chatPromoteKnowledge": "加入知识库",
+  "chatPromotedKnowledge": "已保存至 {path}",
+  "@chatPromotedKnowledge": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "chatPromoteFailed": "无法加入知识库。",
+  "mcpLede": "可添加任意 MCP 服务器。启用前请先测试连接。Stdio 命令以守护进程主机用户运行。工具调用仍受审批约束。",
+  "mcpTest": "测试",
+  "mcpAddServer": "添加服务器",
+  "mcpSave": "保存",
+  "mcpReady": "就绪",
+  "mcpNotTested": "未测试",
+  "mcpServerSubtitle": "{transport} · {status} · {count} 个工具",
+  "@mcpServerSubtitle": {
+    "placeholders": {
+      "transport": {
+        "type": "String"
+      },
+      "status": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mcpTestOk": "成功 — {count} 个工具。就绪后可启用。",
+  "@mcpTestOk": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "mcpTestFailed": "失败：{error}",
+  "@mcpTestFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "mcpLabel": "标签",
+  "mcpCommand": "命令",
+  "mcpArgs": "参数（空格分隔，可选）",
+  "mcpUrl": "URL",
+  "mcpAuthToken": "认证令牌（可选）",
+  "mcpEnv": "环境变量（每行 KEY=value，可选）"
 }

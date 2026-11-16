@@ -99,7 +99,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get pairDaemonHint => '127.0.0.1:4780';
 
   @override
-  String get pairTokenOptional => 'Token (optional)';
+  String get pairTokenOptional => 'Token (freiwillig)';
 
   @override
   String get shellOnline => 'online';
@@ -151,26 +151,26 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get shellCreateProfile => 'Create';
+  String get shellCreateProfile => 'Erstellen';
 
   @override
-  String get shellProfileDisplayName => 'Display name';
+  String get shellProfileDisplayName => 'Anzeigename';
 
   @override
-  String get shellProfileIdOptional => 'Account id (optional)';
+  String get shellProfileIdOptional => 'Konto-ID (optional)';
 
   @override
-  String get shellCancel => 'Cancel';
+  String get shellCancel => 'Abbrechen';
 
   @override
-  String get shellCreate => 'Create';
+  String get shellCreate => 'Erstellen';
 
   @override
-  String get shellProfileCreated => 'Profile created';
+  String get shellProfileCreated => 'Profil erstellt';
 
   @override
   String shellProfileCreateFailed(String error) {
-    return 'Create failed: $error';
+    return 'Erstellen fehlgeschlagen: $error';
   }
 
   @override
@@ -183,13 +183,13 @@ class AppLocalizationsDe extends AppLocalizations {
   String get navSchedulesChat => 'Zeitpläne';
 
   @override
-  String get navSettings => 'Settings';
+  String get navSettings => 'Einstellungen';
 
   @override
   String get navLlm => 'LLM';
 
   @override
-  String get navConnections => 'Connections';
+  String get navConnections => 'Verbindungen';
 
   @override
   String get navSkills => 'Skills';
@@ -198,7 +198,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get navSystem => 'System';
 
   @override
-  String get navProfiles => 'Profiles';
+  String get navProfiles => 'Profile';
 
   @override
   String get navApprovals => 'Freigaben';
@@ -215,24 +215,26 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get settingsProfilesSubtitle =>
-      'Owner, workspace folders, tool policy';
+      'Owner, Arbeitsbereichsordner, Tool-Richtlinie';
 
   @override
-  String get settingsLlmSubtitle => 'Models, Local, Routing, Memory';
+  String get settingsLlmSubtitle => 'Modelle, Lokal, Routing, Speicher';
 
   @override
   String get settingsConnectionsSubtitle =>
       'Pairing, Home Assistant, MQTT, Channels';
 
   @override
-  String get settingsSkillsSubtitle => 'Install and manage skill packs';
+  String get settingsSkillsSubtitle =>
+      'Skill-Pakete installieren und verwalten';
 
   @override
   String get settingsWorkflowsSubtitle =>
-      'DAG workflows — draft, validate, run';
+      'DAG-Workflows — Entwurf, Validierung, Ausführung';
 
   @override
-  String get settingsSystemSubtitle => 'Profiles, Shared files, Health, Grants';
+  String get settingsSystemSubtitle =>
+      'Profile, Gemeinsame Dateien, Zustand, Berechtigungen';
 
   @override
   String get settingsNeedConnect =>
@@ -240,133 +242,135 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get profilesIntro =>
-      'Each person has a profile. The household Owner configures workspace folders and can transfer ownership.';
+      'Jede Person hat ein Profil. Der Haushalts-Owner konfiguriert Arbeitsbereichsordner und kann das Eigentum übertragen.';
 
   @override
   String get profilesMemberHint =>
-      'This device is not the household Owner — workspace is read-only here.';
+      'Dieses Gerät ist nicht der Haushalts-Owner — der Arbeitsbereich ist hier schreibgeschützt.';
 
   @override
-  String get profilesRefresh => 'Refresh';
+  String get profilesRefresh => 'Aktualisieren';
 
   @override
-  String get profilesAddTitle => 'Add profile';
+  String get profilesAddTitle => 'Profil hinzufügen';
 
   @override
   String get profilesOwnerBadge => 'Owner';
 
   @override
-  String get profilesActiveBadge => 'Active';
+  String get profilesActiveBadge => 'Aktiv';
 
   @override
-  String get profilesWorkspaceTitle => 'Workspace folders';
+  String get profilesWorkspaceTitle => 'Arbeitsbereichsordner';
 
   @override
   String get profilesWorkspaceHint =>
-      'Add host folders on the home machine (up to 16). The agent reaches them via workspace/<id>/… paths.';
+      'Host-Ordner auf dem Heimcomputer hinzufügen (bis zu 16). Der Agent erreicht sie über workspace/<id>/…-Pfade.';
 
   @override
-  String get profilesWorkspacePath => 'Host path';
+  String get profilesWorkspacePath => 'Host-Pfad';
 
   @override
-  String get profilesWorkspaceBrowse => 'Browse folders';
+  String get profilesWorkspaceBrowse => 'Ordner durchsuchen';
 
   @override
-  String get profilesWorkspaceBrowseHint => 'Tap to browse the home machine';
+  String get profilesWorkspaceBrowseHint =>
+      'Tippen, um den Heimcomputer zu durchsuchen';
 
   @override
-  String get profilesWorkspaceUnset => 'Not set (sandbox only)';
+  String get profilesWorkspaceUnset => 'Nicht gesetzt (nur Sandbox)';
 
   @override
-  String get profilesWorkspaceSet => 'Configured';
+  String get profilesWorkspaceSet => 'Konfiguriert';
 
   @override
-  String get profilesWorkspaceWholeMachine => 'Whole machine';
+  String get profilesWorkspaceWholeMachine => 'Gesamter Computer';
 
   @override
-  String get profilesWorkspaceRo => 'Read only';
+  String get profilesWorkspaceRo => 'Nur Lesen';
 
   @override
-  String get profilesWorkspaceRw => 'Read & write';
+  String get profilesWorkspaceRw => 'Lesen & Schreiben';
 
   @override
-  String get profilesWorkspaceUseRoot => 'Add computer root';
+  String get profilesWorkspaceUseRoot => 'Computerstamm hinzufügen';
 
   @override
-  String get profilesWorkspaceClear => 'Clear all';
+  String get profilesWorkspaceClear => 'Alle entfernen';
 
   @override
-  String get profilesWorkspaceRemove => 'Remove';
+  String get profilesWorkspaceRemove => 'Entfernen';
 
   @override
-  String get profilesWorkspaceApply => 'Add';
+  String get profilesWorkspaceApply => 'Hinzufügen';
 
   @override
-  String get profilesWorkspaceEdit => 'Add folder';
+  String get profilesWorkspaceEdit => 'Ordner hinzufügen';
 
   @override
-  String get profilesWorkspaceRootTitle => 'Allow whole-computer access?';
+  String get profilesWorkspaceRootTitle =>
+      'Zugriff auf den gesamten Computer erlauben?';
 
   @override
   String get profilesWorkspaceRootBody =>
-      'This lets the agent read (and write, if selected) files under the computer root via workspace/… — including from this phone.';
+      'Der Agent kann Dateien unter dem Computerstamm über workspace/… lesen (und bei Auswahl schreiben) — auch von diesem Telefon.';
 
   @override
-  String get profilesWorkspaceRootOk => 'Allow';
+  String get profilesWorkspaceRootOk => 'Erlauben';
 
   @override
   String get profilesWorkspaceMemberNote =>
-      'Only the household Owner can change workspace folders.';
+      'Nur der Haushalts-Owner kann Arbeitsbereichsordner ändern.';
 
   @override
   String get profilesWorkspaceCrossTitle =>
-      'Add workspace folder for another profile?';
+      'Arbeitsbereichsordner für ein anderes Profil hinzufügen?';
 
   @override
   String profilesWorkspaceCrossBody(String name) {
-    return 'This adds a host folder for $name. Continue only if you intend to configure their workspace.';
+    return 'Dies fügt einen Host-Ordner für $name hinzu. Nur fortfahren, wenn Sie dessen Arbeitsbereich konfigurieren möchten.';
   }
 
   @override
-  String get profilesWorkspaceDenied => 'Not visible on this device';
+  String get profilesWorkspaceDenied => 'Auf diesem Gerät nicht sichtbar';
 
   @override
   String get profilesWorkspaceInactive =>
-      'Configured but inactive (filesystem-root only applies to Owner)';
+      'Konfiguriert, aber inaktiv (Dateisystemstamm gilt nur für Owner)';
 
   @override
-  String get profilesRename => 'Rename';
+  String get profilesRename => 'Umbenennen';
 
   @override
-  String get profilesRenameTitle => 'Rename profile';
+  String get profilesRenameTitle => 'Profil umbenennen';
 
   @override
-  String get profilesRenameSave => 'Save';
+  String get profilesRenameSave => 'Speichern';
 
   @override
   String get profilesTimeZoneUnset =>
-      'Time zone: not set (schedules use host default)';
+      'Zeitzone: nicht gesetzt (Zeitpläne nutzen Host-Standard)';
 
   @override
   String profilesTimeZoneValue(String tz) {
-    return 'Time zone: $tz';
+    return 'Zeitzone: $tz';
   }
 
   @override
-  String get profilesTimeZoneEdit => 'Time zone';
+  String get profilesTimeZoneEdit => 'Zeitzone';
 
   @override
-  String get profilesTimeZoneTitle => 'Account time zone';
+  String get profilesTimeZoneTitle => 'Konto-Zeitzone';
 
   @override
-  String get profilesTimeZoneHint => 'IANA name, e.g. Asia/Shanghai';
+  String get profilesTimeZoneHint => 'IANA-Name, z. B. Europe/Berlin';
 
   @override
-  String get profilesTimeZoneSave => 'Save';
+  String get profilesTimeZoneSave => 'Speichern';
 
   @override
   String profilesTimeZoneDone(String tz) {
-    return 'Time zone set to $tz';
+    return 'Zeitzone auf $tz gesetzt';
   }
 
   @override
@@ -385,111 +389,112 @@ class AppLocalizationsDe extends AppLocalizations {
       'Standortfreigabe auf diesem Gerät aktiv';
 
   @override
-  String get profilesDelete => 'Delete';
+  String get profilesDelete => 'Löschen';
 
   @override
-  String get profilesDeleteTitle => 'Delete profile?';
+  String get profilesDeleteTitle => 'Profil löschen?';
 
   @override
   String profilesDeleteBody(String name) {
-    return 'Delete $name? Their sandbox and workspace config are removed. This cannot be undone.';
+    return '$name löschen? Sandbox und Arbeitsbereichskonfiguration werden entfernt. Das kann nicht rückgängig gemacht werden.';
   }
 
   @override
-  String get profilesDeleteConfirm => 'Delete';
+  String get profilesDeleteConfirm => 'Löschen';
 
   @override
   String profilesDeleteDone(String name) {
-    return 'Deleted $name';
+    return '$name gelöscht';
   }
 
   @override
   String get profilesDeleteOwnerBlocked =>
-      'Cannot delete the household Owner. Transfer ownership first.';
+      'Haushalts-Owner kann nicht gelöscht werden. Zuerst Eigentum übertragen.';
 
   @override
-  String get profilesTransferTitle => 'Transfer household Owner?';
+  String get profilesTransferTitle => 'Haushalts-Owner übertragen?';
 
   @override
   String profilesTransferBody(String name) {
-    return 'Make $name the household Owner. They will control pairing, bindings, and household Settings.';
+    return '$name wird Haushalts-Owner. Steuert Pairing, Bindungen und Haushaltseinstellungen.';
   }
 
   @override
-  String get profilesTransferConfirm => 'Transfer';
+  String get profilesTransferConfirm => 'Übertragen';
 
   @override
   String profilesTransferDone(String name) {
-    return 'Owner is now $name';
+    return 'Owner ist jetzt $name';
   }
 
   @override
   String profilesTransferFailed(String error) {
-    return 'Transfer failed: $error';
+    return 'Übertragung fehlgeschlagen: $error';
   }
 
   @override
   String profilesTransferTo(String name) {
-    return 'Transfer to $name';
+    return 'Übertragen an $name';
   }
 
   @override
-  String get profilesToolPolicy => 'Tool policy';
+  String get profilesToolPolicy => 'Tool-Richtlinie';
 
   @override
   String get profilesToolPolicyStandard => 'Standard';
 
   @override
-  String get profilesToolPolicyRestricted => 'Restricted';
+  String get profilesToolPolicyRestricted => 'Eingeschränkt';
 
   @override
-  String get connMintPairing => 'Mint pairing code';
+  String get connMintPairing => 'Pairing-Code erzeugen';
 
   @override
-  String get connMintOk => 'Pairing code minted';
+  String get connMintOk => 'Pairing-Code erzeugt';
 
   @override
-  String get connMintUriHint => 'Scan or paste this URI on the new device.';
+  String get connMintUriHint =>
+      'URI auf dem neuen Gerät scannen oder einfügen.';
 
   @override
   String get connPairingOwnerOnly =>
-      'Mint / revoke pairing requires the household Owner device.';
+      'Erzeugen/Widerrufen von Pairing erfordert das Haushalts-Owner-Gerät.';
 
   @override
-  String get connRevokeDevice => 'Revoke';
+  String get connRevokeDevice => 'Widerrufen';
 
   @override
-  String get connForgetDevice => 'Forget';
+  String get connForgetDevice => 'Vergessen';
 
   @override
   String connRevokeConfirm(String id) {
-    return 'Revoke device $id? It will need to pair again.';
+    return 'Gerät $id widerrufen? Es muss erneut gekoppelt werden.';
   }
 
   @override
   String connForgetConfirm(String id) {
-    return 'Forget device $id? The pairing record is removed permanently.';
+    return 'Gerät $id vergessen? Der Pairing-Eintrag wird dauerhaft entfernt.';
   }
 
   @override
   String get connOwnerWriteOnly =>
-      'Only the household Owner device can change this setting.';
+      'Nur das Haushalts-Owner-Gerät kann diese Einstellung ändern.';
 
   @override
-  String get connAccountsHint => 'Household profiles';
+  String get connAccountsHint => 'Haushaltsprofile';
 
   @override
-  String get homeChatSessionTitle => 'Phone home chat';
+  String get homeChatSessionTitle => 'Home-Chat vom Telefon';
 
   @override
-  String get homeChatEmptyTitle => 'Talk to your home';
+  String get homeChatEmptyTitle => 'Mit Ihrem Zuhause sprechen';
 
   @override
   String get homeChatEmptyHint =>
-      'Smart-home tools stay available here. Approvals still gate actuations.';
+      'Smart-Home-Tools bleiben hier verfügbar. Genehmigungen steuern weiterhin Aktionen.';
 
   @override
-  String get homeChatHint => 'Ask about lights, locks, climate…';
+  String get homeChatHint => 'Fragen Sie zu Licht, Schlössern, Klima…';
 
   @override
   String get schedulesChatSessionTitle => 'Zeitpläne';
@@ -505,63 +510,63 @@ class AppLocalizationsDe extends AppLocalizations {
   String get schedulesChatHint => 'Erinnere mich…';
 
   @override
-  String get chatAttach => 'Attach';
+  String get chatAttach => 'Anhängen';
 
   @override
   String chatAttachTooMany(int n) {
-    return 'At most $n files';
+    return 'Höchstens $n Dateien';
   }
 
   @override
   String chatAttachTooLarge(String name, String mb) {
-    return '$name exceeds $mb MB';
+    return '$name überschreitet $mb MB';
   }
 
   @override
   String chatAttachAdded(int n) {
-    return 'Attached $n file(s)';
+    return '$n Datei(en) angehängt';
   }
 
   @override
-  String get chatAttachedOnly => '(attachment)';
+  String get chatAttachedOnly => '(Anhang)';
 
   @override
-  String get chatVoiceStart => 'Dictate';
+  String get chatVoiceStart => 'Diktieren';
 
   @override
-  String get chatVoiceStop => 'Stop dictation';
+  String get chatVoiceStop => 'Diktat beenden';
 
   @override
   String get chatVoiceUnsupported =>
-      'Speech recognition is not available on this device.';
+      'Spracherkennung ist auf diesem Gerät nicht verfügbar.';
 
   @override
-  String get llmTabModels => 'Models';
+  String get llmTabModels => 'Modelle';
 
   @override
-  String get llmTabLocal => 'Local';
+  String get llmTabLocal => 'Lokal';
 
   @override
   String get llmTabRouting => 'Routing';
 
   @override
-  String get llmTabMemory => 'Memory';
+  String get llmTabMemory => 'Speicher';
 
   @override
   String get llmLocalDownloadHint =>
-      'Search Hugging Face and download GGUF files onto the home machine.';
+      'Auf Hugging Face suchen und GGUF-Dateien auf den Heimcomputer laden.';
 
   @override
-  String get llmHfSearchHint => 'Search models…';
+  String get llmHfSearchHint => 'Modelle suchen…';
 
   @override
-  String get llmSearch => 'Search';
+  String get llmSearch => 'Suchen';
 
   @override
-  String get llmCancelDownload => 'Cancel';
+  String get llmCancelDownload => 'Abbrechen';
 
   @override
-  String get llmResumeDownload => 'Resume';
+  String get llmResumeDownload => 'Fortsetzen';
 
   @override
   String llmGgufFiles(String repo) {
@@ -569,49 +574,50 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get llmRoutingHint => 'Choose where turns may run for this profile.';
+  String get llmRoutingHint =>
+      'Wählen Sie, wo Turns für dieses Profil laufen dürfen.';
 
   @override
-  String get llmFilterAny => 'Smart / any';
+  String get llmFilterAny => 'Intelligent / beliebig';
 
   @override
-  String get llmFilterCloud => 'Cloud only';
+  String get llmFilterCloud => 'Nur Cloud';
 
   @override
-  String get llmFilterLocal => 'Local only';
+  String get llmFilterLocal => 'Nur lokal';
 
   @override
-  String get llmAutoSwitch => 'Auto model switch';
+  String get llmAutoSwitch => 'Automatischer Modellwechsel';
 
   @override
-  String get privacyModeTitle => 'Privacy Mode';
+  String get privacyModeTitle => 'Datenschutzmodus';
 
   @override
   String get privacyModeHint =>
-      'Forces local inference and blocks cloud tools. Owner-scope.';
+      'Erzwingt lokale Inferenz und blockiert Cloud-Tools. Owner-Bereich.';
 
   @override
-  String get privacyModeEnabled => 'Enable Privacy Mode';
+  String get privacyModeEnabled => 'Datenschutzmodus aktivieren';
 
   @override
   String get privacyModeBlockEgress =>
-      'Also block smart-home actuation & event-source notify';
+      'Auch Smart-Home-Aktionen & Event-Source-Benachrichtigungen blockieren';
 
   @override
   String get privacyModeOwnerOnly =>
-      'Privacy Mode is Owner-only on this device.';
+      'Datenschutzmodus ist auf diesem Gerät nur für Owner.';
 
   @override
-  String get llmCompactNow => 'Compact memory now';
+  String get llmCompactNow => 'Speicher jetzt komprimieren';
 
   @override
-  String get llmFlushEnabled => 'Flush standing notes';
+  String get llmFlushEnabled => 'Stehende Notizen flushen';
 
   @override
-  String get llmReviewEnabled => 'Review before learn write';
+  String get llmReviewEnabled => 'Vor Learn-Schreiben prüfen';
 
   @override
-  String get llmInjectMode => 'Inject budget mode';
+  String get llmInjectMode => 'Inject-Budget-Modus';
 
   @override
   String get llmInjectAuto => 'Auto';
@@ -620,13 +626,13 @@ class AppLocalizationsDe extends AppLocalizations {
   String get llmInjectBaseline => 'Baseline';
 
   @override
-  String get llmInjectCustom => 'Custom';
+  String get llmInjectCustom => 'Benutzerdefiniert';
 
   @override
-  String get llmPendingLearns => 'Pending learns';
+  String get llmPendingLearns => 'Ausstehende Learns';
 
   @override
-  String get llmNoPendingLearns => 'No pending learns.';
+  String get llmNoPendingLearns => 'Keine ausstehenden Learns.';
 
   @override
   String get connTabPairing => 'Pairing';
@@ -638,10 +644,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get connTabMqtt => 'MQTT';
 
   @override
-  String get connTabChannels => 'Channels';
+  String get connTabChannels => 'Kanäle';
 
   @override
-  String get connTabWebSearch => 'Web search';
+  String get connTabWebSearch => 'Websuche';
 
   @override
   String get connTabMcp => 'MCP';
@@ -650,198 +656,256 @@ class AppLocalizationsDe extends AppLocalizations {
   String get connTabBrowser => 'Browser';
 
   @override
+  String get mcpLede =>
+      'Fügen Sie einen beliebigen MCP-Server hinzu. Testen Sie die Verbindung, bevor Sie ihn aktivieren. Stdio-Befehle laufen als Daemon-Hostbenutzer. Tool-Aufrufe bleiben genehmigungspflichtig.';
+
+  @override
+  String get mcpTest => 'Testen';
+
+  @override
+  String get mcpAddServer => 'Server hinzufügen';
+
+  @override
+  String get mcpSave => 'Speichern';
+
+  @override
+  String get mcpReady => 'Bereit';
+
+  @override
+  String get mcpNotTested => 'Nicht getestet';
+
+  @override
+  String mcpServerSubtitle(String transport, String status, int count) {
+    return '$transport · $status · $count Tools';
+  }
+
+  @override
+  String mcpTestOk(int count) {
+    return 'OK — $count Tool(s). Bei Bereitschaft aktivieren.';
+  }
+
+  @override
+  String mcpTestFailed(String error) {
+    return 'Fehlgeschlagen: $error';
+  }
+
+  @override
+  String get mcpLabel => 'Bezeichnung';
+
+  @override
+  String get mcpCommand => 'Befehl';
+
+  @override
+  String get mcpArgs => 'Argumente (leerzeichengetrennt, optional)';
+
+  @override
+  String get mcpUrl => 'URL';
+
+  @override
+  String get mcpAuthToken => 'Auth-Token (optional)';
+
+  @override
+  String get mcpEnv => 'Env (KEY=value pro Zeile, optional)';
+
+  @override
   String get browserControlLede =>
-      'Control a managed browser on the home computer (Auto prefers Obscura, else Chromium), or attach personal Chrome / remote CDP. Off by default.';
+      'Verwalteten Browser auf dem Heimcomputer steuern (Auto bevorzugt Obscura, sonst Chromium) oder persönliches Chrome / Remote-CDP anbinden. Standardmäßig aus.';
 
   @override
   String get browserControlDaemonHostNote =>
-      'Browser sessions run on the home computer. Settings here sync with desktop Connections → Browser.';
+      'Browser-Sitzungen laufen auf dem Heimcomputer. Einstellungen hier synchron mit Desktop Verbindungen → Browser.';
 
   @override
-  String get browserControlEnabled => 'Enable browser tool';
+  String get browserControlEnabled => 'Browser-Tool aktivieren';
 
   @override
   String get browserControlUnattended => 'Allow for schedules';
 
   @override
-  String get browserControlReady => 'Ready';
+  String get browserControlReady => 'Bereit';
 
   @override
-  String get browserControlNotReady => 'Not ready';
+  String get browserControlNotReady => 'Nicht bereit';
 
   @override
-  String get browserControlSave => 'Save';
+  String get browserControlSave => 'Speichern';
 
   @override
-  String get browserControlSaved => 'Browser settings saved.';
+  String get browserControlSaved => 'Browser-Einstellungen gespeichert.';
 
   @override
-  String get browserControlSaveFailed => 'Could not save browser settings.';
+  String get browserControlSaveFailed =>
+      'Browser-Einstellungen konnten nicht gespeichert werden.';
 
   @override
-  String get browserControlDefaultProfile => 'Default profile';
+  String get browserControlDefaultProfile => 'Standardprofil';
 
   @override
-  String get browserControlProfileManaged => 'Managed (isolated)';
+  String get browserControlProfileManaged => 'Verwaltet (isoliert)';
 
   @override
-  String get browserControlProfilePersonal => 'Personal Chrome';
+  String get browserControlProfilePersonal => 'Persönliches Chrome';
 
   @override
-  String get browserControlProfileRemote => 'Remote CDP';
+  String get browserControlProfileRemote => 'Remote-CDP';
 
   @override
   String get browserControlElevatedWarn =>
-      'Personal/remote can act as you on logged-in sites. Owner only; never schedules.';
+      'Persönlich/remote kann auf angemeldeten Sites in Ihrem Namen handeln. Nur Owner; nie in Zeitplänen.';
 
   @override
-  String get browserControlAcknowledge => 'I understand elevated browser risk';
+  String get browserControlAcknowledge =>
+      'Ich verstehe das erhöhte Browser-Risiko';
 
   @override
-  String get browserControlPersonalEnabled => 'Enable personal Chrome';
+  String get browserControlPersonalEnabled => 'Persönliches Chrome aktivieren';
 
   @override
-  String get browserControlPersonalCdp => 'Personal CDP (loopback)';
+  String get browserControlPersonalCdp => 'Persönliches CDP (Loopback)';
 
   @override
-  String get browserControlPersonalReady => 'Personal CDP up';
+  String get browserControlPersonalReady => 'Persönliches CDP aktiv';
 
   @override
-  String get browserControlPersonalNotReady => 'Personal CDP down';
+  String get browserControlPersonalNotReady => 'Persönliches CDP inaktiv';
 
   @override
-  String get browserControlRemoteEnabled => 'Enable remote CDP';
+  String get browserControlRemoteEnabled => 'Remote-CDP aktivieren';
 
   @override
-  String get browserControlRemoteCdp => 'Remote CDP URL';
+  String get browserControlRemoteCdp => 'Remote-CDP-URL';
 
   @override
-  String get browserControlRemoteToken => 'Remote CDP token';
+  String get browserControlRemoteToken => 'Remote-CDP-Token';
 
   @override
-  String get browserControlTokenSet => 'set';
+  String get browserControlTokenSet => 'gesetzt';
 
   @override
-  String get browserControlTokenPlaceholder => 'Leave blank to keep';
+  String get browserControlTokenPlaceholder => 'Leer lassen, um beizubehalten';
 
   @override
-  String get browserControlRemoteReady => 'Remote CDP up';
+  String get browserControlRemoteReady => 'Remote-CDP aktiv';
 
   @override
-  String get browserControlRemoteNotReady => 'Remote CDP down';
+  String get browserControlRemoteNotReady => 'Remote-CDP inaktiv';
 
   @override
   String get browserControlOwnerOnly =>
-      'Only the household Owner device can change browser control settings.';
+      'Nur das Haushalts-Owner-Gerät kann Browser-Einstellungen ändern.';
 
   @override
   String get browserControlAcknowledged =>
-      'Elevated risk acknowledged. Disable personal/remote to stop using them.';
+      'Erhöhtes Risiko bestätigt. Persönlich/remote deaktivieren, um die Nutzung zu beenden.';
 
   @override
   String get webSearchLede =>
-      'Search the public web from chat. Default: DuckDuckGo, then Bing/Google/Baidu in the browser if needed (no API key). Brave and Tavily need an Owner API key.';
+      'Öffentliches Web aus dem Chat durchsuchen. Standard: DuckDuckGo, bei Bedarf Bing/Google/Baidu im Browser (kein API-Schlüssel). Brave und Tavily benötigen einen Owner-API-Schlüssel.';
 
   @override
-  String get webSearchEnabled => 'Enable web_search';
+  String get webSearchEnabled => 'web_search aktivieren';
 
   @override
-  String get webSearchProvider => 'Provider';
+  String get webSearchProvider => 'Anbieter';
 
   @override
   String get webSearchProviderBrowser => 'Browser (Bing / Google / Baidu)';
 
   @override
   String get webSearchBrowserPrimaryHint =>
-      'Searches Bing/Google/Baidu directly in the daemon host headless engine (Obscura if ready, else Chromium). Attended chats ask once before each search.';
+      'Durchsucht Bing/Google/Baidu direkt im Headless-Engine des Daemon-Hosts (Obscura wenn bereit, sonst Chromium). Bei betreuter Nutzung einmal vor jeder Suche bestätigen.';
 
   @override
   String get webSearchDaemonHostNote =>
-      'Engines and dig run on the home computer that hosts EnvoyHome. This phone only views and (Owner) edits the shared settings.';
+      'Suchmaschinen und Auswertung laufen auf dem Heimcomputer mit EnvoyHome. Dieses Telefon zeigt und (Owner) bearbeitet die gemeinsamen Einstellungen.';
 
   @override
-  String get webSearchEffectiveUnresolved => 'not ready yet';
+  String get webSearchEffectiveUnresolved => 'noch nicht bereit';
 
   @override
-  String get webSearchApiKey => 'API key';
+  String get webSearchApiKey => 'API-Schlüssel';
 
   @override
-  String get webSearchApiKeyHint => 'Leave blank to keep the current key';
+  String get webSearchApiKeyHint =>
+      'Leer lassen, um den aktuellen Schlüssel zu behalten';
 
   @override
-  String get webSearchReady => 'Ready';
+  String get webSearchReady => 'Bereit';
 
   @override
-  String get webSearchNotReady => 'Not ready';
+  String get webSearchNotReady => 'Nicht bereit';
 
   @override
-  String get webSearchSave => 'Save';
+  String get webSearchSave => 'Speichern';
 
   @override
-  String get webSearchSaved => 'Web search settings saved.';
+  String get webSearchSaved => 'Websuche-Einstellungen gespeichert.';
 
   @override
-  String get webSearchSaveFailed => 'Could not save web search settings.';
+  String get webSearchSaveFailed =>
+      'Websuche-Einstellungen konnten nicht gespeichert werden.';
 
   @override
   String get webSearchOwnerOnly =>
-      'Only the Household Owner device can change web search.';
+      'Nur das Haushalts-Owner-Gerät kann die Websuche ändern.';
 
   @override
   String get webSearchBrowserFallback =>
-      'Browser fallback (Bing/Google/Baidu when API/DDG fails or is unset)';
+      'Browser-Fallback (Bing/Google/Baidu wenn API/DDG fehlschlägt oder nicht gesetzt)';
 
   @override
   String get webSearchBrowserFallbackHint =>
-      'On by default for zero-config search. Attended chats ask before the browser leg. SERP pages may CAPTCHA or block.';
+      'Standardmäßig an für Suche ohne Konfiguration. Betreute Chats fragen vor dem Browser-Schritt. SERP-Seiten können CAPTCHA oder Blockierung zeigen.';
 
   @override
   String get webSearchResearchEnabled =>
-      'Web research (search then dig top pages)';
+      'Web-Recherche (suchen, dann Top-Seiten auswerten)';
 
   @override
   String get webSearchResearchHint =>
-      'Off by default. Enables web_research: dig into top results and return an organized brief plus links.';
+      'Standardmäßig aus. Aktiviert web_research: Top-Ergebnisse auswerten und strukturierte Kurzfassung mit Links liefern.';
 
   @override
-  String get webSearchDigDepth => 'Dig depth (1–10 pages)';
+  String get webSearchDigDepth => 'Analysetiefe (1–10 Seiten)';
 
   @override
-  String get webSearchExtractBackend => 'Page extract backend';
+  String get webSearchExtractBackend => 'Backend für Seitenextraktion';
 
   @override
   String get webSearchExtractBackendAuto =>
-      'Auto (Obscura if ready, else HTTP fetch)';
+      'Auto (Obscura wenn bereit, sonst HTTP fetch)';
 
   @override
   String get webSearchExtractBackendFetch => 'HTTP fetch';
 
   @override
-  String get webSearchExtractBackendObscura => 'Obscura (JS-rendered Markdown)';
+  String get webSearchExtractBackendObscura =>
+      'Obscura (JS-gerendertes Markdown)';
 
   @override
   String get webSearchExtractBackendHint =>
-      'Auto prefers Obscura when installed on the daemon host, otherwise plain HTTP fetch.';
+      'Auto bevorzugt Obscura auf dem Daemon-Host, sonst einfaches HTTP-Fetch.';
 
   @override
-  String get webSearchEffectiveExtract => 'Effective dig backend now';
+  String get webSearchEffectiveExtract => 'Aktuelles Auswerte-Backend';
 
   @override
-  String get webSearchObscuraReady => 'Obscura ready on daemon host';
+  String get webSearchObscuraReady => 'Obscura bereit auf Daemon-Host';
 
   @override
-  String get webSearchObscuraMissing => 'Obscura not installed on daemon host';
+  String get webSearchObscuraMissing =>
+      'Obscura nicht auf Daemon-Host installiert';
 
   @override
   String get webSearchObscuraInstallHintNote =>
-      'Desktop builds ship Obscura (or the daemon auto-installs on first boot). On the home computer that runs EnvoyHome (not this phone), override with ENVOYHOME_OBSCURA / PATH if needed, then reopen Settings.';
+      'Desktop-Builds enthalten Obscura (oder der Daemon installiert beim ersten Start). Auf dem Heimcomputer mit EnvoyHome (nicht diesem Telefon) bei Bedarf ENVOYHOME_OBSCURA / PATH setzen, dann Einstellungen erneut öffnen.';
 
   @override
-  String get webSearchSerpBrowserEngine => 'Browser SERP engine';
+  String get webSearchSerpBrowserEngine => 'Browser-SERP-Engine';
 
   @override
   String get webSearchSerpBrowserEngineAuto =>
-      'Auto (Obscura if ready, else Chromium)';
+      'Auto (Obscura wenn bereit, sonst Chromium)';
 
   @override
   String get webSearchSerpBrowserEngineChromium => 'Chromium';
@@ -851,17 +915,17 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get webSearchSerpBrowserEngineHint =>
-      'Auto prefers Obscura for Bing/Google/Baidu, then Playwright Chromium.';
+      'Auto bevorzugt Obscura für Bing/Google/Baidu, dann Playwright Chromium.';
 
   @override
-  String get webSearchEffectiveSerp => 'Effective SERP engine now';
+  String get webSearchEffectiveSerp => 'Aktuelle SERP-Engine';
 
   @override
-  String get browserControlManagedEngine => 'Managed browser engine';
+  String get browserControlManagedEngine => 'Verwaltete Browser-Engine';
 
   @override
   String get browserControlManagedEngineAuto =>
-      'Auto (Obscura if ready, else Chromium)';
+      'Auto (Obscura wenn bereit, sonst Chromium)';
 
   @override
   String get browserControlManagedEngineChromium => 'Chromium';
@@ -871,22 +935,22 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get browserControlManagedEngineHint =>
-      'Auto prefers Obscura for managed browser. Personal/remote always use real Chrome CDP.';
+      'Auto bevorzugt Obscura für verwalteten Browser. Persönlich/remote nutzen immer echtes Chrome-CDP.';
 
   @override
-  String get browserControlEffectiveManaged => 'Effective managed engine now';
+  String get browserControlEffectiveManaged => 'Aktuelle verwaltete Engine';
 
   @override
   String get webSearchEngines =>
-      'Search engines (order: Bing → Google → Baidu)';
+      'Suchmaschinen (Reihenfolge: Bing → Google → Baidu)';
 
   @override
   String get webSearchEnginesHint =>
-      'When browser fallback runs, try checked engines in this order until one returns results.';
+      'Bei Browser-Fallback geprüfte Engines in dieser Reihenfolge versuchen, bis Ergebnisse kommen.';
 
   @override
   String get webSearchEnginesRequired =>
-      'Pick at least one of Bing, Google, or Baidu for browser fallback.';
+      'Mindestens eines von Bing, Google oder Baidu für Browser-Fallback wählen.';
 
   @override
   String get webSearchEngineBing => 'Bing';
@@ -899,114 +963,114 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get webSearchBrowserReady =>
-      'Playwright Chromium ready on daemon host';
+      'Playwright Chromium bereit auf Daemon-Host';
 
   @override
   String get webSearchBrowserMissing =>
-      'Playwright Chromium not installed on daemon host';
+      'Playwright Chromium nicht auf Daemon-Host installiert';
 
   @override
   String get webSearchInstallHintNote =>
-      'Playwright is already part of the daemon. Download Chromium on the home computer that runs EnvoyHome (not this phone), then reopen Settings; restart the daemon if status stays missing.';
+      'Playwright ist bereits Teil des Daemon. Chromium auf dem Heimcomputer mit EnvoyHome laden (nicht auf diesem Telefon), dann Einstellungen öffnen; Daemon neu starten, wenn der Status weiterhin fehlt.';
 
   @override
-  String get webSearchCopyHint => 'Copy install command';
+  String get webSearchCopyHint => 'Installationsbefehl kopieren';
 
   @override
   String get webSearchUnattendedBrowser =>
-      'Allow browser fallback for schedules';
+      'Browser-Fallback für Zeitpläne erlauben';
 
   @override
   String get connPairingHint =>
-      'Household Owner devices can mint and revoke pairing here. Members see status only.';
+      'Haushalts-Owner-Geräte können hier Pairing erzeugen und widerrufen. Mitglieder sehen nur den Status.';
 
   @override
-  String get connNoDevices => 'No paired devices listed.';
+  String get connNoDevices => 'Keine gekoppelten Geräte gelistet.';
 
   @override
-  String get connEnabled => 'Enabled';
+  String get connEnabled => 'Aktiviert';
 
   @override
-  String get connDisabled => 'Disabled';
+  String get connDisabled => 'Deaktiviert';
 
   @override
-  String get connReady => 'Ready';
+  String get connReady => 'Bereit';
 
   @override
-  String get connHealthy => 'Healthy';
+  String get connHealthy => 'Gesund';
 
   @override
-  String get connUnhealthy => 'Unhealthy';
+  String get connUnhealthy => 'Ungesund';
 
   @override
-  String get connHaUrl => 'HA base URL';
+  String get connHaUrl => 'HA-Basis-URL';
 
   @override
-  String get connHaToken => 'Access token';
+  String get connHaToken => 'Zugriffstoken';
 
   @override
-  String get connMqttUrl => 'Broker URL';
+  String get connMqttUrl => 'Broker-URL';
 
   @override
-  String get connMqttPassword => 'Password';
+  String get connMqttPassword => 'Passwort';
 
   @override
-  String get connSaveEnable => 'Save & enable';
+  String get connSaveEnable => 'Speichern & aktivieren';
 
   @override
-  String get connBindTitle => 'Object bindings';
+  String get connBindTitle => 'Objektbindungen';
 
   @override
   String connBoundTo(String id) {
-    return 'Bound to $id';
+    return 'Gebunden an $id';
   }
 
   @override
-  String get connUnbound => 'Unbound';
+  String get connUnbound => 'Nicht gebunden';
 
   @override
   String get connChannelsHint =>
-      'Paste a bot token and enable. Prefer desktop for first-time setup.';
+      'Bot-Token einfügen und aktivieren. Für die Ersteinrichtung Desktop bevorzugen.';
 
   @override
-  String get connBotToken => 'Bot token';
+  String get connBotToken => 'Bot-Token';
 
   @override
-  String get connDisable => 'Disable';
+  String get connDisable => 'Deaktivieren';
 
   @override
-  String get connSenderBinds => 'Sender → profile';
+  String get connSenderBinds => 'Absender → Profil';
 
   @override
   String get connSenderBindsHint =>
-      'Link an IM sender id to the active profile.';
+      'IM-Absender-ID mit dem aktiven Profil verknüpfen.';
 
   @override
-  String get connBindChannel => 'Channel';
+  String get connBindChannel => 'Kanal';
 
   @override
-  String get connChannelAccount => 'Channel account';
+  String get connChannelAccount => 'Kanal-Konto';
 
   @override
-  String get connSenderId => 'Sender id';
+  String get connSenderId => 'Absender-ID';
 
   @override
-  String get connBindSender => 'Bind sender';
+  String get connBindSender => 'Absender binden';
 
   @override
   String get skillsTabSkills => 'Skills';
 
   @override
-  String get skillsVerify => 'Verify';
+  String get skillsVerify => 'Verifizieren';
 
   @override
-  String get skillsVerified => 'Skill verified';
+  String get skillsVerified => 'Skill verifiziert';
 
   @override
   String get skillsTabWorkflows => 'Workflows';
 
   @override
-  String get skillsTabSchedules => 'Schedules';
+  String get skillsTabSchedules => 'Zeitpläne';
 
   @override
   String get skillsTabScenes => 'Szenen';
@@ -1016,62 +1080,63 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get scenesHint =>
-      'When → do household automations (household rules). Presence templates need Privacy Mode.';
+      'Wenn → dann-Haushaltsautomationen (Haushaltsregeln). Anwesenheitsvorlagen benötigen Datenschutzmodus.';
 
   @override
-  String get scenesWhenPresence => 'Presence (no cron — sensor trigger)';
+  String get scenesWhenPresence => 'Anwesenheit (kein Cron — Sensorauslöser)';
 
   @override
-  String get scenesNone => 'No scenes yet.';
+  String get scenesNone => 'Noch keine Szenen.';
 
   @override
-  String get scenesAddMorning => 'Add Good morning';
+  String get scenesAddMorning => 'Guten Morgen hinzufügen';
 
   @override
   String get scenesPrivacyRequired =>
-      'Enable Privacy Mode (LLM → Routing) before presence scenes.';
+      'Datenschutzmodus aktivieren (LLM → Routing) vor Anwesenheitsszenen.';
 
   @override
-  String get skillsInstallUrl => 'Install from URL';
+  String get skillsInstallUrl => 'Von URL installieren';
 
   @override
-  String get skillsInstall => 'Install';
+  String get skillsInstall => 'Installieren';
 
   @override
-  String get skillsClawHubSearch => 'ClawHub search';
+  String get skillsClawHubSearch => 'ClawHub-Suche';
 
   @override
-  String get schedWhenHint => 'When (natural language)';
+  String get schedWhenHint => 'Wann (natürliche Sprache)';
 
   @override
-  String get schedMessageHint => 'Reminder message';
+  String get schedMessageHint => 'Erinnerungstext';
 
   @override
-  String get schedPropose => 'Propose';
+  String get schedPropose => 'Vorschlagen';
 
   @override
   String get schedConfirm => 'Confirm reminder';
 
   @override
-  String get scheduleCardTitle => 'Set this reminder?';
+  String get scheduleCardTitle => 'Diese Erinnerung setzen?';
 
   @override
-  String get scheduleCardConfirm => 'Confirm';
+  String get scheduleCardConfirm => 'Bestätigen';
 
   @override
-  String get scheduleCardCancel => 'Cancel';
+  String get scheduleCardCancel => 'Abbrechen';
 
   @override
-  String get scheduleCardConfirmedToast => 'Reminder set.';
+  String get scheduleCardConfirmedToast => 'Erinnerung gesetzt.';
 
   @override
-  String get scheduleCardCanceledToast => 'Reminder canceled.';
+  String get scheduleCardCanceledToast => 'Erinnerung abgebrochen.';
 
   @override
-  String get scheduleCardFailed => 'Could not update that reminder.';
+  String get scheduleCardFailed =>
+      'Erinnerung konnte nicht aktualisiert werden.';
 
   @override
-  String get schedKindNotify => 'Notify';
+  String get schedKindNotify => 'Benachrichtigen';
 
   @override
   String get schedKindWorkflow => 'Workflow';
@@ -1080,16 +1145,16 @@ class AppLocalizationsDe extends AppLocalizations {
   String get schedKindTool => 'Tool';
 
   @override
-  String get schedWorkflowId => 'Workflow id';
+  String get schedWorkflowId => 'Workflow-ID';
 
   @override
-  String get schedToolName => 'Tool name';
+  String get schedToolName => 'Tool-Name';
 
   @override
   String get schedKindAgent => 'Agent';
 
   @override
-  String get schedAgentPrompt => 'Agent prompt';
+  String get schedAgentPrompt => 'Agent-Prompt';
 
   @override
   String get schedTabRepeating => 'Wiederkehrend';
@@ -1110,13 +1175,13 @@ class AppLocalizationsDe extends AppLocalizations {
   String get schedNoReceipts => 'Noch keine Läufe.';
 
   @override
-  String get schedHistoryNotSet => 'Not set';
+  String get schedHistoryNotSet => 'Nicht gesetzt';
 
   @override
-  String get schedHistoryRuns => 'Runs';
+  String get schedHistoryRuns => 'Läufe';
 
   @override
-  String get schedNoDismissed => 'No canceled proposals.';
+  String get schedNoDismissed => 'Keine abgebrochenen Vorschläge.';
 
   @override
   String get schedDismissedCanceled => 'Abgebrochen';
@@ -1160,134 +1225,136 @@ class AppLocalizationsDe extends AppLocalizations {
   String get wfEditorTitle => 'Workflow';
 
   @override
-  String get wfEnable => 'Enable';
+  String get wfEnable => 'Aktivieren';
 
   @override
-  String get wfDisable => 'Disable';
+  String get wfDisable => 'Deaktivieren';
 
   @override
-  String get wfTools => 'Insert tool';
+  String get wfTools => 'Tool einfügen';
 
   @override
-  String get wfId => 'Workflow id';
+  String get wfId => 'Workflow-ID';
 
   @override
-  String get wfAiPrompt => 'Describe the workflow';
+  String get wfAiPrompt => 'Workflow beschreiben';
 
   @override
-  String get wfAiPromptHint => 'e.g. turn off lights at 11pm if nobody home';
+  String get wfAiPromptHint =>
+      'z. B. Lichter um 23 Uhr ausschalten, wenn niemand zu Hause';
 
   @override
-  String get wfAiDraft => 'Draft with AI';
+  String get wfAiDraft => 'Entwurf mit KI';
 
   @override
-  String get wfDiagramNodes => 'Nodes (phone diagram)';
+  String get wfDiagramNodes => 'Knoten (Telefon-Diagramm)';
 
   @override
-  String get wfNoNodes => 'No nodes yet — draft or paste YAML.';
+  String get wfNoNodes => 'Noch keine Knoten — Entwurf oder YAML einfügen.';
 
   @override
   String get wfYaml => 'YAML';
 
   @override
-  String get wfSave => 'Validate & save';
+  String get wfSave => 'Validieren & speichern';
 
   @override
-  String get wfRun => 'Test run';
+  String get wfRun => 'Testlauf';
 
   @override
-  String get wfDrafted => 'Draft applied';
+  String get wfDrafted => 'Entwurf übernommen';
 
   @override
-  String get wfSaved => 'Saved';
+  String get wfSaved => 'Gespeichert';
 
   @override
-  String get wfRan => 'Run started';
+  String get wfRan => 'Lauf gestartet';
 
   @override
-  String get sysTabFiles => 'Files';
+  String get sysTabFiles => 'Dateien';
 
   @override
-  String get sysTabHealth => 'Health';
+  String get sysTabHealth => 'Zustand';
 
   @override
-  String get sysTabGrants => 'Grants';
+  String get sysTabGrants => 'Berechtigungen';
 
   @override
-  String get sysTabMachine => 'This machine';
+  String get sysTabMachine => 'Dieser Computer';
 
   @override
   String get sysMachineHint =>
-      'Daemon listen status from home.health. OS service install/restart is loopback-only on the home desktop — not available over mesh.';
+      'Daemon-Listenstatus von home.health. OS-Dienst installieren/neu starten nur per Loopback auf dem Desktop — nicht über Mesh verfügbar.';
 
   @override
-  String get sysMachineDaemonOk => 'Daemon reachable';
+  String get sysMachineDaemonOk => 'Daemon erreichbar';
 
   @override
-  String get sysMachineDaemonBad => 'Daemon health failed';
+  String get sysMachineDaemonBad => 'Daemon-Zustand fehlgeschlagen';
 
   @override
-  String get sysMachineWsPort => 'WebSocket port';
+  String get sysMachineWsPort => 'WebSocket-Port';
 
   @override
-  String get sysMachineHttpPort => 'HTTP hatch port';
+  String get sysMachineHttpPort => 'HTTP-Hatch-Port';
 
   @override
-  String get sysMachinePublicUrl => 'Public base URL';
+  String get sysMachinePublicUrl => 'Öffentliche Basis-URL';
 
   @override
-  String get sysMachinePublicUrlEmpty => 'Not set';
+  String get sysMachinePublicUrlEmpty => 'Nicht gesetzt';
 
   @override
-  String get sysMachineUptime => 'Uptime';
+  String get sysMachineUptime => 'Laufzeit';
 
   @override
-  String get sysMachineConnections => 'Clients / active turns';
+  String get sysMachineConnections => 'Clients / aktive Turns';
 
   @override
   String get sysMachineMesh => 'Mesh';
 
   @override
   String get sysMachineOsServiceNote =>
-      'Install or restart the OS service from desktop Settings → System → This machine (loopback-owner).';
+      'OS-Dienst installieren oder neu starten unter Desktop Einstellungen → System → Dieser Computer (Loopback-Owner).';
 
   @override
-  String get sysMachineRefresh => 'Refresh';
+  String get sysMachineRefresh => 'Aktualisieren';
 
   @override
-  String get sysTestPush => 'Send test push';
+  String get sysTestPush => 'Test-Push senden';
 
   @override
-  String get sysTestPushSent => 'Test push requested';
+  String get sysTestPushSent => 'Test-Push angefordert';
 
   @override
   String get wfModeYaml => 'YAML';
 
   @override
-  String get wfModeDiagram => 'Diagram';
+  String get wfModeDiagram => 'Diagramm';
 
   @override
-  String get wfDiagramEmpty => 'No steps yet — draft or edit YAML.';
+  String get wfDiagramEmpty =>
+      'Noch keine Schritte — Entwurf oder YAML bearbeiten.';
 
   @override
   String get wfDiagramEdge => '↓';
 
   @override
-  String get sysDoctorFix => 'Fix';
+  String get sysDoctorFix => 'Beheben';
 
   @override
-  String get sysDoctorFixAll => 'Fix all';
+  String get sysDoctorFixAll => 'Alles beheben';
 
   @override
   String sysDoctorFixed(String ids) {
-    return 'Fixed: $ids';
+    return 'Behoben: $ids';
   }
 
   @override
-  String get sysNoIssues => 'No doctor issues.';
+  String get sysNoIssues => 'Keine Doctor-Probleme.';
 
   @override
-  String get sysNoGrants => 'No grants.';
+  String get sysNoGrants => 'Keine Berechtigungen.';
 
   @override
   String get chatNeedAccount => 'Wählen Sie oben ein Konto, bevor Sie chatten.';
@@ -1341,15 +1408,15 @@ class AppLocalizationsDe extends AppLocalizations {
   String get chatOpenArtifact => 'Vollständige Antwort öffnen';
 
   @override
-  String get chatPromoteKnowledge => 'Add to Knowledge';
+  String get chatPromoteKnowledge => 'Zu Wissen hinzufügen';
 
   @override
   String chatPromotedKnowledge(String path) {
-    return 'Saved to $path';
+    return 'Gespeichert unter $path';
   }
 
   @override
-  String get chatPromoteFailed => 'Could not add to Knowledge.';
+  String get chatPromoteFailed => 'Konnte nicht zu Wissen hinzufügen.';
 
   @override
   String get chatRecents => 'Zuletzt';
@@ -1412,16 +1479,16 @@ class AppLocalizationsDe extends AppLocalizations {
   String get chatTabActive => 'Chats';
 
   @override
-  String get chatTabArchived => 'Archived';
+  String get chatTabArchived => 'Archiviert';
 
   @override
-  String get homeFolderTitle => 'Choose folder';
+  String get homeFolderTitle => 'Ordner wählen';
 
   @override
-  String get homeFolderSelect => 'Select';
+  String get homeFolderSelect => 'Auswählen';
 
   @override
-  String get homeFolderDrives => 'Drives';
+  String get homeFolderDrives => 'Laufwerke';
 
   @override
   String get homeFolderComputer => 'Computer';
@@ -1430,10 +1497,10 @@ class AppLocalizationsDe extends AppLocalizations {
   String get homeFolderHome => 'Home';
 
   @override
-  String get homeFolderParent => 'Parent folder';
+  String get homeFolderParent => 'Übergeordneter Ordner';
 
   @override
-  String get homeFolderNoSubfolders => 'No subfolders';
+  String get homeFolderNoSubfolders => 'Keine Unterordner';
 
   @override
   String get chatArchivedTitle => 'Archivierte Chats';
@@ -1634,19 +1701,19 @@ class AppLocalizationsDe extends AppLocalizations {
   String get modelsOffLabel => 'aus';
 
   @override
-  String get modelsTest => 'Test';
+  String get modelsTest => 'Testen';
 
   @override
-  String get modelsSetDefault => 'Set default';
+  String get modelsSetDefault => 'Als Standard setzen';
 
   @override
   String modelsTestOk(String id) {
-    return 'Tested $id';
+    return '$id getestet';
   }
 
   @override
   String modelsDefaultSet(String id) {
-    return 'Default → $id';
+    return 'Standard → $id';
   }
 
   @override
@@ -1676,7 +1743,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get artifactsTooLarge =>
-      'This file is larger than the 8 MB in-app open limit. Ask the agent for a smaller export, or open it on the home machine.';
+      'Diese Datei ist größer als das 8-MB-In-App-Öffnungslimit. Bitten Sie den Agenten um einen kleineren Export oder öffnen Sie sie auf dem Heimcomputer.';
 
   @override
   String get artifactsRefresh => 'Aktualisieren';
@@ -1697,59 +1764,59 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get artifactsCopyLink => 'Copy signed link';
+  String get artifactsCopyLink => 'Signierten Link kopieren';
 
   @override
-  String get artifactsLinkCopied => 'Signed link copied';
+  String get artifactsLinkCopied => 'Signierter Link kopiert';
 
   @override
-  String get artifactsCopyLinkFailed => 'Could not copy link';
+  String get artifactsCopyLinkFailed => 'Link konnte nicht kopiert werden';
 
   @override
-  String get artifactsOpenInBrowser => 'Open in browser';
+  String get artifactsOpenInBrowser => 'Im Browser öffnen';
 
   @override
-  String get artifactsOpenInBrowserFailed => 'Could not open in browser';
+  String get artifactsOpenInBrowserFailed => 'Öffnen im Browser fehlgeschlagen';
 
   @override
-  String get filesParent => 'Parent';
+  String get filesParent => 'Übergeordnet';
 
   @override
-  String get filesRoots => 'Roots';
+  String get filesRoots => 'Stammverzeichnisse';
 
   @override
-  String get filesEmptyFolder => 'This folder is empty';
+  String get filesEmptyFolder => 'Dieser Ordner ist leer';
 
   @override
-  String get artifactsLoTitle => 'LibreOffice (home computer)';
+  String get artifactsLoTitle => 'LibreOffice (Heimcomputer)';
 
   @override
   String get artifactsLoWhy =>
-      'Print-ready Word, Excel, PowerPoint, and PDF exports run on your home computer (~1 GB, stays local). Without it, exports still work with a simpler layout. Documents are never sent to the cloud for conversion.';
+      'Druckfertige Word-, Excel-, PowerPoint- und PDF-Exporte laufen auf Ihrem Heimcomputer (~1 GB, bleibt lokal). Ohne LibreOffice funktionieren Exporte mit einfacherem Layout. Dokumente werden nie zur Konvertierung in die Cloud gesendet.';
 
   @override
-  String get artifactsLoReady => 'Ready';
+  String get artifactsLoReady => 'Bereit';
 
   @override
-  String get artifactsLoMissing => 'Not installed';
+  String get artifactsLoMissing => 'Nicht installiert';
 
   @override
-  String get artifactsLoDownloading => 'Downloading…';
+  String get artifactsLoDownloading => 'Wird heruntergeladen…';
 
   @override
-  String get artifactsLoFailed => 'Install failed';
+  String get artifactsLoFailed => 'Installation fehlgeschlagen';
 
   @override
-  String get artifactsLoInstall => 'Install on home computer';
+  String get artifactsLoInstall => 'Auf Heimcomputer installieren';
 
   @override
-  String get artifactsLoCancel => 'Cancel download';
+  String get artifactsLoCancel => 'Download abbrechen';
 
   @override
-  String get artifactsLoNotNow => 'Not now';
+  String get artifactsLoNotNow => 'Nicht jetzt';
 
   @override
-  String get artifactsLoRefresh => 'Refresh status';
+  String get artifactsLoRefresh => 'Status aktualisieren';
 
   @override
   String artifactsLoProgress(String received, String total) {
@@ -1757,61 +1824,62 @@ class AppLocalizationsDe extends AppLocalizations {
   }
 
   @override
-  String get artifactsLoHintCopied => 'Install hint copied';
+  String get artifactsLoHintCopied => 'Installationshinweis kopiert';
 
   @override
-  String get artifactsLoCopyHint => 'Copy manual install hint';
+  String get artifactsLoCopyHint => 'Manuellen Installationshinweis kopieren';
 
   @override
   String get artifactsLoInstallNote =>
-      'Managed install runs on the home daemon host — not on this phone.';
+      'Verwaltete Installation läuft auf dem Daemon-Host — nicht auf diesem Telefon.';
 
   @override
-  String get artifactsDataPreferTitle => 'Data paths (prefer in order)';
+  String get artifactsDataPreferTitle => 'Datenpfade (Reihenfolge bevorzugen)';
 
   @override
   String get artifactsDataPreferStrip =>
-      '1) Core table tools always on · 2) DuckDB for offline joins / SQL · 3) Owner MCP for cloud sheets / SaaS BI.';
+      '1) Kerntabellen-Tools immer an · 2) DuckDB für Offline-Joins / SQL · 3) Owner MCP für Cloud-Sheets / SaaS-BI.';
 
   @override
-  String get artifactsDataPreferJoinNeed => 'Needed for offline joins in chat.';
+  String get artifactsDataPreferJoinNeed =>
+      'Erforderlich für Offline-Joins im Chat.';
 
   @override
-  String get artifactsDataBrowseTables => 'Browse output/tables';
+  String get artifactsDataBrowseTables => 'output/tables durchsuchen';
 
   @override
-  String get artifactsDataBrowseCharts => 'Browse output/charts';
+  String get artifactsDataBrowseCharts => 'output/charts durchsuchen';
 
   @override
-  String get artifactsSqlTitle => 'Offline SQL (DuckDB)';
+  String get artifactsSqlTitle => 'Offline-SQL (DuckDB)';
 
   @override
   String get artifactsSqlWhy =>
-      'Install DuckDB on the home computer for offline SQL joins on jail files. Never automatic — you choose Install.';
+      'DuckDB auf dem Heimcomputer für Offline-SQL-Joins auf Jail-Dateien installieren. Niemals automatisch — Sie wählen Installieren.';
 
   @override
-  String get artifactsSqlReady => 'Ready';
+  String get artifactsSqlReady => 'Bereit';
 
   @override
-  String get artifactsSqlMissing => 'Not installed (optional)';
+  String get artifactsSqlMissing => 'Nicht installiert (optional)';
 
   @override
-  String get artifactsSqlDownloading => 'Downloading…';
+  String get artifactsSqlDownloading => 'Wird heruntergeladen…';
 
   @override
-  String get artifactsSqlFailed => 'Install failed';
+  String get artifactsSqlFailed => 'Installation fehlgeschlagen';
 
   @override
-  String get artifactsSqlCancelled => 'Download cancelled';
+  String get artifactsSqlCancelled => 'Download abgebrochen';
 
   @override
-  String get artifactsSqlInstall => 'Install DuckDB on home computer';
+  String get artifactsSqlInstall => 'DuckDB auf Heimcomputer installieren';
 
   @override
-  String get artifactsSqlCancel => 'Cancel download';
+  String get artifactsSqlCancel => 'Download abbrechen';
 
   @override
-  String get artifactsSqlRefresh => 'Refresh status';
+  String get artifactsSqlRefresh => 'Status aktualisieren';
 
   @override
   String artifactsSqlProgress(String received, String total) {
@@ -1820,47 +1888,47 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get artifactsSqlToolsReady =>
-      'sql_load / sql_query are available to the agent.';
+      'sql_load / sql_query stehen dem Agenten zur Verfügung.';
 
   @override
   String get artifactsSqlToolsAbsent =>
-      'sql_load / sql_query stay out of the agent catalogue until DuckDB is ready.';
+      'sql_load / sql_query bleiben bis DuckDB bereit ist aus dem Agenten-Katalog.';
 
   @override
   String get artifactsSqlInstallNote =>
-      'Managed install runs on the home daemon host — not on this phone.';
+      'Verwaltete Installation läuft auf dem Daemon-Host — nicht auf diesem Telefon.';
 
   @override
   String get chatDataAssistHint =>
-      'Spreadsheet attached — pick a next step (seeds the composer; writes still need Allow):';
+      'Tabelle angehängt — nächsten Schritt wählen (füllt den Editor; Schreiben erfordert weiter Allow):';
 
   @override
-  String get chatDataAssistClean => 'Clean & chart';
+  String get chatDataAssistClean => 'Bereinigen & Diagramm';
 
   @override
-  String get chatDataAssistAsk => 'Ask about this table';
+  String get chatDataAssistAsk => 'Zu dieser Tabelle fragen';
 
   @override
   String get chatDataAssistJoin => 'Join / SQL';
 
   @override
-  String get chatDataAssistInstallDuckdb => 'Install DuckDB…';
+  String get chatDataAssistInstallDuckdb => 'DuckDB installieren…';
 
   @override
   String get chatDataAssistCleanSeed =>
-      'Clean the attached spreadsheet with table_transform (normalize / filter / pipeline as needed), then chart_table, and show me the Open chips for the CSV and chart.';
+      'Bereinige die angehängte Tabelle mit table_transform (normalisieren / filtern / Pipeline nach Bedarf), dann chart_table, und zeige mir die Open-Chips für CSV und Diagramm.';
 
   @override
   String get chatDataAssistAskSeed =>
-      'What\'s in the attached spreadsheet? Summarize columns, row count, and a few sample rows.';
+      'Was steht in der angehängten Tabelle? Spalten, Zeilenanzahl und einige Beispielzeilen zusammenfassen.';
 
   @override
   String get chatDataAssistJoinSeed =>
-      'Load the attached spreadsheet with sql_load, then use sql_query to answer (join if I attach more tables). Show Open chips for any result CSV.';
+      'Lade die angehängte Tabelle mit sql_load, beantworte dann mit sql_query (Join, wenn ich weitere Tabellen anhänge). Open-Chips für jede Ergebnis-CSV anzeigen.';
 
   @override
   String get chatDataAssistNeedDuckdb =>
-      'DuckDB is not ready — Install under System → Files on the home computer.';
+      'DuckDB ist nicht bereit — unter System → Dateien auf dem Heimcomputer installieren.';
 
   @override
   String chatOpenFile(String name) {
@@ -1876,36 +1944,36 @@ class AppLocalizationsDe extends AppLocalizations {
   String get choiceCardConfirm => 'Bestätigen';
 
   @override
-  String get choiceCardOpen => 'Open';
+  String get choiceCardOpen => 'Öffnen';
 
   @override
-  String get choiceCardChooseFile => 'Choose file';
+  String get choiceCardChooseFile => 'Datei wählen';
 
   @override
-  String get choiceCardBrowseJail => 'Browse files';
+  String get choiceCardBrowseJail => 'Dateien durchsuchen';
 
   @override
   String get choiceCardBrowseUp => 'Up';
 
   @override
   String choiceCardFilesChosen(int n) {
-    return '$n files chosen';
+    return '$n Dateien gewählt';
   }
 
   @override
-  String get choiceCardNoFile => 'No file chosen';
+  String get choiceCardNoFile => 'Keine Datei gewählt';
 
   @override
-  String get choiceCardFileEmpty => 'That file is empty.';
+  String get choiceCardFileEmpty => 'Diese Datei ist leer.';
 
   @override
   String choiceCardFileTypeRefused(String name) {
-    return '$name is not an allowed form upload type.';
+    return '$name ist kein zulässiger Formular-Upload-Typ.';
   }
 
   @override
   String get choiceCardHandoffHint =>
-      'Opens in your browser or app so you can finish and pay there. Home will not enter card details.';
+      'Öffnet in Browser oder App, damit Sie dort abschließen und bezahlen können. Home gibt keine Kartendaten ein.';
 
   @override
   String get choiceCardPickOne => 'Bitte mindestens eine Option wählen.';
@@ -1955,7 +2023,8 @@ class AppLocalizationsDe extends AppLocalizations {
       'Abgebrochene oder abgelaufene Vorschläge und letzte Läufe.';
 
   @override
-  String get jobsHistoriesMovedHint => 'Not set and runs are under Histories';
+  String get jobsHistoriesMovedHint =>
+      'Nicht gesetzt; Läufe stehen unter Verläufe';
 
   @override
   String schedulesChatClosedAt(String when) {

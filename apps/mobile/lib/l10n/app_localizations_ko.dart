@@ -149,54 +149,54 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get shellCreateProfile => 'Create';
+  String get shellCreateProfile => '만들기';
 
   @override
-  String get shellProfileDisplayName => 'Display name';
+  String get shellProfileDisplayName => '표시 이름';
 
   @override
-  String get shellProfileIdOptional => 'Account id (optional)';
+  String get shellProfileIdOptional => '계정 id(선택)';
 
   @override
-  String get shellCancel => 'Cancel';
+  String get shellCancel => '취소';
 
   @override
-  String get shellCreate => 'Create';
+  String get shellCreate => '만들기';
 
   @override
-  String get shellProfileCreated => 'Profile created';
+  String get shellProfileCreated => '프로필이 생성됨';
 
   @override
   String shellProfileCreateFailed(String error) {
-    return 'Create failed: $error';
+    return '생성 실패: $error';
   }
 
   @override
   String get navChat => '채팅';
 
   @override
-  String get navHomeChat => 'Home';
+  String get navHomeChat => '홈';
 
   @override
   String get navSchedulesChat => '일정';
 
   @override
-  String get navSettings => 'Settings';
+  String get navSettings => '설정';
 
   @override
   String get navLlm => 'LLM';
 
   @override
-  String get navConnections => 'Connections';
+  String get navConnections => '연결';
 
   @override
-  String get navSkills => 'Skills';
+  String get navSkills => '스킬';
 
   @override
-  String get navSystem => 'System';
+  String get navSystem => '시스템';
 
   @override
-  String get navProfiles => 'Profiles';
+  String get navProfiles => '프로필';
 
   @override
   String get navApprovals => '승인';
@@ -212,158 +212,151 @@ class AppLocalizationsKo extends AppLocalizations {
       'Configure the home daemon from your phone. Some owner-only actions need a trusted device.';
 
   @override
-  String get settingsProfilesSubtitle =>
-      'Owner, workspace folders, tool policy';
+  String get settingsProfilesSubtitle => 'Owner, 작업 공간 폴더, 도구 정책';
 
   @override
-  String get settingsLlmSubtitle => 'Models, Local, Routing, Memory';
+  String get settingsLlmSubtitle => '모델, 로컬, 라우팅, 메모리';
 
   @override
   String get settingsConnectionsSubtitle =>
       'Pairing, Home Assistant, MQTT, Channels';
 
   @override
-  String get settingsSkillsSubtitle => 'Install and manage skill packs';
+  String get settingsSkillsSubtitle => '스킬 팩 설치 및 관리';
 
   @override
-  String get settingsWorkflowsSubtitle =>
-      'DAG workflows — draft, validate, run';
+  String get settingsWorkflowsSubtitle => 'DAG 워크플로 — 초안, 검증, 실행';
 
   @override
-  String get settingsSystemSubtitle => 'Profiles, Shared files, Health, Grants';
+  String get settingsSystemSubtitle => '프로필, 공유 파일, 상태, 권한';
 
   @override
   String get settingsNeedConnect => '연결하면 LLM, 연결, 스킬, 시스템을 설정할 수 있습니다.';
 
   @override
   String get profilesIntro =>
-      'Each person has a profile. The household Owner configures workspace folders and can transfer ownership.';
+      '사용자마다 프로필이 있습니다. 가정 Owner가 작업 공간 폴더를 설정하고 소유권을 이전할 수 있습니다.';
 
   @override
-  String get profilesMemberHint =>
-      'This device is not the household Owner — workspace is read-only here.';
+  String get profilesMemberHint => '이 기기는 가정 Owner가 아님 — 작업 공간은 여기서 읽기 전용입니다.';
 
   @override
-  String get profilesRefresh => 'Refresh';
+  String get profilesRefresh => '새로고침';
 
   @override
-  String get profilesAddTitle => 'Add profile';
+  String get profilesAddTitle => '프로필 추가';
 
   @override
   String get profilesOwnerBadge => 'Owner';
 
   @override
-  String get profilesActiveBadge => 'Active';
+  String get profilesActiveBadge => '활성';
 
   @override
-  String get profilesWorkspaceTitle => 'Workspace folders';
+  String get profilesWorkspaceTitle => '작업 공간 폴더';
 
   @override
   String get profilesWorkspaceHint =>
-      'Add host folders on the home machine (up to 16). The agent reaches them via workspace/<id>/… paths.';
+      '가정 PC의 호스트 폴더 추가(최대 16개). 에이전트는 workspace/<id>/… 경로로 접근합니다.';
 
   @override
-  String get profilesWorkspacePath => 'Host path';
+  String get profilesWorkspacePath => '호스트 경로';
 
   @override
-  String get profilesWorkspaceBrowse => 'Browse folders';
+  String get profilesWorkspaceBrowse => '폴더 탐색';
 
   @override
-  String get profilesWorkspaceBrowseHint => 'Tap to browse the home machine';
+  String get profilesWorkspaceBrowseHint => '탭하여 가정 PC 탐색';
 
   @override
-  String get profilesWorkspaceUnset => 'Not set (sandbox only)';
+  String get profilesWorkspaceUnset => '미설정(샌드박스만)';
 
   @override
-  String get profilesWorkspaceSet => 'Configured';
+  String get profilesWorkspaceSet => '구성됨';
 
   @override
-  String get profilesWorkspaceWholeMachine => 'Whole machine';
+  String get profilesWorkspaceWholeMachine => '전체 PC';
 
   @override
-  String get profilesWorkspaceRo => 'Read only';
+  String get profilesWorkspaceRo => '읽기 전용';
 
   @override
-  String get profilesWorkspaceRw => 'Read & write';
+  String get profilesWorkspaceRw => '읽기 및 쓰기';
 
   @override
-  String get profilesWorkspaceUseRoot => 'Add computer root';
+  String get profilesWorkspaceUseRoot => 'PC 루트 추가';
 
   @override
-  String get profilesWorkspaceClear => 'Clear all';
+  String get profilesWorkspaceClear => '모두 지우기';
 
   @override
-  String get profilesWorkspaceRemove => 'Remove';
+  String get profilesWorkspaceRemove => '제거';
 
   @override
-  String get profilesWorkspaceApply => 'Add';
+  String get profilesWorkspaceApply => '추가';
 
   @override
-  String get profilesWorkspaceEdit => 'Add folder';
+  String get profilesWorkspaceEdit => '폴더 추가';
 
   @override
-  String get profilesWorkspaceRootTitle => 'Allow whole-computer access?';
+  String get profilesWorkspaceRootTitle => '전체 PC 접근을 허용할까요?';
 
   @override
   String get profilesWorkspaceRootBody =>
-      'This lets the agent read (and write, if selected) files under the computer root via workspace/… — including from this phone.';
+      '에이전트가 workspace/… 경로로 PC 루트 아래 파일을 읽고(선택 시 쓰기) 할 수 있습니다 — 이 휴대폰에서도.';
 
   @override
-  String get profilesWorkspaceRootOk => 'Allow';
+  String get profilesWorkspaceRootOk => '허용';
 
   @override
-  String get profilesWorkspaceMemberNote =>
-      'Only the household Owner can change workspace folders.';
+  String get profilesWorkspaceMemberNote => '작업 공간 폴더는 가정 Owner만 변경할 수 있습니다.';
 
   @override
-  String get profilesWorkspaceCrossTitle =>
-      'Add workspace folder for another profile?';
+  String get profilesWorkspaceCrossTitle => '다른 프로필의 작업 공간 폴더를 추가할까요?';
 
   @override
   String profilesWorkspaceCrossBody(String name) {
-    return 'This adds a host folder for $name. Continue only if you intend to configure their workspace.';
+    return '$name의 호스트 폴더를 추가합니다. 해당 작업 공간을 구성하려는 경우에만 계속하세요.';
   }
 
   @override
-  String get profilesWorkspaceDenied => 'Not visible on this device';
+  String get profilesWorkspaceDenied => '이 기기에서 보이지 않음';
 
   @override
-  String get profilesWorkspaceInactive =>
-      'Configured but inactive (filesystem-root only applies to Owner)';
+  String get profilesWorkspaceInactive => '구성됨이나 비활성(파일시스템 루트는 Owner에게만 적용)';
 
   @override
-  String get profilesRename => 'Rename';
+  String get profilesRename => '이름 변경';
 
   @override
-  String get profilesRenameTitle => 'Rename profile';
+  String get profilesRenameTitle => '프로필 이름 변경';
 
   @override
-  String get profilesRenameSave => 'Save';
+  String get profilesRenameSave => '저장';
 
   @override
-  String get profilesTimeZoneUnset =>
-      'Time zone: not set (schedules use host default)';
+  String get profilesTimeZoneUnset => '시간대: 미설정(일정은 호스트 기본값 사용)';
 
   @override
   String profilesTimeZoneValue(String tz) {
-    return 'Time zone: $tz';
+    return '시간대: $tz';
   }
 
   @override
-  String get profilesTimeZoneEdit => 'Time zone';
+  String get profilesTimeZoneEdit => '시간대';
 
   @override
-  String get profilesTimeZoneTitle => 'Account time zone';
+  String get profilesTimeZoneTitle => '계정 시간대';
 
   @override
-  String get profilesTimeZoneHint => 'IANA name, e.g. Asia/Shanghai';
+  String get profilesTimeZoneHint => 'IANA 이름, 예: Asia/Seoul';
 
   @override
-  String get profilesTimeZoneSave => 'Save';
+  String get profilesTimeZoneSave => '저장';
 
   @override
   String profilesTimeZoneDone(String tz) {
-    return 'Time zone set to $tz';
+    return '시간대가 $tz(으)로 설정됨';
   }
 
   @override
@@ -380,111 +373,108 @@ class AppLocalizationsKo extends AppLocalizations {
   String get profilesShareLocationOn => '이 기기에서 위치 공유가 켜졌습니다';
 
   @override
-  String get profilesDelete => 'Delete';
+  String get profilesDelete => '삭제';
 
   @override
-  String get profilesDeleteTitle => 'Delete profile?';
+  String get profilesDeleteTitle => '프로필을 삭제할까요?';
 
   @override
   String profilesDeleteBody(String name) {
-    return 'Delete $name? Their sandbox and workspace config are removed. This cannot be undone.';
+    return '$name을(를) 삭제할까요? 샌드박스와 작업 공간 구성이 제거됩니다. 되돌릴 수 없습니다.';
   }
 
   @override
-  String get profilesDeleteConfirm => 'Delete';
+  String get profilesDeleteConfirm => '삭제';
 
   @override
   String profilesDeleteDone(String name) {
-    return 'Deleted $name';
+    return '$name 삭제됨';
   }
 
   @override
   String get profilesDeleteOwnerBlocked =>
-      'Cannot delete the household Owner. Transfer ownership first.';
+      '가정 Owner는 삭제할 수 없습니다. 먼저 소유권을 이전하세요.';
 
   @override
-  String get profilesTransferTitle => 'Transfer household Owner?';
+  String get profilesTransferTitle => '가정 Owner를 이전할까요?';
 
   @override
   String profilesTransferBody(String name) {
-    return 'Make $name the household Owner. They will control pairing, bindings, and household Settings.';
+    return '$name을(를) 가정 Owner로 지정합니다. 페어링, 바인딩, 가정 설정을 관리합니다.';
   }
 
   @override
-  String get profilesTransferConfirm => 'Transfer';
+  String get profilesTransferConfirm => '이전';
 
   @override
   String profilesTransferDone(String name) {
-    return 'Owner is now $name';
+    return 'Owner가 이제 $name입니다';
   }
 
   @override
   String profilesTransferFailed(String error) {
-    return 'Transfer failed: $error';
+    return '이전 실패: $error';
   }
 
   @override
   String profilesTransferTo(String name) {
-    return 'Transfer to $name';
+    return '$name(으)로 이전';
   }
 
   @override
-  String get profilesToolPolicy => 'Tool policy';
+  String get profilesToolPolicy => '도구 정책';
 
   @override
-  String get profilesToolPolicyStandard => 'Standard';
+  String get profilesToolPolicyStandard => '표준';
 
   @override
-  String get profilesToolPolicyRestricted => 'Restricted';
+  String get profilesToolPolicyRestricted => '제한';
 
   @override
-  String get connMintPairing => 'Mint pairing code';
+  String get connMintPairing => '페어링 코드 발급';
 
   @override
-  String get connMintOk => 'Pairing code minted';
+  String get connMintOk => '페어링 코드 발급됨';
 
   @override
-  String get connMintUriHint => 'Scan or paste this URI on the new device.';
+  String get connMintUriHint => '새 기기에서 이 URI를 스캔하거나 붙여넣으세요.';
 
   @override
-  String get connPairingOwnerOnly =>
-      'Mint / revoke pairing requires the household Owner device.';
+  String get connPairingOwnerOnly => '페어링 코드 발급/취소는 가정 Owner 기기가 필요합니다.';
 
   @override
-  String get connRevokeDevice => 'Revoke';
+  String get connRevokeDevice => '취소';
 
   @override
-  String get connForgetDevice => 'Forget';
+  String get connForgetDevice => '삭제';
 
   @override
   String connRevokeConfirm(String id) {
-    return 'Revoke device $id? It will need to pair again.';
+    return '기기 $id을(를) 취소할까요? 다시 페어링해야 합니다.';
   }
 
   @override
   String connForgetConfirm(String id) {
-    return 'Forget device $id? The pairing record is removed permanently.';
+    return '기기 $id을(를) 잊을까요? 페어링 기록이 영구 삭제됩니다.';
   }
 
   @override
-  String get connOwnerWriteOnly =>
-      'Only the household Owner device can change this setting.';
+  String get connOwnerWriteOnly => '이 설정은 가정 Owner 기기만 변경할 수 있습니다.';
 
   @override
-  String get connAccountsHint => 'Household profiles';
+  String get connAccountsHint => '가정 프로필';
 
   @override
-  String get homeChatSessionTitle => 'Phone home chat';
+  String get homeChatSessionTitle => '휴대폰 홈 채팅';
 
   @override
-  String get homeChatEmptyTitle => 'Talk to your home';
+  String get homeChatEmptyTitle => '집과 대화';
 
   @override
-  String get homeChatEmptyHint =>
-      'Smart-home tools stay available here. Approvals still gate actuations.';
+  String get homeChatEmptyHint => '스마트홈 도구는 여기서 사용 가능합니다. 실행은 여전히 승인이 필요합니다.';
 
   @override
-  String get homeChatHint => 'Ask about lights, locks, climate…';
+  String get homeChatHint => '조명, 잠금, 온도 등에 대해 물어보세요…';
 
   @override
   String get schedulesChatSessionTitle => '일정';
@@ -499,131 +489,127 @@ class AppLocalizationsKo extends AppLocalizations {
   String get schedulesChatHint => '알려 줘…';
 
   @override
-  String get chatAttach => 'Attach';
+  String get chatAttach => '첨부';
 
   @override
   String chatAttachTooMany(int n) {
-    return 'At most $n files';
+    return '파일은 최대 $n개';
   }
 
   @override
   String chatAttachTooLarge(String name, String mb) {
-    return '$name exceeds $mb MB';
+    return '$name이(가) $mb MB를 초과함';
   }
 
   @override
   String chatAttachAdded(int n) {
-    return 'Attached $n file(s)';
+    return '파일 $n개 첨부됨';
   }
 
   @override
-  String get chatAttachedOnly => '(attachment)';
+  String get chatAttachedOnly => '(첨부)';
 
   @override
-  String get chatVoiceStart => 'Dictate';
+  String get chatVoiceStart => '받아쓰기';
 
   @override
-  String get chatVoiceStop => 'Stop dictation';
+  String get chatVoiceStop => '받아쓰기 중지';
 
   @override
-  String get chatVoiceUnsupported =>
-      'Speech recognition is not available on this device.';
+  String get chatVoiceUnsupported => '이 기기에서는 음성 인식을 사용할 수 없습니다.';
 
   @override
-  String get llmTabModels => 'Models';
+  String get llmTabModels => '모델';
 
   @override
-  String get llmTabLocal => 'Local';
+  String get llmTabLocal => '로컬';
 
   @override
-  String get llmTabRouting => 'Routing';
+  String get llmTabRouting => '라우팅';
 
   @override
-  String get llmTabMemory => 'Memory';
+  String get llmTabMemory => '메모리';
 
   @override
   String get llmLocalDownloadHint =>
-      'Search Hugging Face and download GGUF files onto the home machine.';
+      'Hugging Face에서 검색해 GGUF 파일을 가정 PC에 다운로드합니다.';
 
   @override
-  String get llmHfSearchHint => 'Search models…';
+  String get llmHfSearchHint => '모델 검색…';
 
   @override
-  String get llmSearch => 'Search';
+  String get llmSearch => '검색';
 
   @override
-  String get llmCancelDownload => 'Cancel';
+  String get llmCancelDownload => '취소';
 
   @override
-  String get llmResumeDownload => 'Resume';
+  String get llmResumeDownload => '재개';
 
   @override
   String llmGgufFiles(String repo) {
-    return 'GGUF in $repo';
+    return '$repo의 GGUF';
   }
 
   @override
-  String get llmRoutingHint => 'Choose where turns may run for this profile.';
+  String get llmRoutingHint => '이 프로필에서 턴이 실행될 수 있는 위치를 선택하세요.';
 
   @override
-  String get llmFilterAny => 'Smart / any';
+  String get llmFilterAny => '스마트 / 모두';
 
   @override
-  String get llmFilterCloud => 'Cloud only';
+  String get llmFilterCloud => '클라우드만';
 
   @override
-  String get llmFilterLocal => 'Local only';
+  String get llmFilterLocal => '로컬만';
 
   @override
-  String get llmAutoSwitch => 'Auto model switch';
+  String get llmAutoSwitch => '자동 모델 전환';
 
   @override
-  String get privacyModeTitle => 'Privacy Mode';
+  String get privacyModeTitle => '프라이버시 모드';
 
   @override
-  String get privacyModeHint =>
-      'Forces local inference and blocks cloud tools. Owner-scope.';
+  String get privacyModeHint => '로컬 추론 강제, 클라우드 도구 차단. Owner 범위.';
 
   @override
-  String get privacyModeEnabled => 'Enable Privacy Mode';
+  String get privacyModeEnabled => '프라이버시 모드 사용';
 
   @override
-  String get privacyModeBlockEgress =>
-      'Also block smart-home actuation & event-source notify';
+  String get privacyModeBlockEgress => '스마트홈 실행 및 이벤트 소스 알림도 차단';
 
   @override
-  String get privacyModeOwnerOnly =>
-      'Privacy Mode is Owner-only on this device.';
+  String get privacyModeOwnerOnly => '프라이버시 모드는 이 기기에서 Owner 전용입니다.';
 
   @override
-  String get llmCompactNow => 'Compact memory now';
+  String get llmCompactNow => '지금 메모리 압축';
 
   @override
-  String get llmFlushEnabled => 'Flush standing notes';
+  String get llmFlushEnabled => '상시 노트 플러시';
 
   @override
-  String get llmReviewEnabled => 'Review before learn write';
+  String get llmReviewEnabled => '학습 쓰기 전 검토';
 
   @override
-  String get llmInjectMode => 'Inject budget mode';
+  String get llmInjectMode => '주입 예산 모드';
 
   @override
-  String get llmInjectAuto => 'Auto';
+  String get llmInjectAuto => '자동';
 
   @override
-  String get llmInjectBaseline => 'Baseline';
+  String get llmInjectBaseline => '기준';
 
   @override
-  String get llmInjectCustom => 'Custom';
+  String get llmInjectCustom => '사용자 지정';
 
   @override
-  String get llmPendingLearns => 'Pending learns';
+  String get llmPendingLearns => '대기 중인 학습';
 
   @override
-  String get llmNoPendingLearns => 'No pending learns.';
+  String get llmNoPendingLearns => '대기 중인 학습 없음.';
 
   @override
-  String get connTabPairing => 'Pairing';
+  String get connTabPairing => '페어링';
 
   @override
   String get connTabHa => 'Home Assistant';
@@ -632,210 +618,259 @@ class AppLocalizationsKo extends AppLocalizations {
   String get connTabMqtt => 'MQTT';
 
   @override
-  String get connTabChannels => 'Channels';
+  String get connTabChannels => '채널';
 
   @override
-  String get connTabWebSearch => 'Web search';
+  String get connTabWebSearch => '웹 검색';
 
   @override
   String get connTabMcp => 'MCP';
 
   @override
-  String get connTabBrowser => 'Browser';
+  String get connTabBrowser => '브라우저';
+
+  @override
+  String get mcpLede =>
+      '원하는 MCP 서버를 추가하세요. 사용하기 전에 연결을 테스트하세요. Stdio 명령은 데몬 호스트 사용자로 실행됩니다. 도구 호출은 여전히 승인이 필요합니다.';
+
+  @override
+  String get mcpTest => '테스트';
+
+  @override
+  String get mcpAddServer => '서버 추가';
+
+  @override
+  String get mcpSave => '저장';
+
+  @override
+  String get mcpReady => '준비됨';
+
+  @override
+  String get mcpNotTested => '미테스트';
+
+  @override
+  String mcpServerSubtitle(String transport, String status, int count) {
+    return '$transport · $status · 도구 $count개';
+  }
+
+  @override
+  String mcpTestOk(int count) {
+    return '성공 — 도구 $count개. 준비되면 사용하세요.';
+  }
+
+  @override
+  String mcpTestFailed(String error) {
+    return '실패: $error';
+  }
+
+  @override
+  String get mcpLabel => '레이블';
+
+  @override
+  String get mcpCommand => '명령';
+
+  @override
+  String get mcpArgs => '인수(공백 구분, 선택)';
+
+  @override
+  String get mcpUrl => 'URL';
+
+  @override
+  String get mcpAuthToken => '인증 토큰(선택)';
+
+  @override
+  String get mcpEnv => '환경 변수(줄마다 KEY=value, 선택)';
 
   @override
   String get browserControlLede =>
-      'Control a managed browser on the home computer (Auto prefers Obscura, else Chromium), or attach personal Chrome / remote CDP. Off by default.';
+      '가정 PC의 관리 브라우저(Auto는 Obscura 우선, 없으면 Chromium)를 제어하거나 개인 Chrome / 원격 CDP를 연결합니다. 기본 꺼짐.';
 
   @override
   String get browserControlDaemonHostNote =>
-      'Browser sessions run on the home computer. Settings here sync with desktop Connections → Browser.';
+      '브라우저 세션은 가정 PC에서 실행됩니다. 여기 설정은 데스크톱 연결 → 브라우저와 동기화됩니다.';
 
   @override
-  String get browserControlEnabled => 'Enable browser tool';
+  String get browserControlEnabled => '브라우저 도구 사용';
 
   @override
   String get browserControlUnattended => 'Allow for schedules';
 
   @override
-  String get browserControlReady => 'Ready';
+  String get browserControlReady => '준비됨';
 
   @override
-  String get browserControlNotReady => 'Not ready';
+  String get browserControlNotReady => '준비 안 됨';
 
   @override
-  String get browserControlSave => 'Save';
+  String get browserControlSave => '저장';
 
   @override
-  String get browserControlSaved => 'Browser settings saved.';
+  String get browserControlSaved => '브라우저 설정이 저장됨.';
 
   @override
-  String get browserControlSaveFailed => 'Could not save browser settings.';
+  String get browserControlSaveFailed => '브라우저 설정을 저장할 수 없습니다.';
 
   @override
-  String get browserControlDefaultProfile => 'Default profile';
+  String get browserControlDefaultProfile => '기본 프로필';
 
   @override
-  String get browserControlProfileManaged => 'Managed (isolated)';
+  String get browserControlProfileManaged => '관리형(격리)';
 
   @override
-  String get browserControlProfilePersonal => 'Personal Chrome';
+  String get browserControlProfilePersonal => '개인 Chrome';
 
   @override
-  String get browserControlProfileRemote => 'Remote CDP';
+  String get browserControlProfileRemote => '원격 CDP';
 
   @override
   String get browserControlElevatedWarn =>
-      'Personal/remote can act as you on logged-in sites. Owner only; never schedules.';
+      '개인/원격은 로그인된 사이트에서 사용자처럼 동작할 수 있습니다. Owner만; 일정에 사용 안 함.';
 
   @override
-  String get browserControlAcknowledge => 'I understand elevated browser risk';
+  String get browserControlAcknowledge => '브라우저 위험을 이해했습니다';
 
   @override
-  String get browserControlPersonalEnabled => 'Enable personal Chrome';
+  String get browserControlPersonalEnabled => '개인 Chrome 사용';
 
   @override
-  String get browserControlPersonalCdp => 'Personal CDP (loopback)';
+  String get browserControlPersonalCdp => '개인 CDP(루프백)';
 
   @override
-  String get browserControlPersonalReady => 'Personal CDP up';
+  String get browserControlPersonalReady => '개인 CDP 연결됨';
 
   @override
-  String get browserControlPersonalNotReady => 'Personal CDP down';
+  String get browserControlPersonalNotReady => '개인 CDP 끊김';
 
   @override
-  String get browserControlRemoteEnabled => 'Enable remote CDP';
+  String get browserControlRemoteEnabled => '원격 CDP 사용';
 
   @override
-  String get browserControlRemoteCdp => 'Remote CDP URL';
+  String get browserControlRemoteCdp => '원격 CDP URL';
 
   @override
-  String get browserControlRemoteToken => 'Remote CDP token';
+  String get browserControlRemoteToken => '원격 CDP 토큰';
 
   @override
-  String get browserControlTokenSet => 'set';
+  String get browserControlTokenSet => '설정됨';
 
   @override
-  String get browserControlTokenPlaceholder => 'Leave blank to keep';
+  String get browserControlTokenPlaceholder => '비우면 기존 유지';
 
   @override
-  String get browserControlRemoteReady => 'Remote CDP up';
+  String get browserControlRemoteReady => '원격 CDP 연결됨';
 
   @override
-  String get browserControlRemoteNotReady => 'Remote CDP down';
+  String get browserControlRemoteNotReady => '원격 CDP 끊김';
 
   @override
-  String get browserControlOwnerOnly =>
-      'Only the household Owner device can change browser control settings.';
+  String get browserControlOwnerOnly => '브라우저 제어 설정은 가정 Owner 기기만 변경할 수 있습니다.';
 
   @override
   String get browserControlAcknowledged =>
-      'Elevated risk acknowledged. Disable personal/remote to stop using them.';
+      '고위험 사용을 확인했습니다. 개인/원격을 끄면 사용을 중단합니다.';
 
   @override
   String get webSearchLede =>
-      'Search the public web from chat. Default: DuckDuckGo, then Bing/Google/Baidu in the browser if needed (no API key). Brave and Tavily need an Owner API key.';
+      '채팅에서 공개 웹 검색. 기본: DuckDuckGo, 필요 시 브라우저에서 Bing/Google/Baidu(API 키 없음). Brave와 Tavily는 Owner API 키 필요.';
 
   @override
-  String get webSearchEnabled => 'Enable web_search';
+  String get webSearchEnabled => 'web_search 사용';
 
   @override
-  String get webSearchProvider => 'Provider';
+  String get webSearchProvider => '제공자';
 
   @override
-  String get webSearchProviderBrowser => 'Browser (Bing / Google / Baidu)';
+  String get webSearchProviderBrowser => '브라우저(Bing / Google / Baidu)';
 
   @override
   String get webSearchBrowserPrimaryHint =>
-      'Searches Bing/Google/Baidu directly in the daemon host headless engine (Obscura if ready, else Chromium). Attended chats ask once before each search.';
+      '데몬 호스트 헤드리스 엔진에서 Bing/Google/Baidu 직접 검색(Obscura 준비 시 Obscura, 아니면 Chromium). 참석 채팅은 검색마다 한 번 확인합니다.';
 
   @override
   String get webSearchDaemonHostNote =>
-      'Engines and dig run on the home computer that hosts EnvoyHome. This phone only views and (Owner) edits the shared settings.';
+      '엔진과 분석은 EnvoyHome을 호스팅하는 가정 PC에서 실행됩니다. 이 휴대폰은 보기 및(Owner) 공유 설정 편집만 합니다.';
 
   @override
-  String get webSearchEffectiveUnresolved => 'not ready yet';
+  String get webSearchEffectiveUnresolved => '아직 준비 안 됨';
 
   @override
-  String get webSearchApiKey => 'API key';
+  String get webSearchApiKey => 'API 키';
 
   @override
-  String get webSearchApiKeyHint => 'Leave blank to keep the current key';
+  String get webSearchApiKeyHint => '비우면 현재 키 유지';
 
   @override
-  String get webSearchReady => 'Ready';
+  String get webSearchReady => '준비됨';
 
   @override
-  String get webSearchNotReady => 'Not ready';
+  String get webSearchNotReady => '준비 안 됨';
 
   @override
-  String get webSearchSave => 'Save';
+  String get webSearchSave => '저장';
 
   @override
-  String get webSearchSaved => 'Web search settings saved.';
+  String get webSearchSaved => '웹 검색 설정이 저장됨.';
 
   @override
-  String get webSearchSaveFailed => 'Could not save web search settings.';
+  String get webSearchSaveFailed => '웹 검색 설정을 저장할 수 없습니다.';
 
   @override
-  String get webSearchOwnerOnly =>
-      'Only the Household Owner device can change web search.';
+  String get webSearchOwnerOnly => '웹 검색은 가정 Owner 기기만 변경할 수 있습니다.';
 
   @override
   String get webSearchBrowserFallback =>
-      'Browser fallback (Bing/Google/Baidu when API/DDG fails or is unset)';
+      '브라우저 대체(API/DDG 실패 또는 미설정 시 Bing/Google/Baidu)';
 
   @override
   String get webSearchBrowserFallbackHint =>
-      'On by default for zero-config search. Attended chats ask before the browser leg. SERP pages may CAPTCHA or block.';
+      '기본 켜짐 — 설정 없이 검색. 참석 채팅은 브라우저 단계 전 확인. SERP 페이지는 CAPTCHA나 차단될 수 있음.';
 
   @override
-  String get webSearchResearchEnabled =>
-      'Web research (search then dig top pages)';
+  String get webSearchResearchEnabled => '웹 리서치(검색 후 상위 페이지 분석)';
 
   @override
   String get webSearchResearchHint =>
-      'Off by default. Enables web_research: dig into top results and return an organized brief plus links.';
+      '기본 꺼짐. web_research: 상위 결과 분석 후 요약과 링크 반환.';
 
   @override
-  String get webSearchDigDepth => 'Dig depth (1–10 pages)';
+  String get webSearchDigDepth => '분석 깊이(1–10페이지)';
 
   @override
-  String get webSearchExtractBackend => 'Page extract backend';
+  String get webSearchExtractBackend => '페이지 추출 백엔드';
 
   @override
   String get webSearchExtractBackendAuto =>
-      'Auto (Obscura if ready, else HTTP fetch)';
+      '자동(Obscura 준비 시 Obscura, 아니면 HTTP fetch)';
 
   @override
   String get webSearchExtractBackendFetch => 'HTTP fetch';
 
   @override
-  String get webSearchExtractBackendObscura => 'Obscura (JS-rendered Markdown)';
+  String get webSearchExtractBackendObscura => 'Obscura(JS 렌더링 Markdown)';
 
   @override
   String get webSearchExtractBackendHint =>
-      'Auto prefers Obscura when installed on the daemon host, otherwise plain HTTP fetch.';
+      '자동은 데몬 호스트에 Obscura가 있으면 우선, 없으면 일반 HTTP fetch.';
 
   @override
-  String get webSearchEffectiveExtract => 'Effective dig backend now';
+  String get webSearchEffectiveExtract => '현재 적용 분석 백엔드';
 
   @override
-  String get webSearchObscuraReady => 'Obscura ready on daemon host';
+  String get webSearchObscuraReady => '데몬 호스트에서 Obscura 준비됨';
 
   @override
-  String get webSearchObscuraMissing => 'Obscura not installed on daemon host';
+  String get webSearchObscuraMissing => '데몬 호스트에 Obscura 미설치';
 
   @override
   String get webSearchObscuraInstallHintNote =>
-      'Desktop builds ship Obscura (or the daemon auto-installs on first boot). On the home computer that runs EnvoyHome (not this phone), override with ENVOYHOME_OBSCURA / PATH if needed, then reopen Settings.';
+      '데스크톱 빌드는 Obscura 포함(또는 데몬이 첫 부팅에 자동 설치). EnvoyHome을 실행하는 가정 PC에서(이 휴대폰 아님) 필요 시 ENVOYHOME_OBSCURA / PATH로 지정 후 설정을 다시 여세요.';
 
   @override
-  String get webSearchSerpBrowserEngine => 'Browser SERP engine';
+  String get webSearchSerpBrowserEngine => '브라우저 SERP 엔진';
 
   @override
   String get webSearchSerpBrowserEngineAuto =>
-      'Auto (Obscura if ready, else Chromium)';
+      '자동(Obscura 준비 시 Obscura, 아니면 Chromium)';
 
   @override
   String get webSearchSerpBrowserEngineChromium => 'Chromium';
@@ -845,17 +880,17 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get webSearchSerpBrowserEngineHint =>
-      'Auto prefers Obscura for Bing/Google/Baidu, then Playwright Chromium.';
+      '자동은 Bing/Google/Baidu에 Obscura 우선, 이어 Playwright Chromium.';
 
   @override
-  String get webSearchEffectiveSerp => 'Effective SERP engine now';
+  String get webSearchEffectiveSerp => '현재 적용 SERP 엔진';
 
   @override
-  String get browserControlManagedEngine => 'Managed browser engine';
+  String get browserControlManagedEngine => '관리 브라우저 엔진';
 
   @override
   String get browserControlManagedEngineAuto =>
-      'Auto (Obscura if ready, else Chromium)';
+      '자동(Obscura 준비 시 Obscura, 아니면 Chromium)';
 
   @override
   String get browserControlManagedEngineChromium => 'Chromium';
@@ -865,22 +900,21 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get browserControlManagedEngineHint =>
-      'Auto prefers Obscura for managed browser. Personal/remote always use real Chrome CDP.';
+      '자동은 관리 브라우저에 Obscura 우선. 개인/원격은 항상 실제 Chrome CDP.';
 
   @override
-  String get browserControlEffectiveManaged => 'Effective managed engine now';
+  String get browserControlEffectiveManaged => '현재 적용 관리 엔진';
 
   @override
-  String get webSearchEngines =>
-      'Search engines (order: Bing → Google → Baidu)';
+  String get webSearchEngines => '검색 엔진(순서: Bing → Google → Baidu)';
 
   @override
   String get webSearchEnginesHint =>
-      'When browser fallback runs, try checked engines in this order until one returns results.';
+      '브라우저 대체 시 체크된 엔진을 이 순서로 시도해 결과가 나올 때까지 반복합니다.';
 
   @override
   String get webSearchEnginesRequired =>
-      'Pick at least one of Bing, Google, or Baidu for browser fallback.';
+      '브라우저 대체를 위해 Bing, Google, Baidu 중 하나 이상 선택하세요.';
 
   @override
   String get webSearchEngineBing => 'Bing';
@@ -892,198 +926,191 @@ class AppLocalizationsKo extends AppLocalizations {
   String get webSearchEngineBaidu => 'Baidu';
 
   @override
-  String get webSearchBrowserReady =>
-      'Playwright Chromium ready on daemon host';
+  String get webSearchBrowserReady => '데몬 호스트에서 Playwright Chromium 준비됨';
 
   @override
-  String get webSearchBrowserMissing =>
-      'Playwright Chromium not installed on daemon host';
+  String get webSearchBrowserMissing => '데몬 호스트에 Playwright Chromium 미설치';
 
   @override
   String get webSearchInstallHintNote =>
-      'Playwright is already part of the daemon. Download Chromium on the home computer that runs EnvoyHome (not this phone), then reopen Settings; restart the daemon if status stays missing.';
+      'Playwright는 데몬에 포함됩니다. EnvoyHome을 실행하는 가정 PC에서 Chromium을 다운로드한 뒤(이 휴대폰 아님) 설정을 다시 여세요. 상태가 계속 없으면 데몬을 재시작하세요.';
 
   @override
-  String get webSearchCopyHint => 'Copy install command';
+  String get webSearchCopyHint => '설치 명령 복사';
 
   @override
-  String get webSearchUnattendedBrowser =>
-      'Allow browser fallback for schedules';
+  String get webSearchUnattendedBrowser => '일정에서 브라우저 대체 허용';
 
   @override
   String get connPairingHint =>
-      'Household Owner devices can mint and revoke pairing here. Members see status only.';
+      '가정 Owner 기기가 여기서 페어링 코드를 발급·취소할 수 있습니다. 구성원은 상태만 볼 수 있습니다.';
 
   @override
-  String get connNoDevices => 'No paired devices listed.';
+  String get connNoDevices => '페어링된 기기가 없습니다.';
 
   @override
-  String get connEnabled => 'Enabled';
+  String get connEnabled => '사용';
 
   @override
-  String get connDisabled => 'Disabled';
+  String get connDisabled => '사용 안 함';
 
   @override
-  String get connReady => 'Ready';
+  String get connReady => '준비됨';
 
   @override
-  String get connHealthy => 'Healthy';
+  String get connHealthy => '정상';
 
   @override
-  String get connUnhealthy => 'Unhealthy';
+  String get connUnhealthy => '비정상';
 
   @override
-  String get connHaUrl => 'HA base URL';
+  String get connHaUrl => 'HA 기본 URL';
 
   @override
-  String get connHaToken => 'Access token';
+  String get connHaToken => '액세스 토큰';
 
   @override
-  String get connMqttUrl => 'Broker URL';
+  String get connMqttUrl => '브로커 URL';
 
   @override
-  String get connMqttPassword => 'Password';
+  String get connMqttPassword => '비밀번호';
 
   @override
-  String get connSaveEnable => 'Save & enable';
+  String get connSaveEnable => '저장 및 사용';
 
   @override
-  String get connBindTitle => 'Object bindings';
+  String get connBindTitle => '객체 바인딩';
 
   @override
   String connBoundTo(String id) {
-    return 'Bound to $id';
+    return '$id에 바인딩됨';
   }
 
   @override
-  String get connUnbound => 'Unbound';
+  String get connUnbound => '바인딩 해제';
 
   @override
-  String get connChannelsHint =>
-      'Paste a bot token and enable. Prefer desktop for first-time setup.';
+  String get connChannelsHint => '봇 토큰을 붙여넣고 사용. 첫 설정은 데스크톱을 권장합니다.';
 
   @override
-  String get connBotToken => 'Bot token';
+  String get connBotToken => '봇 토큰';
 
   @override
-  String get connDisable => 'Disable';
+  String get connDisable => '사용 안 함';
 
   @override
-  String get connSenderBinds => 'Sender → profile';
+  String get connSenderBinds => '발신자 → 프로필';
 
   @override
-  String get connSenderBindsHint =>
-      'Link an IM sender id to the active profile.';
+  String get connSenderBindsHint => 'IM 발신자 id를 활성 프로필에 연결합니다.';
 
   @override
-  String get connBindChannel => 'Channel';
+  String get connBindChannel => '채널';
 
   @override
-  String get connChannelAccount => 'Channel account';
+  String get connChannelAccount => '채널 계정';
 
   @override
-  String get connSenderId => 'Sender id';
+  String get connSenderId => '발신자 id';
 
   @override
-  String get connBindSender => 'Bind sender';
+  String get connBindSender => '발신자 바인딩';
 
   @override
-  String get skillsTabSkills => 'Skills';
+  String get skillsTabSkills => '스킬';
 
   @override
-  String get skillsVerify => 'Verify';
+  String get skillsVerify => '검증';
 
   @override
-  String get skillsVerified => 'Skill verified';
+  String get skillsVerified => '스킬 검증됨';
 
   @override
-  String get skillsTabWorkflows => 'Workflows';
+  String get skillsTabWorkflows => '워크플로';
 
   @override
-  String get skillsTabSchedules => 'Schedules';
+  String get skillsTabSchedules => '일정';
 
   @override
   String get skillsTabScenes => '장면';
 
   @override
-  String get schedulesTabJobs => 'Jobs';
+  String get schedulesTabJobs => '작업';
 
   @override
-  String get scenesHint =>
-      'When → do household automations (household rules). Presence templates need Privacy Mode.';
+  String get scenesHint => 'When → 실행 가정 자동화(가정 규칙). 재실 템플릿은 프라이버시 모드 필요.';
 
   @override
-  String get scenesWhenPresence => 'Presence (no cron — sensor trigger)';
+  String get scenesWhenPresence => '재실(cron 없음 — 센서 트리거)';
 
   @override
-  String get scenesNone => 'No scenes yet.';
+  String get scenesNone => '장면이 아직 없습니다.';
 
   @override
-  String get scenesAddMorning => 'Add Good morning';
+  String get scenesAddMorning => '좋은 아침 추가';
 
   @override
-  String get scenesPrivacyRequired =>
-      'Enable Privacy Mode (LLM → Routing) before presence scenes.';
+  String get scenesPrivacyRequired => '재실 장면 전에 프라이버시 모드 사용(LLM → 라우팅).';
 
   @override
-  String get skillsInstallUrl => 'Install from URL';
+  String get skillsInstallUrl => 'URL에서 설치';
 
   @override
-  String get skillsInstall => 'Install';
+  String get skillsInstall => '설치';
 
   @override
-  String get skillsClawHubSearch => 'ClawHub search';
+  String get skillsClawHubSearch => 'ClawHub 검색';
 
   @override
-  String get schedWhenHint => 'When (natural language)';
+  String get schedWhenHint => '실행 시점(자연어)';
 
   @override
-  String get schedMessageHint => 'Reminder message';
+  String get schedMessageHint => '알림 메시지';
 
   @override
-  String get schedPropose => 'Propose';
+  String get schedPropose => '제안';
 
   @override
   String get schedConfirm => 'Confirm reminder';
 
   @override
-  String get scheduleCardTitle => 'Set this reminder?';
+  String get scheduleCardTitle => '이 알림을 설정할까요?';
 
   @override
-  String get scheduleCardConfirm => 'Confirm';
+  String get scheduleCardConfirm => '확인';
 
   @override
-  String get scheduleCardCancel => 'Cancel';
+  String get scheduleCardCancel => '취소';
 
   @override
-  String get scheduleCardConfirmedToast => 'Reminder set.';
+  String get scheduleCardConfirmedToast => '알림이 설정됨.';
 
   @override
-  String get scheduleCardCanceledToast => 'Reminder canceled.';
+  String get scheduleCardCanceledToast => '알림이 취소됨.';
 
   @override
-  String get scheduleCardFailed => 'Could not update that reminder.';
+  String get scheduleCardFailed => '해당 알림을 업데이트할 수 없습니다.';
 
   @override
-  String get schedKindNotify => 'Notify';
+  String get schedKindNotify => '알림';
 
   @override
-  String get schedKindWorkflow => 'Workflow';
+  String get schedKindWorkflow => '워크플로';
 
   @override
-  String get schedKindTool => 'Tool';
+  String get schedKindTool => '도구';
 
   @override
-  String get schedWorkflowId => 'Workflow id';
+  String get schedWorkflowId => '워크플로 id';
 
   @override
-  String get schedToolName => 'Tool name';
+  String get schedToolName => '도구 이름';
 
   @override
-  String get schedKindAgent => 'Agent';
+  String get schedKindAgent => '에이전트';
 
   @override
-  String get schedAgentPrompt => 'Agent prompt';
+  String get schedAgentPrompt => '에이전트 프롬프트';
 
   @override
   String get schedTabRepeating => '반복';
@@ -1104,13 +1131,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get schedNoReceipts => '실행 기록이 없습니다.';
 
   @override
-  String get schedHistoryNotSet => 'Not set';
+  String get schedHistoryNotSet => '미설정';
 
   @override
-  String get schedHistoryRuns => 'Runs';
+  String get schedHistoryRuns => '실행';
 
   @override
-  String get schedNoDismissed => 'No canceled proposals.';
+  String get schedNoDismissed => '취소된 제안 없음.';
 
   @override
   String get schedDismissedCanceled => '취소됨';
@@ -1151,137 +1178,137 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get wfEditorTitle => 'Workflow';
+  String get wfEditorTitle => '워크플로';
 
   @override
-  String get wfEnable => 'Enable';
+  String get wfEnable => '사용';
 
   @override
-  String get wfDisable => 'Disable';
+  String get wfDisable => '사용 안 함';
 
   @override
-  String get wfTools => 'Insert tool';
+  String get wfTools => '도구 삽입';
 
   @override
-  String get wfId => 'Workflow id';
+  String get wfId => '워크플로 id';
 
   @override
-  String get wfAiPrompt => 'Describe the workflow';
+  String get wfAiPrompt => '워크플로 설명';
 
   @override
-  String get wfAiPromptHint => 'e.g. turn off lights at 11pm if nobody home';
+  String get wfAiPromptHint => '예: 아무도 없으면 23시에 조명 끄기';
 
   @override
-  String get wfAiDraft => 'Draft with AI';
+  String get wfAiDraft => 'AI로 초안';
 
   @override
-  String get wfDiagramNodes => 'Nodes (phone diagram)';
+  String get wfDiagramNodes => '노드(휴대폰 다이어그램)';
 
   @override
-  String get wfNoNodes => 'No nodes yet — draft or paste YAML.';
+  String get wfNoNodes => '노드 없음 — 초안 작성 또는 YAML 붙여넣기.';
 
   @override
   String get wfYaml => 'YAML';
 
   @override
-  String get wfSave => 'Validate & save';
+  String get wfSave => '검증 및 저장';
 
   @override
-  String get wfRun => 'Test run';
+  String get wfRun => '시험 실행';
 
   @override
-  String get wfDrafted => 'Draft applied';
+  String get wfDrafted => '초안 적용됨';
 
   @override
-  String get wfSaved => 'Saved';
+  String get wfSaved => '저장됨';
 
   @override
-  String get wfRan => 'Run started';
+  String get wfRan => '실행 시작됨';
 
   @override
-  String get sysTabFiles => 'Files';
+  String get sysTabFiles => '파일';
 
   @override
-  String get sysTabHealth => 'Health';
+  String get sysTabHealth => '상태';
 
   @override
-  String get sysTabGrants => 'Grants';
+  String get sysTabGrants => '권한';
 
   @override
-  String get sysTabMachine => 'This machine';
+  String get sysTabMachine => '이 PC';
 
   @override
   String get sysMachineHint =>
-      'Daemon listen status from home.health. OS service install/restart is loopback-only on the home desktop — not available over mesh.';
+      '데몬 수신 상태는 home.health에서. OS 서비스 설치/재시작은 가정 데스크톱에서 루프백 전용 — mesh 경유 불가.';
 
   @override
-  String get sysMachineDaemonOk => 'Daemon reachable';
+  String get sysMachineDaemonOk => '데몬 연결됨';
 
   @override
-  String get sysMachineDaemonBad => 'Daemon health failed';
+  String get sysMachineDaemonBad => '데몬 상태 확인 실패';
 
   @override
-  String get sysMachineWsPort => 'WebSocket port';
+  String get sysMachineWsPort => 'WebSocket 포트';
 
   @override
-  String get sysMachineHttpPort => 'HTTP hatch port';
+  String get sysMachineHttpPort => 'HTTP 해치 포트';
 
   @override
-  String get sysMachinePublicUrl => 'Public base URL';
+  String get sysMachinePublicUrl => '공개 기본 URL';
 
   @override
-  String get sysMachinePublicUrlEmpty => 'Not set';
+  String get sysMachinePublicUrlEmpty => '미설정';
 
   @override
-  String get sysMachineUptime => 'Uptime';
+  String get sysMachineUptime => '가동 시간';
 
   @override
-  String get sysMachineConnections => 'Clients / active turns';
+  String get sysMachineConnections => '클라이언트 / 활성 턴';
 
   @override
   String get sysMachineMesh => 'Mesh';
 
   @override
   String get sysMachineOsServiceNote =>
-      'Install or restart the OS service from desktop Settings → System → This machine (loopback-owner).';
+      'OS 서비스는 데스크톱 설정 → 시스템 → 이 PC에서 설치 또는 재시작(루프백-Owner).';
 
   @override
-  String get sysMachineRefresh => 'Refresh';
+  String get sysMachineRefresh => '새로고침';
 
   @override
-  String get sysTestPush => 'Send test push';
+  String get sysTestPush => '테스트 푸시 보내기';
 
   @override
-  String get sysTestPushSent => 'Test push requested';
+  String get sysTestPushSent => '테스트 푸시 요청됨';
 
   @override
   String get wfModeYaml => 'YAML';
 
   @override
-  String get wfModeDiagram => 'Diagram';
+  String get wfModeDiagram => '다이어그램';
 
   @override
-  String get wfDiagramEmpty => 'No steps yet — draft or edit YAML.';
+  String get wfDiagramEmpty => '단계 없음 — 초안 작성 또는 YAML 편집.';
 
   @override
   String get wfDiagramEdge => '↓';
 
   @override
-  String get sysDoctorFix => 'Fix';
+  String get sysDoctorFix => '수정';
 
   @override
-  String get sysDoctorFixAll => 'Fix all';
+  String get sysDoctorFixAll => '모두 수정';
 
   @override
   String sysDoctorFixed(String ids) {
-    return 'Fixed: $ids';
+    return '수정됨: $ids';
   }
 
   @override
-  String get sysNoIssues => 'No doctor issues.';
+  String get sysNoIssues => 'doctor 이슈 없음.';
 
   @override
-  String get sysNoGrants => 'No grants.';
+  String get sysNoGrants => '권한 없음.';
 
   @override
   String get chatNeedAccount => '채팅 전에 위에서 계정을 선택하세요.';
@@ -1333,15 +1360,15 @@ class AppLocalizationsKo extends AppLocalizations {
   String get chatOpenArtifact => '전체 답변 열기';
 
   @override
-  String get chatPromoteKnowledge => 'Add to Knowledge';
+  String get chatPromoteKnowledge => '지식에 추가';
 
   @override
   String chatPromotedKnowledge(String path) {
-    return 'Saved to $path';
+    return '$path에 저장됨';
   }
 
   @override
-  String get chatPromoteFailed => 'Could not add to Knowledge.';
+  String get chatPromoteFailed => '지식에 추가할 수 없습니다.';
 
   @override
   String get chatRecents => '최근';
@@ -1398,31 +1425,31 @@ class AppLocalizationsKo extends AppLocalizations {
   String get chatArchivedOpen => '보관됨';
 
   @override
-  String get chatTabActive => 'Chats';
+  String get chatTabActive => '채팅';
 
   @override
-  String get chatTabArchived => 'Archived';
+  String get chatTabArchived => '보관됨';
 
   @override
-  String get homeFolderTitle => 'Choose folder';
+  String get homeFolderTitle => '폴더 선택';
 
   @override
-  String get homeFolderSelect => 'Select';
+  String get homeFolderSelect => '선택';
 
   @override
-  String get homeFolderDrives => 'Drives';
+  String get homeFolderDrives => '드라이브';
 
   @override
-  String get homeFolderComputer => 'Computer';
+  String get homeFolderComputer => 'PC';
 
   @override
-  String get homeFolderHome => 'Home';
+  String get homeFolderHome => '홈';
 
   @override
-  String get homeFolderParent => 'Parent folder';
+  String get homeFolderParent => '상위 폴더';
 
   @override
-  String get homeFolderNoSubfolders => 'No subfolders';
+  String get homeFolderNoSubfolders => '하위 폴더 없음';
 
   @override
   String get chatArchivedTitle => '보관된 채팅';
@@ -1616,19 +1643,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get modelsOffLabel => '끔';
 
   @override
-  String get modelsTest => 'Test';
+  String get modelsTest => '테스트';
 
   @override
-  String get modelsSetDefault => 'Set default';
+  String get modelsSetDefault => '기본으로 설정';
 
   @override
   String modelsTestOk(String id) {
-    return 'Tested $id';
+    return '$id 테스트됨';
   }
 
   @override
   String modelsDefaultSet(String id) {
-    return 'Default → $id';
+    return '기본 → $id';
   }
 
   @override
@@ -1656,7 +1683,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get artifactsTooLarge =>
-      'This file is larger than the 8 MB in-app open limit. Ask the agent for a smaller export, or open it on the home machine.';
+      '이 파일은 앱 내 8 MB 열기 제한을 초과합니다. 더 작은 내보내기를 에이전트에 요청하거나 가정 PC에서 여세요.';
 
   @override
   String get artifactsRefresh => '새로고침';
@@ -1677,59 +1704,59 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get artifactsCopyLink => 'Copy signed link';
+  String get artifactsCopyLink => '서명된 링크 복사';
 
   @override
-  String get artifactsLinkCopied => 'Signed link copied';
+  String get artifactsLinkCopied => '서명된 링크 복사됨';
 
   @override
-  String get artifactsCopyLinkFailed => 'Could not copy link';
+  String get artifactsCopyLinkFailed => '링크를 복사할 수 없습니다';
 
   @override
-  String get artifactsOpenInBrowser => 'Open in browser';
+  String get artifactsOpenInBrowser => '브라우저에서 열기';
 
   @override
-  String get artifactsOpenInBrowserFailed => 'Could not open in browser';
+  String get artifactsOpenInBrowserFailed => '브라우저에서 열 수 없습니다';
 
   @override
-  String get filesParent => 'Parent';
+  String get filesParent => '상위';
 
   @override
-  String get filesRoots => 'Roots';
+  String get filesRoots => '루트';
 
   @override
-  String get filesEmptyFolder => 'This folder is empty';
+  String get filesEmptyFolder => '이 폴더는 비어 있습니다';
 
   @override
-  String get artifactsLoTitle => 'LibreOffice (home computer)';
+  String get artifactsLoTitle => 'LibreOffice(가정 PC)';
 
   @override
   String get artifactsLoWhy =>
-      'Print-ready Word, Excel, PowerPoint, and PDF exports run on your home computer (~1 GB, stays local). Without it, exports still work with a simpler layout. Documents are never sent to the cloud for conversion.';
+      '인쇄 품질 Word·Excel·PowerPoint·PDF 내보내기는 가정 PC에서 실행(~1 GB, 로컬). 없어도 단순 레이아웃으로 내보내기는 됩니다. 문서는 클라우드로 변환하지 않습니다.';
 
   @override
-  String get artifactsLoReady => 'Ready';
+  String get artifactsLoReady => '준비됨';
 
   @override
-  String get artifactsLoMissing => 'Not installed';
+  String get artifactsLoMissing => '미설치';
 
   @override
-  String get artifactsLoDownloading => 'Downloading…';
+  String get artifactsLoDownloading => '다운로드 중…';
 
   @override
-  String get artifactsLoFailed => 'Install failed';
+  String get artifactsLoFailed => '설치 실패';
 
   @override
-  String get artifactsLoInstall => 'Install on home computer';
+  String get artifactsLoInstall => '가정 PC에 설치';
 
   @override
-  String get artifactsLoCancel => 'Cancel download';
+  String get artifactsLoCancel => '다운로드 취소';
 
   @override
-  String get artifactsLoNotNow => 'Not now';
+  String get artifactsLoNotNow => '나중에';
 
   @override
-  String get artifactsLoRefresh => 'Refresh status';
+  String get artifactsLoRefresh => '상태 새로고침';
 
   @override
   String artifactsLoProgress(String received, String total) {
@@ -1737,61 +1764,60 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get artifactsLoHintCopied => 'Install hint copied';
+  String get artifactsLoHintCopied => '설치 안내 복사됨';
 
   @override
-  String get artifactsLoCopyHint => 'Copy manual install hint';
+  String get artifactsLoCopyHint => '수동 설치 안내 복사';
 
   @override
-  String get artifactsLoInstallNote =>
-      'Managed install runs on the home daemon host — not on this phone.';
+  String get artifactsLoInstallNote => '관리 설치는 가정 데몬 호스트에서 실행 — 이 휴대폰 아님.';
 
   @override
-  String get artifactsDataPreferTitle => 'Data paths (prefer in order)';
+  String get artifactsDataPreferTitle => '데이터 경로(우선순위)';
 
   @override
   String get artifactsDataPreferStrip =>
-      '1) Core table tools always on · 2) DuckDB for offline joins / SQL · 3) Owner MCP for cloud sheets / SaaS BI.';
+      '1) 코어 표 도구 항상 · 2) 오프라인 조인/SQL은 DuckDB · 3) 클라우드 시트/SaaS BI는 Owner MCP.';
 
   @override
-  String get artifactsDataPreferJoinNeed => 'Needed for offline joins in chat.';
+  String get artifactsDataPreferJoinNeed => '채팅에서 오프라인 조인에 필요합니다.';
 
   @override
-  String get artifactsDataBrowseTables => 'Browse output/tables';
+  String get artifactsDataBrowseTables => 'output/tables 탐색';
 
   @override
-  String get artifactsDataBrowseCharts => 'Browse output/charts';
+  String get artifactsDataBrowseCharts => 'output/charts 탐색';
 
   @override
-  String get artifactsSqlTitle => 'Offline SQL (DuckDB)';
+  String get artifactsSqlTitle => '오프라인 SQL(DuckDB)';
 
   @override
   String get artifactsSqlWhy =>
-      'Install DuckDB on the home computer for offline SQL joins on jail files. Never automatic — you choose Install.';
+      'jail 파일 오프라인 SQL 조인을 위해 가정 PC에 DuckDB 설치. 자동 아님 — 설치를 선택합니다.';
 
   @override
-  String get artifactsSqlReady => 'Ready';
+  String get artifactsSqlReady => '준비됨';
 
   @override
-  String get artifactsSqlMissing => 'Not installed (optional)';
+  String get artifactsSqlMissing => '미설치(선택)';
 
   @override
-  String get artifactsSqlDownloading => 'Downloading…';
+  String get artifactsSqlDownloading => '다운로드 중…';
 
   @override
-  String get artifactsSqlFailed => 'Install failed';
+  String get artifactsSqlFailed => '설치 실패';
 
   @override
-  String get artifactsSqlCancelled => 'Download cancelled';
+  String get artifactsSqlCancelled => '다운로드 취소됨';
 
   @override
-  String get artifactsSqlInstall => 'Install DuckDB on home computer';
+  String get artifactsSqlInstall => '가정 PC에 DuckDB 설치';
 
   @override
-  String get artifactsSqlCancel => 'Cancel download';
+  String get artifactsSqlCancel => '다운로드 취소';
 
   @override
-  String get artifactsSqlRefresh => 'Refresh status';
+  String get artifactsSqlRefresh => '상태 새로고침';
 
   @override
   String artifactsSqlProgress(String received, String total) {
@@ -1800,47 +1826,46 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get artifactsSqlToolsReady =>
-      'sql_load / sql_query are available to the agent.';
+      'sql_load / sql_query를 에이전트가 사용할 수 있습니다.';
 
   @override
   String get artifactsSqlToolsAbsent =>
-      'sql_load / sql_query stay out of the agent catalogue until DuckDB is ready.';
+      'DuckDB가 준비될 때까지 sql_load / sql_query는 에이전트 카탈로그에서 제외됩니다.';
 
   @override
-  String get artifactsSqlInstallNote =>
-      'Managed install runs on the home daemon host — not on this phone.';
+  String get artifactsSqlInstallNote => '관리 설치는 가정 데몬 호스트에서 실행 — 이 휴대폰 아님.';
 
   @override
   String get chatDataAssistHint =>
-      'Spreadsheet attached — pick a next step (seeds the composer; writes still need Allow):';
+      '스프레드시트 첨부됨 — 다음 단계 선택(작성란 시드; 쓰기는 Allow 필요):';
 
   @override
-  String get chatDataAssistClean => 'Clean & chart';
+  String get chatDataAssistClean => '정리 및 차트';
 
   @override
-  String get chatDataAssistAsk => 'Ask about this table';
+  String get chatDataAssistAsk => '이 표에 대해 질문';
 
   @override
-  String get chatDataAssistJoin => 'Join / SQL';
+  String get chatDataAssistJoin => '조인 / SQL';
 
   @override
-  String get chatDataAssistInstallDuckdb => 'Install DuckDB…';
+  String get chatDataAssistInstallDuckdb => 'DuckDB 설치…';
 
   @override
   String get chatDataAssistCleanSeed =>
-      'Clean the attached spreadsheet with table_transform (normalize / filter / pipeline as needed), then chart_table, and show me the Open chips for the CSV and chart.';
+      '첨부한 스프레드시트를 table_transform으로 정리(필요 시 normalize / filter / pipeline), 이어 chart_table로 차트하고 CSV와 차트용 Open 칩을 보여 주세요.';
 
   @override
   String get chatDataAssistAskSeed =>
-      'What\'s in the attached spreadsheet? Summarize columns, row count, and a few sample rows.';
+      '첨부한 스프레드시트에 무엇이 있나요? 열, 행 수, 샘플 행 몇 개를 요약해 주세요.';
 
   @override
   String get chatDataAssistJoinSeed =>
-      'Load the attached spreadsheet with sql_load, then use sql_query to answer (join if I attach more tables). Show Open chips for any result CSV.';
+      '첨부한 스프레드시트를 sql_load로 불러온 뒤 sql_query로 답하세요(표를 더 첨부하면 조인). 결과 CSV마다 Open 칩을 보여 주세요.';
 
   @override
   String get chatDataAssistNeedDuckdb =>
-      'DuckDB is not ready — Install under System → Files on the home computer.';
+      'DuckDB가 준비되지 않음 — 가정 PC에서 시스템 → 파일에서 설치하세요.';
 
   @override
   String chatOpenFile(String name) {
@@ -1856,36 +1881,36 @@ class AppLocalizationsKo extends AppLocalizations {
   String get choiceCardConfirm => '확인';
 
   @override
-  String get choiceCardOpen => 'Open';
+  String get choiceCardOpen => '열기';
 
   @override
-  String get choiceCardChooseFile => 'Choose file';
+  String get choiceCardChooseFile => '파일 선택';
 
   @override
-  String get choiceCardBrowseJail => 'Browse files';
+  String get choiceCardBrowseJail => '파일 탐색';
 
   @override
   String get choiceCardBrowseUp => 'Up';
 
   @override
   String choiceCardFilesChosen(int n) {
-    return '$n files chosen';
+    return '파일 $n개 선택됨';
   }
 
   @override
-  String get choiceCardNoFile => 'No file chosen';
+  String get choiceCardNoFile => '선택한 파일 없음';
 
   @override
-  String get choiceCardFileEmpty => 'That file is empty.';
+  String get choiceCardFileEmpty => '해당 파일이 비어 있습니다.';
 
   @override
   String choiceCardFileTypeRefused(String name) {
-    return '$name is not an allowed form upload type.';
+    return '$name은(는) 허용되지 않는 양식 업로드 형식입니다.';
   }
 
   @override
   String get choiceCardHandoffHint =>
-      'Opens in your browser or app so you can finish and pay there. Home will not enter card details.';
+      '브라우저나 앱에서 열려 결제 등을 완료합니다. Home은 카드 정보를 입력하지 않습니다.';
 
   @override
   String get choiceCardPickOne => '하나 이상 선택하세요.';
@@ -1924,7 +1949,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get choiceCardTextPlaceholder => '답변 입력';
 
   @override
-  String get schedulesChatTabChat => 'Chat';
+  String get schedulesChatTabChat => '채팅';
 
   @override
   String get schedulesChatTabHistories => '기록';
@@ -1933,7 +1958,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get schedulesChatHistoriesHint => '취소·만료된 제안과 최근 실행 기록.';
 
   @override
-  String get jobsHistoriesMovedHint => 'Not set and runs are under Histories';
+  String get jobsHistoriesMovedHint => '미설정 및 실행 기록은 Histories에 있습니다';
 
   @override
   String schedulesChatClosedAt(String when) {

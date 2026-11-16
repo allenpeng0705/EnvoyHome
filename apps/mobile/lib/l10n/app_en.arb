@@ -320,6 +320,38 @@
   "connTabWebSearch": "Web search",
   "connTabMcp": "MCP",
   "connTabBrowser": "Browser",
+  "mcpLede": "Add any MCP server you choose. Test connection before enable. Stdio commands run as the daemon host user. Approvals still gate tool calls.",
+  "mcpTest": "Test",
+  "mcpAddServer": "Add server",
+  "mcpSave": "Save",
+  "mcpReady": "Ready",
+  "mcpNotTested": "Not tested",
+  "mcpServerSubtitle": "{transport} · {status} · {count} tools",
+  "@mcpServerSubtitle": {
+    "placeholders": {
+      "transport": {"type": "String"},
+      "status": {"type": "String"},
+      "count": {"type": "int"}
+    }
+  },
+  "mcpTestOk": "OK — {count} tool(s). Enable when ready.",
+  "@mcpTestOk": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "mcpTestFailed": "Failed: {error}",
+  "@mcpTestFailed": {
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "mcpLabel": "Label",
+  "mcpCommand": "Command",
+  "mcpArgs": "Args (space-separated, optional)",
+  "mcpUrl": "URL",
+  "mcpAuthToken": "Auth token (optional)",
+  "mcpEnv": "Env (KEY=value per line, optional)",
   "browserControlLede": "Control a managed browser on the home computer (Auto prefers Obscura, else Chromium), or attach personal Chrome / remote CDP. Off by default.",
   "browserControlDaemonHostNote": "Browser sessions run on the home computer. Settings here sync with desktop Connections → Browser.",
   "browserControlEnabled": "Enable browser tool",

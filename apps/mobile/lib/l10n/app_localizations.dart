@@ -1254,6 +1254,96 @@ abstract class AppLocalizations {
   /// **'Browser'**
   String get connTabBrowser;
 
+  /// No description provided for @mcpLede.
+  ///
+  /// In en, this message translates to:
+  /// **'Add any MCP server you choose. Test connection before enable. Stdio commands run as the daemon host user. Approvals still gate tool calls.'**
+  String get mcpLede;
+
+  /// No description provided for @mcpTest.
+  ///
+  /// In en, this message translates to:
+  /// **'Test'**
+  String get mcpTest;
+
+  /// No description provided for @mcpAddServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Add server'**
+  String get mcpAddServer;
+
+  /// No description provided for @mcpSave.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get mcpSave;
+
+  /// No description provided for @mcpReady.
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get mcpReady;
+
+  /// No description provided for @mcpNotTested.
+  ///
+  /// In en, this message translates to:
+  /// **'Not tested'**
+  String get mcpNotTested;
+
+  /// No description provided for @mcpServerSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{transport} · {status} · {count} tools'**
+  String mcpServerSubtitle(String transport, String status, int count);
+
+  /// No description provided for @mcpTestOk.
+  ///
+  /// In en, this message translates to:
+  /// **'OK — {count} tool(s). Enable when ready.'**
+  String mcpTestOk(int count);
+
+  /// No description provided for @mcpTestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed: {error}'**
+  String mcpTestFailed(String error);
+
+  /// No description provided for @mcpLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Label'**
+  String get mcpLabel;
+
+  /// No description provided for @mcpCommand.
+  ///
+  /// In en, this message translates to:
+  /// **'Command'**
+  String get mcpCommand;
+
+  /// No description provided for @mcpArgs.
+  ///
+  /// In en, this message translates to:
+  /// **'Args (space-separated, optional)'**
+  String get mcpArgs;
+
+  /// No description provided for @mcpUrl.
+  ///
+  /// In en, this message translates to:
+  /// **'URL'**
+  String get mcpUrl;
+
+  /// No description provided for @mcpAuthToken.
+  ///
+  /// In en, this message translates to:
+  /// **'Auth token (optional)'**
+  String get mcpAuthToken;
+
+  /// No description provided for @mcpEnv.
+  ///
+  /// In en, this message translates to:
+  /// **'Env (KEY=value per line, optional)'**
+  String get mcpEnv;
+
   /// No description provided for @browserControlLede.
   ///
   /// In en, this message translates to:

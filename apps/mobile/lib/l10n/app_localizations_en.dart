@@ -649,6 +649,58 @@ class AppLocalizationsEn extends AppLocalizations {
   String get connTabBrowser => 'Browser';
 
   @override
+  String get mcpLede =>
+      'Add any MCP server you choose. Test connection before enable. Stdio commands run as the daemon host user. Approvals still gate tool calls.';
+
+  @override
+  String get mcpTest => 'Test';
+
+  @override
+  String get mcpAddServer => 'Add server';
+
+  @override
+  String get mcpSave => 'Save';
+
+  @override
+  String get mcpReady => 'Ready';
+
+  @override
+  String get mcpNotTested => 'Not tested';
+
+  @override
+  String mcpServerSubtitle(String transport, String status, int count) {
+    return '$transport · $status · $count tools';
+  }
+
+  @override
+  String mcpTestOk(int count) {
+    return 'OK — $count tool(s). Enable when ready.';
+  }
+
+  @override
+  String mcpTestFailed(String error) {
+    return 'Failed: $error';
+  }
+
+  @override
+  String get mcpLabel => 'Label';
+
+  @override
+  String get mcpCommand => 'Command';
+
+  @override
+  String get mcpArgs => 'Args (space-separated, optional)';
+
+  @override
+  String get mcpUrl => 'URL';
+
+  @override
+  String get mcpAuthToken => 'Auth token (optional)';
+
+  @override
+  String get mcpEnv => 'Env (KEY=value per line, optional)';
+
+  @override
   String get browserControlLede =>
       'Control a managed browser on the home computer (Auto prefers Obscura, else Chromium), or attach personal Chrome / remote CDP. Off by default.';
 

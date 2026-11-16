@@ -69,7 +69,8 @@
     "version:desktop:check": "node ./scripts/sync-desktop-version.mjs --check",
     "mobile:test": "./scripts/mobile-test.sh",
     "mobile:live": "./scripts/mobile-live-smoke.sh",
-    "mobile:flutter": "cd apps/mobile && flutter pub get && flutter test"
+    "mobile:flutter": "cd apps/mobile && flutter pub get && flutter test",
+    "i18n:check": "node ./scripts/i18n-check.mjs"
   },
   "devDependencies": {
     "typescript": "5.6.3"

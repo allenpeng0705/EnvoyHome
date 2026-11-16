@@ -1865,6 +1865,7 @@ class _McpServersTabState extends State<_McpServersTab> {
   Future<void> _test(String id) async {
     final home = widget.session.session;
     if (home == null) return;
+    final l10n = AppLocalizations.of(context);
     setState(() {
       _busy = true;
       _testResult = null;
@@ -1875,10 +1876,11 @@ class _McpServersTabState extends State<_McpServersTab> {
       final tools = res['tools'];
       final n = tools is List ? tools.length : 0;
       final err = res['error']?.toString();
+      if (!mounted) return;
       setState(() {
         _testResult = ok
-            ? 'OK — $n tool(s). Enable when ready.'
-            : 'Failed: ${err ?? 'unknown'}';
+            ? l10n.mcpTestOk(n)
+            : l10n.mcpTestFailed(err ?? 'unknown');
       });
       await _reload();
     } catch (e) {
@@ -1890,12 +1892,12 @@ class _McpServersTabState extends State<_McpServersTab> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Text(
-          'Add any MCP server you choose. Test connection before enable. '
-          'Stdio commands run as the daemon host user. Approvals still gate tool calls.',
+          l10n.mcpLede,
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         if (_error != null) ...[
@@ -1913,19 +1915,25 @@ class _McpServersTabState extends State<_McpServersTab> {
           final ready = s['ready'] == true;
           final enabled = s['enabled'] == true;
           final transport = s['transport']?.toString() ?? '';
+          final toolCount = (s['toolCount'] is int)
+              ? s['toolCount'] as int
+              : int.tryParse('${s['toolCount'] ?? 0}') ?? 0;
           return Card(
             child: ListTile(
               title: Text(label),
               subtitle: Text(
-                '$transport · ${ready ? 'Ready' : 'Not tested'} · '
-                '${s['toolCount'] ?? 0} tools',
+                l10n.mcpServerSubtitle(
+                  transport,
+                  ready ? l10n.mcpReady : l10n.mcpNotTested,
+                  toolCount,
+                ),
               ),
               trailing: Wrap(
                 spacing: 4,
                 children: [
                   TextButton(
                     onPressed: _busy ? null : () => _test(id),
-                    child: const Text('Test'),
+                    child: Text(l10n.mcpTest),
                   ),
                   Switch(
                     value: enabled,
@@ -1959,7 +1967,7 @@ class _McpServersTabState extends State<_McpServersTab> {
           );
         }),
         const Divider(),
-        Text('Add server', style: Theme.of(context).textTheme.titleMedium),
+        Text(l10n.mcpAddServer, style: Theme.of(context).textTheme.titleMedium),
         DropdownButton<String>(
           value: _transport,
           items: const [
@@ -1975,42 +1983,36 @@ class _McpServersTabState extends State<_McpServersTab> {
         ),
         TextField(
           controller: _labelCtrl,
-          decoration: const InputDecoration(labelText: 'Label'),
+          decoration: InputDecoration(labelText: l10n.mcpLabel),
           enabled: !_busy,
         ),
         if (_transport == 'stdio') ...[
           TextField(
             controller: _commandCtrl,
-            decoration: const InputDecoration(labelText: 'Command'),
+            decoration: InputDecoration(labelText: l10n.mcpCommand),
             enabled: !_busy,
           ),
           TextField(
             controller: _argsCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Args (space-separated, optional)',
-            ),
+            decoration: InputDecoration(labelText: l10n.mcpArgs),
             enabled: !_busy,
           ),
         ] else ...[
           TextField(
             controller: _urlCtrl,
-            decoration: const InputDecoration(labelText: 'URL'),
+            decoration: InputDecoration(labelText: l10n.mcpUrl),
             enabled: !_busy,
           ),
           TextField(
             controller: _authCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Auth token (optional)',
-            ),
+            decoration: InputDecoration(labelText: l10n.mcpAuthToken),
             obscureText: true,
             enabled: !_busy,
           ),
         ],
         TextField(
           controller: _envCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Env (KEY=value per line, optional)',
-          ),
+          decoration: InputDecoration(labelText: l10n.mcpEnv),
           minLines: 2,
           maxLines: 6,
           enabled: !_busy,
@@ -2018,7 +2020,7 @@ class _McpServersTabState extends State<_McpServersTab> {
         const SizedBox(height: 12),
         FilledButton(
           onPressed: _busy ? null : _add,
-          child: const Text('Save'),
+          child: Text(l10n.mcpSave),
         ),
       ],
     );
