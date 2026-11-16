@@ -119,6 +119,26 @@ export class PolicyStore {
   }
 }
 
+/**
+ * Whether MixRouter must pick a local provider (Design §5.7.4 rule 5 / §8.3).
+ * `forceLocalForEventSource` applies only to event-source caller turns —
+ * schedule/standing unattended agentTurns follow configured routing.
+ */
+export function shouldForceLocal(input: {
+  privacyEnabled: boolean;
+  forceLocalForMedia: boolean;
+  hasMedia?: boolean;
+  forceLocalForEventSource: boolean;
+  callerKind: string;
+  privacyTagged: boolean;
+}): boolean {
+  if (input.privacyEnabled) return true;
+  if (input.hasMedia && input.forceLocalForMedia) return true;
+  if (input.callerKind === "event-source" && input.forceLocalForEventSource) return true;
+  if (input.privacyTagged) return true;
+  return false;
+}
+
 function pickKnown(raw: Record<string, unknown>): Partial<AccountPolicy> {
   const out: Record<string, unknown> = {};
   for (const key of KNOWN) {

@@ -10,7 +10,7 @@ and EnvoyMesh). Do **not** hand-edit `package.json` / Tauri / Cargo versions for
 a release — bump `VERSION` and sync:
 
 ```bash
-pnpm version:desktop -- 0.1.0    # writes VERSION, then syncs all desktop targets
+pnpm version:desktop -- 0.2.0    # writes VERSION, then syncs all desktop targets
 pnpm version:desktop             # re-sync from the current VERSION file
 pnpm version:desktop:check       # fail if anything drifted (also run by ./scripts/ci.sh)
 ```
@@ -45,9 +45,9 @@ pnpm install
 
 | OS | Command | Output (repo-root **`release/`**) |
 |----|---------|-------------------------------------|
-| macOS | `./scripts/build-desktop.sh macos` | `envoyhome-desktop-{ver}-macos-{arch}.dmg` |
+| macOS | `./scripts/build-desktop.sh macos` | `envoyhome-desktop-{ver}-macos-{arch}.dmg` + stable `envoyhome-desktop.dmg` |
 | Linux | `./scripts/build-desktop.sh linux` | `.deb` + `.AppImage` |
-| Windows | `.\scripts\build-desktop.ps1` | `envoyhome-desktop-{ver}-windows-{arch}-setup.exe` |
+| Windows | `.\scripts\build-desktop.ps1` | `envoyhome-desktop-{ver}-windows-{arch}-setup.exe` + stable `envoyhome-desktop.exe` |
 
 Override the output folder with `OUT_DIR=…` (relative → under repo root, or absolute).
 
@@ -67,10 +67,23 @@ Put `push-config.json`, `AuthKey_*.p8`, and `serviceAccountKey.json` at the
 present but secrets are missing; set `REQUIRE_PUSH_CREDENTIALS=0` to package
 without push. No config → packages without push.
 
-### macOS signing (optional)
+### macOS signing / notarization (required for DMG)
 
-Copy `scripts/sign-macos-release.env.example` → `scripts/sign-macos-release.env`
-(gitignored) and fill Apple Developer ID fields. Without it, the DMG is unsigned.
+Release DMGs are always Developer ID–signed and notarized (Gatekeeper on more
+Macs). Same pipeline as **../EnvoyMesh** and **../EnvoyCoder** (EnvoyDev):
+
+1. Copy `sign-macos-release.env.example` → `sign-macos-release.env` (gitignored).
+2. Fill the four Apple exports (reuse Mesh/Coder values when the same team).
+3. `./scripts/build-desktop.sh macos` — deep-signs staged resources, signs
+   `EnvoyHome.app`, packages the DMG, notarizes when Apple accepts the ticket.
+
+Operator guide: [`../EnvoyMesh/docs/macos-mirror-signing.md`](../../EnvoyMesh/docs/macos-mirror-signing.md).
+Missing credentials abort the build; unsigned release DMGs are not supported.
+
+After deferred codesign, packaging uses `scripts/package-macos-dmg.sh` (not
+`tauri bundle --bundles dmg`) so Developer ID is preserved, then `notarytool`
++ staple. Windows EXE must be built on a Windows host with
+`.\scripts\build-desktop.ps1`.
 
 ## Agent scenario tests
 

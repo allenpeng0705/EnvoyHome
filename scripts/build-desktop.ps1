@@ -25,6 +25,7 @@
 #
 # Final installer is copied to the **repo-root** release folder:
 #   <EnvoyHome>\release\envoyhome-desktop-{version}-windows-{arch}-setup.exe
+#   <EnvoyHome>\release\envoyhome-desktop.exe   (stable mirror — EnvoyMesh / EnvoyDev)
 # Override with $env:OUT_DIR (relative → under repo root; absolute path allowed).
 
 $ErrorActionPreference = "Stop"
@@ -193,5 +194,10 @@ $newest = $found | Select-Object -First 1
 $dest = Join-Path $Out $versioned
 Copy-Item -Force $newest.FullName $dest
 Write-Host "  $versioned  ←  $($newest.FullName)"
+# Stable mirror filename (EnvoyMesh / EnvoyDev convention).
+$stable = Join-Path $Out "envoyhome-desktop.exe"
+Copy-Item -Force $newest.FullName $stable
+Write-Host "  envoyhome-desktop.exe  (stable mirror)"
 Write-Host "Done. Release package is in:"
 Write-Host "  $dest"
+Write-Host "  $stable"

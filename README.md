@@ -206,7 +206,7 @@ curl -s http://127.0.0.1:4781/health
 ### Package (optional)
 
 ```bash
-pnpm version:desktop -- 0.1.0     # bump desktop VERSION (see scripts/README.md)
+pnpm version:desktop -- 0.2.0     # bump desktop VERSION (see scripts/README.md)
 ./scripts/build-desktop.sh macos  # DMG → release/ (Linux: linux; Windows: .\scripts\build-desktop.ps1)
 ```
 

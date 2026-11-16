@@ -75,6 +75,17 @@ export const SCENE_TEMPLATES = [
     prompt:
       "Presence: treat as arrive-home. Welcome lights/climate only via bound objects and Approvals. Do not Learn presence into standing memory.",
   },
+  {
+    id: "custom",
+    nameKey: "scenes.tplCustom",
+    hintKey: "scenes.tplCustomHint",
+    presenceAware: false,
+    whenKind: "cron",
+    cronExpr: "0 9 * * *",
+    actionKind: "agentTurn",
+    // Prompt must be supplied via buildStandingOrderFromScene opts.
+    prompt: "",
+  },
 ];
 
 /**
@@ -89,17 +100,6 @@ export function assertPresenceSceneAllowed(privacy) {
   return { ok: false, reason: "privacy_required" };
 }
 
-/**
- * @param {SceneTemplate} template
- * @param {{
- *   name?: string,
- *   cronExpr?: string,
- *   sourceId?: string,
- *   eventType?: string,
- *   prompt?: string,
- *   message?: string,
- * }} opts
- */
 /**
  * Standing orders store bare HA entity / MQTT topic sourceId.
  * Accept opaque `channel:sourceId` handles from the object registry too.
@@ -123,29 +123,47 @@ export function normalizeSceneSourceId(raw) {
   return s;
 }
 
+/**
+ * @param {SceneTemplate} template
+ * @param {{
+ *   name?: string,
+ *   cronExpr?: string,
+ *   sourceId?: string,
+ *   eventType?: string,
+ *   prompt?: string,
+ *   message?: string,
+ *   whenKind?: "cron"|"smarthome_event",
+ * }} opts
+ */
 export function buildStandingOrderFromScene(template, opts = {}) {
   const name = (opts.name || "").trim() || template.id.replace(/_/g, " ");
+  const whenKind =
+    opts.whenKind === "cron" || opts.whenKind === "smarthome_event"
+      ? opts.whenKind
+      : template.whenKind;
+  const presenceAware =
+    whenKind === "smarthome_event" || template.presenceAware === true;
+
   /** @type {Record<string, unknown>} */
   let when;
-  if (template.whenKind === "cron") {
+  if (whenKind === "cron") {
     const cronExpr = (opts.cronExpr || template.cronExpr || "").trim();
     if (!cronExpr) throw new Error("cronExpr required");
     when = { kind: "cron", cronExpr };
   } else {
     const sourceId = normalizeSceneSourceId(opts.sourceId || "");
     if (!sourceId) throw new Error("sourceId required for presence scene");
+    const eventType = (opts.eventType || template.eventType || "occupancy").trim();
     when = {
       kind: "smarthome_event",
       sourceId,
-      ...(opts.eventType || template.eventType
-        ? { eventType: (opts.eventType || template.eventType || "").trim() }
-        : {}),
+      ...(eventType ? { eventType } : {}),
     };
   }
 
   /** @type {Record<string, unknown>} */
   let action;
-  if (template.actionKind === "notify") {
+  if (template.actionKind === "notify" && template.id !== "custom") {
     const message = (opts.message || template.message || "").trim();
     if (!message) throw new Error("notify message required");
     action = { kind: "notify", message };
@@ -161,7 +179,7 @@ export function buildStandingOrderFromScene(template, opts = {}) {
     enabled: true,
     when,
     action,
-    presenceAware: template.presenceAware === true,
+    presenceAware,
     templateId: template.id,
   };
 }

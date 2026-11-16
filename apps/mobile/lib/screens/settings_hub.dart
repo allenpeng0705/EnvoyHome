@@ -142,6 +142,13 @@ class SettingsHub extends StatelessWidget {
         ),
         _tile(
           context,
+          icon: Icons.account_tree_outlined,
+          title: l10n.skillsTabWorkflows,
+          subtitle: l10n.settingsWorkflowsSubtitle,
+          builder: (_) => WorkflowsScreen(session: session),
+        ),
+        _tile(
+          context,
           icon: Icons.settings_outlined,
           title: l10n.navSystem,
           subtitle: l10n.settingsSystemSubtitle,

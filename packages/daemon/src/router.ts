@@ -312,6 +312,18 @@ function mapStoreError(err: unknown): never {
   if (err instanceof Error && /envoyhome\.tool_unavailable/.test(err.message)) {
     throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", err.message);
   }
+  // Create-time grants / safety refuses (putUnattendedGrants, Always Allow, etc.).
+  const coded =
+    err instanceof Error ? (err as Error & { code?: unknown }).code : undefined;
+  if (
+    typeof coded === "string" &&
+    /^(bad_params|object_not_bound|grant_too_broad|actuation_never_unattended|actuation_non_idempotent)$/.test(
+      coded,
+    ) &&
+    err instanceof Error
+  ) {
+    throwRpc(TRANSPORT_CODE_BAD_PARAMS, "bad_params", err.message);
+  }
   throw err;
 }
 
@@ -1809,6 +1821,28 @@ export function createDispatcher(deps: RouterDeps) {
               : {}),
             ...(fieldValues ? { fieldValues } : {}),
             ...(params.cancel === true ? { cancel: true } : {}),
+          });
+        } catch (err) {
+          mapStoreError(err);
+        }
+      }
+      case "home.putUnattendedGrants": {
+        try {
+          const accountId = requireBoundAccount(method, caller, params);
+          const raw = Array.isArray(params.grants) ? params.grants : [];
+          const grants = raw.map((row) => {
+            const r = row && typeof row === "object" ? (row as Record<string, unknown>) : {};
+            return {
+              tool: String(r.tool ?? ""),
+              objectId: String(r.objectId ?? ""),
+              domain: String(r.domain ?? ""),
+              service: String(r.service ?? ""),
+            };
+          });
+          return await deps.turns.putUnattendedGrants({
+            accountId,
+            grantedBy: caller.kind === "loopback-owner" ? "loopback-owner" : "device",
+            grants,
           });
         } catch (err) {
           mapStoreError(err);

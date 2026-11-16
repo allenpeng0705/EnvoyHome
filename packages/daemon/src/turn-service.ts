@@ -22,6 +22,7 @@ import {
   readTranscript,
   readTranscriptEnsuringMessageIds,
   runTurn,
+  toolArgsDigest,
   updateTranscript,
   writeTranscript,
   type HistoryMessage,
@@ -74,7 +75,7 @@ import {
   type StandingInjectResult,
 } from "@envoyhome/memory";
 import type { ProductEmit } from "./product-events.js";
-import { PolicyStore, PrivacyModeStore } from "./policy-store.js";
+import { PolicyStore, PrivacyModeStore, shouldForceLocal } from "./policy-store.js";
 import { MediaGenerateStore } from "./media-generate-store.js";
 import { formatSchedulesChatCard } from "./schedule/chat-card.js";
 import { isScheduleAffirmation, isScheduleDenial } from "./schedule/affirm.js";
@@ -2016,22 +2017,20 @@ ${lines.join("\n")}
   private async resolveForceLocal(
     accountId: string,
     text: string,
-    origin: TurnOrigin,
+    _origin: TurnOrigin,
     callerKind: string,
     opts?: { hasMedia?: boolean },
   ): Promise<boolean> {
     const policy = await this.policy.get(accountId);
     const privacy = await this.privacyMode.get(accountId);
-    if (privacy.enabled) return true;
-    if (opts?.hasMedia && policy.forceLocalForMedia) return true;
-    if (
-      (origin === "unattended" || callerKind === "event-source") &&
-      policy.forceLocalForEventSource
-    ) {
-      return true;
-    }
-    if (this.policy.isPrivacyTagged(policy, text)) return true;
-    return false;
+    return shouldForceLocal({
+      privacyEnabled: privacy.enabled === true,
+      forceLocalForMedia: policy.forceLocalForMedia === true,
+      hasMedia: opts?.hasMedia === true,
+      forceLocalForEventSource: policy.forceLocalForEventSource === true,
+      callerKind,
+      privacyTagged: this.policy.isPrivacyTagged(policy, text),
+    });
   }
 
   private async finishTurn(info: TurnCompleteInfo): Promise<void> {
@@ -4470,6 +4469,100 @@ ${lines.join("\n")}
     await this.approvals.revokeGrant(grant.accountId, id);
   }
 
+  /**
+   * Attended create-time grants for Scenes / standing orders (Design §4.4).
+   * Fire path never mints grants — only claim or deny.
+   */
+  async putUnattendedGrants(input: {
+    accountId: string;
+    grantedBy: string;
+    grants: Array<{
+      tool: string;
+      objectId: string;
+      domain: string;
+      service: string;
+    }>;
+  }): Promise<{ ok: true; grants: Record<string, unknown>[] }> {
+    const { assertGrantCreatable } = await import("@envoyhome/smarthome");
+    const { resolveBoundHandle } = await import("./workflow-tools.js");
+    /** Validate all entries before writing any (fail closed; no partial batch). */
+    const prepared: Array<{
+      tool: string;
+      argsDigest: string;
+    }> = [];
+    const seen = new Set<string>();
+    for (const g of input.grants) {
+      const tool = String(g.tool || "").trim();
+      const objectId = String(g.objectId || "").trim();
+      const domain = String(g.domain || "").trim();
+      const service = String(g.service || "").trim();
+      if (!tool || !objectId || !domain || !service) {
+        throw Object.assign(new Error("envoyhome.bad_params: grant fields required"), {
+          code: "bad_params",
+        });
+      }
+      if (service.endsWith("toggle")) {
+        throw Object.assign(new Error("envoyhome.actuation_non_idempotent"), {
+          code: "actuation_non_idempotent",
+        });
+      }
+      if (tool !== "ha_call_service") {
+        throw Object.assign(
+          new Error("envoyhome.bad_params: putUnattendedGrants supports ha_call_service"),
+          { code: "bad_params" },
+        );
+      }
+      const handle = await resolveBoundHandle(this.channels, objectId, input.accountId);
+      // Seat-bound only: household-visible foreign bindings cannot mint grants for this seat.
+      if (handle.accountId !== input.accountId) {
+        throw Object.assign(
+          new Error(
+            `envoyhome.object_not_bound: ${handle.objectId} bound to another seat`,
+          ),
+          { code: "object_not_bound" },
+        );
+      }
+      const args = { objectId: handle.objectId, domain, service };
+      const argsDigest = toolArgsDigest(tool, args);
+      assertGrantCreatable({
+        tool,
+        argsDigest,
+        handle,
+        domain,
+        service,
+      });
+      const key = `${tool}\0${argsDigest}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      prepared.push({ tool, argsDigest });
+    }
+    const priorIds = new Set(
+      (await this.approvals.listGrants(input.accountId)).map((g) => g.id),
+    );
+    const mintedIds: string[] = [];
+    const out: Record<string, unknown>[] = [];
+    try {
+      for (const row of prepared) {
+        const grant = await this.approvals.writeGrant({
+          accountId: input.accountId,
+          tool: row.tool,
+          argsDigest: row.argsDigest,
+          risk: "admin",
+          grantedBy: input.grantedBy,
+          expiresAt: null,
+        });
+        if (!priorIds.has(grant.id)) mintedIds.push(grant.id);
+        out.push(wireGrant(grant));
+      }
+    } catch (err) {
+      for (const id of mintedIds) {
+        await this.approvals.revokeGrant(input.accountId, id).catch(() => undefined);
+      }
+      throw err;
+    }
+    return { ok: true, grants: out };
+  }
+
   /** Cross-account sandbox probe for V-HAR-6. */
   assertSandboxScope(accountId: string, sandboxRoot: string): void {
     const expected = this.paths.accountFiles(accountId);
@@ -4799,6 +4892,7 @@ ${lines.join("\n")}
   }
 
   static digestForTool(tool: string, args: unknown): string {
-    return canonicalDigest({ tool, data: args });
+    // Prefer toolArgsDigest so create-time / ApprovalSink / claim stay aligned.
+    return toolArgsDigest(tool, args);
   }
 }

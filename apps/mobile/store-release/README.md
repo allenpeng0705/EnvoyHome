@@ -28,14 +28,14 @@ Brand source of truth: `apps/branding/store/` (wired into iOS/Android/desktop).
 | Field | Value |
 |-------|--------|
 | App name | **EnvoyHome** |
-| Version (current) | `0.1.0+1` (`apps/mobile/pubspec.yaml`) |
+| Version (current) | `0.2.0+1` (`apps/mobile/pubspec.yaml`) |
 | iOS bundle ID | `com.envoymesh.envoyhome` |
 | Android application ID | `com.envoymesh.envoyhome` |
 | Category (suggested) | Productivity / Lifestyle |
 | Price | Free |
 | Age rating (suggested) | 4+ / Everyone |
 | Marketing / Website | https://www.envoymesh.cn/envoyhome/ (deploy `sites/envoyhome/`) |
-| Privacy Policy | https://www.envoymesh.cn/envoyhome/privacy.html |
+| Privacy Policy | interim htmlpreview (in listings) → canonical https://www.envoymesh.cn/envoyhome/privacy.html after deploy |
 | Support | https://github.com/allenpeng0705/EnvoyHome/issues |
 | Play contact email | `shilei.peng@qq.com` (alternate `shileipeng@gmail.com`) |
 
@@ -50,17 +50,18 @@ Thin-client companion for the **EnvoyHome** self-hosted home agent — pair by Q
 | App Store `1024×1024` | present | Opaque RGB from `apps/branding/store/app-store/`. |
 | Play Store `512×512` | present | Opaque RGB (Play rejects transparency). |
 | Play feature graphic `1024×500` | present | From `apps/branding/store/google-play/`. |
-| Screenshots | **TODO** | Capture on device; checklists in each `listing.md` / `screenshots/README.md`. |
-| Privacy Policy URL | filled | Deploy `sites/envoyhome/privacy.html` (and `-zh`) to www.envoymesh.cn before submit. |
+| Screenshots | **ready** | `appstore/screenshots/` + `googleplay/screenshots/` (01–03 from real Flutter captures). |
+| Android signing | **ready (local)** | `android/key.properties` + family `upload-keystore.jks` (gitignored).
+| Privacy Policy URL | **live interim** | htmlpreview in listings. Canonical: `./scripts/deploy-envoyhome-site.sh`. Family: www.envoymesh.cn/privacy.html (EnvoyHome section staged in EnvoyMesh). |
 | Support / Marketing URLs | filled | See listing.md files. |
 
 ## Suggested next steps
 
 Follow the ordered checklist in [`docs/mobile-store-release.md`](../../../docs/mobile-store-release.md) §3–§4. Short version:
 
-1. Deploy `sites/envoyhome/` so https://www.envoymesh.cn/envoyhome/privacy.html is live.
-2. Re-capture **screenshots** at App Store / Play pixel sizes (checklists in each `listing.md`).
-3. Configure **release signing** for Android (upload keystore + `android/key.properties` — see `key.properties.example`).
+1. Privacy interim URL is live (htmlpreview). Canonical: `./scripts/deploy-envoyhome-site.sh` after `npx wrangler login`.
+2. Screenshots are under `appstore/screenshots/` and `googleplay/screenshots/` (re-capture if UI changes).
+3. Android release signing is configured locally (`key.properties` + family upload keystore, gitignored).
 4. Spin up a **demo EnvoyHome daemon** with a long-lived pairing QR — see `apple_google_reviewing.md` — and paste the URI into store review notes.
 5. Confirm prod **APNs / FCM** end-to-end (`docs/mobile-ios-android-setup.md`, `docs/mobile-live-verify.md`).
 6. Upload builds via App Store Connect / Play Console and paste text from the listing files.

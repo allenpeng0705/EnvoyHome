@@ -356,9 +356,16 @@ class EnvoyHomeSession {
   /// daemon bookkeeping — without transport `on`, the host never pushes
   /// `home:turn-delta` / `home:turn-finished` frames to this socket.
   Future<Map<String, dynamic>> subscribe(List<String> events) async {
-    _subscribedEvents = List<String>.unmodifiable(events);
-    final result = await _call('home.subscribe', {'events': events});
-    await _bindTransportEvents(events);
+    // Daemon SubscriptionRegistry unions per scope; mirror that so multiple
+    // ChatTabs (general / schedules / home) do not clobber each other's events
+    // — especially home:schedule-proposed on reconnect via _resubscribeAfterReconnect.
+    final merged = <String>[..._subscribedEvents];
+    for (final e in events) {
+      if (!merged.contains(e)) merged.add(e);
+    }
+    _subscribedEvents = List<String>.unmodifiable(merged);
+    final result = await _call('home.subscribe', {'events': merged});
+    await _bindTransportEvents(merged);
     return result;
   }
 
@@ -1053,6 +1060,16 @@ class EnvoyHomeSession {
     if (payload != null) params['payload'] = payload;
     return _call('home.confirmSchedule', params);
   }
+
+  /// Dismiss an unarmed proposal (Histories → Not set). Clears session pending card.
+  Future<Map<String, dynamic>> cancelScheduleProposal({
+    required String accountId,
+    required String proposalId,
+  }) =>
+      _call('home.cancelScheduleProposal', {
+        'accountId': accountId,
+        'proposalId': proposalId,
+      });
 
   Future<Map<String, dynamic>> updateSchedule({
     required String accountId,

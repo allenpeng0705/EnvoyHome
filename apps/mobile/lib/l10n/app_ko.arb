@@ -87,7 +87,8 @@
   "settingsHubHint": "Configure the home daemon from your phone. Some owner-only actions need a trusted device.",
   "settingsLlmSubtitle": "Models, Local, Routing, Memory",
   "settingsConnectionsSubtitle": "Pairing, Home Assistant, MQTT, Channels",
-  "settingsSkillsSubtitle": "Skills, Workflows, Schedules",
+  "settingsSkillsSubtitle": "Install and manage skill packs",
+  "settingsWorkflowsSubtitle": "DAG workflows — draft, validate, run",
   "settingsSystemSubtitle": "Profiles, Shared files, Health, Grants",
   "homeChatSessionTitle": "Phone home chat",
   "homeChatEmptyTitle": "Talk to your home",
@@ -284,6 +285,8 @@
   "skillsVerified": "Skill verified",
   "skillsTabWorkflows": "Workflows",
   "skillsTabSchedules": "Schedules",
+  "skillsTabScenes": "장면",
+  "schedulesTabJobs": "Jobs",
   "skillsInstallUrl": "Install from URL",
   "skillsInstall": "Install",
   "skillsClawHubSearch": "ClawHub search",
@@ -306,7 +309,7 @@
   "schedNoReceipts": "실행 기록이 없습니다.",
   "schedHistoryNotSet": "Not set",
   "schedHistoryRuns": "Runs",
-  "schedNoDismissed": "No canceled or expired proposals.",
+  "schedNoDismissed": "No canceled proposals.",
   "schedDismissedCanceled": "취소됨",
   "schedDismissedExpired": "만료됨",
   "schedNext": "다음",
@@ -809,10 +812,10 @@
       }
     }
   },
-  "schedulesChatTabChat": "일정",
+  "schedulesChatTabChat": "Chat",
   "schedulesChatTabHistories": "기록",
   "schedulesChatHistoriesHint": "취소·만료된 제안과 최근 실행 기록.",
-  "jobsHistoriesMovedHint": "기록은 일정 → 기록으로 이동",
+  "jobsHistoriesMovedHint": "Not set and runs are under Histories",
   "schedulesChatClosedAt": "종료 {when}",
   "@schedulesChatClosedAt": {
     "placeholders": {

@@ -87,7 +87,8 @@
   "settingsHubHint": "Configure the home daemon from your phone. Some owner-only actions need a trusted device.",
   "settingsLlmSubtitle": "Models, Local, Routing, Memory",
   "settingsConnectionsSubtitle": "Pairing, Home Assistant, MQTT, Channels",
-  "settingsSkillsSubtitle": "Skills, Workflows, Schedules",
+  "settingsSkillsSubtitle": "Install and manage skill packs",
+  "settingsWorkflowsSubtitle": "DAG workflows — draft, validate, run",
   "settingsSystemSubtitle": "Profiles, Shared files, Health, Grants",
   "homeChatSessionTitle": "Phone home chat",
   "homeChatEmptyTitle": "Talk to your home",
@@ -284,6 +285,8 @@
   "skillsVerified": "Skill verified",
   "skillsTabWorkflows": "Workflows",
   "skillsTabSchedules": "Schedules",
+  "skillsTabScenes": "Scene",
+  "schedulesTabJobs": "Jobs",
   "skillsInstallUrl": "Install from URL",
   "skillsInstall": "Install",
   "skillsClawHubSearch": "ClawHub search",
@@ -306,7 +309,7 @@
   "schedNoReceipts": "Nessuna esecuzione.",
   "schedHistoryNotSet": "Not set",
   "schedHistoryRuns": "Runs",
-  "schedNoDismissed": "No canceled or expired proposals.",
+  "schedNoDismissed": "No canceled proposals.",
   "schedDismissedCanceled": "Annullato",
   "schedDismissedExpired": "Scaduto",
   "schedNext": "Prossima",
@@ -809,10 +812,10 @@
       }
     }
   },
-  "schedulesChatTabChat": "Programmi",
+  "schedulesChatTabChat": "Chat",
   "schedulesChatTabHistories": "Cronologie",
   "schedulesChatHistoriesHint": "Proposte annullate o scadute ed esecuzioni recenti.",
-  "jobsHistoriesMovedHint": "Cronologia in Programmi → Cronologie",
+  "jobsHistoriesMovedHint": "Not set and runs are under Histories",
   "schedulesChatClosedAt": "Chiuso {when}",
   "@schedulesChatClosedAt": {
     "placeholders": {

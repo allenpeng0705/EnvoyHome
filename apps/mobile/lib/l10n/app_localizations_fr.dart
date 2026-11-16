@@ -226,7 +226,11 @@ class AppLocalizationsFr extends AppLocalizations {
       'Pairing, Home Assistant, MQTT, Channels';
 
   @override
-  String get settingsSkillsSubtitle => 'Skills, Workflows, Schedules';
+  String get settingsSkillsSubtitle => 'Install and manage skill packs';
+
+  @override
+  String get settingsWorkflowsSubtitle =>
+      'DAG workflows — draft, validate, run';
 
   @override
   String get settingsSystemSubtitle => 'Profiles, Shared files, Health, Grants';
@@ -1006,7 +1010,10 @@ class AppLocalizationsFr extends AppLocalizations {
   String get skillsTabSchedules => 'Schedules';
 
   @override
-  String get skillsTabScenes => 'Scenes';
+  String get skillsTabScenes => 'Scènes';
+
+  @override
+  String get schedulesTabJobs => 'Jobs';
 
   @override
   String get scenesHint =>
@@ -1045,6 +1052,24 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get schedConfirm => 'Confirm reminder';
+
+  @override
+  String get scheduleCardTitle => 'Set this reminder?';
+
+  @override
+  String get scheduleCardConfirm => 'Confirm';
+
+  @override
+  String get scheduleCardCancel => 'Cancel';
+
+  @override
+  String get scheduleCardConfirmedToast => 'Reminder set.';
+
+  @override
+  String get scheduleCardCanceledToast => 'Reminder canceled.';
+
+  @override
+  String get scheduleCardFailed => 'Could not update that reminder.';
 
   @override
   String get schedKindNotify => 'Notify';
@@ -1092,7 +1117,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get schedHistoryRuns => 'Runs';
 
   @override
-  String get schedNoDismissed => 'No canceled or expired proposals.';
+  String get schedNoDismissed => 'No canceled proposals.';
 
   @override
   String get schedDismissedCanceled => 'Annulé';
@@ -1923,7 +1948,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get choiceCardTextPlaceholder => 'Saisissez votre réponse';
 
   @override
-  String get schedulesChatTabChat => 'Plannings';
+  String get schedulesChatTabChat => 'Chat';
 
   @override
   String get schedulesChatTabHistories => 'Historiques';
@@ -1933,8 +1958,7 @@ class AppLocalizationsFr extends AppLocalizations {
       'Propositions annulées ou expirées, et exécutions récentes.';
 
   @override
-  String get jobsHistoriesMovedHint =>
-      'Historique sous Plannings → Historiques';
+  String get jobsHistoriesMovedHint => 'Not set and runs are under Histories';
 
   @override
   String schedulesChatClosedAt(String when) {

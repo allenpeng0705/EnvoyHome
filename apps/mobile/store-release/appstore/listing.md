@@ -2,7 +2,7 @@
 
 Paste these fields into [App Store Connect](https://appstoreconnect.apple.com). Character limits are noted.
 
-Replace every `TODO:` before submit.
+Fill the live pairing URI before submit (contact emails below are set).
 
 ---
 
@@ -113,8 +113,8 @@ Initial public release of EnvoyHome Mobile.
 | Field | Value |
 |-------|--------|
 | Support URL | `https://github.com/allenpeng0705/EnvoyHome/issues` |
-| Marketing URL | `https://www.envoymesh.cn/envoyhome/` |
-| Privacy Policy URL | `https://www.envoymesh.cn/envoyhome/privacy.html` |
+| Marketing URL | `https://htmlpreview.github.io/?https://github.com/allenpeng0705/EnvoyHome/blob/main/sites/envoyhome/index.html` (canonical after deploy: `https://www.envoymesh.cn/envoyhome/`) |
+| Privacy Policy URL | `https://htmlpreview.github.io/?https://github.com/allenpeng0705/EnvoyHome/blob/main/sites/envoyhome/privacy.html` · also `https://www.envoymesh.cn/privacy.html` · canonical `https://www.envoymesh.cn/envoyhome/privacy.html` |
 
 Deploy `sites/envoyhome/` before submit. Source drafts: `docs/privacy-policy.md`, `sites/envoyhome/privacy.html`.
 
@@ -175,10 +175,11 @@ See apple_google_reviewing.md in this folder (demo home + long-lived pairing QR)
 
 1. Open EnvoyHome → Pair → Scan QR (or paste the pairing URI).
 2. Pairing URI:
-   TODO: paste the live envoy://pair?…&app=EnvoyHome URI for this submission
+   Mint fresh before submit (desktop Settings → Connections → Pair devices) and paste the full envoy://pair?…&app=EnvoyHome URI here.
+   Operator contact: shilei.peng@qq.com
 3. After pair: open Chat → send a short message → read the reply.
    If an approval is pending, tap Deny (or Allow); that only answers the home daemon.
-4. Demo home is online during review. Contact: TODO: you@example.com
+4. Demo home is online during review. Contact: shilei.peng@qq.com (alt: shileipeng@gmail.com)
 
 Permissions:
 • Camera — scan the desktop pairing QR
@@ -240,11 +241,11 @@ Brand colors: indigo `#211962` / `#6366f1`, cyan `#22d3ee`, charcoal `#0c0f1d`, 
 
 ```bash
 cd apps/mobile
-# Bump pubspec version first: 0.1.0+N
+# Bump pubspec version first: 0.2.0+N
 flutter build ipa   # after signing / certificates configured in Xcode
 ```
 
-- Version: `CFBundleShortVersionString` from Flutter `version` name (`0.1.0`)
+- Version: `CFBundleShortVersionString` from Flutter `version` name (`0.2.0`)
 - Build: `CFBundleVersion` from Flutter build number (`N`)
 - Camera, mic, speech, location, and local-network usage strings are in `ios/Runner/Info.plist`
 - Release push: `RunnerRelease.entitlements` (`aps-environment` = production); daemon unset `APNS_SANDBOX`

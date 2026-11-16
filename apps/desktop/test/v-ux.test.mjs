@@ -12,14 +12,18 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const uiDist = join(root, "ui-dist");
 
-test("V-UX-6 bundle: bind panel on HA/MQTT; Skills tabs omit smarthome", async () => {
-  const appJs = await readFile(join(uiDist, "app.js"), "utf8");
+test("V-UX-6 bundle: bind panel on HA/MQTT; Skills packs only; Schedules hub", async () => {
+  const appJs = await readFile(join(root, "public", "app.js"), "utf8");
   assert.match(appJs, /sourceBindingPanel/);
   assert.match(appJs, /channel:\s*["']homeassistant["']/);
   assert.match(appJs, /channel:\s*["']mqtt["']/);
   assert.match(appJs, /id === ["']smarthome["']/);
   assert.doesNotMatch(appJs, /tab\(["']smarthome["']/);
   assert.doesNotMatch(appJs, /data-automation-tab=["']smarthome["']/);
+  assert.match(appJs, /data-schedules-tab/);
+  assert.match(appJs, /schedulesHubTabsHtml/);
+  assert.doesNotMatch(appJs, /data-automation-tab=["']jobs["']/);
+  assert.doesNotMatch(appJs, /data-automation-tab=["']workflows["']/);
 });
 
 test("desktop setup guide: first-launch + re-open hooks", async () => {
@@ -303,21 +307,11 @@ test("V-UX-1..5 smoke: nav + account + memory + advanced + pairing QR", async (t
     assert.ok(await page.locator('input[name="allow"]').isVisible());
     assert.doesNotMatch(await page.locator(".source-binding-panel").innerText(), /Recent actions/i);
 
-    // Skills tabs no longer include Smart home
+    // Skills = skill packs only (no Jobs/Scenes/Workflows sub-tabs)
     await page.locator('button.nav-item[data-view="automation"]').click();
-    await page.waitForSelector('[data-automation-tab="skills"]');
-    assert.equal(await page.locator('[data-automation-tab="smarthome"]').count(), 0);
-    assert.ok(await page.locator('[data-automation-tab="skills"]').isVisible());
-    assert.ok(await page.locator('[data-automation-tab="workflows"]').isVisible());
-    assert.ok(await page.locator('[data-automation-tab="jobs"]').isVisible());
-
-    // §10.1 nav slices — Channels combines former IM + Channel links
-    await page.getByRole("button", { name: "Connections", exact: true }).click();
-    await page.getByRole("tab", { name: "Channels" }).click();
-    await page.waitForSelector("#tg-bind");
-    await page.locator('button.nav-item[data-view="automation"]').click();
-    await page.getByRole("tab", { name: "Skills" }).click();
     await page.waitForSelector("#install-skill");
+    assert.equal(await page.locator("[data-automation-tab]").count(), 0);
+    assert.equal(await page.locator('[data-automation-tab="smarthome"]').count(), 0);
     assert.ok(await page.locator("#skill-source-howto").isVisible());
     assert.ok(await page.locator("#skill-howto-md").isVisible());
     assert.match(await page.locator("#skill-howto-md").innerText(), /household-tone/);
@@ -334,7 +328,25 @@ test("V-UX-1..5 smoke: nav + account + memory + advanced + pairing QR", async (t
     await page.locator("#skill-clawhub-paste summary").click();
     assert.ok(await page.locator("#skill-clawhub-form").isVisible());
     assert.ok(await page.locator("#skill-url-form").isVisible());
-    await page.getByRole("tab", { name: "Workflows" }).click();
+
+    // Schedules hub tabs (Chat · Histories · Jobs · Scenes · …)
+    await page.locator('button.nav-item[data-view="schedulesChat"]').click();
+    await page.waitForSelector('[data-schedules-tab="chat"]');
+    assert.ok(await page.locator('[data-schedules-tab="histories"]').isVisible());
+    assert.ok(await page.locator('[data-schedules-tab="jobs"]').isVisible());
+    assert.ok(await page.locator('[data-schedules-tab="scenes"]').isVisible());
+    assert.ok(await page.locator('[data-schedules-tab="standing"]').isVisible());
+    assert.ok(await page.locator('[data-schedules-tab="heartbeat"]').isVisible());
+    await page.locator('[data-schedules-tab="jobs"]').click();
+    await page.waitForSelector("#job-create");
+
+    // §10.1 nav slices — Channels combines former IM + Channel links
+    await page.getByRole("button", { name: "Connections", exact: true }).click();
+    await page.getByRole("tab", { name: "Channels" }).click();
+    await page.waitForSelector("#tg-bind");
+
+    // Workflows is top-level (not under Skills)
+    await page.locator('button.nav-item[data-view="workflows"]').click();
     await page.waitForSelector("#reload-wf");
     // Web clip howto (Design 2026-11-11f) — sample card + Try/Test controls.
     assert.ok(await page.getByRole("button", { name: /Open in editor/i }).count() >= 1);

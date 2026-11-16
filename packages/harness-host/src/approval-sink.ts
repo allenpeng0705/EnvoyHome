@@ -2,7 +2,7 @@
 
 import {
   ApprovalStore,
-  canonicalDigest,
+  toolArgsDigest,
   type PendingApproval,
   type RiskTier,
 } from "./approvals.js";
@@ -41,8 +41,8 @@ export interface ApprovalSinkDeps {
 export class ApprovalSink {
   constructor(private readonly deps: ApprovalSinkDeps) {}
 
-  private digest(args: unknown): string {
-    return canonicalDigest(args);
+  private digest(tool: string, args: unknown): string {
+    return toolArgsDigest(tool, args);
   }
 
   async authorize(req: ToolDispatchRequest): Promise<ApprovalDecision> {
@@ -53,7 +53,7 @@ export class ApprovalSink {
       });
     }
 
-    const argsDigest = this.digest(req.args);
+    const argsDigest = this.digest(req.tool, req.args);
     const origin = this.deps.policy.origin;
 
     if (origin === "unattended") {
@@ -139,7 +139,10 @@ export class ApprovalSink {
       agentId: req.agentId,
       turnId: req.turnId,
       tool: req.tool,
-      argsDigest: this.digest({ ...(req.args as object), _browserFallback: true }),
+      argsDigest: this.digest(req.tool, {
+        ...(req.args as object),
+        _browserFallback: true,
+      }),
       risk: "network",
       origin,
       summary,

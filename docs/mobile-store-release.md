@@ -6,7 +6,7 @@ Layout and process mirror EnvoyDev (`../EnvoyCoder/apps/mobile/store-release`) a
 | Item | Value |
 |------|--------|
 | Bundle / applicationId | `com.envoymesh.envoyhome` |
-| Version source | `apps/mobile/pubspec.yaml` (`0.1.0+N` → name `0.1.0`, build/versionCode `N`) |
+| Version source | `apps/mobile/pubspec.yaml` (`0.2.0+N` → name `0.2.0`, build/versionCode `N`) |
 | Store pack | [`apps/mobile/store-release/`](../apps/mobile/store-release/) |
 | Brand icons (source) | [`apps/branding/store/`](../apps/branding/store/) |
 | Privacy HTML (deploy) | [`sites/envoyhome/`](../sites/envoyhome/) |
@@ -59,15 +59,12 @@ Deploy `sites/envoyhome/` (including `privacy.html` / `privacy-zh.html`) so thos
 Do these in order:
 
 1. **Live verify PASS** — [`mobile-live-verify.md`](mobile-live-verify.md) (pair, Chat, Approvals, Settings).
-2. **Privacy URL live** — deploy `sites/envoyhome/` → confirm `https://www.envoymesh.cn/envoyhome/privacy.html`.
-3. **Screenshots** — capture on device at store resolutions; drop under  
-   `apps/mobile/store-release/appstore/screenshots/` and  
-   `apps/mobile/store-release/googleplay/screenshots/`  
-   (checklists inside each folder’s `README.md` and the `listing.md` files). Suggested set: Pairing, Chat, Approval, Settings hub, Schedules/Workflows. Do **not** show live pairing secrets or production HA tokens.
-4. **Android release signing** — copy [`apps/mobile/android/key.properties.example`](../apps/mobile/android/key.properties.example) → `android/key.properties` (gitignored). Prefer reusing the family upload keystore (EnvoyGo / EnvoyDev) or create a new one. Steps in [`googleplay/listing.md`](../apps/mobile/store-release/googleplay/listing.md). **Never commit** `*.jks` / `key.properties`.
+2. **Privacy URL live** — interim htmlpreview URL is in the listing pack; canonical deploy: `./scripts/deploy-envoyhome-site.sh` (after `npx wrangler login`) → `https://www.envoymesh.cn/envoyhome/privacy.html`. Family page: `https://www.envoymesh.cn/privacy.html` (EnvoyHome section staged in EnvoyMesh `sites/privacy.html`).
+3. **Screenshots** — store-sized PNGs are under `apps/mobile/store-release/{appstore,googleplay}/screenshots/` (01 pairing / 02 chat / 03 settings). Re-capture on device if the UI changes. Do **not** show live pairing secrets or production HA tokens.
+4. **Android release signing** — local `android/key.properties` + family `upload-keystore.jks` (gitignored; same upload key as EnvoyCoder/EnvoyGo). **Never commit** `*.jks` / `key.properties`.
 5. **Prod push** — APNs (Release / TestFlight) + FCM end-to-end; see [`mobile-ios-android-setup.md`](mobile-ios-android-setup.md). Daemon: unset `APNS_SANDBOX` for production.
 6. **Demo home for review** — dedicated machine/profile; mint `envoy://pair?…&app=EnvoyHome`; keep daemon reachable from cellular. Paste URI into App Review / Play App access notes. Full script: [`apple_google_reviewing.md`](../apps/mobile/store-release/apple_google_reviewing.md). Lead with the thin-client / Guideline **2.5.2** sentence (agent runs on the home daemon, not on the phone).
-7. **Bump version** — edit `apps/mobile/pubspec.yaml` (`0.1.0+N`; `N` must increase every upload).
+7. **Bump version** — edit `apps/mobile/pubspec.yaml` (`0.2.0+N`; `N` must increase every upload).
 8. **Claims hygiene** — stay inside the early-adopter claim sheet; do not overclaim Privacy Mode, IM zoo, or agentskills.io.
 
 ---

@@ -2,7 +2,7 @@
 
 Paste these fields into [Google Play Console](https://play.google.com/console). Character limits are noted.
 
-Replace every `TODO:` before submit.
+Fill the live pairing URI before submit (contact emails below are set).
 
 ---
 
@@ -106,8 +106,8 @@ Initial public release of EnvoyHome Mobile.
 |-------|--------|
 | Email | `shilei.peng@qq.com` (alternate: `shileipeng@gmail.com`) |
 | Phone | optional |
-| Website | `https://www.envoymesh.cn/envoyhome/` |
-| Privacy policy | `https://www.envoymesh.cn/envoyhome/privacy.html` |
+| Website | `https://htmlpreview.github.io/?https://github.com/allenpeng0705/EnvoyHome/blob/main/sites/envoyhome/index.html` (canonical after deploy: `https://www.envoymesh.cn/envoyhome/`) |
+| Privacy policy | `https://htmlpreview.github.io/?https://github.com/allenpeng0705/EnvoyHome/blob/main/sites/envoyhome/privacy.html` · also `https://www.envoymesh.cn/privacy.html` · canonical `https://www.envoymesh.cn/envoyhome/privacy.html` |
 
 Deploy `sites/envoyhome/` before submit.
 
@@ -193,9 +193,10 @@ Full guide: apple_google_reviewing.md (sibling of this file).
 
 1. Open EnvoyHome → Pair → Scan QR or paste URI.
 2. Pairing URI:
-   TODO: paste the live envoy://pair?…&app=EnvoyHome URI for this submission
+   Mint fresh before submit (desktop Settings → Connections → Pair devices) and paste the full envoy://pair?…&app=EnvoyHome URI here.
+   Operator contact: shilei.peng@qq.com
 3. After pair: open Chat → send a short message → read the reply.
-4. Demo home is online during review. Contact: TODO: you@example.com
+4. Demo home is online during review. Contact: shilei.peng@qq.com (alt: shileipeng@gmail.com)
 ```
 
 Play Console → App content → App access.
@@ -264,7 +265,7 @@ cp ../../../../EnvoyMesh/apps/envoygo/android/key.properties .
 
 ```bash
 cd apps/mobile
-# Bump pubspec version first: 0.1.0+N  (N = versionCode, must increase every upload)
+# Bump pubspec version first: 0.2.0+N  (N = versionCode, must increase every upload)
 flutter build appbundle --release
 # → build/app/outputs/bundle/release/app-release.aab
 ```
@@ -279,4 +280,4 @@ Do **not** commit `key.properties`, `*.jks`, or `*.keystore`.
 Current IDs:
 
 - `applicationId` / namespace (Android) and bundle ID (iOS): `com.envoymesh.envoyhome`
-- versionName / versionCode: from Flutter `pubspec.yaml` (`0.1.0+N` → name `0.1.0`, code `N`)
+- versionName / versionCode: from Flutter `pubspec.yaml` (`0.2.0+N` → name `0.2.0`, code `N`)

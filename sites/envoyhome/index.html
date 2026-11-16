@@ -480,7 +480,7 @@
   <section class="hero">
     <div class="container hero-content">
       <img src="screens/envoyhome-logo.png" alt="EnvoyHome" class="hero-logo">
-      <div><span class="preview-badge">Early preview</span></div>
+      <div><span class="preview-badge">0.2.0 preview</span></div>
       <h1>A home agent that lives on your computer</h1>
       <p>EnvoyHome is a self-hosted, security-first home agent: chat, memory, a document knowledge base, static workflows, approvals, and optional smart-home control — all running on your own machine. Your desktop and phone are just windows onto it.</p>
       <div class="agent-chips" aria-label="What EnvoyHome ships with">
@@ -597,10 +597,10 @@
       </div>
       <div class="shots-grid">
         <div class="shot-card featured">
-          <img src="screens/desktop-workflows.png" alt="EnvoyHome desktop — Skills → Workflows with a sample DAG in the diagram editor" loading="lazy">
+          <img src="screens/desktop-workflows.png" alt="EnvoyHome desktop — Workflows with a sample DAG in the diagram editor" loading="lazy">
           <div class="shot-caption">
             <h4>Workflows</h4>
-            <p>Build a DAG in the diagram or in YAML. Samples show fan-out, joins, branches, and tool steps — all on the same tool catalogue as chat.</p>
+            <p>Top-level Workflows (not buried under Skills). Build a DAG in the diagram or in YAML — same tool catalogue and approvals as chat.</p>
           </div>
         </div>
         <div class="shot-card">
@@ -643,7 +643,7 @@
         <div class="feature-card">
           <div class="feature-icon cyan">03</div>
           <h3>One household control plane</h3>
-          <p>Chats, Schedules, and Settings mirror the desktop. LLM, Connections, Skills, and System stay in one connected Settings hub.</p>
+          <p>Chat, a Schedules hub (Jobs · Scenes · Histories), and Settings mirror the desktop. LLM, Connections, Skills (packs), and System stay in one Settings hub.</p>
         </div>
       </div>
       <div class="mobile-shots">
@@ -676,7 +676,7 @@
         </div>
       </div>
       <div class="callout">
-        <strong>Preview thin client.</strong> A reachable EnvoyHome daemon is required; the phone app is not a standalone cloud chatbot. The optional Home tab appears only when Home Assistant is configured and enabled. APNs / FCM push is optional and configured on the daemon. There is no App Store or Play listing yet.
+        <strong>Preview thin client (0.2.0).</strong> A reachable EnvoyHome daemon is required; the phone app is not a standalone cloud chatbot. The optional Home tab appears only when Home Assistant is configured and enabled. APNs / FCM push is optional (approvals and schedule notifies) and configured on the daemon. Store listing pack is prepared; there is no App Store or Play listing live yet.
       </div>
       <p class="figure-caption">Captured from the actual Flutter app on an iOS simulator. Click any phone screenshot to enlarge.</p>
     </div>
@@ -949,7 +949,7 @@ pnpm desktop:dev      <span class="cmt"># Tauri Settings shell</span></pre>
             <div class="platform-row"><span>License</span><span>MIT</span></div>
             <p class="preview-note" style="margin-top: 10px;">macOS is the primary desktop target; Linux and Windows are best-effort. The phone app is a Flutter preview.</p>
           </div>
-          <p class="preview-note">EnvoyHome is an early-adopter preview. <code>v1.0.0</code> is not tagged yet, and there is no App Store or Play listing — install from source or a locally built package.</p>
+          <p class="preview-note">EnvoyHome <strong>0.2.0</strong> is an early-adopter preview. <code>v1.0.0</code> is not tagged yet, and there is no App Store or Play listing live — install from source or a locally built package under <code>release/</code>.</p>
         </div>
       </div>
       <div class="dev-path">
@@ -960,7 +960,7 @@ env -u CI pnpm install
 pnpm -r build
 pnpm desktop:dev        <span class="cmt"># daemon build if missing, then Tauri dev</span></pre>
         <p><code>desktop:dev</code> runs <code>./scripts/desktop-dev.sh</code>: it builds <code>packages/daemon/dist/bin/envoyhome-daemon.js</code> only when that file is missing, then starts <code>tauri:dev</code>. Tauri supervises the daemon once the binary exists. No provider config file is needed before launch — first-run Settings asks for a profile and a model provider (preset + key, or Local / Ollama).</p>
-        <p>Release bundle: <code>pnpm desktop:tauri:build</code> · installers: <code>pnpm desktop:build macos</code> (push credentials required unless <code>REQUIRE_PUSH_CREDENTIALS=0</code>).</p>
+        <p>Release installers: <code>./scripts/build-desktop.sh macos</code> → <code>release/envoyhome-desktop-0.2.0-macos-*.dmg</code> (Developer ID + notarization required; push credentials staged unless <code>REQUIRE_PUSH_CREDENTIALS=0</code>). Windows: <code>.\scripts\build-desktop.ps1</code> on a Windows host.</p>
       </div>
     </div>
   </section>

@@ -2,7 +2,7 @@
 
 Thin Settings shell for EnvoyHome (B12 / Design §10). Loopback WebSocket to the daemon (`ws://127.0.0.1:4780/ws` by default).
 
-**Focus now:** desktop Settings depth + mobile thin client. Demo IM parked. Sidebar: **Chat**, **LLM** (Model Provider / Local Model / Routing / Memory), **Connections** (Pair devices / Home Assistant / MQTT / Channels), **Skills** (Skills / Workflows / Jobs / Smart home), **System**. Profile + Language in the top bar. Approvals Allow/Deny inline in Chat; grants under System → This machine. **LLM → Model Provider** (default) is cloud providers — preferred for agent; Add provider uses Mesh-style presets (MiniMax, Anthropic, OpenAI, DeepSeek, GLM, Qwen, Moonshot, xAI, OpenRouter, plus custom OpenAI-/Anthropic-compatible). **Local Model** guides **llama.cpp** first (built-in default, `:18792` + GGUF setup steps). **Ollama** is optional/collapsed (BYO `:11434`) — Connect is manual; after Connect, boot restores that choice. Never auto-enabled from install alone. Only one engine can be on at a time. **Routing** chooses the pool (Cloud / Local only / Smart Routing). Runtime is **envoy-harness** for every profile (Harness Settings UI hidden for now).
+**Focus now:** desktop Settings depth + mobile thin client. Demo IM parked. Sidebar: **Chat**, **LLM** (Model Provider / Local Model / Routing / Memory), **Connections** (Pair devices / Home Assistant / MQTT / Channels), **Schedules** (hub: Chat / Jobs / Scenes / Household rules / Heartbeat / Histories), **Skills** (skill packs only), **Workflows**, **System**. Profile + Language in the top bar. Approvals Allow/Deny inline in Chat; grants under System → This machine. **LLM → Model Provider** (default) is cloud providers — preferred for agent; Add provider uses Mesh-style presets (MiniMax, Anthropic, OpenAI, DeepSeek, GLM, Qwen, Moonshot, xAI, OpenRouter, plus custom OpenAI-/Anthropic-compatible). **Local Model** guides **llama.cpp** first (built-in default, `:18792` + GGUF setup steps). **Ollama** is optional/collapsed (BYO `:11434`) — Connect is manual; after Connect, boot restores that choice. Never auto-enabled from install alone. Only one engine can be on at a time. **Routing** chooses the pool (Cloud / Local only / Smart Routing). Runtime is **envoy-harness** for every profile (Harness Settings UI hidden for now).
 
 ## Scripts
 
@@ -20,7 +20,7 @@ Source of truth is the one-line root **`VERSION`** file (EnvoyCoder / EnvoyMesh)
 Full packaging notes: [`scripts/README.md`](../../scripts/README.md).
 
 ```bash
-pnpm version:desktop -- 0.1.0   # writes VERSION + syncs package.json / Tauri / Cargo
+pnpm version:desktop -- 0.2.0   # writes VERSION + syncs package.json / Tauri / Cargo
 pnpm version:desktop:check      # CI also runs this
 ```
 
@@ -58,6 +58,10 @@ Windows (PowerShell, on a Windows host):
 ```
 
 Optional: `pnpm desktop:stage` only stages resources; `pnpm desktop:build` runs the shell script.
+
+**macOS signing:** release DMGs require Developer ID + notarization (same as
+EnvoyMesh / EnvoyCoder EnvoyDev). Copy `scripts/sign-macos-release.env.example` →
+`scripts/sign-macos-release.env` before `./scripts/build-desktop.sh macos`.
 
 **Push credentials** are staged into the installer (EnvoyMesh pattern): put
 `push-config.json`, `AuthKey_*.p8`, and `serviceAccountKey.json` at the **repo

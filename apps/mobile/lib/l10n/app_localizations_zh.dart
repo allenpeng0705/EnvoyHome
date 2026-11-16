@@ -219,7 +219,10 @@ class AppLocalizationsZh extends AppLocalizations {
       'Pairing, Home Assistant, MQTT, Channels';
 
   @override
-  String get settingsSkillsSubtitle => 'Skills, Workflows, Schedules';
+  String get settingsSkillsSubtitle => '安装与管理技能包';
+
+  @override
+  String get settingsWorkflowsSubtitle => '工作流 — 起草、校验、运行';
 
   @override
   String get settingsSystemSubtitle => 'Profiles, Shared files, Health, Grants';
@@ -981,11 +984,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get skillsTabSchedules => 'Schedules';
 
   @override
-  String get skillsTabScenes => 'Scenes';
+  String get skillsTabScenes => '场景';
+
+  @override
+  String get schedulesTabJobs => '任务';
 
   @override
   String get scenesHint =>
-      '「当…则…」家庭自动化（家庭规则）。在场模板需要隐私模式。';
+      'When → do household automations (household rules). Presence templates need Privacy Mode.';
 
   @override
   String get scenesWhenPresence => 'Presence (no cron — sensor trigger)';
@@ -1020,6 +1026,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get schedConfirm => 'Confirm reminder';
+
+  @override
+  String get scheduleCardTitle => '设置这个提醒？';
+
+  @override
+  String get scheduleCardConfirm => '确认';
+
+  @override
+  String get scheduleCardCancel => '取消';
+
+  @override
+  String get scheduleCardConfirmedToast => '提醒已设置。';
+
+  @override
+  String get scheduleCardCanceledToast => '提醒已取消。';
+
+  @override
+  String get scheduleCardFailed => '无法更新该提醒。';
 
   @override
   String get schedKindNotify => 'Notify';
@@ -1067,7 +1091,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get schedHistoryRuns => '运行记录';
 
   @override
-  String get schedNoDismissed => '暂无已取消或已过期的提议。';
+  String get schedNoDismissed => '暂无已取消的提议。';
 
   @override
   String get schedDismissedCanceled => '已取消';
@@ -1872,16 +1896,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get choiceCardTextPlaceholder => '输入你的回答';
 
   @override
-  String get schedulesChatTabChat => '日程';
+  String get schedulesChatTabChat => '聊天';
 
   @override
   String get schedulesChatTabHistories => '历史';
 
   @override
-  String get schedulesChatHistoriesHint => '已取消或过期的提议，以及近期运行记录。';
+  String get schedulesChatHistoriesHint => '已取消的提议，以及近期运行记录。';
 
   @override
-  String get jobsHistoriesMovedHint => '历史已移至日程 → 历史';
+  String get jobsHistoriesMovedHint => '未设置与运行在「历史」';
 
   @override
   String schedulesChatClosedAt(String when) {

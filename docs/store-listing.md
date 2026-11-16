@@ -14,7 +14,7 @@
 | Privacy draft | [`privacy-policy.md`](privacy-policy.md) |
 
 **Bundle / applicationId:** `com.envoymesh.envoyhome`  
-**App version (preview):** `0.1.0+1` — bump before each store upload.  
+**App version (preview):** `0.2.0+1` — bump before each store upload.  
 **Privacy policy URL (after deploy):** `https://www.envoymesh.cn/envoyhome/privacy.html`
 
 ## Short description (≤80 chars)

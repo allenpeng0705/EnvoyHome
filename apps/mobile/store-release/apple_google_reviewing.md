@@ -69,7 +69,7 @@ Demo home for App Review / Play review:
    envoy://pair?<PASTE_FULL_URI_INCLUDING_app=EnvoyHome>
 3. After pair: open Chat → send “hello” → read the reply.
    If an approval is shown, tap Deny (or Allow); that only answers the home daemon.
-4. Demo home is online 24/7 during review. Contact: TODO: you@example.com
+4. Demo home is online 24/7 during review. Contact: shilei.peng@qq.com (alt: shileipeng@gmail.com)
 
 Notes for reviewers:
 - First connect can take a short time while the app walks LAN / mesh / relay candidates.

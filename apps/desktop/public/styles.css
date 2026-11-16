@@ -4149,14 +4149,16 @@ body[data-view="chat"] .chat-page-split {
 }
 
 body[data-view="chat"] .chat-page,
-body[data-view="homeChat"] .chat-page {
+body[data-view="homeChat"] .chat-page,
+body[data-view="schedulesChat"] .chat-page {
   flex: 1;
   min-height: 0;
   height: 100%;
 }
 
 body[data-view="chat"] .chat-log,
-body[data-view="homeChat"] .chat-log {
+body[data-view="homeChat"] .chat-log,
+body[data-view="schedulesChat"] .chat-log {
   min-height: 0;
 }
 
@@ -4434,8 +4436,27 @@ body[data-view="schedulesChat"] .chat-log .chat-schedule {
   margin-top: 0;
 }
 
-body[data-view="schedulesChat"] .schedules-pane-tabs {
-  margin: 0.1rem 0 0.85rem;
+body[data-view="schedulesChat"] #view.view-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+body[data-view="schedulesChat"] .schedules-hub-tabs {
+  flex-shrink: 0;
+}
+
+body[data-view="schedulesChat"] .schedules-hub-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+body[data-view="schedulesChat"] .schedules-hub-panel > .chat-page {
+  flex: 1;
+  min-height: 0;
 }
 
 .schedules-histories-wrap {
@@ -5333,23 +5354,52 @@ body[data-view="schedulesChat"] .schedules-pane-tabs {
   font-style: italic;
 }
 
-.standing-examples {
-  margin: 0.65rem 0 1rem;
+.automation-howto {
+  margin: 0 0 1rem;
+}
+
+.automation-howto-list {
+  margin: 0.15rem 0 0 1.1rem;
+  padding: 0;
   font-size: 0.86rem;
   line-height: 1.45;
 }
 
-.standing-examples p {
-  margin: 0 0 0.4rem;
-}
-
-.standing-examples-list {
-  margin: 0.25rem 0 0.65rem 1.1rem;
-  padding: 0;
-}
-
-.standing-examples-list li {
+.automation-howto-list li {
   margin: 0.25rem 0;
+}
+
+.scene-unattended {
+  margin: 0.75rem 0;
+  padding: 0.75rem 1rem;
+}
+
+.scene-unattended-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.scene-unattended-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1rem;
+}
+
+.scene-unattended-name {
+  flex: 1 1 10rem;
+  font-weight: 500;
+}
+
+.scene-unattended-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.9rem;
 }
 
 .cron-schedule-field input {

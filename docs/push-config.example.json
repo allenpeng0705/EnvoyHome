@@ -1,12 +1,12 @@
 {
-  "_comment": "Install at <stateDir>/push-config.json (default ~/.envoyhome/push-config.json). Repo-root copy is only used when the daemon cwd is the repo.",
-  "_comment_sandbox": "true for Xcode debug / flutter run (development signing). false for TestFlight / App Store (RunnerRelease.entitlements production aps).",
+  "_comment": "Install at <stateDir>/push-config.json (default ~/.envoyhome/push-config.json). Repo-root copy is only used when the daemon cwd is the repo. Desktop packaging stages from repo root or ~/.envoyhome into resources/push/.",
+  "_comment_sandbox": "Product default is false (api.push.apple.com) — pairs with RunnerRelease.entitlements / TestFlight / App Store. Only override with APNS_SANDBOX=1 for Xcode debug / flutter run development APS.",
   "apns": {
     "keyId": "ABC1234567",
     "teamId": "1A2B3C4D5E",
     "keyPath": "/secure/AuthKey_ABC1234567.p8",
     "topic": "com.envoymesh.envoyhome",
-    "sandbox": true
+    "sandbox": false
   },
   "fcm": {
     "projectId": "your-firebase-project-id",

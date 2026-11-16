@@ -31,14 +31,23 @@
 # CLI is missing. Set ENVOYHOME_SKIP_OBSCURA=1 only for local debug packaging.
 # Force re-download: ENVOYHOME_OBSCURA_FORCE=1. All platforms: pnpm obscura:fetch:all
 #
-# Optional Apple Developer ID + notarization (Gatekeeper-friendly DMG):
+# Apple Developer ID + notarization is **required** for macOS DMG (Gatekeeper):
 #   Copy scripts/sign-macos-release.env.example → scripts/sign-macos-release.env
-#   (gitignored). Without credentials, this builds an unsigned DMG.
+#   (gitignored) — same values as ../EnvoyMesh and ../EnvoyCoder (EnvoyDev).
+#   Missing credentials abort the build; unsigned release DMGs are not supported.
+#   Flow (EnvoyDev pattern): deep-sign staged resources → unsigned .app →
+#   sign-macos-app-bundle.sh → DMG + notarize. Guide: ../EnvoyMesh/docs/macos-mirror-signing.md
+#   Set TAURI_DEFER_APP_SIGN=0 to let Tauri codesign the .app inline instead.
 #
-# Final installers are always copied to the **repo-root** release folder:
-#   <EnvoyHome>/release/envoyhome-desktop-{version}-macos-{arch}.dmg
-#   <EnvoyHome>/release/envoyhome-desktop-{version}-linux-{arch}.deb
-#   <EnvoyHome>/release/envoyhome-desktop-{version}-linux-{arch}.AppImage
+# Final installers are always copied to the **repo-root** release folder
+# (same convention as ../EnvoyMesh + ../EnvoyCoder EnvoyDev):
+#   release/envoyhome-desktop-{version}-macos-{arch}.dmg
+#   release/envoyhome-desktop.dmg                          (stable mirror)
+#   release/envoyhome-desktop-{version}-linux-{arch}.deb
+#   release/envoyhome-desktop-{version}-linux-{arch}.AppImage
+# Windows (build-desktop.ps1 on a Windows host):
+#   release/envoyhome-desktop-{version}-windows-{arch}-setup.exe
+#   release/envoyhome-desktop.exe                          (stable mirror)
 # Override with OUT_DIR (relative → under repo root; absolute path allowed).
 
 set -euo pipefail
@@ -57,6 +66,7 @@ else
 fi
 TAURI_TARGET="$ROOT/apps/desktop/src-tauri/target"
 BUNDLE_CONF="src-tauri/tauri.conf.bundle.json"
+UNSIGNED_CONF="src-tauri/tauri.conf.unsigned-build.json"
 
 # Desktop product version: one-line root VERSION (EnvoyCoder / EnvoyMesh pattern).
 echo "Syncing desktop version from VERSION…"
@@ -146,28 +156,74 @@ case "${TARGET}" in
     ;;
 esac
 
-apply_apple_signing_env() {
+# Developer ID + notarization for a Gatekeeper-friendly DMG (not Mac App Store).
+# Signing is mandatory on macOS — refuse to produce an unsigned package.
+# Pattern: ../EnvoyCoder/scripts/build-dmg.sh require_apple_signing_env.
+require_apple_signing_env() {
   local sign_env="$ROOT/scripts/sign-macos-release.env"
-  if [ -f "$sign_env" ]; then
-    set -a
-    # shellcheck source=/dev/null
-    source "$sign_env"
-    set +a
+  if [ ! -f "$sign_env" ]; then
+    echo "error: missing $sign_env" >&2
+    echo "  Copy scripts/sign-macos-release.env.example → scripts/sign-macos-release.env" >&2
+    echo "  and fill APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID." >&2
+    echo "  Same values as ../EnvoyMesh / ../EnvoyCoder (EnvoyDev)." >&2
+    echo "  Release DMGs are always signed; unsigned builds are not supported." >&2
+    exit 1
   fi
 
-  export APPLE_SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:-Developer ID Application: …}"
-  export APPLE_ID="${APPLE_ID:-…}"
-  export APPLE_PASSWORD="${APPLE_PASSWORD:-…}"
-  export APPLE_TEAM_ID="${APPLE_TEAM_ID:-…}"
+  set -a
+  # shellcheck source=/dev/null
+  source "$sign_env"
+  set +a
 
-  if [ "$APPLE_SIGNING_IDENTITY" = "Developer ID Application: …" ] || \
-     [ "$APPLE_ID" = "…" ] || [ "$APPLE_PASSWORD" = "…" ] || [ "$APPLE_TEAM_ID" = "…" ]; then
-    unset APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID
-    echo "  Apple signing: skipped (unsigned DMG — add scripts/sign-macos-release.env to sign)"
-    return 0
+  export APPLE_SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:-}"
+  export APPLE_ID="${APPLE_ID:-}"
+  export APPLE_PASSWORD="${APPLE_PASSWORD:-}"
+  export APPLE_TEAM_ID="${APPLE_TEAM_ID:-}"
+
+  if [ -z "$APPLE_SIGNING_IDENTITY" ] || [ "$APPLE_SIGNING_IDENTITY" = "Developer ID Application: …" ] || \
+     [[ "$APPLE_SIGNING_IDENTITY" == *"Your Name"* ]] || \
+     [ -z "$APPLE_ID" ] || [ "$APPLE_ID" = "…" ] || [[ "$APPLE_ID" == *"example.com"* ]] || \
+     [ -z "$APPLE_PASSWORD" ] || [ "$APPLE_PASSWORD" = "…" ] || [[ "$APPLE_PASSWORD" == *"xxxx"* ]] || \
+     [ -z "$APPLE_TEAM_ID" ] || [ "$APPLE_TEAM_ID" = "…" ] || [[ "$APPLE_TEAM_ID" == *"XXXXXXXXXX"* ]]; then
+    echo "error: $sign_env still has placeholders or empty Apple credentials." >&2
+    echo "  Fill all four exports before building a release DMG." >&2
+    echo "  Release DMGs are always signed; unsigned builds are not supported." >&2
+    exit 1
   fi
 
-  echo "  Apple signing: Developer ID + notarization enabled"
+  echo "  Apple signing: Developer ID + notarization required (enabled)"
+}
+
+# Newest EnvoyHome.app under the Cargo target tree (triple or host release).
+newest_envoyhome_app() {
+  local best="" best_m=0 d probe m
+  while IFS= read -r d; do
+    [ -d "$d" ] || continue
+    probe="$d"
+    [ -f "$d/Contents/Info.plist" ] && probe="$d/Contents/Info.plist"
+    m="$(file_mtime "$probe")"
+    if [ "$m" -gt "$best_m" ]; then
+      best_m="$m"
+      best="$d"
+    fi
+  done < <(find "$TAURI_TARGET" -path '*/release/bundle/macos/EnvoyHome.app' -type d 2>/dev/null)
+  [ -n "$best" ] && echo "$best"
+}
+
+# create-dmg leaves rw.<pid>.….dmg mounted under /Volumes/dmg.* when a prior
+# bundle dies mid-flight (EnvoyCoder / EnvoyMesh).
+cleanup_stale_bundle_dmg_mounts() {
+  local vol img
+  echo "  Clearing stale create-dmg mounts (if any)…"
+  for vol in /Volumes/dmg.* /Volumes/EnvoyHome*; do
+    [ -e "$vol" ] || continue
+    hdiutil detach "$vol" -force >/dev/null 2>&1 || true
+  done
+  while IFS= read -r img; do
+    [ -n "$img" ] || continue
+    hdiutil detach "$img" -force >/dev/null 2>&1 || true
+    rm -f "$img"
+  done < <(find "$TAURI_TARGET" -path '*/release/bundle/macos/rw.*.dmg' -type f 2>/dev/null)
 }
 
 echo "============================================"
@@ -237,7 +293,9 @@ else
 fi
 
 if [ "${TARGET}" = "macos" ]; then
-  apply_apple_signing_env
+  require_apple_signing_env
+  echo "[1.5/3] Signing nested Mach-O in staged resources…"
+  bash "$ROOT/scripts/sign-macos-staged-resources.sh"
 fi
 
 echo "[2/3] Building the Tauri app…"
@@ -249,8 +307,44 @@ TAURI="$(resolve_tauri)" || {
 
 case "${TARGET}" in
   macos)
-    # Host help lists app/dmg only; --bundles selects the installer flavor.
-    "$TAURI" build --config "$BUNDLE_CONF" --bundles dmg,app
+    # When Apple timestamp.apple.com flakes, Tauri's inline codesign fails the
+    # whole bundle. Build an unsigned .app, deep-sign with retry/fallback, then
+    # package DMG (EnvoyCoder / EnvoyMesh TAURI_DEFER_APP_SIGN pattern).
+    defer_sign=0
+    saved_identity=""
+    if [ "${TAURI_DEFER_APP_SIGN:-1}" = "1" ]; then
+      defer_sign=1
+      saved_identity="$APPLE_SIGNING_IDENTITY"
+      unset APPLE_SIGNING_IDENTITY
+      echo "  Tauri: deferring app codesign (sign-macos-app-bundle.sh handles timestamp fallback)"
+      if [ ! -f "$ROOT/apps/desktop/$UNSIGNED_CONF" ]; then
+        echo "error: missing $UNSIGNED_CONF (required for TAURI_DEFER_APP_SIGN)" >&2
+        exit 1
+      fi
+    fi
+
+    if [ "$defer_sign" = "1" ]; then
+      "$TAURI" build --config "$BUNDLE_CONF" --config "$UNSIGNED_CONF" --bundles app
+      export APPLE_SIGNING_IDENTITY="$saved_identity"
+      app="$(newest_envoyhome_app || true)"
+      if [ -z "$app" ]; then
+        echo "error: deferred codesign enabled but EnvoyHome.app not found under target/" >&2
+        exit 1
+      fi
+      echo ""
+      echo "[2.5/3] Signing EnvoyHome.app (deferred from Tauri)…"
+      bash "$ROOT/scripts/sign-macos-app-bundle.sh" "$app"
+      echo ""
+      echo "Packaging DMG from signed .app (not tauri bundle — preserves Developer ID)…"
+      cleanup_stale_bundle_dmg_mounts
+      # Keep APPLE_* for notarytool. Do NOT run `tauri bundle --bundles dmg` —
+      # it re-bundles an adhoc .app and wipes the signature (same trap as Mesh/Dev).
+      bash "$ROOT/scripts/package-macos-dmg.sh" "$app"
+      export APPLE_SIGNING_IDENTITY="$saved_identity"
+    else
+      cleanup_stale_bundle_dmg_mounts
+      "$TAURI" build --config "$BUNDLE_CONF" --bundles dmg,app
+    fi
     ;;
   linux)
     "$TAURI" build --config "$BUNDLE_CONF" --bundles deb,appimage
@@ -293,7 +387,12 @@ publish_one() {
 
 case "${TARGET}" in
   macos)
-    publish_one dmg "envoyhome-desktop-${VERSION}-macos-${arch}.dmg" || true
+    versioned_dmg="envoyhome-desktop-${VERSION}-macos-${arch}.dmg"
+    if publish_one dmg "$versioned_dmg"; then
+      # Stable mirror filename (EnvoyMesh / EnvoyDev convention).
+      cp -f "$OUT/$versioned_dmg" "$OUT/envoyhome-desktop.dmg"
+      echo "  envoyhome-desktop.dmg  (stable mirror)"
+    fi
     ;;
   linux)
     publish_one deb "envoyhome-desktop-${VERSION}-linux-${arch}.deb" || true
@@ -310,4 +409,4 @@ fi
 echo ""
 echo "Done. Release package(s) are in:"
 echo "  $OUT"
-ls -la "$OUT"/envoyhome-desktop-* 2>/dev/null || true
+ls -lah "$OUT"/envoyhome-desktop* 2>/dev/null || true

@@ -1,6 +1,13 @@
 // @envoyhome/harness-host — harness plugin loader + TurnContext + approvals (B6).
 
-export { ApprovalStore, canonicalDigest, type Grant, type PendingApproval, type RiskTier } from "./approvals.js";
+export {
+  ApprovalStore,
+  canonicalDigest,
+  toolArgsDigest,
+  type Grant,
+  type PendingApproval,
+  type RiskTier,
+} from "./approvals.js";
 export { ALLOWED_INTENTS, validateIntent, type AllowedIntent } from "./validator.js";
 export { type TurnContext, type TurnOrigin } from "./context.js";
 export {

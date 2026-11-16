@@ -482,6 +482,8 @@ const NAV_ICON = {
   llm: `<path d="M12 3l1.5 4.5L18 9l-4.5 1.5L12 15l-1.5-4.5L6 9l4.5-1.5L12 3z"/><path d="M5 16l.8 2.2L8 19l-2.2.8L5 22l-.8-2.2L2 19l2.2-.8L5 16z"/><path d="M19 13l.6 1.8L21.4 15.4 19.6 16 19 17.8l-.6-1.8L16.6 15.4l1.8-.6L19 13z"/>`,
   connections: `<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>`,
   automation: `<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>`,
+  // DAG / branching flow — distinct from Skills bolt.
+  workflows: `<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="8.5" y="14" width="7" height="7" rx="1"/><path d="M10 6.5h4M12 10v4"/>`,
   system: `<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>`,
 };
 
@@ -494,6 +496,8 @@ const VIEWS = [
   { id: "connections", labelKey: "nav.connections" },
   // Product label is Skills (agent-familiar); view id stays automation for deep links.
   { id: "automation", labelKey: "nav.skills" },
+  // Workflows are a top-level sidebar item (not a Skills tab).
+  { id: "workflows", labelKey: "nav.workflows" },
   { id: "system", labelKey: "nav.system" },
 ];
 
@@ -833,13 +837,25 @@ const CHAT_BOTS = [
 let tgConfigDraft = chatBotDrafts.telegram;
 let discordConfigDraft = chatBotDrafts.discord;
 
-/** @type {"skills" | "workflows" | "jobs"} */
+/** Skills view is skill-packs only (no inner tabs). */
+/** @type {"skills"} */
 let automationTab = "skills";
 
 /** @type {"profiles" | "files" | "health" | "machine"} */
 let systemTab = "profiles";
 
 const PRESENCE_CLASSES = new Set(["lock", "alarm", "camera", "presence"]);
+/** Safety / never-unattended grant refuse (Design §5.7.2). */
+const SAFETY_GRANT_CLASSES = new Set([
+  "lock",
+  "alarm",
+  "camera",
+  "presence",
+  "garage",
+  "gate",
+  "valve",
+]);
+const GRANTABLE_ACTUATE_CLASSES = new Set(["light", "switch", "other"]);
 const OBJECT_CLASSES = [
   "light",
   "switch",
@@ -860,6 +876,130 @@ function objectClassLabel(cls) {
   const key = `smarthome.class.${cls}`;
   const label = t(key);
   return label === key ? cls : label;
+}
+
+/**
+ * Top-of-tab info card (Skills / Workflows style): what it is + what it can do.
+ * @param {{
+ *   titleKey: string,
+ *   whatKey: string,
+ *   canKey: string,
+ *   bulletKeys?: string[],
+ *   id?: string,
+ * }} opts
+ */
+function automationHowtoHtml(opts) {
+  const bullets = (opts.bulletKeys || [])
+    .map((k) => `<li>${escapeHtml(t(k))}</li>`)
+    .join("");
+  const idAttr = opts.id ? ` id="${escapeHtml(opts.id)}"` : "";
+  return `<section class="card skill-source automation-howto"${idAttr}>
+    <h3>${escapeHtml(t(opts.titleKey))}</h3>
+    <p class="muted">${escapeHtml(t(opts.whatKey))}</p>
+    <p class="muted">${escapeHtml(t(opts.canKey))}</p>
+    ${
+      bullets
+        ? `<ul class="automation-howto-list muted">${bullets}</ul>`
+        : ""
+    }
+  </section>`;
+}
+
+/**
+ * Bound HA objects that may receive create-time On/Off unattended grants.
+ * @param {unknown[]} sources
+ * @param {string} accountId
+ */
+function grantableActuateObjects(sources, accountId) {
+  return (Array.isArray(sources) ? sources : []).filter((s) => {
+    if (!s || s.bound !== true || s.accountId !== accountId || !s.sourceId) return false;
+    const ch = String(s.channel || "").toLowerCase();
+    if (ch && ch !== "ha" && ch !== "homeassistant" && ch !== "demo-ha") return false;
+    const cls = String(s.class || "other");
+    if (SAFETY_GRANT_CLASSES.has(cls) || s.neverUnattended === true) return false;
+    if (!GRANTABLE_ACTUATE_CLASSES.has(cls) && cls !== "other") {
+      // Prefer light/switch; allow unknown "other" if sourceId looks like light./switch.
+      const sid = String(s.sourceId);
+      if (!sid.startsWith("light.") && !sid.startsWith("switch.")) return false;
+    }
+    return true;
+  });
+}
+
+/** @param {{ sourceId?: string, channel?: string, class?: string }} obj */
+function objectHandleId(obj) {
+  const sid = String(obj.sourceId || "").trim();
+  let ch = String(obj.channel || "homeassistant").trim() || "homeassistant";
+  // Registry / resolveBoundHandle use `homeassistant` (demo-ha plugin id aliases).
+  if (ch === "ha" || ch === "demo-ha") ch = "homeassistant";
+  return `${ch}:${sid}`;
+}
+
+/** @param {{ sourceId?: string, class?: string }} obj */
+function haDomainForObject(obj) {
+  const sid = String(obj.sourceId || "");
+  const i = sid.indexOf(".");
+  if (i > 0) return sid.slice(0, i);
+  const cls = String(obj.class || "");
+  if (cls === "light" || cls === "switch") return cls;
+  return "light";
+}
+
+/**
+ * Create-time unattended grant panel HTML.
+ * @param {unknown[]} grantable
+ * @param {{ titleKey?: string, hintKey?: string }} [opts]
+ */
+function unattendedGrantPanelHtml(grantable, opts = {}) {
+  const titleKey = opts.titleKey || "scenes.unattendedTitle";
+  const hintKey = opts.hintKey || "scenes.unattendedHint";
+  if (!grantable.length) {
+    return `<div class="scene-unattended card" id="scene-unattended-wrap">
+      <h4>${escapeHtml(t(titleKey))}</h4>
+      <p class="muted">${escapeHtml(t(hintKey))}</p>
+      <p class="muted">${escapeHtml(t("scenes.unattendedNone"))}</p>
+    </div>`;
+  }
+  const rows = grantable
+    .map((s) => {
+      const oid = objectHandleId(s);
+      const label = String(s.displayName || s.sourceId || oid);
+      return `<li class="scene-unattended-row">
+        <span class="scene-unattended-name">${escapeHtml(label)}</span>
+        <label class="scene-unattended-opt"><input type="checkbox" name="grantOn" value="${escapeHtml(oid)}" /> ${escapeHtml(t("scenes.unattendedOn"))}</label>
+        <label class="scene-unattended-opt"><input type="checkbox" name="grantOff" value="${escapeHtml(oid)}" /> ${escapeHtml(t("scenes.unattendedOff"))}</label>
+      </li>`;
+    })
+    .join("");
+  return `<div class="scene-unattended card" id="scene-unattended-wrap">
+    <h4>${escapeHtml(t(titleKey))}</h4>
+    <p class="muted">${escapeHtml(t(hintKey))}</p>
+    <ul class="scene-unattended-list">${rows}</ul>
+  </div>`;
+}
+
+/**
+ * @param {FormData} fd
+ * @param {unknown[]} grantable
+ * @returns {Array<{ tool: string, objectId: string, domain: string, service: string }>}
+ */
+function collectUnattendedGrantsFromForm(fd, grantable) {
+  const byId = new Map(grantable.map((s) => [objectHandleId(s), s]));
+  /** @type {Array<{ tool: string, objectId: string, domain: string, service: string }>} */
+  const out = [];
+  for (const oid of fd.getAll("grantOn").map(String)) {
+    const s = byId.get(oid);
+    if (!s) continue;
+    const domain = haDomainForObject(s);
+    out.push({ tool: "ha_call_service", objectId: oid, domain, service: "turn_on" });
+  }
+  for (const oid of fd.getAll("grantOff").map(String)) {
+    const s = byId.get(oid);
+    if (!s) continue;
+    const domain = haDomainForObject(s);
+    out.push({ tool: "ha_call_service", objectId: oid, domain, service: "turn_off" });
+  }
+  return out;
 }
 
 /**
@@ -1573,20 +1713,12 @@ async function refreshChatPendingChoices(sessionId) {
 
 function scheduleCardHtml(p) {
   if (!p || !p.proposalId) return "";
-  const expired = p.expiresAt && Date.parse(p.expiresAt) < Date.now();
+  // TTL-expired proposals are hidden (also omitted from Histories → Not set).
+  if (p.expiresAt && Date.parse(p.expiresAt) < Date.now()) return "";
   const when = escapeHtml(p.resolvedLocal || "");
   const msg = p.message || p.name
     ? `<p class="chat-schedule-msg">${escapeHtml(p.message || p.name || "")}</p>`
     : "";
-  if (expired) {
-    return `<div class="chat-schedule is-expired" data-proposal-id="${escapeHtml(p.proposalId)}">
-      <div class="chat-schedule-head"><strong>${escapeHtml(t("scheduleCard.title"))}</strong>
-        <span class="badge">${escapeHtml(t("scheduleCard.expired"))}</span></div>
-      <p class="chat-schedule-when">${when}</p>
-      ${msg}
-      <p class="muted">${escapeHtml(t("scheduleCard.expiredHint"))}</p>
-    </div>`;
-  }
   return `<div class="chat-schedule" data-proposal-id="${escapeHtml(p.proposalId)}">
     <div class="chat-schedule-head"><strong>${escapeHtml(t("scheduleCard.title"))}</strong></div>
     <p class="chat-schedule-when">${when}</p>
@@ -1655,9 +1787,53 @@ async function refreshChatPendingSchedule(sessionId) {
       : null;
 }
 
-/** Schedules chat sub-pane: conversation vs Histories (Not set + Runs). */
-/** @type {"chat" | "histories"} */
-let schedulesChatPane = "chat";
+/**
+ * Schedules hub tab (sidebar Schedules): Chat · Jobs · Scenes ·
+ * Household rules · Heartbeat · Histories (last).
+ * @type {"chat" | "histories" | "jobs" | "scenes" | "standing" | "heartbeat"}
+ */
+let schedulesTab = "chat";
+
+const SCHEDULES_HUB_TABS = new Set([
+  "chat",
+  "jobs",
+  "scenes",
+  "standing",
+  "heartbeat",
+  "histories",
+]);
+
+function schedulesHubTabsHtml() {
+  if (!SCHEDULES_HUB_TABS.has(schedulesTab)) schedulesTab = "chat";
+  const tab = (tabId, labelKey) =>
+    `<button type="button" role="tab" class="page-tab${schedulesTab === tabId ? " active" : ""}" data-schedules-tab="${tabId}" aria-selected="${
+      schedulesTab === tabId ? "true" : "false"
+    }">${escapeHtml(t(labelKey))}</button>`;
+  return `<div class="page-tabs schedules-hub-tabs" role="tablist" aria-label="${escapeHtml(t("schedulesChat.paneLabel"))}">
+    ${tab("chat", "schedulesChat.tabChat")}
+    ${tab("jobs", "jobs.title")}
+    ${tab("scenes", "nav.scenes")}
+    ${tab("standing", "nav.standing")}
+    ${tab("heartbeat", "nav.heartbeat")}
+    ${tab("histories", "schedulesChat.tabHistories")}
+  </div>`;
+}
+
+function schedulesHubShell(panel) {
+  return `<h2>${escapeHtml(t("nav.schedulesChat"))}</h2>${schedulesHubTabsHtml()}<div class="page-tab-panel schedules-hub-panel">${panel}</div>`;
+}
+
+function wireSchedulesHubTabs(root) {
+  root.querySelectorAll("[data-schedules-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const next = btn.getAttribute("data-schedules-tab");
+      if (!next || !SCHEDULES_HUB_TABS.has(next)) return;
+      if (next === schedulesTab) return;
+      schedulesTab = /** @type {typeof schedulesTab} */ (next);
+      void showView("schedulesChat");
+    });
+  });
+}
 
 function formatScheduleWhen(iso) {
   if (!iso) return "—";
@@ -1693,20 +1869,21 @@ async function schedulesHistoriesPanelHtml(aid) {
     rpc("home.listSchedules", { accountId: aid }).catch(() => null),
     rpc("home.listScheduleReceipts", { accountId: aid, limit: 20 }).catch(() => null),
   ]);
-  const dismissed = Array.isArray(listed?.result?.dismissed)
+  const dismissedRaw = Array.isArray(listed?.result?.dismissed)
     ? listed.result.dismissed
     : Array.isArray(listed?.dismissed)
       ? listed.dismissed
       : [];
+  // Hide TTL-expired proposals — keep canceled (user-initiated) in Not set.
+  const dismissed = dismissedRaw.filter((d) => d && d.status !== "expired");
   const receipts = receiptsBody?.error
     ? []
     : receiptsBody?.result?.receipts || receiptsBody?.receipts || [];
   const dismissedRows = dismissed
     .slice(0, 20)
     .map((d) => {
-      const statusLabel =
-        d.status === "expired" ? t("jobs.dismissedExpired") : t("jobs.dismissedCanceled");
-      const badgeClass = d.status === "expired" ? "sched-hist-badge is-expired" : "sched-hist-badge is-canceled";
+      const statusLabel = t("jobs.dismissedCanceled");
+      const badgeClass = "sched-hist-badge is-canceled";
       const title = schedulesDismissedTitle(d);
       const whenLine = schedulesDismissedWhen(d);
       const closed = formatScheduleWhen(d.closedAt);
@@ -1762,12 +1939,6 @@ async function schedulesHistoriesPanelHtml(aid) {
   </div>`;
 }
 
-function schedulesPaneToggleHtml() {
-  return `<div class="page-tabs schedules-pane-tabs" role="tablist" aria-label="${escapeHtml(t("schedulesChat.paneLabel"))}">
-    <button type="button" class="page-tab${schedulesChatPane === "chat" ? " active" : ""}" data-schedules-pane="chat" role="tab" aria-selected="${schedulesChatPane === "chat"}">${escapeHtml(t("schedulesChat.tabChat"))}</button>
-    <button type="button" class="page-tab${schedulesChatPane === "histories" ? " active" : ""}" data-schedules-pane="histories" role="tab" aria-selected="${schedulesChatPane === "histories"}">${escapeHtml(t("schedulesChat.tabHistories"))}</button>
-  </div>`;
-}
 
 /**
  * Place each pending approval / choice after the last bubble of its turn (V-UX-7 / V-UX-14).
@@ -5777,9 +5948,18 @@ async function showView(id) {
     // Legacy Skills → Smart home → Connections → Home Assistant (bind lives there).
     connectionsTab = "homeassistant";
     id = "connections";
-  } else if (id === "skills" || id === "workflows" || id === "jobs") {
-    automationTab = id;
+  } else if (id === "skills") {
+    automationTab = "skills";
     id = "automation";
+  } else if (
+    id === "jobs" ||
+    id === "heartbeat" ||
+    id === "standing" ||
+    id === "scenes"
+  ) {
+    // Legacy Skills-tab deep-links → Schedules hub.
+    schedulesTab = id;
+    id = "schedulesChat";
   } else if (id === "accounts") {
     // Legacy / top-bar “Manage profiles” → System → Profiles (first tab).
     systemTab = "profiles";
@@ -5793,6 +5973,11 @@ async function showView(id) {
   } else if (id === "advanced") {
     systemTab = "machine";
     id = "system";
+  }
+  // Stale in-memory Skills→Workflows tab (pre–top-level nav) → sidebar Workflows.
+  if (id === "automation" && /** @type {string} */ (automationTab) === "workflows") {
+    automationTab = "skills";
+    id = "workflows";
   }
   // Leaving Chat surfaces: drop the doc pane listener (state kept if returning to chat).
   if (!isChatSurface(id)) {
@@ -5835,6 +6020,1392 @@ async function showView(id) {
       return;
     }
 
+    if (id === "schedulesChat" && !SCHEDULES_HUB_TABS.has(schedulesTab)) {
+      schedulesTab = "chat";
+    }
+    if (id === "schedulesChat" && schedulesTab !== "chat" && schedulesTab !== "histories") {
+      const shell = schedulesHubShell;
+      const wireTabs = () => wireSchedulesHubTabs(el);
+
+      if (schedulesTab === "heartbeat") {
+        if (!aid) {
+          el.innerHTML = shell(`<p>${escapeHtml(t("profile.pick"))}</p>`);
+          wireTabs();
+          return;
+        }
+        const hb = await rpc("home.getHeartbeatConfig", { accountId: aid });
+        if (hb.error) {
+          el.innerHTML = shell(`<p class="le-error">${escapeHtml(errMsg(hb))}</p>`);
+          wireTabs();
+          return;
+        }
+        const cfg = hb.result || {};
+        const everyMin = Math.max(1, Math.round((cfg.everyMs || 1_800_000) / 60_000));
+        const minMin = Math.max(1, Math.round((cfg.minEveryMs || 900_000) / 60_000));
+        el.innerHTML = shell(`
+          ${automationHowtoHtml({
+            id: "heartbeat-howto",
+            titleKey: "heartbeat.howtoTitle",
+            whatKey: "heartbeat.howtoWhat",
+            canKey: "heartbeat.howtoCan",
+            bulletKeys: [
+              "heartbeat.howtoCan1",
+              "heartbeat.howtoCan2",
+              "heartbeat.howtoCan3",
+            ],
+          })}
+          <form id="hb-form" class="stack-form">
+            <h3>${escapeHtml(t("heartbeat.title"))}</h3>
+            <label class="check-row"><input type="checkbox" name="enabled" ${cfg.enabled ? "checked" : ""}/> ${escapeHtml(t("heartbeat.enabled"))}</label>
+            <label>${escapeHtml(t("heartbeat.everyMin"))}
+              <input type="number" name="everyMin" min="${minMin}" step="1" value="${everyMin}" />
+            </label>
+            <p class="muted">${escapeHtml(t("heartbeat.minHint", { min: String(minMin) }))}</p>
+            <label>${escapeHtml(t("heartbeat.prompt"))}
+              <textarea name="prompt" rows="4">${escapeHtml(cfg.prompt || "")}</textarea>
+            </label>
+            <button type="submit" class="primary">${escapeHtml(t("heartbeat.save"))}</button>
+          </form>
+          <div id="hb-banner"></div>
+        `);
+        wireTabs();
+        const form = el.querySelector("#hb-form");
+        const setBanner = (html) => {
+          const b = el.querySelector("#hb-banner");
+          if (b) b.innerHTML = html;
+        };
+        form?.addEventListener("submit", async (ev) => {
+          ev.preventDefault();
+          const fd = new FormData(form);
+          const enabled = fd.get("enabled") === "on";
+          const everyMinVal = Number(fd.get("everyMin") || everyMin);
+          const prompt = String(fd.get("prompt") || "").trim();
+          const ans = await rpc("home.setHeartbeatConfig", {
+            accountId: aid,
+            enabled,
+            everyMs: Math.round(everyMinVal * 60_000),
+            ...(prompt ? { prompt } : {}),
+          });
+          if (ans.error) {
+            setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+            return;
+          }
+          setBanner(`<p class="muted">${escapeHtml(t("heartbeat.saved"))}</p>`);
+          schedulesTab = "heartbeat";
+          await showView("schedulesChat");
+        });
+        return;
+      }
+
+      if (schedulesTab === "scenes") {
+        if (!aid) {
+          el.innerHTML = shell(`<p>${escapeHtml(t("profile.pick"))}</p>`);
+          wireTabs();
+          return;
+        }
+        const [listed, sourcesBody, privBody] = await Promise.all([
+          rpc("home.listStandingOrders", { accountId: aid }),
+          rpc("home.listSources", {}),
+          rpc("home.getPrivacyMode", { accountId: aid }).catch(() => null),
+        ]);
+        if (listed.error) {
+          el.innerHTML = shell(`<p class="le-error">${escapeHtml(errMsg(listed))}</p>`);
+          wireTabs();
+          return;
+        }
+        const privacy =
+          privBody && !privBody.error
+            ? {
+                enabled: privBody.result?.enabled === true,
+                blockSmartHomeEgress: privBody.result?.blockSmartHomeEgress !== false,
+              }
+            : null;
+        const presenceGate = assertPresenceSceneAllowed(privacy);
+        const sources = Array.isArray(sourcesBody.result?.sources)
+          ? sourcesBody.result.sources
+          : [];
+        // putStandingOrder requires source bound to this seat (not merely shared).
+        const boundSources = sources.filter(
+          (s) => s && s.bound === true && s.accountId === aid && s.sourceId,
+        );
+        const sceneOrders = (listed.result?.orders || []).filter((o) =>
+          isSceneStandingOrderId(o.id),
+        );
+        const rows = sceneOrders.length
+          ? `<ul class="sys-list">${sceneOrders
+              .map((o) => {
+                const when =
+                  o.when && typeof o.when === "object" ? o.when : null;
+                const whenKind = when?.kind ? String(when.kind) : "?";
+                let whenLabel = whenKind;
+                if (whenKind === "cron" && when?.cronExpr) {
+                  whenLabel = humanCronExprLabel(String(when.cronExpr));
+                } else if (whenKind === "smarthome_event") {
+                  whenLabel = t("scenes.source");
+                }
+                return `<li class="sys-row">
+                  <div class="sys-row-main">
+                    <span class="sys-row-title">${escapeHtml(o.name || o.id)}</span>
+                    <span class="sys-row-meta muted">${escapeHtml(whenLabel)}${
+                      o.enabled ? "" : ` · ${escapeHtml(t("standing.disabled"))}`
+                    }</span>
+                  </div>
+                  <div class="sys-row-actions">
+                    <button type="button" class="secondary" data-scene-toggle="${escapeHtml(o.id)}" data-en="${o.enabled ? "1" : "0"}">${escapeHtml(
+                      o.enabled ? t("standing.disable") : t("standing.enable"),
+                    )}</button>
+                    <button type="button" class="secondary" data-scene-remove="${escapeHtml(o.id)}">${escapeHtml(t("standing.remove"))}</button>
+                  </div>
+                </li>`;
+              })
+              .join("")}</ul>`
+          : `<p class="muted">${escapeHtml(t("scenes.none"))}</p>`;
+        const tplOpts = SCENE_TEMPLATES.map(
+          (tpl) =>
+            `<option value="${escapeHtml(tpl.id)}">${escapeHtml(t(tpl.nameKey))}</option>`,
+        ).join("");
+        const sourceOpts = boundSources.length
+          ? boundSources
+              .map((s) => {
+                const sid = String(s.sourceId || "");
+                const label = String(s.displayName || sid);
+                return `<option value="${escapeHtml(sid)}">${escapeHtml(label)}</option>`;
+              })
+              .join("")
+          : `<option value="">${escapeHtml(t("scenes.noSources"))}</option>`;
+        const grantable = grantableActuateObjects(sources, aid);
+        el.innerHTML = shell(`
+          ${automationHowtoHtml({
+            id: "scenes-howto",
+            titleKey: "scenes.howtoTitle",
+            whatKey: "scenes.howtoWhat",
+            canKey: "scenes.howtoCan",
+            bulletKeys: [
+              "scenes.howtoCan1",
+              "scenes.howtoCan2",
+              "scenes.howtoCan3",
+              "scenes.howtoCan4",
+            ],
+          })}
+          ${
+            presenceGate.ok
+              ? ""
+              : `<p class="muted">${escapeHtml(t("scenes.privacyRequired"))}</p>`
+          }
+          ${rows}
+          <h4>${escapeHtml(t("scenes.addTitle"))}</h4>
+          <form id="scene-form" class="stack-form">
+            <label>${escapeHtml(t("scenes.template"))}
+              <select name="templateId" id="scene-template">${tplOpts}</select>
+            </label>
+            <p class="muted" id="scene-tpl-hint"></p>
+            <label>${escapeHtml(t("scenes.name"))}
+              <input type="text" name="name" id="scene-name" maxlength="120" placeholder="" />
+            </label>
+            <label id="scene-when-kind-wrap" hidden>${escapeHtml(t("scenes.whenKind"))}
+              <select name="whenKind" id="scene-when-kind">
+                <option value="cron">${escapeHtml(t("scenes.whenTime"))}</option>
+                <option value="smarthome_event">${escapeHtml(t("scenes.whenPresence"))}</option>
+              </select>
+            </label>
+            <div id="scene-cron-wrap">${cronScheduleFieldHtml({
+              inputId: "scene-cron",
+              name: "cron",
+              value: "",
+            })}</div>
+            <label id="scene-source-wrap" hidden>${escapeHtml(t("scenes.source"))}
+              <select name="sourceId" id="scene-source">${sourceOpts}</select>
+            </label>
+            <label id="scene-prompt-wrap" hidden>${escapeHtml(t("scenes.prompt"))}
+              <textarea name="prompt" id="scene-prompt" rows="4"></textarea>
+            </label>
+            <p class="muted" id="scene-prompt-hint" hidden>${escapeHtml(t("scenes.promptHint"))}</p>
+            <label id="scene-message-wrap" hidden>${escapeHtml(t("scenes.notifyMessage"))}
+              <textarea name="message" id="scene-message" rows="2"></textarea>
+            </label>
+            <div id="scene-grants-slot">${unattendedGrantPanelHtml(grantable)}</div>
+            <button type="submit" class="primary">${escapeHtml(t("scenes.add"))}</button>
+          </form>
+          <div id="scene-banner"></div>
+        `);
+        wireTabs();
+        wireCronScheduleExamples(el);
+        const setBanner = (html) => {
+          const b = el.querySelector("#scene-banner");
+          if (b) b.innerHTML = html;
+        };
+        /** Last template id we synced instruction fields for — refill on change only. */
+        let lastSceneTplId = "";
+        const syncTplUi = () => {
+          const sel = /** @type {HTMLSelectElement | null} */ (
+            document.getElementById("scene-template")
+          );
+          const tpl = SCENE_TEMPLATES.find((x) => x.id === sel?.value) || SCENE_TEMPLATES[0];
+          const hint = document.getElementById("scene-tpl-hint");
+          if (hint && tpl) hint.textContent = t(tpl.hintKey);
+          const cronWrap = document.getElementById("scene-cron-wrap");
+          const sourceWrap = document.getElementById("scene-source-wrap");
+          const whenKindWrap = document.getElementById("scene-when-kind-wrap");
+          const promptWrap = document.getElementById("scene-prompt-wrap");
+          const promptHint = document.getElementById("scene-prompt-hint");
+          const messageWrap = document.getElementById("scene-message-wrap");
+          const whenKindSel = /** @type {HTMLSelectElement | null} */ (
+            document.getElementById("scene-when-kind")
+          );
+          const cronInput = /** @type {HTMLInputElement | null} */ (
+            document.getElementById("scene-cron")
+          );
+          const promptInput = /** @type {HTMLTextAreaElement | null} */ (
+            document.getElementById("scene-prompt")
+          );
+          const messageInput = /** @type {HTMLTextAreaElement | null} */ (
+            document.getElementById("scene-message")
+          );
+          const isCustom = tpl?.id === "custom";
+          const isNotify = tpl?.actionKind === "notify";
+          const grantsSlot = document.getElementById("scene-grants-slot");
+          if (whenKindWrap) whenKindWrap.hidden = !isCustom;
+          if (promptWrap) promptWrap.hidden = isNotify;
+          if (promptHint) promptHint.hidden = isNotify;
+          if (messageWrap) messageWrap.hidden = !isNotify;
+          if (grantsSlot) grantsSlot.hidden = !!isNotify;
+          const tplChanged = tpl?.id !== lastSceneTplId;
+          if (tplChanged) lastSceneTplId = tpl?.id || "";
+          if (isCustom) {
+            const wk = whenKindSel?.value === "smarthome_event" ? "smarthome_event" : "cron";
+            if (cronWrap) cronWrap.hidden = wk !== "cron";
+            if (sourceWrap) sourceWrap.hidden = wk !== "smarthome_event";
+            if (cronInput && (tplChanged || !cronInput.value)) {
+              cronInput.value = tpl.cronExpr || "0 9 * * *";
+            }
+            if (promptInput && tplChanged) promptInput.value = "";
+          } else if (tpl?.whenKind === "cron") {
+            if (cronWrap) cronWrap.hidden = false;
+            if (sourceWrap) sourceWrap.hidden = true;
+            if (cronInput && tplChanged) cronInput.value = tpl.cronExpr || "";
+          } else {
+            if (cronWrap) cronWrap.hidden = true;
+            if (sourceWrap) sourceWrap.hidden = false;
+          }
+          if (tplChanged) {
+            if (isNotify) {
+              if (messageInput) messageInput.value = tpl.message || "";
+              if (promptInput) promptInput.value = "";
+            } else {
+              if (promptInput) promptInput.value = tpl.prompt || "";
+              if (messageInput) messageInput.value = "";
+            }
+          }
+        };
+        syncTplUi();
+        document.getElementById("scene-template")?.addEventListener("change", syncTplUi);
+        document.getElementById("scene-when-kind")?.addEventListener("change", syncTplUi);
+        el.querySelector("#scene-form")?.addEventListener("submit", async (ev) => {
+          ev.preventDefault();
+          const fd = new FormData(/** @type {HTMLFormElement} */ (ev.target));
+          const templateId = String(fd.get("templateId") || "");
+          const tpl = SCENE_TEMPLATES.find((x) => x.id === templateId);
+          if (!tpl) return;
+          const isCustom = tpl.id === "custom";
+          const isNotify = tpl.actionKind === "notify";
+          const whenKind = isCustom
+            ? String(fd.get("whenKind") || "cron") === "smarthome_event"
+              ? "smarthome_event"
+              : "cron"
+            : tpl.whenKind;
+          const needsPresence =
+            whenKind === "smarthome_event" || tpl.presenceAware === true;
+          if (needsPresence) {
+            const gate = assertPresenceSceneAllowed(privacy);
+            if (!gate.ok) {
+              setBanner(`<p class="le-error">${escapeHtml(t("scenes.privacyRequired"))}</p>`);
+              return;
+            }
+          }
+          const name = String(fd.get("name") || "").trim();
+          const prompt = String(fd.get("prompt") || "").trim();
+          const message = String(fd.get("message") || "").trim();
+          if (isCustom && !name) {
+            setBanner(`<p class="le-error">${escapeHtml(t("scenes.nameRequired"))}</p>`);
+            return;
+          }
+          if (!isNotify && !prompt) {
+            setBanner(`<p class="le-error">${escapeHtml(t("scenes.promptRequired"))}</p>`);
+            return;
+          }
+          try {
+            const built = buildStandingOrderFromScene(tpl, {
+              name: name || t(tpl.nameKey),
+              cronExpr: String(fd.get("cron") || "").trim(),
+              sourceId: String(fd.get("sourceId") || "").trim(),
+              ...(isCustom ? { whenKind } : {}),
+              ...(isNotify ? { message } : { prompt }),
+            });
+            const ans = await rpc("home.putStandingOrder", {
+              accountId: aid,
+              id: built.id,
+              name: built.name,
+              enabled: true,
+              when: built.when,
+              action: built.action,
+            });
+            if (ans.error) {
+              setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+              return;
+            }
+            if (!isNotify) {
+              const grants = collectUnattendedGrantsFromForm(fd, grantable);
+              if (grants.length) {
+                const gAns = await rpc("home.putUnattendedGrants", {
+                  accountId: aid,
+                  grants,
+                });
+                if (gAns.error) {
+                  // Roll back the scene so we never leave an enabled rule without its grants.
+                  const createdId =
+                    ans.result &&
+                    typeof ans.result === "object" &&
+                    typeof /** @type {{ order?: { id?: string } }} */ (ans.result).order?.id ===
+                      "string"
+                      ? /** @type {{ order: { id: string } }} */ (ans.result).order.id
+                      : built.id;
+                  await rpc("home.removeStandingOrder", {
+                    accountId: aid,
+                    id: createdId,
+                  });
+                  setBanner(
+                    `<p class="le-error">${escapeHtml(
+                      t("scenes.grantsFailed", { error: errMsg(gAns) }),
+                    )}</p>`,
+                  );
+                  return;
+                }
+              }
+            }
+            schedulesTab = "scenes";
+            await showView("schedulesChat");
+          } catch (err) {
+            setBanner(
+              `<p class="le-error">${escapeHtml(err instanceof Error ? err.message : String(err))}</p>`,
+            );
+          }
+        });
+        el.querySelectorAll("[data-scene-toggle]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-scene-toggle");
+            const en = btn.getAttribute("data-en") === "1";
+            const ans = await rpc("home.setStandingOrderEnabled", {
+              accountId: aid,
+              id,
+              enabled: !en,
+            });
+            if (ans.error) {
+              setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+              return;
+            }
+            schedulesTab = "scenes";
+            await showView("schedulesChat");
+          });
+        });
+        el.querySelectorAll("[data-scene-remove]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-scene-remove");
+            // Tauri/WKWebView blocks window.confirm (returns false silently).
+            if (
+              !(await confirmDialog({
+                title: t("standing.remove"),
+                body: t("standing.confirmRemove"),
+                okLabel: t("standing.remove"),
+                danger: true,
+              }))
+            ) {
+              return;
+            }
+            const ans = await rpc("home.removeStandingOrder", { accountId: aid, id });
+            if (ans.error) {
+              setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+              return;
+            }
+            schedulesTab = "scenes";
+            await showView("schedulesChat");
+          });
+        });
+        return;
+      }
+
+      if (schedulesTab === "standing") {
+        if (!aid) {
+          el.innerHTML = shell(`<p>${escapeHtml(t("profile.pick"))}</p>`);
+          wireTabs();
+          return;
+        }
+        const [listed, sourcesBody] = await Promise.all([
+          rpc("home.listStandingOrders", { accountId: aid }),
+          rpc("home.listSources", {}),
+        ]);
+        if (listed.error) {
+          el.innerHTML = shell(`<p class="le-error">${escapeHtml(errMsg(listed))}</p>`);
+          wireTabs();
+          return;
+        }
+        const standingSources = Array.isArray(sourcesBody.result?.sources)
+          ? sourcesBody.result.sources
+          : [];
+        const standingGrantable = grantableActuateObjects(standingSources, aid);
+        // Scenes live under the Scenes hub tab — keep Household rules non-scene only.
+        const orders = (listed.result?.orders || []).filter(
+          (o) => !isSceneStandingOrderId(o.id),
+        );
+        const rows = orders.length
+          ? `<ul class="sys-list">${orders
+              .map((o) => {
+                const when =
+                  o.when && typeof o.when === "object" ? o.when : null;
+                const whenKind = when?.kind ? String(when.kind) : "?";
+                let whenLabel = whenKind;
+                if (whenKind === "cron" && when?.cronExpr) {
+                  whenLabel = humanCronExprLabel(String(when.cronExpr));
+                } else if (whenKind === "smarthome_event") {
+                  whenLabel = t("scenes.source");
+                } else if (whenKind === "channel_event") {
+                  whenLabel = whenKind;
+                }
+                return `<li class="sys-row">
+                  <div class="sys-row-main">
+                    <span class="sys-row-title">${escapeHtml(o.name || o.id)}</span>
+                    <span class="sys-row-meta muted">${escapeHtml(whenLabel)}${
+                      o.enabled ? "" : ` · ${escapeHtml(t("standing.disabled"))}`
+                    }</span>
+                  </div>
+                  <div class="sys-row-actions">
+                    <button type="button" class="secondary" data-so-toggle="${escapeHtml(o.id)}" data-en="${o.enabled ? "1" : "0"}">${escapeHtml(
+                      o.enabled ? t("standing.disable") : t("standing.enable"),
+                    )}</button>
+                    <button type="button" class="secondary" data-so-remove="${escapeHtml(o.id)}">${escapeHtml(t("standing.remove"))}</button>
+                  </div>
+                </li>`;
+              })
+              .join("")}</ul>`
+          : `<p class="muted">${escapeHtml(t("standing.none"))}</p>`;
+        el.innerHTML = shell(`
+          ${automationHowtoHtml({
+            id: "standing-howto",
+            titleKey: "standing.howtoTitle",
+            whatKey: "standing.howtoWhat",
+            canKey: "standing.howtoCan",
+            bulletKeys: [
+              "standing.howtoCan1",
+              "standing.howtoCan2",
+              "standing.howtoCan3",
+              "standing.exampleTime",
+              "standing.exampleEvent",
+              "standing.exampleNotify",
+            ],
+          })}
+          ${rows}
+          <h4>${escapeHtml(t("standing.addTitle"))}</h4>
+          <form id="so-form" class="stack-form">
+            <label>${escapeHtml(t("standing.name"))}
+              <input type="text" name="name" required maxlength="120" />
+            </label>
+            ${cronScheduleFieldHtml({ inputId: "so-cron", name: "cron" })}
+            <label>${escapeHtml(t("standing.prompt"))}
+              <textarea name="prompt" rows="3" required></textarea>
+            </label>
+            ${unattendedGrantPanelHtml(standingGrantable, {
+              titleKey: "standing.unattendedTitle",
+              hintKey: "standing.unattendedHint",
+            })}
+            <button type="submit" class="primary">${escapeHtml(t("standing.add"))}</button>
+          </form>
+          <div id="so-banner"></div>
+        `);
+        wireTabs();
+        wireCronScheduleExamples(el);
+        const setBanner = (html) => {
+          const b = el.querySelector("#so-banner");
+          if (b) b.innerHTML = html;
+        };
+        el.querySelector("#so-form")?.addEventListener("submit", async (ev) => {
+          ev.preventDefault();
+          const fd = new FormData(/** @type {HTMLFormElement} */ (ev.target));
+          const name = String(fd.get("name") || "").trim();
+          const cron = String(fd.get("cron") || "").trim();
+          const prompt = String(fd.get("prompt") || "").trim();
+          if (!name || !cron || !prompt) return;
+          const ans = await rpc("home.putStandingOrder", {
+            accountId: aid,
+            name,
+            enabled: true,
+            when: { kind: "cron", cronExpr: cron },
+            action: { kind: "agentTurn", prompt },
+          });
+          if (ans.error) {
+            setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+            return;
+          }
+          const grants = collectUnattendedGrantsFromForm(fd, standingGrantable);
+          if (grants.length) {
+            const gAns = await rpc("home.putUnattendedGrants", {
+              accountId: aid,
+              grants,
+            });
+            if (gAns.error) {
+              const createdId =
+                ans.result &&
+                typeof ans.result === "object" &&
+                typeof /** @type {{ order?: { id?: string } }} */ (ans.result).order?.id ===
+                  "string"
+                  ? /** @type {{ order: { id: string } }} */ (ans.result).order.id
+                  : "";
+              if (createdId) {
+                await rpc("home.removeStandingOrder", {
+                  accountId: aid,
+                  id: createdId,
+                });
+              }
+              setBanner(
+                `<p class="le-error">${escapeHtml(
+                  t("standing.grantsFailed", { error: errMsg(gAns) }),
+                )}</p>`,
+              );
+              return;
+            }
+          }
+          schedulesTab = "standing";
+          await showView("schedulesChat");
+        });
+        el.querySelectorAll("[data-so-toggle]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-so-toggle");
+            const en = btn.getAttribute("data-en") === "1";
+            const ans = await rpc("home.setStandingOrderEnabled", {
+              accountId: aid,
+              id,
+              enabled: !en,
+            });
+            if (ans.error) {
+              setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+              return;
+            }
+            schedulesTab = "standing";
+            await showView("schedulesChat");
+          });
+        });
+        el.querySelectorAll("[data-so-remove]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const id = btn.getAttribute("data-so-remove");
+            // Tauri/WKWebView blocks window.confirm (returns false silently).
+            if (
+              !(await confirmDialog({
+                title: t("standing.remove"),
+                body: t("standing.confirmRemove"),
+                okLabel: t("standing.remove"),
+                danger: true,
+              }))
+            ) {
+              return;
+            }
+            const ans = await rpc("home.removeStandingOrder", { accountId: aid, id });
+            if (ans.error) {
+              setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+              return;
+            }
+            schedulesTab = "standing";
+            await showView("schedulesChat");
+          });
+        });
+        return;
+      }
+
+      if (schedulesTab === "jobs") {
+        if (!aid) {
+          el.innerHTML = shell(`<p>${escapeHtml(t("profile.pick"))}</p>`);
+          wireTabs();
+          return;
+        }
+        const [listed, wfBody, toolsBody, sourcesBody] = await Promise.all([
+          rpc("home.listSchedules", { accountId: aid }),
+          rpc("home.listWorkflows", { accountId: aid }),
+          rpc("home.listWorkflowTools", { accountId: aid }),
+          rpc("home.listSources", {}),
+        ]);
+        if (listed.error) {
+          el.innerHTML = shell(
+            `<p class="le-error">${escapeHtml(errMsg(listed))}</p>`,
+          );
+          wireTabs();
+          return;
+        }
+        /** @type {Array<{ id: string, name: string, enabled: boolean, kind: string, source: string, payloadKind?: string, message?: string, workflowId?: string, toolName?: string, nextRunAt?: string, lastStatus?: string, timeZone?: string, cronExpr?: string, everyMs?: number, whenInstant?: string }>} */
+        const jobs = (listed.result?.jobs || []).filter((j) => j.payloadKind !== "system");
+        const repeatingJobs = jobs.filter((j) => j.kind === "cron" || j.kind === "every");
+        const onceJobs = jobs.filter((j) => j.kind === "at");
+        const workflows = (wfBody.result?.workflows || []).filter((w) => !isDemoWorkflowId(w.id));
+        const readyTools = (toolsBody.result?.tools || []).filter((r) => r.available !== false);
+        // Household: any bound device is usable by any profile (Design 2026-10-16l).
+        const boundObjects = (sourcesBody.result?.sources || []).filter(
+          (s) => s.bound && s.accountId,
+        );
+        const objectIdOptions = boundObjects
+          .map((s) => {
+            const oid = `${s.channel}:${s.sourceId}`;
+            const label = s.displayName ? `${s.displayName} (${oid})` : oid;
+            return `<option value="${escapeHtml(oid)}">${escapeHtml(label)}</option>`;
+          })
+          .join("");
+        const payloadLabel = (kind) => {
+          if (kind === "workflow") return t("jobs.payloadWorkflow");
+          if (kind === "tool") return t("jobs.payloadTool");
+          if (kind === "agentTurn") return t("jobs.payloadAgent");
+          return t("jobs.payloadNotify");
+        };
+        const formatNext = (iso) => formatScheduleWhen(iso);
+        const DOW_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        /** @param {{ kind?: string, cronExpr?: string, everyMs?: number, whenInstant?: string, timeZone?: string, nextRunAt?: string }} j */
+        const formatJobWhen = (j) => {
+          const tz = j.timeZone ? ` · ${j.timeZone}` : "";
+          if (j.kind === "every" && typeof j.everyMs === "number" && j.everyMs > 0) {
+            const sec = Math.round(j.everyMs / 1000);
+            if (sec < 120) return `${t("jobs.kindEvery")} ${sec}s${tz}`;
+            const min = Math.round(sec / 60);
+            if (min < 120) return `${t("jobs.kindEvery")} ${min}m${tz}`;
+            const hr = Math.round(min / 60);
+            return `${t("jobs.kindEvery")} ${hr}h${tz}`;
+          }
+          if (j.kind === "cron" && j.cronExpr) {
+            const parts = String(j.cronExpr).trim().split(/\s+/);
+            if (parts.length >= 5) {
+              const [min, hour, dom, mon, dow] = parts;
+              const clock =
+                hour !== "*" && min !== "*"
+                  ? `${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`
+                  : j.cronExpr;
+              if (dom === "*" && mon === "*" && dow === "*") {
+                return `${t("jobs.kindDaily")} ${clock}${tz}`;
+              }
+              if (dom === "*" && mon === "*" && dow === "1-5") {
+                return `${t("jobs.kindWeekdays")} ${clock}${tz}`;
+              }
+              if (dom === "*" && mon === "*" && /^\d$/.test(dow || "")) {
+                return `${t("jobs.kindWeekly")} ${DOW_SHORT[Number(dow)] || dow} ${clock}${tz}`;
+              }
+              if (dom !== "*" && mon === "*" && dow === "*") {
+                return `${t("jobs.kindMonthly")} ${t("jobs.dayOfMonth").replace("{d}", dom)} ${clock}${tz}`;
+              }
+              if (dom !== "*" && mon !== "*" && dow === "*") {
+                return `${t("jobs.kindYearly")} ${mon}/${dom} ${clock}${tz}`;
+              }
+              return `${t("jobs.kindRepeating")} ${j.cronExpr}${tz}`;
+            }
+          }
+          if (j.kind === "at") {
+            return `${t("jobs.kindOnce")} · ${formatNext(j.whenInstant || j.nextRunAt)}${tz}`;
+          }
+          return j.kind === "cron" || j.kind === "every"
+            ? t("jobs.kindRepeating")
+            : t("jobs.kindOnce");
+        };
+        const wfOptions = workflows
+          .map((w) => `<option value="${escapeHtml(w.id)}">${escapeHtml(w.id)}</option>`)
+          .join("");
+        /** @type {Map<string, (typeof readyTools)[number]>} */
+        const toolByName = new Map(readyTools.map((r) => [r.name, r]));
+        const toolOptions = readyTools
+          .map(
+            (r) =>
+              `<option value="${escapeHtml(r.name)}" title="${escapeHtml(r.summary || "")}">${escapeHtml(r.name)}</option>`,
+          )
+          .join("");
+        /** @param {typeof jobs} list @param {string} emptyKey */
+        const renderJobRows = (list, emptyKey) =>
+          list.length
+            ? list
+                .map((j) => {
+                  const synced = j.source === "workflow";
+                  const title =
+                    j.name || j.message || j.workflowId || j.toolName || j.id;
+                  const badge = synced
+                    ? `<span class="job-badge" title="${escapeHtml(t("jobs.syncedHint"))}">${escapeHtml(t("jobs.badgeWorkflow"))}</span>`
+                    : "";
+                  const status =
+                    j.lastStatus === "ok"
+                      ? `<span class="status-pill ok">${escapeHtml(t("jobs.statusOk"))}</span>`
+                      : j.lastStatus === "error"
+                        ? `<span class="status-pill warn">${escapeHtml(t("jobs.statusError"))}</span>`
+                        : j.lastStatus === "skipped"
+                          ? `<span class="status-pill">${escapeHtml(t("jobs.statusSkipped"))}</span>`
+                          : "";
+                  const removeBtn = synced
+                    ? ""
+                    : `<button type="button" class="secondary" data-act="remove">${escapeHtml(t("app.remove"))}</button>`;
+                  const editBtn = synced
+                    ? ""
+                    : `<button type="button" class="secondary" data-act="edit">${escapeHtml(t("jobs.edit"))}</button>`;
+                  return `<li class="job-row" data-id="${escapeHtml(j.id)}" data-source="${escapeHtml(j.source || "user")}" data-name="${escapeHtml(j.name || "")}" data-message="${escapeHtml(j.message || "")}" data-payload="${escapeHtml(j.payloadKind || "notify")}">
+              <div class="job-row-main">
+                <strong>${escapeHtml(title)} ${badge}</strong>
+                <span class="muted job-row-meta">${escapeHtml(formatJobWhen(j))} · ${escapeHtml(payloadLabel(j.payloadKind || "notify"))}${
+                  j.workflowId ? ` · <code>${escapeHtml(j.workflowId)}</code>` : ""
+                }${j.toolName ? ` · <code>${escapeHtml(j.toolName)}</code>` : ""} · ${escapeHtml(t("jobs.next"))}: ${escapeHtml(formatNext(j.nextRunAt))} ${status}</span>
+                ${synced ? `<span class="muted job-synced-hint">${escapeHtml(t("jobs.syncedHint"))}</span>` : ""}
+              </div>
+              <span class="row job-row-actions">
+                <button type="button" data-act="toggle" data-en="${j.enabled ? "0" : "1"}">${escapeHtml(j.enabled ? t("app.disable") : t("app.enable"))}</button>
+                <button type="button" data-act="run">${escapeHtml(t("app.run"))}</button>
+                ${editBtn}
+                ${removeBtn}
+              </span>
+            </li>`;
+                })
+                .join("")
+            : `<li class="muted">${escapeHtml(t(emptyKey))}</li>`;
+        /** @type {"repeating" | "once"} */
+        let jobListView = "repeating";
+        el.innerHTML = shell(`
+          ${automationHowtoHtml({
+            id: "jobs-howto",
+            titleKey: "jobs.howtoTitle",
+            whatKey: "jobs.howtoWhat",
+            canKey: "jobs.howtoCan",
+            bulletKeys: [
+              "jobs.howtoCan1",
+              "jobs.howtoCan2",
+              "jobs.howtoCan3",
+              "jobs.howtoCan4",
+            ],
+          })}
+          <div id="job-banner" class="le-section-msg"></div>
+          <div class="card job-create">
+            <h3>${escapeHtml(t("jobs.createTitle"))}</h3>
+            <div class="job-mode-toggle" role="tablist" aria-label="${escapeHtml(t("jobs.modeLabel"))}">
+              <button type="button" class="secondary is-active" data-job-mode="notify">${escapeHtml(t("jobs.modeReminder"))}</button>
+              <button type="button" class="secondary" data-job-mode="workflow">${escapeHtml(t("jobs.modeWorkflow"))}</button>
+              <button type="button" class="secondary" data-job-mode="tool">${escapeHtml(t("jobs.modeTool"))}</button>
+              <button type="button" class="secondary" data-job-mode="agentTurn">${escapeHtml(t("jobs.modeAgent"))}</button>
+            </div>
+            <label class="job-when-label">${escapeHtml(t("jobs.when"))}
+              <span class="job-when-row">
+                <input id="job-when-text" type="text" required placeholder="${escapeHtml(t("jobs.whenPlaceholder"))}" />
+                <button type="button" class="secondary" id="job-preview">${escapeHtml(t("jobs.preview"))}</button>
+              </span>
+            </label>
+            <p class="muted job-resolved" id="job-resolved" hidden></p>
+            <div class="job-mode-pane" data-job-pane="notify">
+              <label>${escapeHtml(t("jobs.message"))}
+                <input id="job-message" type="text" placeholder="${escapeHtml(t("jobs.messagePlaceholder"))}" />
+              </label>
+            </div>
+            <div class="job-mode-pane" data-job-pane="workflow" hidden>
+              <label>${escapeHtml(t("jobs.pickWorkflow"))}
+                <select id="job-workflow-id">
+                  <option value="">${escapeHtml(t("jobs.pickWorkflowPlaceholder"))}</option>
+                  ${wfOptions}
+                </select>
+              </label>
+              ${
+                workflows.length
+                  ? ""
+                  : `<p class="muted">${escapeHtml(t("jobs.noWorkflows"))}</p>`
+              }
+            </div>
+            <div class="job-mode-pane" data-job-pane="tool" hidden>
+              <label>${escapeHtml(t("jobs.pickTool"))}
+                <select id="job-tool-name">
+                  <option value="">${escapeHtml(t("jobs.pickToolPlaceholder"))}</option>
+                  ${toolOptions}
+                </select>
+              </label>
+              <p class="muted job-tool-summary" id="job-tool-summary" hidden></p>
+              <div class="job-tool-args" id="job-tool-args" hidden></div>
+              ${
+                readyTools.length
+                  ? ""
+                  : `<p class="muted">${escapeHtml(t("jobs.noTools"))}</p>`
+              }
+            </div>
+            <div class="job-mode-pane" data-job-pane="agentTurn" hidden>
+              <label>${escapeHtml(t("jobs.agentPrompt"))}
+                <textarea id="job-agent-prompt" rows="3" placeholder="${escapeHtml(t("jobs.agentPromptPlaceholder"))}"></textarea>
+              </label>
+              <p class="muted">${escapeHtml(t("jobs.agentHint"))}</p>
+            </div>
+            <div class="row job-create-actions">
+              <button type="button" id="job-create">${escapeHtml(t("jobs.createAction"))}</button>
+            </div>
+          </div>
+          <div class="job-view-toggle" role="tablist" aria-label="${escapeHtml(t("jobs.listViews"))}">
+            <button type="button" class="secondary is-active" data-job-view="repeating">${escapeHtml(t("jobs.tabRepeating"))} (${repeatingJobs.length})</button>
+            <button type="button" class="secondary" data-job-view="once">${escapeHtml(t("jobs.tabOnce"))} (${onceJobs.length})</button>
+          </div>
+          <p class="muted job-histories-link">${escapeHtml(t("jobs.historiesMovedHint"))} <button type="button" class="linkish" id="jobs-open-histories">${escapeHtml(t("schedulesChat.tabHistories"))}</button></p>
+          <ul class="job-list" id="job-list-repeating" data-job-view-pane="repeating">${renderJobRows(repeatingJobs, "jobs.noneRepeating")}</ul>
+          <ul class="job-list" id="job-list-once" data-job-view-pane="once" hidden>${renderJobRows(onceJobs, "jobs.noneOnce")}</ul>`);
+        wireTabs();
+        const setJobListView = (view) => {
+          jobListView = view;
+          el.querySelectorAll("[data-job-view]").forEach((btn) => {
+            btn.classList.toggle("is-active", btn.getAttribute("data-job-view") === view);
+          });
+          el.querySelectorAll("[data-job-view-pane]").forEach((pane) => {
+            const show = pane.getAttribute("data-job-view-pane") === view;
+            if (show) pane.removeAttribute("hidden");
+            else pane.setAttribute("hidden", "");
+          });
+        };
+        el.querySelectorAll("[data-job-view]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const view = btn.getAttribute("data-job-view");
+            if (view === "repeating" || view === "once") {
+              setJobListView(view);
+            }
+          });
+        });
+        setJobListView(jobListView);
+        document.getElementById("jobs-open-histories")?.addEventListener("click", () => {
+          schedulesTab = "histories";
+          void showView("schedulesChat");
+        });
+
+        /** @type {{ proposalId: string, whenText: string, resolvedLocal: string, kind: string, message?: string } | null} */
+        let previewProposal = null;
+        /** @type {"notify" | "workflow" | "tool" | "agentTurn"} */
+        let jobMode = "notify";
+        const setJobBanner = (html) => {
+          const box = document.getElementById("job-banner");
+          if (box) box.innerHTML = html || "";
+        };
+        const setMode = (mode) => {
+          jobMode = mode;
+          el.querySelectorAll("[data-job-mode]").forEach((btn) => {
+            btn.classList.toggle("is-active", btn.getAttribute("data-job-mode") === mode);
+          });
+          el.querySelectorAll("[data-job-pane]").forEach((pane) => {
+            const show = pane.getAttribute("data-job-pane") === mode;
+            if (show) pane.removeAttribute("hidden");
+            else pane.setAttribute("hidden", "");
+          });
+        };
+        el.querySelectorAll("[data-job-mode]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const mode = btn.getAttribute("data-job-mode");
+            if (
+              mode === "notify" ||
+              mode === "workflow" ||
+              mode === "tool" ||
+              mode === "agentTurn"
+            ) {
+              setMode(mode);
+            }
+          });
+        });
+        const argFieldLabel = (key) => {
+          const k = `jobs.arg.${key}`;
+          const labeled = t(k);
+          return labeled === k ? key : labeled;
+        };
+        const argFieldHint = (key) => {
+          const k = `jobs.argHint.${key}`;
+          const hint = t(k);
+          return hint === k ? "" : hint;
+        };
+        const domainFromObjectId = (objectId) => {
+          // homeassistant:light.living_room → light
+          const colon = objectId.indexOf(":");
+          const entity = colon >= 0 ? objectId.slice(colon + 1) : objectId;
+          const dot = entity.indexOf(".");
+          if (dot <= 0) return "";
+          return entity.slice(0, dot);
+        };
+        const optionsHtml = (values, selected, placeholder) => {
+          const opts = [
+            `<option value="">${escapeHtml(placeholder)}</option>`,
+            ...values.map(
+              (v) =>
+                `<option value="${escapeHtml(v)}"${v === selected ? " selected" : ""}>${escapeHtml(v)}</option>`,
+            ),
+          ];
+          if (selected && !values.includes(selected)) {
+            opts.push(
+              `<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`,
+            );
+          }
+          return opts.join("");
+        };
+        const pickPlaceholder = (key) => {
+          if (key === "objectId") return t("jobs.argPickObject");
+          if (key === "domain") return t("jobs.argPickDomain");
+          if (key === "service") return t("jobs.argPickService");
+          return t("jobs.argPickValue");
+        };
+        /**
+         * Known multi-value args → dropdown. Sources (in order):
+         * bound objects for objectId; catalogue argChoiceGroups[parent]; catalogue argChoices.
+         * @param {any} row
+         * @param {string} key
+         * @param {Record<string, string>} parentValues
+         * @returns {string[] | null}
+         */
+        const knownChoicesForArg = (row, key, parentValues) => {
+          if (key === "objectId") {
+            const ids = boundObjects.map((s) => `${s.channel}:${s.sourceId}`);
+            return ids.length ? ids : null;
+          }
+          const dependsOn =
+            (row.argChoiceDependsOn && row.argChoiceDependsOn[key]) ||
+            (row.argChoiceGroups && row.argChoiceGroups[key] ? "domain" : undefined);
+          const groups = row.argChoiceGroups && row.argChoiceGroups[key];
+          if (groups && typeof groups === "object") {
+            const parentKey = dependsOn || "domain";
+            const parentVal = parentValues[parentKey] || "";
+            if (parentVal && Array.isArray(groups[parentVal]) && groups[parentVal].length) {
+              return groups[parentVal].map(String);
+            }
+            const flat = [...new Set(Object.values(groups).flatMap((v) => (Array.isArray(v) ? v : [])))].map(
+              String,
+            );
+            return flat.length ? flat : null;
+          }
+          const choices = row.argChoices && row.argChoices[key];
+          if (Array.isArray(choices) && choices.length > 0) return choices.map(String);
+          return null;
+        };
+        const refillDependentSelects = (row) => {
+          const argsHost = document.getElementById("job-tool-args");
+          if (!argsHost || !row) return;
+          /** @type {Record<string, string>} */
+          const parents = {};
+          argsHost.querySelectorAll("[data-job-arg]").forEach((el) => {
+            const k = el.getAttribute("data-job-arg");
+            if (!k) return;
+            if (el instanceof HTMLSelectElement || el instanceof HTMLInputElement) {
+              parents[k] = String(el.value || "").trim();
+            }
+          });
+          argsHost.querySelectorAll("select[data-job-arg][data-job-depends]").forEach((el) => {
+            if (!(el instanceof HTMLSelectElement)) return;
+            const key = el.getAttribute("data-job-arg") || "";
+            const list = knownChoicesForArg(row, key, parents) || [];
+            const prev = el.value;
+            el.innerHTML = optionsHtml(list, list.includes(prev) ? prev : list[0] || "", pickPlaceholder(key));
+          });
+        };
+        const wireArgChoiceSync = (row) => {
+          const argsHost = document.getElementById("job-tool-args");
+          if (!argsHost || !row) return;
+          const objEl = argsHost.querySelector('[data-job-arg="objectId"]');
+          const domainEl = /** @type {HTMLSelectElement | null} */ (
+            argsHost.querySelector('[data-job-arg="domain"]')
+          );
+          const syncDomainFromObject = () => {
+            if (!domainEl) return;
+            const oid =
+              objEl instanceof HTMLSelectElement || objEl instanceof HTMLInputElement
+                ? String(objEl.value || "").trim()
+                : "";
+            if (!oid) return;
+            const inferred = domainFromObjectId(oid);
+            if (!inferred) return;
+            if (![...domainEl.options].some((o) => o.value === inferred)) {
+              domainEl.appendChild(new Option(inferred, inferred, true, true));
+            } else {
+              domainEl.value = inferred;
+            }
+            refillDependentSelects(row);
+          };
+          objEl?.addEventListener("change", syncDomainFromObject);
+          argsHost.querySelectorAll("select[data-job-arg]").forEach((el) => {
+            el.addEventListener("change", () => refillDependentSelects(row));
+          });
+        };
+        const renderToolArgsForm = (toolName) => {
+          const summaryEl = document.getElementById("job-tool-summary");
+          const argsHost = document.getElementById("job-tool-args");
+          if (!summaryEl || !argsHost) return;
+          const row = toolName ? toolByName.get(toolName) : undefined;
+          if (!row) {
+            summaryEl.hidden = true;
+            summaryEl.textContent = "";
+            argsHost.hidden = true;
+            argsHost.innerHTML = "";
+            return;
+          }
+          summaryEl.hidden = false;
+          summaryEl.textContent = row.summary || "";
+          const sample =
+            row.sampleArgs && typeof row.sampleArgs === "object" && !Array.isArray(row.sampleArgs)
+              ? row.sampleArgs
+              : {};
+          const keys = Object.keys(sample);
+          if (!keys.length) {
+            argsHost.hidden = false;
+            argsHost.innerHTML = `<p class="muted job-tool-args-empty">${escapeHtml(t("jobs.toolArgsNone"))}</p>`;
+            return;
+          }
+          const n = keys.length;
+          const countHint =
+            n > 1
+              ? t("jobs.toolArgsMulti", { count: String(n) })
+              : t("jobs.toolArgsHint");
+          /** @type {Record<string, string>} */
+          const parentSeed = {};
+          for (const [k, v] of Object.entries(sample)) {
+            if (typeof v === "string") parentSeed[k] = v;
+          }
+          argsHost.hidden = false;
+          argsHost.innerHTML = `<p class="muted job-tool-args-hint">${escapeHtml(countHint)}</p>${keys
+            .map((key, idx) => {
+              const sampleVal = sample[key];
+              const asText =
+                sampleVal === null || sampleVal === undefined
+                  ? ""
+                  : typeof sampleVal === "string"
+                    ? sampleVal
+                    : JSON.stringify(sampleVal);
+              const hint = argFieldHint(key);
+              const hintHtml = hint
+                ? `<p class="muted job-tool-arg-hint">${escapeHtml(hint)}</p>`
+                : "";
+              const step =
+                n > 1
+                  ? `<span class="job-tool-arg-step">${escapeHtml(t("jobs.argStep", { n: String(idx + 1), total: String(n) }))}</span>`
+                  : "";
+              const choices = knownChoicesForArg(row, key, parentSeed);
+              const dependsOn =
+                (row.argChoiceDependsOn && row.argChoiceDependsOn[key]) ||
+                (row.argChoiceGroups && row.argChoiceGroups[key] ? "domain" : "");
+              let control;
+              if (choices && choices.length) {
+                const selected = choices.includes(asText) ? asText : choices[0] || "";
+                const depAttr = dependsOn ? ` data-job-depends="${escapeHtml(dependsOn)}"` : "";
+                if (key === "objectId") {
+                  control = `<select data-job-arg="${escapeHtml(key)}"${depAttr}>
+                      <option value="">${escapeHtml(t("jobs.argPickObject"))}</option>
+                      ${objectIdOptions}
+                    </select>`;
+                } else {
+                  control = `<select data-job-arg="${escapeHtml(key)}"${depAttr}>${optionsHtml(choices, selected, pickPlaceholder(key))}</select>`;
+                }
+              } else if (key === "objectId") {
+                control = `<input data-job-arg="${escapeHtml(key)}" type="text" value="" placeholder="${escapeHtml(asText || "homeassistant:light.living_room")}" />
+                  <p class="muted job-tool-arg-hint">${escapeHtml(t("jobs.argNoBoundObjects"))}</p>`;
+              } else {
+                const isMultiline =
+                  typeof sampleVal === "string" && (sampleVal.includes("\n") || asText.length > 80);
+                control = isMultiline
+                  ? `<textarea data-job-arg="${escapeHtml(key)}" rows="3" spellcheck="false" placeholder="${escapeHtml(asText)}">${escapeHtml(asText)}</textarea>`
+                  : `<input data-job-arg="${escapeHtml(key)}" type="text" value="${escapeHtml(asText)}" placeholder="${escapeHtml(asText)}" />`;
+              }
+              return `<div class="job-tool-arg-field">
+                <div class="job-tool-arg-head">${step}<span class="job-tool-arg-label">${escapeHtml(argFieldLabel(key))}</span></div>
+                ${hintHtml}
+                ${control}
+              </div>`;
+            })
+            .join("")}`;
+          wireArgChoiceSync(row);
+        };
+        const readToolArgsFromForm = () => {
+          const argsHost = document.getElementById("job-tool-args");
+          /** @type {Record<string, unknown>} */
+          const out = {};
+          if (!argsHost) return out;
+          argsHost.querySelectorAll("[data-job-arg]").forEach((el) => {
+            const key = el.getAttribute("data-job-arg");
+            if (!key) return;
+            const raw =
+              el instanceof HTMLTextAreaElement ||
+              el instanceof HTMLInputElement ||
+              el instanceof HTMLSelectElement
+                ? String(el.value || "").trim()
+                : "";
+            if (!raw) return;
+            // Keep numbers/bools/objects if the sample was JSON; otherwise plain string.
+            if (
+              (raw.startsWith("{") && raw.endsWith("}")) ||
+              (raw.startsWith("[") && raw.endsWith("]")) ||
+              raw === "true" ||
+              raw === "false" ||
+              /^-?\d+(\.\d+)?$/.test(raw)
+            ) {
+              try {
+                out[key] = JSON.parse(raw);
+                return;
+              } catch {
+                /* fall through as string */
+              }
+            }
+            out[key] = raw;
+          });
+          return out;
+        };
+        document.getElementById("job-tool-name")?.addEventListener("change", (ev) => {
+          const sel = /** @type {HTMLSelectElement} */ (ev.currentTarget);
+          renderToolArgsForm(sel.value);
+        });
+        const readWhenText = () =>
+          String(
+            /** @type {HTMLInputElement | null} */ (document.getElementById("job-when-text"))?.value || "",
+          ).trim();
+        const showPreview = (p) => {
+          const line = document.getElementById("job-resolved");
+          if (!line) return;
+          line.hidden = false;
+          line.textContent = t("jobs.resolvedLine", {
+            when: p.resolvedLocal || "",
+            kind: p.kind || "",
+          });
+          const msgEl = /** @type {HTMLInputElement | null} */ (document.getElementById("job-message"));
+          if (msgEl && p.message && !msgEl.value.trim()) msgEl.value = p.message;
+        };
+        const clearPreviewIfStale = () => {
+          const whenText = readWhenText();
+          if (previewProposal && previewProposal.whenText !== whenText) {
+            previewProposal = null;
+            const line = document.getElementById("job-resolved");
+            if (line) {
+              line.hidden = true;
+              line.textContent = "";
+            }
+          }
+        };
+        document.getElementById("job-when-text")?.addEventListener("input", clearPreviewIfStale);
+        document.getElementById("job-preview")?.addEventListener("click", async () => {
+          const whenText = readWhenText();
+          if (!whenText) {
+            setJobBanner(`<p class="le-error">${escapeHtml(t("jobs.whenRequired"))}</p>`);
+            return;
+          }
+          setJobBanner(`<p class="muted">${escapeHtml(t("jobs.previewing"))}</p>`);
+          const proposed = await rpc("home.proposeSchedule", {
+            accountId: aid,
+            text: whenText,
+            clientContext: {
+              clientNow: new Date().toISOString(),
+              timeZone:
+                (typeof Intl !== "undefined" &&
+                  Intl.DateTimeFormat().resolvedOptions().timeZone) ||
+                undefined,
+              locale: getLocale() ||
+                (typeof navigator !== "undefined" && navigator.language
+                  ? navigator.language.split(/[-_]/)[0]
+                  : "en"),
+            },
+          });
+          if (proposed.error) {
+            previewProposal = null;
+            setJobBanner(`<p class="le-error">${escapeHtml(errMsg(proposed))}</p>`);
+            return;
+          }
+          const p = proposed.result || {};
+          previewProposal = {
+            proposalId: String(p.proposalId || ""),
+            whenText,
+            resolvedLocal: String(p.resolvedLocal || ""),
+            kind: String(p.kind || ""),
+            ...(p.message ? { message: String(p.message) } : {}),
+          };
+          showPreview(previewProposal);
+          setJobBanner(`<p class="muted">${escapeHtml(t("jobs.previewOk"))}</p>`);
+        });
+        document.getElementById("job-create")?.addEventListener("click", async () => {
+          const whenText = readWhenText();
+          if (!whenText) {
+            setJobBanner(`<p class="le-error">${escapeHtml(t("jobs.whenRequired"))}</p>`);
+            return;
+          }
+          /** @type {Record<string, unknown>} */
+          let payload;
+          let name;
+          if (jobMode === "notify") {
+            const message = String(
+              /** @type {HTMLInputElement | null} */ (document.getElementById("job-message"))?.value || "",
+            ).trim();
+            payload = { kind: "notify", ...(message ? { message } : {}) };
+            name = message.slice(0, 80);
+          } else if (jobMode === "workflow") {
+            const workflowId = String(
+              /** @type {HTMLSelectElement | null} */ (document.getElementById("job-workflow-id"))
+                ?.value || "",
+            ).trim();
+            if (!workflowId) {
+              setJobBanner(`<p class="le-error">${escapeHtml(t("jobs.workflowRequired"))}</p>`);
+              return;
+            }
+            payload = { kind: "workflow", workflowId, message: workflowId };
+            name = workflowId;
+          } else if (jobMode === "agentTurn") {
+            const prompt = String(
+              /** @type {HTMLTextAreaElement | null} */ (document.getElementById("job-agent-prompt"))
+                ?.value || "",
+            ).trim();
+            if (!prompt) {
+              setJobBanner(`<p class="le-error">${escapeHtml(t("jobs.agentPromptRequired"))}</p>`);
+              return;
+            }
+            payload = {
+              kind: "agentTurn",
+              prompt,
+              toolPolicyPreset: "restricted",
+              message: prompt.slice(0, 80),
+            };
+            name = prompt.slice(0, 80);
+          } else {
+            const toolName = String(
+              /** @type {HTMLSelectElement | null} */ (document.getElementById("job-tool-name"))
+                ?.value || "",
+            ).trim();
+            if (!toolName) {
+              setJobBanner(`<p class="le-error">${escapeHtml(t("jobs.toolRequired"))}</p>`);
+              return;
+            }
+            const toolArgs = readToolArgsFromForm();
+            payload = {
+              kind: "tool",
+              toolName,
+              ...(Object.keys(toolArgs).length ? { toolArgs } : {}),
+            };
+            name = toolName;
+          }
+          setJobBanner(`<p class="muted">${escapeHtml(t("jobs.creating"))}</p>`);
+          let proposalId =
+            previewProposal && previewProposal.whenText === whenText
+              ? previewProposal.proposalId
+              : "";
+          let proposedMessage =
+            previewProposal && previewProposal.whenText === whenText
+              ? previewProposal.message
+              : undefined;
+          if (!proposalId) {
+            const proposed = await rpc("home.proposeSchedule", {
+              accountId: aid,
+              text: whenText,
+              clientContext: {
+                clientNow: new Date().toISOString(),
+                timeZone:
+                  (typeof Intl !== "undefined" &&
+                    Intl.DateTimeFormat().resolvedOptions().timeZone) ||
+                  undefined,
+                locale: getLocale() ||
+                  (typeof navigator !== "undefined" && navigator.language
+                    ? navigator.language.split(/[-_]/)[0]
+                    : "en"),
+              },
+            });
+            if (proposed.error) {
+              setJobBanner(`<p class="le-error">${escapeHtml(errMsg(proposed))}</p>`);
+              return;
+            }
+            const p = proposed.result || {};
+            proposalId = String(p.proposalId || "");
+            if (typeof p.message === "string") proposedMessage = p.message;
+            if (proposalId) {
+              previewProposal = {
+                proposalId,
+                whenText,
+                resolvedLocal: String(p.resolvedLocal || ""),
+                kind: String(p.kind || ""),
+                ...(proposedMessage ? { message: proposedMessage } : {}),
+              };
+              showPreview(previewProposal);
+            }
+          }
+          if (!proposalId) {
+            setJobBanner(`<p class="le-error">${escapeHtml(t("jobs.whenRequired"))}</p>`);
+            return;
+          }
+          if (jobMode === "notify") {
+            const message =
+              (typeof payload.message === "string" && payload.message) ||
+              (typeof proposedMessage === "string" ? proposedMessage : "") ||
+              "";
+            if (!message.trim()) {
+              setJobBanner(`<p class="le-error">${escapeHtml(t("jobs.messageRequired"))}</p>`);
+              return;
+            }
+            payload = { kind: "notify", message: message.trim() };
+            name = message.trim().slice(0, 80);
+          }
+          const ans = await rpc("home.confirmSchedule", {
+            accountId: aid,
+            proposalId,
+            name,
+            payload,
+          });
+          if (ans.error) {
+            // Proposal may have been consumed or expired — clear so Create can re-propose.
+            previewProposal = null;
+            setJobBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+            return;
+          }
+          schedulesTab = "jobs";
+          await showView("schedulesChat");
+        });
+        el.querySelectorAll(".job-row button[data-act]").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const row = btn.closest(".job-row");
+            const jobId = row?.getAttribute("data-id");
+            if (!jobId) return;
+            const act = btn.getAttribute("data-act");
+            let ans;
+            if (act === "toggle") {
+              const enabled = btn.getAttribute("data-en") === "1";
+              ans = await rpc("home.updateSchedule", { accountId: aid, jobId, enabled });
+            } else if (act === "run") {
+              ans = await rpc("home.runSchedule", { accountId: aid, jobId });
+            } else if (act === "edit") {
+              const curName = row?.getAttribute("data-name") || "";
+              const curMessage = row?.getAttribute("data-message") || "";
+              const payloadKind = row?.getAttribute("data-payload") || "notify";
+              const nextName = window.prompt(t("jobs.editNamePrompt"), curName);
+              if (nextName === null) return;
+              const patch = { accountId: aid, jobId, name: nextName.trim() || curName };
+              if (payloadKind === "notify") {
+                const nextMsg = window.prompt(t("jobs.editMessagePrompt"), curMessage);
+                if (nextMsg === null) return;
+                if (nextMsg.trim()) {
+                  patch.payload = { kind: "notify", message: nextMsg.trim() };
+                }
+              }
+              ans = await rpc("home.updateSchedule", patch);
+            } else if (act === "remove") {
+              // Tauri/WKWebView blocks window.confirm (returns false silently).
+              if (
+                !(await confirmDialog({
+                  title: t("app.remove"),
+                  body: t("jobs.confirmRemove"),
+                  okLabel: t("app.remove"),
+                  danger: true,
+                }))
+              ) {
+                return;
+              }
+              ans = await rpc("home.removeSchedule", { accountId: aid, jobId });
+            } else {
+              return;
+            }
+            if (ans.error) {
+              setJobBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+              return;
+            }
+            if (act === "run") {
+              const receipt = ans.result?.receipt;
+              const line = receipt
+                ? `${receipt.execStatus}${receipt.deliveryStatus ? ` · ${receipt.deliveryStatus}` : ""}`
+                : t("jobs.runOk");
+              setJobBanner(`<p class="muted">${escapeHtml(line)}</p>`);
+            }
+            schedulesTab = "jobs";
+            await showView("schedulesChat");
+          });
+        });
+        return;
+      }
+      el.innerHTML = schedulesHubShell(`<p class="muted">${escapeHtml(t("app.unknownView"))}</p>`);
+      wireSchedulesHubTabs(el);
+      return;
+    }
+
     if (id === "chat" || id === "homeChat" || id === "schedulesChat") {
       const purpose = purposeForView(id);
       const isHome = dedicatedChat(purpose);
@@ -5847,13 +7418,16 @@ async function showView(id) {
             ? "schedulesChat.placeholder"
             : "chat.placeholder";
       if (!aid) {
-        el.innerHTML = `<div class="chat-page">
+        const needProfile = `<div class="chat-page">
           <div class="empty">
             <p>${escapeHtml(t("chat.needProfile"))}</p>
             <p class="muted">${escapeHtml(t("chat.needProfileHint"))}</p>
             <button type="button" id="go-accounts">${escapeHtml(t("profile.openProfiles"))}</button>
           </div>
         </div>`;
+        el.innerHTML =
+          purpose === "schedules" ? schedulesHubShell(needProfile) : needProfile;
+        if (purpose === "schedules") wireSchedulesHubTabs(el);
         document.getElementById("go-accounts")?.addEventListener("click", () => showView("accounts"));
         return;
       }
@@ -5901,9 +7475,8 @@ async function showView(id) {
         : await currentGeneralChatTitle(aid);
       const sessionsOpen = isHome ? true : chatSessionsOpenPreferred();
       const sessionsRail = isHome ? "" : chatSessionsRailHtml();
-      const schedulesToggle = purpose === "schedules" ? schedulesPaneToggleHtml() : "";
       const showSchedulesHistories =
-        purpose === "schedules" && schedulesChatPane === "histories";
+        purpose === "schedules" && schedulesTab === "histories";
       const historiesBody = showSchedulesHistories
         ? await schedulesHistoriesPanelHtml(aid)
         : "";
@@ -5922,11 +7495,13 @@ async function showView(id) {
                   <input name="text" id="chat-input" placeholder="${escapeHtml(t(placeholderKey))}" autocomplete="off" />
                   <button type="submit" id="chat-send">${escapeHtml(t("app.send"))}</button>
                 </div>`;
-      el.innerHTML = `<div class="chat-page${isHome ? "" : ` chat-page-split${sessionsOpen ? "" : " is-sessions-collapsed"}`}">
+      // Hub already has Schedules h2 + tabs — skip duplicate chrome title on Chat/Histories.
+      const schedulesChrome =
+        purpose === "schedules" ? "" : chatChromeHtml(isHome, threadTitle, !sessionsOpen);
+      const chatBodyHtml = `<div class="chat-page${isHome ? "" : ` chat-page-split${sessionsOpen ? "" : " is-sessions-collapsed"}`}">
         ${sessionsRail}
         <div class="chat-main">
-          ${chatChromeHtml(isHome, threadTitle, !sessionsOpen)}
-          ${schedulesToggle}
+          ${schedulesChrome}
           ${showSchedulesHistories ? "" : banner}
           ${
             showSchedulesHistories
@@ -5962,17 +7537,9 @@ async function showView(id) {
           }
         </div>
       </div>`;
-      if (purpose === "schedules") {
-        el.querySelectorAll("[data-schedules-pane]").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const pane = btn.getAttribute("data-schedules-pane");
-            if (pane !== "chat" && pane !== "histories") return;
-            if (pane === schedulesChatPane) return;
-            schedulesChatPane = pane;
-            void showView("schedulesChat");
-          });
-        });
-      }
+      el.innerHTML =
+        purpose === "schedules" ? schedulesHubShell(chatBodyHtml) : chatBodyHtml;
+      if (purpose === "schedules") wireSchedulesHubTabs(el);
       if (showSchedulesHistories) {
         return;
       }
@@ -10610,333 +12177,13 @@ async function showView(id) {
     }
 
 
-    if (id === "automation") {
-      const tab = (tabId, labelKey) =>
-        `<button type="button" role="tab" class="page-tab${automationTab === tabId ? " active" : ""}" data-automation-tab="${tabId}" aria-selected="${
-          automationTab === tabId ? "true" : "false"
-        }">${escapeHtml(t(labelKey))}</button>`;
-      if (
-        automationTab !== "skills" &&
-        automationTab !== "workflows" &&
-        automationTab !== "jobs" &&
-        automationTab !== "heartbeat" &&
-        automationTab !== "standing" &&
-        automationTab !== "scenes"
-      ) {
-        automationTab = "skills";
-      }
-      const tabsHtml = `<div class="page-tabs" role="tablist">
-        ${tab("skills", "nav.skills")}
-        ${tab("workflows", "nav.workflows")}
-        ${tab("scenes", "nav.scenes")}
-        ${tab("jobs", "nav.jobs")}
-        ${tab("heartbeat", "nav.heartbeat")}
-        ${tab("standing", "nav.standing")}
-      </div>`;
+    if (id === "workflows") {
       const shell = (panel) =>
-        `<h2>${escapeHtml(t("nav.skills"))}</h2>${tabsHtml}<div class="page-tab-panel">${panel}</div>`;
-      const wireTabs = () => {
-        el.querySelectorAll("[data-automation-tab]").forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            const next = btn.getAttribute("data-automation-tab");
-            if (
-              next !== "skills" &&
-              next !== "workflows" &&
-              next !== "jobs" &&
-              next !== "heartbeat" &&
-              next !== "standing" &&
-              next !== "scenes"
-            ) {
-              return;
-            }
-            if (next === automationTab) return;
-            automationTab = next;
-            await showView("automation");
-          });
-        });
-      };
-
-      if (automationTab === "skills") {
-        const body = await rpc("home.listSkills", {});
-        const skills = body.result?.skills || [];
-        const cards = skills
-          .map((s) => {
-            const status = s.verified
-              ? `<span class="status-pill ok">${escapeHtml(t("skills.verified"))}</span>`
-              : `<span class="status-pill warn">${escapeHtml(t("skills.needsVerify"))}</span>`;
-            const en = s.enabled
-              ? `<span class="muted">${escapeHtml(t("skills.enabled"))}</span>`
-              : `<span class="muted">${escapeHtml(t("skills.disabled"))}</span>`;
-            return `<div class="card">
-              <div class="prov-card-head">
-                <strong>${escapeHtml(s.name || s.id)}</strong>
-                ${status}
-                ${en}
-              </div>
-              <div class="muted"><code>${escapeHtml(s.id)}</code></div>
-              <div class="row">
-                <button type="button" data-verify="${escapeHtml(s.id)}">${escapeHtml(t("skills.verify"))}</button>
-                <button type="button" class="secondary" data-remove="${escapeHtml(s.id)}">${escapeHtml(t("app.remove"))}</button>
-              </div>
-            </div>`;
-          })
-          .join("");
-        el.innerHTML = shell(`
-          <div id="install-skill" class="skill-install">
-            <div id="skill-install-msg" class="le-section-msg"></div>
-            <section class="card skill-source" id="skill-source-howto">
-              <h3>${escapeHtml(t("skills.howtoTitle"))}</h3>
-              <p class="muted">${escapeHtml(t("skills.howtoHint"))}</p>
-              <pre class="skill-howto-md" id="skill-howto-md"><code>${escapeHtml(SKILL_MD_HOWTO_EXAMPLE)}</code></pre>
-            </section>
-            <section class="card skill-source" id="skill-source-disk">
-              <h3>${escapeHtml(t("skills.install"))}</h3>
-              <p class="muted">${escapeHtml(t("skills.installHint"))}</p>
-              <div id="skill-drop" class="skill-drop" tabindex="0" role="button" aria-label="${escapeHtml(t("skills.drop"))}">
-                <p class="skill-drop-label" id="skill-drop-label">${escapeHtml(t("skills.drop"))}</p>
-                <div class="row skill-drop-actions">
-                  <button type="button" id="skill-browse-folder">${escapeHtml(t("skills.browseFolder"))}</button>
-                  <button type="button" class="secondary" id="skill-browse-file">${escapeHtml(t("skills.browseFile"))}</button>
-                </div>
-              </div>
-            </section>
-            <section class="card skill-source" id="skill-source-clawhub">
-              <h3>${escapeHtml(t("skills.clawhubTitle"))}</h3>
-              <p class="muted">${escapeHtml(t("skills.clawhubHint"))}</p>
-              <div class="row skill-clawhub-search-bar">
-                <input id="skill-clawhub-query" type="search" placeholder="${escapeHtml(t("skills.clawhubSearchPlaceholder"))}" autocomplete="off" />
-                <button type="button" id="skill-clawhub-search">${escapeHtml(t("skills.clawhubSearch"))}</button>
-              </div>
-              <div id="skill-clawhub-results" class="skill-clawhub-results" aria-live="polite"></div>
-              <details class="skill-clawhub-paste" id="skill-clawhub-paste">
-                <summary>${escapeHtml(t("skills.clawhubPaste"))}</summary>
-                <form id="skill-clawhub-form" class="skill-clawhub-manual">
-                  <label>${escapeHtml(t("skills.clawhubRef"))}
-                    <input name="ref" required placeholder="owner/slug" autocomplete="off" />
-                  </label>
-                  <button type="submit">${escapeHtml(t("skills.installClawhub"))}</button>
-                </form>
-              </details>
-            </section>
-            <section class="card skill-source" id="skill-source-url">
-              <h3>${escapeHtml(t("skills.urlTitle"))}</h3>
-              <p class="muted">${escapeHtml(t("skills.urlHint"))}</p>
-              <form id="skill-url-form" class="skill-url-form">
-                <label>${escapeHtml(t("skills.urlRef"))}
-                  <input name="ref" type="url" required placeholder="https://…/skill.zip or …/SKILL.md" autocomplete="off" />
-                </label>
-                <button type="submit">${escapeHtml(t("skills.installUrl"))}</button>
-              </form>
-            </section>
-          </div>
-          ${cards || `<p class='muted'>${escapeHtml(t("skills.none"))}</p>`}`);
-        wireTabs();
-
-        const msgBox = () => document.getElementById("skill-install-msg");
-        const setInstallMsg = (html) => {
-          const box = msgBox();
-          if (box) box.innerHTML = html;
-        };
-        const installFromPath = async (ref) => {
-          const path = String(ref || "").trim();
-          if (!path) return;
-          setInstallMsg(`<p class="muted">${escapeHtml(t("skills.installing"))}</p>`);
-          const ans = await rpc("home.installSkill", { source: "path", ref: path });
-          if (ans.error) {
-            setInstallMsg(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
-            return;
-          }
-          await showView("automation");
-        };
-
-        const drop = document.getElementById("skill-drop");
-        const dropLabel = document.getElementById("skill-drop-label");
-        const setDropActive = (on) => {
-          drop?.classList.toggle("skill-drop--active", on);
-          if (dropLabel) {
-            dropLabel.textContent = on ? t("skills.dropActive") : t("skills.drop");
-          }
-        };
-
-        drop?.addEventListener("dragenter", (ev) => {
-          ev.preventDefault();
-          setDropActive(true);
-        });
-        drop?.addEventListener("dragover", (ev) => {
-          ev.preventDefault();
-          if (ev.dataTransfer) ev.dataTransfer.dropEffect = "copy";
-          setDropActive(true);
-        });
-        drop?.addEventListener("dragleave", (ev) => {
-          if (ev.target === drop) setDropActive(false);
-        });
-        drop?.addEventListener("drop", (ev) => {
-          ev.preventDefault();
-          setDropActive(false);
-          const files = ev.dataTransfer?.files;
-          if (!files || files.length === 0) return;
-          const path = pathFromDroppedFile(files[0]);
-          if (!path) {
-            setInstallMsg(
-              `<p class="le-error">${escapeHtml(t("skills.pickerUnavailable"))}</p>`,
-            );
-            return;
-          }
-          void installFromPath(path);
-        });
-
-        document.getElementById("skill-browse-folder")?.addEventListener("click", async () => {
-          if (!isTauriShell()) {
-            setInstallMsg(
-              `<p class="muted">${escapeHtml(t("skills.pickerUnavailable"))}</p>`,
-            );
-            return;
-          }
-          try {
-            const picked = await tauriInvoke("pick_skill_folder");
-            if (typeof picked === "string" && picked) await installFromPath(picked);
-          } catch (err) {
-            setInstallMsg(
-              `<p class="le-error">${escapeHtml(err instanceof Error ? err.message : String(err))}</p>`,
-            );
-          }
-        });
-        document.getElementById("skill-browse-file")?.addEventListener("click", async () => {
-          if (!isTauriShell()) {
-            setInstallMsg(
-              `<p class="muted">${escapeHtml(t("skills.pickerUnavailable"))}</p>`,
-            );
-            return;
-          }
-          try {
-            const picked = await tauriInvoke("pick_skill_file");
-            if (typeof picked === "string" && picked) await installFromPath(picked);
-          } catch (err) {
-            setInstallMsg(
-              `<p class="le-error">${escapeHtml(err instanceof Error ? err.message : String(err))}</p>`,
-            );
-          }
-        });
-
-        const installRemote = async (source, ref) => {
-          const value = String(ref || "").trim();
-          if (!value) return;
-          setInstallMsg(`<p class="muted">${escapeHtml(t("skills.installing"))}</p>`);
-          const ans = await rpc("home.installSkill", { source, ref: value }, { timeoutMs: 90_000 });
-          if (ans.error) {
-            setInstallMsg(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
-            return;
-          }
-          await showView("automation");
-        };
-
-        const clawhubResults = document.getElementById("skill-clawhub-results");
-        const runClawhubSearch = async () => {
-          const q = /** @type {HTMLInputElement|null} */ (document.getElementById("skill-clawhub-query"))
-            ?.value?.trim();
-          if (!clawhubResults) return;
-          if (!q) {
-            clawhubResults.innerHTML = `<p class="muted">${escapeHtml(t("skills.clawhubQueryRequired"))}</p>`;
-            return;
-          }
-          clawhubResults.innerHTML = `<p class="muted">${escapeHtml(t("app.working"))}</p>`;
-          try {
-            const ans = await rpc("home.searchClawHubSkills", { query: q, limit: 20 }, {
-              timeoutMs: 30_000,
-            });
-            if (ans.error) {
-              clawhubResults.innerHTML = `<p class="le-error">${escapeHtml(errMsg(ans) || "failed")}</p>`;
-              return;
-            }
-            const skills = Array.isArray(ans.result?.skills) ? ans.result.skills : [];
-            if (!skills.length) {
-              clawhubResults.innerHTML = `<p class="muted">${escapeHtml(t("skills.clawhubNoResults"))}</p>`;
-              return;
-            }
-            clawhubResults.innerHTML = `<ul class="skill-clawhub-list">${skills
-              .map((s) => {
-                const ref = String(s.ref || (s.ownerHandle ? `${s.ownerHandle}/${s.slug}` : s.slug) || "");
-                const title = s.ownerHandle
-                  ? `${s.ownerHandle}/${s.name || s.slug}`
-                  : String(s.name || s.slug || ref);
-                const desc = s.description
-                  ? `<span class="muted skill-clawhub-desc">${escapeHtml(s.description)}</span>`
-                  : "";
-                const open = s.url
-                  ? `<a class="muted" href="${escapeHtml(s.url)}" target="_blank" rel="noopener">${escapeHtml(t("skills.clawhubOpen"))}</a>`
-                  : "";
-                return `<li class="skill-clawhub-hit">
-                  <div class="skill-clawhub-hit-info">
-                    <strong>${escapeHtml(title)}</strong>
-                    ${desc}
-                    <code class="muted">${escapeHtml(ref)}</code>
-                  </div>
-                  <div class="row skill-clawhub-hit-actions">
-                    ${open}
-                    <button type="button" data-clawhub-install="${escapeHtml(ref)}">${escapeHtml(t("skills.installClawhub"))}</button>
-                  </div>
-                </li>`;
-              })
-              .join("")}</ul>`;
-            clawhubResults.querySelectorAll("[data-clawhub-install]").forEach((btn) => {
-              btn.addEventListener("click", async () => {
-                const ref = btn.getAttribute("data-clawhub-install");
-                if (!ref) return;
-                btn.setAttribute("disabled", "true");
-                await installRemote("clawhub", ref);
-              });
-            });
-          } catch (e) {
-            clawhubResults.innerHTML = `<p class="le-error">${escapeHtml(
-              e instanceof Error ? e.message : String(e),
-            )}</p>`;
-          }
-        };
-        document.getElementById("skill-clawhub-search")?.addEventListener("click", () => {
-          void runClawhubSearch();
-        });
-        document.getElementById("skill-clawhub-query")?.addEventListener("keydown", (ev) => {
-          if (ev.key === "Enter") {
-            ev.preventDefault();
-            void runClawhubSearch();
-          }
-        });
-
-        document.getElementById("skill-clawhub-form")?.addEventListener("submit", async (ev) => {
-          ev.preventDefault();
-          const fd = new FormData(/** @type {HTMLFormElement} */ (ev.target));
-          await installRemote("clawhub", fd.get("ref"));
-        });
-        document.getElementById("skill-url-form")?.addEventListener("submit", async (ev) => {
-          ev.preventDefault();
-          const fd = new FormData(/** @type {HTMLFormElement} */ (ev.target));
-          await installRemote("url", fd.get("ref"));
-        });
-
-        el.querySelectorAll("[data-verify]").forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            const ans = await rpc("home.verifySkill", { id: btn.getAttribute("data-verify") });
-            if (ans.error) {
-              setInstallMsg(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
-              return;
-            }
-            await showView("automation");
-          });
-        });
-        el.querySelectorAll("[data-remove]").forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            const ans = await rpc("home.removeSkill", { id: btn.getAttribute("data-remove") });
-            if (ans.error) {
-              setInstallMsg(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
-              return;
-            }
-            await showView("automation");
-          });
-        });
-        return;
-      }
-
-      if (automationTab === "workflows") {
+        `<h2>${escapeHtml(t("nav.workflows"))}</h2><div class="page-tab-panel">${panel}</div>`;
+      const wireTabs = () => {};
+      const aid = accountId();
+      const isWorkflowsView = true;
+      {
         const body = await rpc("home.listWorkflows", aid ? { accountId: aid } : {});
         const toolsBody = await rpc("home.listWorkflowTools", aid ? { accountId: aid } : {});
         const catalogueTools = toolsBody.result?.tools || [];
@@ -12088,7 +13335,7 @@ async function showView(id) {
             setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
             return;
           }
-          await showView("automation");
+          await showView("workflows");
         });
         document.getElementById("wf-validate")?.addEventListener("click", async () => {
           if (wfViewMode === "diagram") syncYamlFromCanvas();
@@ -12135,7 +13382,7 @@ async function showView(id) {
             setWfMsg(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
             return;
           }
-          await showView("automation");
+          await showView("workflows");
         });
         el.querySelectorAll("[data-wf-edit]").forEach((btn) => {
           btn.addEventListener("click", async () => {
@@ -12169,7 +13416,7 @@ async function showView(id) {
               setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
               return;
             }
-            await showView("automation");
+            await showView("workflows");
           });
         });
         el.querySelectorAll("[data-wf-run]").forEach((btn) => {
@@ -12200,1172 +13447,301 @@ async function showView(id) {
               setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
               return;
             }
-            await showView("automation");
+            await showView("workflows");
           });
         });
         return;
       }
+      return;
+    }
 
-      if (automationTab === "heartbeat") {
-        if (!aid) {
-          el.innerHTML = shell(`<p>${escapeHtml(t("profile.pick"))}</p>`);
-          wireTabs();
-          return;
-        }
-        const hb = await rpc("home.getHeartbeatConfig", { accountId: aid });
-        if (hb.error) {
-          el.innerHTML = shell(`<p class="le-error">${escapeHtml(errMsg(hb))}</p>`);
-          wireTabs();
-          return;
-        }
-        const cfg = hb.result || {};
-        const everyMin = Math.max(1, Math.round((cfg.everyMs || 1_800_000) / 60_000));
-        const minMin = Math.max(1, Math.round((cfg.minEveryMs || 900_000) / 60_000));
+    if (id === "automation") {
+      const shell = (panel) =>
+        `<h2>${escapeHtml(t("nav.skills"))}</h2><div class="page-tab-panel">${panel}</div>`;
+      const wireTabs = () => {};
+      const aid = accountId();
+      {
+        const body = await rpc("home.listSkills", {});
+        const skills = body.result?.skills || [];
+        const cards = skills
+          .map((s) => {
+            const status = s.verified
+              ? `<span class="status-pill ok">${escapeHtml(t("skills.verified"))}</span>`
+              : `<span class="status-pill warn">${escapeHtml(t("skills.needsVerify"))}</span>`;
+            const en = s.enabled
+              ? `<span class="muted">${escapeHtml(t("skills.enabled"))}</span>`
+              : `<span class="muted">${escapeHtml(t("skills.disabled"))}</span>`;
+            return `<div class="card">
+              <div class="prov-card-head">
+                <strong>${escapeHtml(s.name || s.id)}</strong>
+                ${status}
+                ${en}
+              </div>
+              <div class="muted"><code>${escapeHtml(s.id)}</code></div>
+              <div class="row">
+                <button type="button" data-verify="${escapeHtml(s.id)}">${escapeHtml(t("skills.verify"))}</button>
+                <button type="button" class="secondary" data-remove="${escapeHtml(s.id)}">${escapeHtml(t("app.remove"))}</button>
+              </div>
+            </div>`;
+          })
+          .join("");
         el.innerHTML = shell(`
-          <h3>${escapeHtml(t("heartbeat.title"))}</h3>
-          <p class="muted">${escapeHtml(t("heartbeat.hint"))}</p>
-          <form id="hb-form" class="stack-form">
-            <label class="check-row"><input type="checkbox" name="enabled" ${cfg.enabled ? "checked" : ""}/> ${escapeHtml(t("heartbeat.enabled"))}</label>
-            <label>${escapeHtml(t("heartbeat.everyMin"))}
-              <input type="number" name="everyMin" min="${minMin}" step="1" value="${everyMin}" />
-            </label>
-            <p class="muted">${escapeHtml(t("heartbeat.minHint", { min: String(minMin) }))}</p>
-            <label>${escapeHtml(t("heartbeat.prompt"))}
-              <textarea name="prompt" rows="4">${escapeHtml(cfg.prompt || "")}</textarea>
-            </label>
-            <button type="submit" class="primary">${escapeHtml(t("heartbeat.save"))}</button>
-          </form>
-          <div id="hb-banner"></div>
-        `);
+          <div id="install-skill" class="skill-install">
+            <div id="skill-install-msg" class="le-section-msg"></div>
+            <section class="card skill-source" id="skill-source-howto">
+              <h3>${escapeHtml(t("skills.howtoTitle"))}</h3>
+              <p class="muted">${escapeHtml(t("skills.howtoHint"))}</p>
+              <pre class="skill-howto-md" id="skill-howto-md"><code>${escapeHtml(SKILL_MD_HOWTO_EXAMPLE)}</code></pre>
+            </section>
+            <section class="card skill-source" id="skill-source-disk">
+              <h3>${escapeHtml(t("skills.install"))}</h3>
+              <p class="muted">${escapeHtml(t("skills.installHint"))}</p>
+              <div id="skill-drop" class="skill-drop" tabindex="0" role="button" aria-label="${escapeHtml(t("skills.drop"))}">
+                <p class="skill-drop-label" id="skill-drop-label">${escapeHtml(t("skills.drop"))}</p>
+                <div class="row skill-drop-actions">
+                  <button type="button" id="skill-browse-folder">${escapeHtml(t("skills.browseFolder"))}</button>
+                  <button type="button" class="secondary" id="skill-browse-file">${escapeHtml(t("skills.browseFile"))}</button>
+                </div>
+              </div>
+            </section>
+            <section class="card skill-source" id="skill-source-clawhub">
+              <h3>${escapeHtml(t("skills.clawhubTitle"))}</h3>
+              <p class="muted">${escapeHtml(t("skills.clawhubHint"))}</p>
+              <div class="row skill-clawhub-search-bar">
+                <input id="skill-clawhub-query" type="search" placeholder="${escapeHtml(t("skills.clawhubSearchPlaceholder"))}" autocomplete="off" />
+                <button type="button" id="skill-clawhub-search">${escapeHtml(t("skills.clawhubSearch"))}</button>
+              </div>
+              <div id="skill-clawhub-results" class="skill-clawhub-results" aria-live="polite"></div>
+              <details class="skill-clawhub-paste" id="skill-clawhub-paste">
+                <summary>${escapeHtml(t("skills.clawhubPaste"))}</summary>
+                <form id="skill-clawhub-form" class="skill-clawhub-manual">
+                  <label>${escapeHtml(t("skills.clawhubRef"))}
+                    <input name="ref" required placeholder="owner/slug" autocomplete="off" />
+                  </label>
+                  <button type="submit">${escapeHtml(t("skills.installClawhub"))}</button>
+                </form>
+              </details>
+            </section>
+            <section class="card skill-source" id="skill-source-url">
+              <h3>${escapeHtml(t("skills.urlTitle"))}</h3>
+              <p class="muted">${escapeHtml(t("skills.urlHint"))}</p>
+              <form id="skill-url-form" class="skill-url-form">
+                <label>${escapeHtml(t("skills.urlRef"))}
+                  <input name="ref" type="url" required placeholder="https://…/skill.zip or …/SKILL.md" autocomplete="off" />
+                </label>
+                <button type="submit">${escapeHtml(t("skills.installUrl"))}</button>
+              </form>
+            </section>
+          </div>
+          ${cards || `<p class='muted'>${escapeHtml(t("skills.none"))}</p>`}`);
         wireTabs();
-        const form = el.querySelector("#hb-form");
-        const setBanner = (html) => {
-          const b = el.querySelector("#hb-banner");
-          if (b) b.innerHTML = html;
+
+        const msgBox = () => document.getElementById("skill-install-msg");
+        const setInstallMsg = (html) => {
+          const box = msgBox();
+          if (box) box.innerHTML = html;
         };
-        form?.addEventListener("submit", async (ev) => {
-          ev.preventDefault();
-          const fd = new FormData(form);
-          const enabled = fd.get("enabled") === "on";
-          const everyMinVal = Number(fd.get("everyMin") || everyMin);
-          const prompt = String(fd.get("prompt") || "").trim();
-          const ans = await rpc("home.setHeartbeatConfig", {
-            accountId: aid,
-            enabled,
-            everyMs: Math.round(everyMinVal * 60_000),
-            ...(prompt ? { prompt } : {}),
-          });
+        const installFromPath = async (ref) => {
+          const path = String(ref || "").trim();
+          if (!path) return;
+          setInstallMsg(`<p class="muted">${escapeHtml(t("skills.installing"))}</p>`);
+          const ans = await rpc("home.installSkill", { source: "path", ref: path });
           if (ans.error) {
-            setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+            setInstallMsg(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
             return;
           }
-          setBanner(`<p class="muted">${escapeHtml(t("heartbeat.saved"))}</p>`);
-          automationTab = "heartbeat";
           await showView("automation");
-        });
-        return;
-      }
+        };
 
-      if (automationTab === "scenes") {
-        if (!aid) {
-          el.innerHTML = shell(`<p>${escapeHtml(t("profile.pick"))}</p>`);
-          wireTabs();
-          return;
-        }
-        const [listed, sourcesBody, privBody] = await Promise.all([
-          rpc("home.listStandingOrders", { accountId: aid }),
-          rpc("home.listSources", {}),
-          rpc("home.getPrivacyMode", { accountId: aid }).catch(() => null),
-        ]);
-        if (listed.error) {
-          el.innerHTML = shell(`<p class="le-error">${escapeHtml(errMsg(listed))}</p>`);
-          wireTabs();
-          return;
-        }
-        const privacy =
-          privBody && !privBody.error
-            ? {
-                enabled: privBody.result?.enabled === true,
-                blockSmartHomeEgress: privBody.result?.blockSmartHomeEgress !== false,
-              }
-            : null;
-        const presenceGate = assertPresenceSceneAllowed(privacy);
-        const sources = Array.isArray(sourcesBody.result?.sources)
-          ? sourcesBody.result.sources
-          : [];
-        // putStandingOrder requires source bound to this seat (not merely shared).
-        const boundSources = sources.filter(
-          (s) => s && s.bound === true && s.accountId === aid && s.sourceId,
-        );
-        const sceneOrders = (listed.result?.orders || []).filter((o) =>
-          isSceneStandingOrderId(o.id),
-        );
-        const rows = sceneOrders.length
-          ? `<ul class="sys-list">${sceneOrders
-              .map((o) => {
-                const when =
-                  o.when && typeof o.when === "object" ? o.when : null;
-                const whenKind = when?.kind ? String(when.kind) : "?";
-                let whenLabel = whenKind;
-                if (whenKind === "cron" && when?.cronExpr) {
-                  whenLabel = humanCronExprLabel(String(when.cronExpr));
-                } else if (whenKind === "smarthome_event") {
-                  whenLabel = t("scenes.source");
-                }
-                return `<li class="sys-row">
-                  <div class="sys-row-main">
-                    <span class="sys-row-title">${escapeHtml(o.name || o.id)}</span>
-                    <span class="sys-row-meta muted">${escapeHtml(whenLabel)}${
-                      o.enabled ? "" : ` · ${escapeHtml(t("standing.disabled"))}`
-                    }</span>
-                  </div>
-                  <div class="sys-row-actions">
-                    <button type="button" class="secondary" data-scene-toggle="${escapeHtml(o.id)}" data-en="${o.enabled ? "1" : "0"}">${escapeHtml(
-                      o.enabled ? t("standing.disable") : t("standing.enable"),
-                    )}</button>
-                    <button type="button" class="secondary" data-scene-remove="${escapeHtml(o.id)}">${escapeHtml(t("standing.remove"))}</button>
-                  </div>
-                </li>`;
-              })
-              .join("")}</ul>`
-          : `<p class="muted">${escapeHtml(t("scenes.none"))}</p>`;
-        const tplOpts = SCENE_TEMPLATES.map(
-          (tpl) =>
-            `<option value="${escapeHtml(tpl.id)}">${escapeHtml(t(tpl.nameKey))}</option>`,
-        ).join("");
-        const sourceOpts = boundSources.length
-          ? boundSources
-              .map((s) => {
-                const sid = String(s.sourceId || "");
-                const label = String(s.displayName || sid);
-                return `<option value="${escapeHtml(sid)}">${escapeHtml(label)}</option>`;
-              })
-              .join("")
-          : `<option value="">${escapeHtml(t("scenes.noSources"))}</option>`;
-        el.innerHTML = shell(`
-          <h3>${escapeHtml(t("scenes.title"))}</h3>
-          <p class="muted">${escapeHtml(t("scenes.hint"))}</p>
-          ${
-            presenceGate.ok
-              ? ""
-              : `<p class="muted">${escapeHtml(t("scenes.privacyRequired"))}</p>`
-          }
-          ${rows}
-          <h4>${escapeHtml(t("scenes.addTitle"))}</h4>
-          <form id="scene-form" class="stack-form">
-            <label>${escapeHtml(t("scenes.template"))}
-              <select name="templateId" id="scene-template">${tplOpts}</select>
-            </label>
-            <p class="muted" id="scene-tpl-hint"></p>
-            <label>${escapeHtml(t("scenes.name"))}
-              <input type="text" name="name" maxlength="120" placeholder="" />
-            </label>
-            <div id="scene-cron-wrap">${cronScheduleFieldHtml({
-              inputId: "scene-cron",
-              name: "cron",
-              value: "",
-            })}</div>
-            <label id="scene-source-wrap" hidden>${escapeHtml(t("scenes.source"))}
-              <select name="sourceId" id="scene-source">${sourceOpts}</select>
-            </label>
-            <button type="submit" class="primary">${escapeHtml(t("scenes.add"))}</button>
-          </form>
-          <div id="scene-banner"></div>
-        `);
-        wireTabs();
-        wireCronScheduleExamples(el);
-        const setBanner = (html) => {
-          const b = el.querySelector("#scene-banner");
-          if (b) b.innerHTML = html;
-        };
-        const syncTplUi = () => {
-          const sel = /** @type {HTMLSelectElement | null} */ (
-            document.getElementById("scene-template")
-          );
-          const tpl = SCENE_TEMPLATES.find((x) => x.id === sel?.value) || SCENE_TEMPLATES[0];
-          const hint = document.getElementById("scene-tpl-hint");
-          if (hint && tpl) hint.textContent = t(tpl.hintKey);
-          const cronWrap = document.getElementById("scene-cron-wrap");
-          const sourceWrap = document.getElementById("scene-source-wrap");
-          const cronInput = /** @type {HTMLInputElement | null} */ (
-            document.getElementById("scene-cron")
-          );
-          if (tpl?.whenKind === "cron") {
-            if (cronWrap) cronWrap.hidden = false;
-            if (sourceWrap) sourceWrap.hidden = true;
-            if (cronInput) cronInput.value = tpl.cronExpr || "";
-          } else {
-            if (cronWrap) cronWrap.hidden = true;
-            if (sourceWrap) sourceWrap.hidden = false;
+        const drop = document.getElementById("skill-drop");
+        const dropLabel = document.getElementById("skill-drop-label");
+        const setDropActive = (on) => {
+          drop?.classList.toggle("skill-drop--active", on);
+          if (dropLabel) {
+            dropLabel.textContent = on ? t("skills.dropActive") : t("skills.drop");
           }
         };
-        syncTplUi();
-        document.getElementById("scene-template")?.addEventListener("change", syncTplUi);
-        el.querySelector("#scene-form")?.addEventListener("submit", async (ev) => {
+
+        drop?.addEventListener("dragenter", (ev) => {
           ev.preventDefault();
-          const fd = new FormData(/** @type {HTMLFormElement} */ (ev.target));
-          const templateId = String(fd.get("templateId") || "");
-          const tpl = SCENE_TEMPLATES.find((x) => x.id === templateId);
-          if (!tpl) return;
-          if (tpl.presenceAware) {
-            const gate = assertPresenceSceneAllowed(privacy);
-            if (!gate.ok) {
-              setBanner(`<p class="le-error">${escapeHtml(t("scenes.privacyRequired"))}</p>`);
-              return;
-            }
+          setDropActive(true);
+        });
+        drop?.addEventListener("dragover", (ev) => {
+          ev.preventDefault();
+          if (ev.dataTransfer) ev.dataTransfer.dropEffect = "copy";
+          setDropActive(true);
+        });
+        drop?.addEventListener("dragleave", (ev) => {
+          if (ev.target === drop) setDropActive(false);
+        });
+        drop?.addEventListener("drop", (ev) => {
+          ev.preventDefault();
+          setDropActive(false);
+          const files = ev.dataTransfer?.files;
+          if (!files || files.length === 0) return;
+          const path = pathFromDroppedFile(files[0]);
+          if (!path) {
+            setInstallMsg(
+              `<p class="le-error">${escapeHtml(t("skills.pickerUnavailable"))}</p>`,
+            );
+            return;
+          }
+          void installFromPath(path);
+        });
+
+        document.getElementById("skill-browse-folder")?.addEventListener("click", async () => {
+          if (!isTauriShell()) {
+            setInstallMsg(
+              `<p class="muted">${escapeHtml(t("skills.pickerUnavailable"))}</p>`,
+            );
+            return;
           }
           try {
-            const built = buildStandingOrderFromScene(tpl, {
-              name: String(fd.get("name") || "").trim() || t(tpl.nameKey),
-              cronExpr: String(fd.get("cron") || "").trim(),
-              sourceId: String(fd.get("sourceId") || "").trim(),
-            });
-            const ans = await rpc("home.putStandingOrder", {
-              accountId: aid,
-              id: built.id,
-              name: built.name,
-              enabled: true,
-              when: built.when,
-              action: built.action,
-            });
-            if (ans.error) {
-              setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
-              return;
-            }
-            automationTab = "scenes";
-            await showView("automation");
+            const picked = await tauriInvoke("pick_skill_folder");
+            if (typeof picked === "string" && picked) await installFromPath(picked);
           } catch (err) {
-            setBanner(
+            setInstallMsg(
               `<p class="le-error">${escapeHtml(err instanceof Error ? err.message : String(err))}</p>`,
             );
           }
         });
-        el.querySelectorAll("[data-scene-toggle]").forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            const id = btn.getAttribute("data-scene-toggle");
-            const en = btn.getAttribute("data-en") === "1";
-            const ans = await rpc("home.setStandingOrderEnabled", {
-              accountId: aid,
-              id,
-              enabled: !en,
+        document.getElementById("skill-browse-file")?.addEventListener("click", async () => {
+          if (!isTauriShell()) {
+            setInstallMsg(
+              `<p class="muted">${escapeHtml(t("skills.pickerUnavailable"))}</p>`,
+            );
+            return;
+          }
+          try {
+            const picked = await tauriInvoke("pick_skill_file");
+            if (typeof picked === "string" && picked) await installFromPath(picked);
+          } catch (err) {
+            setInstallMsg(
+              `<p class="le-error">${escapeHtml(err instanceof Error ? err.message : String(err))}</p>`,
+            );
+          }
+        });
+
+        const installRemote = async (source, ref) => {
+          const value = String(ref || "").trim();
+          if (!value) return;
+          setInstallMsg(`<p class="muted">${escapeHtml(t("skills.installing"))}</p>`);
+          const ans = await rpc("home.installSkill", { source, ref: value }, { timeoutMs: 90_000 });
+          if (ans.error) {
+            setInstallMsg(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+            return;
+          }
+          await showView("automation");
+        };
+
+        const clawhubResults = document.getElementById("skill-clawhub-results");
+        const runClawhubSearch = async () => {
+          const q = /** @type {HTMLInputElement|null} */ (document.getElementById("skill-clawhub-query"))
+            ?.value?.trim();
+          if (!clawhubResults) return;
+          if (!q) {
+            clawhubResults.innerHTML = `<p class="muted">${escapeHtml(t("skills.clawhubQueryRequired"))}</p>`;
+            return;
+          }
+          clawhubResults.innerHTML = `<p class="muted">${escapeHtml(t("app.working"))}</p>`;
+          try {
+            const ans = await rpc("home.searchClawHubSkills", { query: q, limit: 20 }, {
+              timeoutMs: 30_000,
             });
             if (ans.error) {
-              setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+              clawhubResults.innerHTML = `<p class="le-error">${escapeHtml(errMsg(ans) || "failed")}</p>`;
               return;
             }
-            automationTab = "scenes";
-            await showView("automation");
-          });
-        });
-        el.querySelectorAll("[data-scene-remove]").forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            const id = btn.getAttribute("data-scene-remove");
-            if (!window.confirm(t("standing.confirmRemove"))) return;
-            const ans = await rpc("home.removeStandingOrder", { accountId: aid, id });
-            if (ans.error) {
-              setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+            const skills = Array.isArray(ans.result?.skills) ? ans.result.skills : [];
+            if (!skills.length) {
+              clawhubResults.innerHTML = `<p class="muted">${escapeHtml(t("skills.clawhubNoResults"))}</p>`;
               return;
             }
-            automationTab = "scenes";
-            await showView("automation");
-          });
-        });
-        return;
-      }
-
-      if (automationTab === "standing") {
-        if (!aid) {
-          el.innerHTML = shell(`<p>${escapeHtml(t("profile.pick"))}</p>`);
-          wireTabs();
-          return;
-        }
-        const listed = await rpc("home.listStandingOrders", { accountId: aid });
-        if (listed.error) {
-          el.innerHTML = shell(`<p class="le-error">${escapeHtml(errMsg(listed))}</p>`);
-          wireTabs();
-          return;
-        }
-        const orders = listed.result?.orders || [];
-        const rows = orders.length
-          ? `<ul class="sys-list">${orders
-              .map((o) => {
-                const when =
-                  o.when && typeof o.when === "object" ? o.when : null;
-                const whenKind = when?.kind ? String(when.kind) : "?";
-                let whenLabel = whenKind;
-                if (whenKind === "cron" && when?.cronExpr) {
-                  whenLabel = humanCronExprLabel(String(when.cronExpr));
-                } else if (whenKind === "smarthome_event") {
-                  whenLabel = t("scenes.source");
-                } else if (whenKind === "channel_event") {
-                  whenLabel = whenKind;
-                }
-                return `<li class="sys-row">
-                  <div class="sys-row-main">
-                    <span class="sys-row-title">${escapeHtml(o.name || o.id)}</span>
-                    <span class="sys-row-meta muted">${escapeHtml(whenLabel)}${
-                      o.enabled ? "" : ` · ${escapeHtml(t("standing.disabled"))}`
-                    }</span>
+            clawhubResults.innerHTML = `<ul class="skill-clawhub-list">${skills
+              .map((s) => {
+                const ref = String(s.ref || (s.ownerHandle ? `${s.ownerHandle}/${s.slug}` : s.slug) || "");
+                const title = s.ownerHandle
+                  ? `${s.ownerHandle}/${s.name || s.slug}`
+                  : String(s.name || s.slug || ref);
+                const desc = s.description
+                  ? `<span class="muted skill-clawhub-desc">${escapeHtml(s.description)}</span>`
+                  : "";
+                const open = s.url
+                  ? `<a class="muted" href="${escapeHtml(s.url)}" target="_blank" rel="noopener">${escapeHtml(t("skills.clawhubOpen"))}</a>`
+                  : "";
+                return `<li class="skill-clawhub-hit">
+                  <div class="skill-clawhub-hit-info">
+                    <strong>${escapeHtml(title)}</strong>
+                    ${desc}
+                    <code class="muted">${escapeHtml(ref)}</code>
                   </div>
-                  <div class="sys-row-actions">
-                    <button type="button" class="secondary" data-so-toggle="${escapeHtml(o.id)}" data-en="${o.enabled ? "1" : "0"}">${escapeHtml(
-                      o.enabled ? t("standing.disable") : t("standing.enable"),
-                    )}</button>
-                    <button type="button" class="secondary" data-so-remove="${escapeHtml(o.id)}">${escapeHtml(t("standing.remove"))}</button>
+                  <div class="row skill-clawhub-hit-actions">
+                    ${open}
+                    <button type="button" data-clawhub-install="${escapeHtml(ref)}">${escapeHtml(t("skills.installClawhub"))}</button>
                   </div>
                 </li>`;
               })
-              .join("")}</ul>`
-          : `<p class="muted">${escapeHtml(t("standing.none"))}</p>`;
-        el.innerHTML = shell(`
-          <h3>${escapeHtml(t("standing.title"))}</h3>
-          <p class="muted">${escapeHtml(t("standing.hint"))}</p>
-          <div class="standing-examples muted">
-            <p><strong>${escapeHtml(t("standing.examplesTitle"))}</strong></p>
-            <ul class="standing-examples-list">
-              <li>${escapeHtml(t("standing.exampleTime"))}</li>
-              <li>${escapeHtml(t("standing.exampleEvent"))}</li>
-              <li>${escapeHtml(t("standing.exampleNotify"))}</li>
-            </ul>
-            <p>${escapeHtml(t("standing.vsSchedules"))}</p>
-          </div>
-          ${rows}
-          <h4>${escapeHtml(t("standing.addTitle"))}</h4>
-          <form id="so-form" class="stack-form">
-            <label>${escapeHtml(t("standing.name"))}
-              <input type="text" name="name" required maxlength="120" />
-            </label>
-            ${cronScheduleFieldHtml({ inputId: "so-cron", name: "cron" })}
-            <label>${escapeHtml(t("standing.prompt"))}
-              <textarea name="prompt" rows="3" required></textarea>
-            </label>
-            <button type="submit" class="primary">${escapeHtml(t("standing.add"))}</button>
-          </form>
-          <div id="so-banner"></div>
-        `);
-        wireTabs();
-        wireCronScheduleExamples(el);
-        const setBanner = (html) => {
-          const b = el.querySelector("#so-banner");
-          if (b) b.innerHTML = html;
+              .join("")}</ul>`;
+            clawhubResults.querySelectorAll("[data-clawhub-install]").forEach((btn) => {
+              btn.addEventListener("click", async () => {
+                const ref = btn.getAttribute("data-clawhub-install");
+                if (!ref) return;
+                btn.setAttribute("disabled", "true");
+                await installRemote("clawhub", ref);
+              });
+            });
+          } catch (e) {
+            clawhubResults.innerHTML = `<p class="le-error">${escapeHtml(
+              e instanceof Error ? e.message : String(e),
+            )}</p>`;
+          }
         };
-        el.querySelector("#so-form")?.addEventListener("submit", async (ev) => {
+        document.getElementById("skill-clawhub-search")?.addEventListener("click", () => {
+          void runClawhubSearch();
+        });
+        document.getElementById("skill-clawhub-query")?.addEventListener("keydown", (ev) => {
+          if (ev.key === "Enter") {
+            ev.preventDefault();
+            void runClawhubSearch();
+          }
+        });
+
+        document.getElementById("skill-clawhub-form")?.addEventListener("submit", async (ev) => {
           ev.preventDefault();
           const fd = new FormData(/** @type {HTMLFormElement} */ (ev.target));
-          const name = String(fd.get("name") || "").trim();
-          const cron = String(fd.get("cron") || "").trim();
-          const prompt = String(fd.get("prompt") || "").trim();
-          if (!name || !cron || !prompt) return;
-          const ans = await rpc("home.putStandingOrder", {
-            accountId: aid,
-            name,
-            enabled: true,
-            when: { kind: "cron", cronExpr: cron },
-            action: { kind: "agentTurn", prompt },
-          });
-          if (ans.error) {
-            setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
-            return;
-          }
-          automationTab = "standing";
-          await showView("automation");
+          await installRemote("clawhub", fd.get("ref"));
         });
-        el.querySelectorAll("[data-so-toggle]").forEach((btn) => {
+        document.getElementById("skill-url-form")?.addEventListener("submit", async (ev) => {
+          ev.preventDefault();
+          const fd = new FormData(/** @type {HTMLFormElement} */ (ev.target));
+          await installRemote("url", fd.get("ref"));
+        });
+
+        el.querySelectorAll("[data-verify]").forEach((btn) => {
           btn.addEventListener("click", async () => {
-            const id = btn.getAttribute("data-so-toggle");
-            const en = btn.getAttribute("data-en") === "1";
-            const ans = await rpc("home.setStandingOrderEnabled", {
-              accountId: aid,
-              id,
-              enabled: !en,
-            });
+            const ans = await rpc("home.verifySkill", { id: btn.getAttribute("data-verify") });
             if (ans.error) {
-              setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+              setInstallMsg(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
               return;
             }
-            automationTab = "standing";
             await showView("automation");
           });
         });
-        el.querySelectorAll("[data-so-remove]").forEach((btn) => {
+        el.querySelectorAll("[data-remove]").forEach((btn) => {
           btn.addEventListener("click", async () => {
-            const id = btn.getAttribute("data-so-remove");
-            if (!window.confirm(t("standing.confirmRemove"))) return;
-            const ans = await rpc("home.removeStandingOrder", { accountId: aid, id });
+            const ans = await rpc("home.removeSkill", { id: btn.getAttribute("data-remove") });
             if (ans.error) {
-              setBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
+              setInstallMsg(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
               return;
             }
-            automationTab = "standing";
             await showView("automation");
           });
         });
         return;
       }
-
-      if (automationTab === "jobs") {
-        if (!aid) {
-          el.innerHTML = shell(`<p>${escapeHtml(t("profile.pick"))}</p>`);
-          wireTabs();
-          return;
-        }
-        const [listed, wfBody, toolsBody, sourcesBody] = await Promise.all([
-          rpc("home.listSchedules", { accountId: aid }),
-          rpc("home.listWorkflows", { accountId: aid }),
-          rpc("home.listWorkflowTools", { accountId: aid }),
-          rpc("home.listSources", {}),
-        ]);
-        if (listed.error) {
-          el.innerHTML = shell(
-            `<p class="le-error">${escapeHtml(errMsg(listed))}</p>`,
-          );
-          wireTabs();
-          return;
-        }
-        /** @type {Array<{ id: string, name: string, enabled: boolean, kind: string, source: string, payloadKind?: string, message?: string, workflowId?: string, toolName?: string, nextRunAt?: string, lastStatus?: string, timeZone?: string, cronExpr?: string, everyMs?: number, whenInstant?: string }>} */
-        const jobs = (listed.result?.jobs || []).filter((j) => j.payloadKind !== "system");
-        const repeatingJobs = jobs.filter((j) => j.kind === "cron" || j.kind === "every");
-        const onceJobs = jobs.filter((j) => j.kind === "at");
-        const workflows = (wfBody.result?.workflows || []).filter((w) => !isDemoWorkflowId(w.id));
-        const readyTools = (toolsBody.result?.tools || []).filter((r) => r.available !== false);
-        // Household: any bound device is usable by any profile (Design 2026-10-16l).
-        const boundObjects = (sourcesBody.result?.sources || []).filter(
-          (s) => s.bound && s.accountId,
-        );
-        const objectIdOptions = boundObjects
-          .map((s) => {
-            const oid = `${s.channel}:${s.sourceId}`;
-            const label = s.displayName ? `${s.displayName} (${oid})` : oid;
-            return `<option value="${escapeHtml(oid)}">${escapeHtml(label)}</option>`;
-          })
-          .join("");
-        const payloadLabel = (kind) => {
-          if (kind === "workflow") return t("jobs.payloadWorkflow");
-          if (kind === "tool") return t("jobs.payloadTool");
-          if (kind === "agentTurn") return t("jobs.payloadAgent");
-          return t("jobs.payloadNotify");
-        };
-        const formatNext = (iso) => formatScheduleWhen(iso);
-        const DOW_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-        /** @param {{ kind?: string, cronExpr?: string, everyMs?: number, whenInstant?: string, timeZone?: string, nextRunAt?: string }} j */
-        const formatJobWhen = (j) => {
-          const tz = j.timeZone ? ` · ${j.timeZone}` : "";
-          if (j.kind === "every" && typeof j.everyMs === "number" && j.everyMs > 0) {
-            const sec = Math.round(j.everyMs / 1000);
-            if (sec < 120) return `${t("jobs.kindEvery")} ${sec}s${tz}`;
-            const min = Math.round(sec / 60);
-            if (min < 120) return `${t("jobs.kindEvery")} ${min}m${tz}`;
-            const hr = Math.round(min / 60);
-            return `${t("jobs.kindEvery")} ${hr}h${tz}`;
-          }
-          if (j.kind === "cron" && j.cronExpr) {
-            const parts = String(j.cronExpr).trim().split(/\s+/);
-            if (parts.length >= 5) {
-              const [min, hour, dom, mon, dow] = parts;
-              const clock =
-                hour !== "*" && min !== "*"
-                  ? `${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`
-                  : j.cronExpr;
-              if (dom === "*" && mon === "*" && dow === "*") {
-                return `${t("jobs.kindDaily")} ${clock}${tz}`;
-              }
-              if (dom === "*" && mon === "*" && dow === "1-5") {
-                return `${t("jobs.kindWeekdays")} ${clock}${tz}`;
-              }
-              if (dom === "*" && mon === "*" && /^\d$/.test(dow || "")) {
-                return `${t("jobs.kindWeekly")} ${DOW_SHORT[Number(dow)] || dow} ${clock}${tz}`;
-              }
-              if (dom !== "*" && mon === "*" && dow === "*") {
-                return `${t("jobs.kindMonthly")} ${t("jobs.dayOfMonth").replace("{d}", dom)} ${clock}${tz}`;
-              }
-              if (dom !== "*" && mon !== "*" && dow === "*") {
-                return `${t("jobs.kindYearly")} ${mon}/${dom} ${clock}${tz}`;
-              }
-              return `${t("jobs.kindRepeating")} ${j.cronExpr}${tz}`;
-            }
-          }
-          if (j.kind === "at") {
-            return `${t("jobs.kindOnce")} · ${formatNext(j.whenInstant || j.nextRunAt)}${tz}`;
-          }
-          return j.kind === "cron" || j.kind === "every"
-            ? t("jobs.kindRepeating")
-            : t("jobs.kindOnce");
-        };
-        const wfOptions = workflows
-          .map((w) => `<option value="${escapeHtml(w.id)}">${escapeHtml(w.id)}</option>`)
-          .join("");
-        /** @type {Map<string, (typeof readyTools)[number]>} */
-        const toolByName = new Map(readyTools.map((r) => [r.name, r]));
-        const toolOptions = readyTools
-          .map(
-            (r) =>
-              `<option value="${escapeHtml(r.name)}" title="${escapeHtml(r.summary || "")}">${escapeHtml(r.name)}</option>`,
-          )
-          .join("");
-        /** @param {typeof jobs} list @param {string} emptyKey */
-        const renderJobRows = (list, emptyKey) =>
-          list.length
-            ? list
-                .map((j) => {
-                  const synced = j.source === "workflow";
-                  const title =
-                    j.name || j.message || j.workflowId || j.toolName || j.id;
-                  const badge = synced
-                    ? `<span class="job-badge" title="${escapeHtml(t("jobs.syncedHint"))}">${escapeHtml(t("jobs.badgeWorkflow"))}</span>`
-                    : "";
-                  const status =
-                    j.lastStatus === "ok"
-                      ? `<span class="status-pill ok">${escapeHtml(t("jobs.statusOk"))}</span>`
-                      : j.lastStatus === "error"
-                        ? `<span class="status-pill warn">${escapeHtml(t("jobs.statusError"))}</span>`
-                        : j.lastStatus === "skipped"
-                          ? `<span class="status-pill">${escapeHtml(t("jobs.statusSkipped"))}</span>`
-                          : "";
-                  const removeBtn = synced
-                    ? ""
-                    : `<button type="button" class="secondary" data-act="remove">${escapeHtml(t("app.remove"))}</button>`;
-                  const editBtn = synced
-                    ? ""
-                    : `<button type="button" class="secondary" data-act="edit">${escapeHtml(t("jobs.edit"))}</button>`;
-                  return `<li class="job-row" data-id="${escapeHtml(j.id)}" data-source="${escapeHtml(j.source || "user")}" data-name="${escapeHtml(j.name || "")}" data-message="${escapeHtml(j.message || "")}" data-payload="${escapeHtml(j.payloadKind || "notify")}">
-              <div class="job-row-main">
-                <strong>${escapeHtml(title)} ${badge}</strong>
-                <span class="muted job-row-meta">${escapeHtml(formatJobWhen(j))} · ${escapeHtml(payloadLabel(j.payloadKind || "notify"))}${
-                  j.workflowId ? ` · <code>${escapeHtml(j.workflowId)}</code>` : ""
-                }${j.toolName ? ` · <code>${escapeHtml(j.toolName)}</code>` : ""} · ${escapeHtml(t("jobs.next"))}: ${escapeHtml(formatNext(j.nextRunAt))} ${status}</span>
-                ${synced ? `<span class="muted job-synced-hint">${escapeHtml(t("jobs.syncedHint"))}</span>` : ""}
-              </div>
-              <span class="row job-row-actions">
-                <button type="button" data-act="toggle" data-en="${j.enabled ? "0" : "1"}">${escapeHtml(j.enabled ? t("app.disable") : t("app.enable"))}</button>
-                <button type="button" data-act="run">${escapeHtml(t("app.run"))}</button>
-                ${editBtn}
-                ${removeBtn}
-              </span>
-            </li>`;
-                })
-                .join("")
-            : `<li class="muted">${escapeHtml(t(emptyKey))}</li>`;
-        /** @type {"repeating" | "once"} */
-        let jobListView = "repeating";
-        el.innerHTML = shell(`
-          <p class="muted job-list-hint">${escapeHtml(t("jobs.hint"))}</p>
-          <div id="job-banner" class="le-section-msg"></div>
-          <div class="card job-create">
-            <h3>${escapeHtml(t("jobs.createTitle"))}</h3>
-            <div class="job-mode-toggle" role="tablist" aria-label="${escapeHtml(t("jobs.modeLabel"))}">
-              <button type="button" class="secondary is-active" data-job-mode="notify">${escapeHtml(t("jobs.modeReminder"))}</button>
-              <button type="button" class="secondary" data-job-mode="workflow">${escapeHtml(t("jobs.modeWorkflow"))}</button>
-              <button type="button" class="secondary" data-job-mode="tool">${escapeHtml(t("jobs.modeTool"))}</button>
-              <button type="button" class="secondary" data-job-mode="agentTurn">${escapeHtml(t("jobs.modeAgent"))}</button>
-            </div>
-            <label class="job-when-label">${escapeHtml(t("jobs.when"))}
-              <span class="job-when-row">
-                <input id="job-when-text" type="text" required placeholder="${escapeHtml(t("jobs.whenPlaceholder"))}" />
-                <button type="button" class="secondary" id="job-preview">${escapeHtml(t("jobs.preview"))}</button>
-              </span>
-            </label>
-            <p class="muted job-resolved" id="job-resolved" hidden></p>
-            <div class="job-mode-pane" data-job-pane="notify">
-              <label>${escapeHtml(t("jobs.message"))}
-                <input id="job-message" type="text" placeholder="${escapeHtml(t("jobs.messagePlaceholder"))}" />
-              </label>
-            </div>
-            <div class="job-mode-pane" data-job-pane="workflow" hidden>
-              <label>${escapeHtml(t("jobs.pickWorkflow"))}
-                <select id="job-workflow-id">
-                  <option value="">${escapeHtml(t("jobs.pickWorkflowPlaceholder"))}</option>
-                  ${wfOptions}
-                </select>
-              </label>
-              ${
-                workflows.length
-                  ? ""
-                  : `<p class="muted">${escapeHtml(t("jobs.noWorkflows"))}</p>`
-              }
-            </div>
-            <div class="job-mode-pane" data-job-pane="tool" hidden>
-              <label>${escapeHtml(t("jobs.pickTool"))}
-                <select id="job-tool-name">
-                  <option value="">${escapeHtml(t("jobs.pickToolPlaceholder"))}</option>
-                  ${toolOptions}
-                </select>
-              </label>
-              <p class="muted job-tool-summary" id="job-tool-summary" hidden></p>
-              <div class="job-tool-args" id="job-tool-args" hidden></div>
-              ${
-                readyTools.length
-                  ? ""
-                  : `<p class="muted">${escapeHtml(t("jobs.noTools"))}</p>`
-              }
-            </div>
-            <div class="job-mode-pane" data-job-pane="agentTurn" hidden>
-              <label>${escapeHtml(t("jobs.agentPrompt"))}
-                <textarea id="job-agent-prompt" rows="3" placeholder="${escapeHtml(t("jobs.agentPromptPlaceholder"))}"></textarea>
-              </label>
-              <p class="muted">${escapeHtml(t("jobs.agentHint"))}</p>
-            </div>
-            <div class="row job-create-actions">
-              <button type="button" id="job-create">${escapeHtml(t("jobs.createAction"))}</button>
-            </div>
-          </div>
-          <div class="job-view-toggle" role="tablist" aria-label="${escapeHtml(t("jobs.listViews"))}">
-            <button type="button" class="secondary is-active" data-job-view="repeating">${escapeHtml(t("jobs.tabRepeating"))} (${repeatingJobs.length})</button>
-            <button type="button" class="secondary" data-job-view="once">${escapeHtml(t("jobs.tabOnce"))} (${onceJobs.length})</button>
-          </div>
-          <p class="muted job-histories-link">${escapeHtml(t("jobs.historiesMovedHint"))} <button type="button" class="linkish" id="jobs-open-histories">${escapeHtml(t("schedulesChat.tabHistories"))}</button></p>
-          <ul class="job-list" id="job-list-repeating" data-job-view-pane="repeating">${renderJobRows(repeatingJobs, "jobs.noneRepeating")}</ul>
-          <ul class="job-list" id="job-list-once" data-job-view-pane="once" hidden>${renderJobRows(onceJobs, "jobs.noneOnce")}</ul>`);
-        wireTabs();
-        const setJobListView = (view) => {
-          jobListView = view;
-          el.querySelectorAll("[data-job-view]").forEach((btn) => {
-            btn.classList.toggle("is-active", btn.getAttribute("data-job-view") === view);
-          });
-          el.querySelectorAll("[data-job-view-pane]").forEach((pane) => {
-            const show = pane.getAttribute("data-job-view-pane") === view;
-            if (show) pane.removeAttribute("hidden");
-            else pane.setAttribute("hidden", "");
-          });
-        };
-        el.querySelectorAll("[data-job-view]").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const view = btn.getAttribute("data-job-view");
-            if (view === "repeating" || view === "once") {
-              setJobListView(view);
-            }
-          });
-        });
-        setJobListView(jobListView);
-        document.getElementById("jobs-open-histories")?.addEventListener("click", () => {
-          schedulesChatPane = "histories";
-          void showView("schedulesChat");
-        });
-
-        /** @type {{ proposalId: string, whenText: string, resolvedLocal: string, kind: string, message?: string } | null} */
-        let previewProposal = null;
-        /** @type {"notify" | "workflow" | "tool" | "agentTurn"} */
-        let jobMode = "notify";
-        const setJobBanner = (html) => {
-          const box = document.getElementById("job-banner");
-          if (box) box.innerHTML = html || "";
-        };
-        const setMode = (mode) => {
-          jobMode = mode;
-          el.querySelectorAll("[data-job-mode]").forEach((btn) => {
-            btn.classList.toggle("is-active", btn.getAttribute("data-job-mode") === mode);
-          });
-          el.querySelectorAll("[data-job-pane]").forEach((pane) => {
-            const show = pane.getAttribute("data-job-pane") === mode;
-            if (show) pane.removeAttribute("hidden");
-            else pane.setAttribute("hidden", "");
-          });
-        };
-        el.querySelectorAll("[data-job-mode]").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            const mode = btn.getAttribute("data-job-mode");
-            if (
-              mode === "notify" ||
-              mode === "workflow" ||
-              mode === "tool" ||
-              mode === "agentTurn"
-            ) {
-              setMode(mode);
-            }
-          });
-        });
-        const argFieldLabel = (key) => {
-          const k = `jobs.arg.${key}`;
-          const labeled = t(k);
-          return labeled === k ? key : labeled;
-        };
-        const argFieldHint = (key) => {
-          const k = `jobs.argHint.${key}`;
-          const hint = t(k);
-          return hint === k ? "" : hint;
-        };
-        const domainFromObjectId = (objectId) => {
-          // homeassistant:light.living_room → light
-          const colon = objectId.indexOf(":");
-          const entity = colon >= 0 ? objectId.slice(colon + 1) : objectId;
-          const dot = entity.indexOf(".");
-          if (dot <= 0) return "";
-          return entity.slice(0, dot);
-        };
-        const optionsHtml = (values, selected, placeholder) => {
-          const opts = [
-            `<option value="">${escapeHtml(placeholder)}</option>`,
-            ...values.map(
-              (v) =>
-                `<option value="${escapeHtml(v)}"${v === selected ? " selected" : ""}>${escapeHtml(v)}</option>`,
-            ),
-          ];
-          if (selected && !values.includes(selected)) {
-            opts.push(
-              `<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)}</option>`,
-            );
-          }
-          return opts.join("");
-        };
-        const pickPlaceholder = (key) => {
-          if (key === "objectId") return t("jobs.argPickObject");
-          if (key === "domain") return t("jobs.argPickDomain");
-          if (key === "service") return t("jobs.argPickService");
-          return t("jobs.argPickValue");
-        };
-        /**
-         * Known multi-value args → dropdown. Sources (in order):
-         * bound objects for objectId; catalogue argChoiceGroups[parent]; catalogue argChoices.
-         * @param {any} row
-         * @param {string} key
-         * @param {Record<string, string>} parentValues
-         * @returns {string[] | null}
-         */
-        const knownChoicesForArg = (row, key, parentValues) => {
-          if (key === "objectId") {
-            const ids = boundObjects.map((s) => `${s.channel}:${s.sourceId}`);
-            return ids.length ? ids : null;
-          }
-          const dependsOn =
-            (row.argChoiceDependsOn && row.argChoiceDependsOn[key]) ||
-            (row.argChoiceGroups && row.argChoiceGroups[key] ? "domain" : undefined);
-          const groups = row.argChoiceGroups && row.argChoiceGroups[key];
-          if (groups && typeof groups === "object") {
-            const parentKey = dependsOn || "domain";
-            const parentVal = parentValues[parentKey] || "";
-            if (parentVal && Array.isArray(groups[parentVal]) && groups[parentVal].length) {
-              return groups[parentVal].map(String);
-            }
-            const flat = [...new Set(Object.values(groups).flatMap((v) => (Array.isArray(v) ? v : [])))].map(
-              String,
-            );
-            return flat.length ? flat : null;
-          }
-          const choices = row.argChoices && row.argChoices[key];
-          if (Array.isArray(choices) && choices.length > 0) return choices.map(String);
-          return null;
-        };
-        const refillDependentSelects = (row) => {
-          const argsHost = document.getElementById("job-tool-args");
-          if (!argsHost || !row) return;
-          /** @type {Record<string, string>} */
-          const parents = {};
-          argsHost.querySelectorAll("[data-job-arg]").forEach((el) => {
-            const k = el.getAttribute("data-job-arg");
-            if (!k) return;
-            if (el instanceof HTMLSelectElement || el instanceof HTMLInputElement) {
-              parents[k] = String(el.value || "").trim();
-            }
-          });
-          argsHost.querySelectorAll("select[data-job-arg][data-job-depends]").forEach((el) => {
-            if (!(el instanceof HTMLSelectElement)) return;
-            const key = el.getAttribute("data-job-arg") || "";
-            const list = knownChoicesForArg(row, key, parents) || [];
-            const prev = el.value;
-            el.innerHTML = optionsHtml(list, list.includes(prev) ? prev : list[0] || "", pickPlaceholder(key));
-          });
-        };
-        const wireArgChoiceSync = (row) => {
-          const argsHost = document.getElementById("job-tool-args");
-          if (!argsHost || !row) return;
-          const objEl = argsHost.querySelector('[data-job-arg="objectId"]');
-          const domainEl = /** @type {HTMLSelectElement | null} */ (
-            argsHost.querySelector('[data-job-arg="domain"]')
-          );
-          const syncDomainFromObject = () => {
-            if (!domainEl) return;
-            const oid =
-              objEl instanceof HTMLSelectElement || objEl instanceof HTMLInputElement
-                ? String(objEl.value || "").trim()
-                : "";
-            if (!oid) return;
-            const inferred = domainFromObjectId(oid);
-            if (!inferred) return;
-            if (![...domainEl.options].some((o) => o.value === inferred)) {
-              domainEl.appendChild(new Option(inferred, inferred, true, true));
-            } else {
-              domainEl.value = inferred;
-            }
-            refillDependentSelects(row);
-          };
-          objEl?.addEventListener("change", syncDomainFromObject);
-          argsHost.querySelectorAll("select[data-job-arg]").forEach((el) => {
-            el.addEventListener("change", () => refillDependentSelects(row));
-          });
-        };
-        const renderToolArgsForm = (toolName) => {
-          const summaryEl = document.getElementById("job-tool-summary");
-          const argsHost = document.getElementById("job-tool-args");
-          if (!summaryEl || !argsHost) return;
-          const row = toolName ? toolByName.get(toolName) : undefined;
-          if (!row) {
-            summaryEl.hidden = true;
-            summaryEl.textContent = "";
-            argsHost.hidden = true;
-            argsHost.innerHTML = "";
-            return;
-          }
-          summaryEl.hidden = false;
-          summaryEl.textContent = row.summary || "";
-          const sample =
-            row.sampleArgs && typeof row.sampleArgs === "object" && !Array.isArray(row.sampleArgs)
-              ? row.sampleArgs
-              : {};
-          const keys = Object.keys(sample);
-          if (!keys.length) {
-            argsHost.hidden = false;
-            argsHost.innerHTML = `<p class="muted job-tool-args-empty">${escapeHtml(t("jobs.toolArgsNone"))}</p>`;
-            return;
-          }
-          const n = keys.length;
-          const countHint =
-            n > 1
-              ? t("jobs.toolArgsMulti", { count: String(n) })
-              : t("jobs.toolArgsHint");
-          /** @type {Record<string, string>} */
-          const parentSeed = {};
-          for (const [k, v] of Object.entries(sample)) {
-            if (typeof v === "string") parentSeed[k] = v;
-          }
-          argsHost.hidden = false;
-          argsHost.innerHTML = `<p class="muted job-tool-args-hint">${escapeHtml(countHint)}</p>${keys
-            .map((key, idx) => {
-              const sampleVal = sample[key];
-              const asText =
-                sampleVal === null || sampleVal === undefined
-                  ? ""
-                  : typeof sampleVal === "string"
-                    ? sampleVal
-                    : JSON.stringify(sampleVal);
-              const hint = argFieldHint(key);
-              const hintHtml = hint
-                ? `<p class="muted job-tool-arg-hint">${escapeHtml(hint)}</p>`
-                : "";
-              const step =
-                n > 1
-                  ? `<span class="job-tool-arg-step">${escapeHtml(t("jobs.argStep", { n: String(idx + 1), total: String(n) }))}</span>`
-                  : "";
-              const choices = knownChoicesForArg(row, key, parentSeed);
-              const dependsOn =
-                (row.argChoiceDependsOn && row.argChoiceDependsOn[key]) ||
-                (row.argChoiceGroups && row.argChoiceGroups[key] ? "domain" : "");
-              let control;
-              if (choices && choices.length) {
-                const selected = choices.includes(asText) ? asText : choices[0] || "";
-                const depAttr = dependsOn ? ` data-job-depends="${escapeHtml(dependsOn)}"` : "";
-                if (key === "objectId") {
-                  control = `<select data-job-arg="${escapeHtml(key)}"${depAttr}>
-                      <option value="">${escapeHtml(t("jobs.argPickObject"))}</option>
-                      ${objectIdOptions}
-                    </select>`;
-                } else {
-                  control = `<select data-job-arg="${escapeHtml(key)}"${depAttr}>${optionsHtml(choices, selected, pickPlaceholder(key))}</select>`;
-                }
-              } else if (key === "objectId") {
-                control = `<input data-job-arg="${escapeHtml(key)}" type="text" value="" placeholder="${escapeHtml(asText || "homeassistant:light.living_room")}" />
-                  <p class="muted job-tool-arg-hint">${escapeHtml(t("jobs.argNoBoundObjects"))}</p>`;
-              } else {
-                const isMultiline =
-                  typeof sampleVal === "string" && (sampleVal.includes("\n") || asText.length > 80);
-                control = isMultiline
-                  ? `<textarea data-job-arg="${escapeHtml(key)}" rows="3" spellcheck="false" placeholder="${escapeHtml(asText)}">${escapeHtml(asText)}</textarea>`
-                  : `<input data-job-arg="${escapeHtml(key)}" type="text" value="${escapeHtml(asText)}" placeholder="${escapeHtml(asText)}" />`;
-              }
-              return `<div class="job-tool-arg-field">
-                <div class="job-tool-arg-head">${step}<span class="job-tool-arg-label">${escapeHtml(argFieldLabel(key))}</span></div>
-                ${hintHtml}
-                ${control}
-              </div>`;
-            })
-            .join("")}`;
-          wireArgChoiceSync(row);
-        };
-        const readToolArgsFromForm = () => {
-          const argsHost = document.getElementById("job-tool-args");
-          /** @type {Record<string, unknown>} */
-          const out = {};
-          if (!argsHost) return out;
-          argsHost.querySelectorAll("[data-job-arg]").forEach((el) => {
-            const key = el.getAttribute("data-job-arg");
-            if (!key) return;
-            const raw =
-              el instanceof HTMLTextAreaElement ||
-              el instanceof HTMLInputElement ||
-              el instanceof HTMLSelectElement
-                ? String(el.value || "").trim()
-                : "";
-            if (!raw) return;
-            // Keep numbers/bools/objects if the sample was JSON; otherwise plain string.
-            if (
-              (raw.startsWith("{") && raw.endsWith("}")) ||
-              (raw.startsWith("[") && raw.endsWith("]")) ||
-              raw === "true" ||
-              raw === "false" ||
-              /^-?\d+(\.\d+)?$/.test(raw)
-            ) {
-              try {
-                out[key] = JSON.parse(raw);
-                return;
-              } catch {
-                /* fall through as string */
-              }
-            }
-            out[key] = raw;
-          });
-          return out;
-        };
-        document.getElementById("job-tool-name")?.addEventListener("change", (ev) => {
-          const sel = /** @type {HTMLSelectElement} */ (ev.currentTarget);
-          renderToolArgsForm(sel.value);
-        });
-        const readWhenText = () =>
-          String(
-            /** @type {HTMLInputElement | null} */ (document.getElementById("job-when-text"))?.value || "",
-          ).trim();
-        const showPreview = (p) => {
-          const line = document.getElementById("job-resolved");
-          if (!line) return;
-          line.hidden = false;
-          line.textContent = t("jobs.resolvedLine", {
-            when: p.resolvedLocal || "",
-            kind: p.kind || "",
-          });
-          const msgEl = /** @type {HTMLInputElement | null} */ (document.getElementById("job-message"));
-          if (msgEl && p.message && !msgEl.value.trim()) msgEl.value = p.message;
-        };
-        const clearPreviewIfStale = () => {
-          const whenText = readWhenText();
-          if (previewProposal && previewProposal.whenText !== whenText) {
-            previewProposal = null;
-            const line = document.getElementById("job-resolved");
-            if (line) {
-              line.hidden = true;
-              line.textContent = "";
-            }
-          }
-        };
-        document.getElementById("job-when-text")?.addEventListener("input", clearPreviewIfStale);
-        document.getElementById("job-preview")?.addEventListener("click", async () => {
-          const whenText = readWhenText();
-          if (!whenText) {
-            setJobBanner(`<p class="le-error">${escapeHtml(t("jobs.whenRequired"))}</p>`);
-            return;
-          }
-          setJobBanner(`<p class="muted">${escapeHtml(t("jobs.previewing"))}</p>`);
-          const proposed = await rpc("home.proposeSchedule", {
-            accountId: aid,
-            text: whenText,
-            clientContext: {
-              clientNow: new Date().toISOString(),
-              timeZone:
-                (typeof Intl !== "undefined" &&
-                  Intl.DateTimeFormat().resolvedOptions().timeZone) ||
-                undefined,
-              locale: getLocale() ||
-                (typeof navigator !== "undefined" && navigator.language
-                  ? navigator.language.split(/[-_]/)[0]
-                  : "en"),
-            },
-          });
-          if (proposed.error) {
-            previewProposal = null;
-            setJobBanner(`<p class="le-error">${escapeHtml(errMsg(proposed))}</p>`);
-            return;
-          }
-          const p = proposed.result || {};
-          previewProposal = {
-            proposalId: String(p.proposalId || ""),
-            whenText,
-            resolvedLocal: String(p.resolvedLocal || ""),
-            kind: String(p.kind || ""),
-            ...(p.message ? { message: String(p.message) } : {}),
-          };
-          showPreview(previewProposal);
-          setJobBanner(`<p class="muted">${escapeHtml(t("jobs.previewOk"))}</p>`);
-        });
-        document.getElementById("job-create")?.addEventListener("click", async () => {
-          const whenText = readWhenText();
-          if (!whenText) {
-            setJobBanner(`<p class="le-error">${escapeHtml(t("jobs.whenRequired"))}</p>`);
-            return;
-          }
-          /** @type {Record<string, unknown>} */
-          let payload;
-          let name;
-          if (jobMode === "notify") {
-            const message = String(
-              /** @type {HTMLInputElement | null} */ (document.getElementById("job-message"))?.value || "",
-            ).trim();
-            payload = { kind: "notify", ...(message ? { message } : {}) };
-            name = message.slice(0, 80);
-          } else if (jobMode === "workflow") {
-            const workflowId = String(
-              /** @type {HTMLSelectElement | null} */ (document.getElementById("job-workflow-id"))
-                ?.value || "",
-            ).trim();
-            if (!workflowId) {
-              setJobBanner(`<p class="le-error">${escapeHtml(t("jobs.workflowRequired"))}</p>`);
-              return;
-            }
-            payload = { kind: "workflow", workflowId, message: workflowId };
-            name = workflowId;
-          } else if (jobMode === "agentTurn") {
-            const prompt = String(
-              /** @type {HTMLTextAreaElement | null} */ (document.getElementById("job-agent-prompt"))
-                ?.value || "",
-            ).trim();
-            if (!prompt) {
-              setJobBanner(`<p class="le-error">${escapeHtml(t("jobs.agentPromptRequired"))}</p>`);
-              return;
-            }
-            payload = {
-              kind: "agentTurn",
-              prompt,
-              toolPolicyPreset: "restricted",
-              message: prompt.slice(0, 80),
-            };
-            name = prompt.slice(0, 80);
-          } else {
-            const toolName = String(
-              /** @type {HTMLSelectElement | null} */ (document.getElementById("job-tool-name"))
-                ?.value || "",
-            ).trim();
-            if (!toolName) {
-              setJobBanner(`<p class="le-error">${escapeHtml(t("jobs.toolRequired"))}</p>`);
-              return;
-            }
-            const toolArgs = readToolArgsFromForm();
-            payload = {
-              kind: "tool",
-              toolName,
-              ...(Object.keys(toolArgs).length ? { toolArgs } : {}),
-            };
-            name = toolName;
-          }
-          setJobBanner(`<p class="muted">${escapeHtml(t("jobs.creating"))}</p>`);
-          let proposalId =
-            previewProposal && previewProposal.whenText === whenText
-              ? previewProposal.proposalId
-              : "";
-          let proposedMessage =
-            previewProposal && previewProposal.whenText === whenText
-              ? previewProposal.message
-              : undefined;
-          if (!proposalId) {
-            const proposed = await rpc("home.proposeSchedule", {
-              accountId: aid,
-              text: whenText,
-              clientContext: {
-                clientNow: new Date().toISOString(),
-                timeZone:
-                  (typeof Intl !== "undefined" &&
-                    Intl.DateTimeFormat().resolvedOptions().timeZone) ||
-                  undefined,
-                locale: getLocale() ||
-                  (typeof navigator !== "undefined" && navigator.language
-                    ? navigator.language.split(/[-_]/)[0]
-                    : "en"),
-              },
-            });
-            if (proposed.error) {
-              setJobBanner(`<p class="le-error">${escapeHtml(errMsg(proposed))}</p>`);
-              return;
-            }
-            const p = proposed.result || {};
-            proposalId = String(p.proposalId || "");
-            if (typeof p.message === "string") proposedMessage = p.message;
-            if (proposalId) {
-              previewProposal = {
-                proposalId,
-                whenText,
-                resolvedLocal: String(p.resolvedLocal || ""),
-                kind: String(p.kind || ""),
-                ...(proposedMessage ? { message: proposedMessage } : {}),
-              };
-              showPreview(previewProposal);
-            }
-          }
-          if (!proposalId) {
-            setJobBanner(`<p class="le-error">${escapeHtml(t("jobs.whenRequired"))}</p>`);
-            return;
-          }
-          if (jobMode === "notify") {
-            const message =
-              (typeof payload.message === "string" && payload.message) ||
-              (typeof proposedMessage === "string" ? proposedMessage : "") ||
-              "";
-            if (!message.trim()) {
-              setJobBanner(`<p class="le-error">${escapeHtml(t("jobs.messageRequired"))}</p>`);
-              return;
-            }
-            payload = { kind: "notify", message: message.trim() };
-            name = message.trim().slice(0, 80);
-          }
-          const ans = await rpc("home.confirmSchedule", {
-            accountId: aid,
-            proposalId,
-            name,
-            payload,
-          });
-          if (ans.error) {
-            // Proposal may have been consumed or expired — clear so Create can re-propose.
-            previewProposal = null;
-            setJobBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
-            return;
-          }
-          automationTab = "jobs";
-          await showView("automation");
-        });
-        el.querySelectorAll(".job-row button[data-act]").forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            const row = btn.closest(".job-row");
-            const jobId = row?.getAttribute("data-id");
-            if (!jobId) return;
-            const act = btn.getAttribute("data-act");
-            let ans;
-            if (act === "toggle") {
-              const enabled = btn.getAttribute("data-en") === "1";
-              ans = await rpc("home.updateSchedule", { accountId: aid, jobId, enabled });
-            } else if (act === "run") {
-              ans = await rpc("home.runSchedule", { accountId: aid, jobId });
-            } else if (act === "edit") {
-              const curName = row?.getAttribute("data-name") || "";
-              const curMessage = row?.getAttribute("data-message") || "";
-              const payloadKind = row?.getAttribute("data-payload") || "notify";
-              const nextName = window.prompt(t("jobs.editNamePrompt"), curName);
-              if (nextName === null) return;
-              const patch = { accountId: aid, jobId, name: nextName.trim() || curName };
-              if (payloadKind === "notify") {
-                const nextMsg = window.prompt(t("jobs.editMessagePrompt"), curMessage);
-                if (nextMsg === null) return;
-                if (nextMsg.trim()) {
-                  patch.payload = { kind: "notify", message: nextMsg.trim() };
-                }
-              }
-              ans = await rpc("home.updateSchedule", patch);
-            } else if (act === "remove") {
-              if (!window.confirm(t("jobs.confirmRemove"))) return;
-              ans = await rpc("home.removeSchedule", { accountId: aid, jobId });
-            } else {
-              return;
-            }
-            if (ans.error) {
-              setJobBanner(`<p class="le-error">${escapeHtml(errMsg(ans))}</p>`);
-              return;
-            }
-            if (act === "run") {
-              const receipt = ans.result?.receipt;
-              const line = receipt
-                ? `${receipt.execStatus}${receipt.deliveryStatus ? ` · ${receipt.deliveryStatus}` : ""}`
-                : t("jobs.runOk");
-              setJobBanner(`<p class="muted">${escapeHtml(line)}</p>`);
-            }
-            automationTab = "jobs";
-            await showView("automation");
-          });
-        });
-        return;
-      }
+      return;
     }
+
 
     if (id === "system") {
       const tab = (tabId, labelKey) =>
@@ -14142,7 +14518,10 @@ function confirmDialog(opts) {
         finish(false);
       } else if (ev.key === "Enter") {
         ev.preventDefault();
-        finish(true);
+        ev.stopPropagation();
+        // Danger confirms require an explicit click (focused OK would still
+        // activate via the browser default Enter→button path).
+        if (!opts.danger) finish(true);
       }
     };
     backdrop.querySelector("[data-confirm-cancel]")?.addEventListener("click", () => finish(false));
@@ -14152,9 +14531,12 @@ function confirmDialog(opts) {
     });
     document.addEventListener("keydown", onKeydown, true);
     document.body.appendChild(backdrop);
+    // Prefer Cancel focus on destructive confirms so Enter never means delete.
     /** @type {HTMLButtonElement | null} */
-    const okBtn = backdrop.querySelector("[data-confirm-ok]");
-    okBtn?.focus();
+    const focusBtn = opts.danger
+      ? backdrop.querySelector("[data-confirm-cancel]")
+      : backdrop.querySelector("[data-confirm-ok]");
+    focusBtn?.focus();
   });
 }
 

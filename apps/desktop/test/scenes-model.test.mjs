@@ -62,3 +62,29 @@ test("V-UX-15: normalizeSceneSourceId strips channel: object handles", () => {
   });
   assert.equal(order.when.sourceId, "binary_sensor.front");
 });
+
+test("V-UX-15: custom scene requires prompt; supports time and presence whenKind", () => {
+  const tpl = SCENE_TEMPLATES.find((t) => t.id === "custom");
+  assert.ok(tpl);
+  assert.throws(
+    () => buildStandingOrderFromScene(tpl, { name: "Mine", cronExpr: "0 8 * * *" }),
+    /prompt/,
+  );
+  const timed = buildStandingOrderFromScene(tpl, {
+    name: "Mine",
+    cronExpr: "0 8 * * *",
+    prompt: "Say hello",
+  });
+  assert.equal(timed.when.kind, "cron");
+  assert.equal(timed.presenceAware, false);
+  assert.ok(timed.id.startsWith("scene:custom:"));
+  const presence = buildStandingOrderFromScene(tpl, {
+    name: "Leave custom",
+    whenKind: "smarthome_event",
+    sourceId: "binary_sensor.anyone_home",
+    prompt: "Secure the house",
+  });
+  assert.equal(presence.when.kind, "smarthome_event");
+  assert.equal(presence.presenceAware, true);
+  assert.equal(presence.action.prompt, "Secure the house");
+});

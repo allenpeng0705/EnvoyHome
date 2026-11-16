@@ -40,6 +40,30 @@ export function canonicalDigest(value: unknown): string {
   return `sha256:${createHash("sha256").update(json, "utf8").digest("hex")}`;
 }
 
+/**
+ * Digest used for approvals / grants / claim matching.
+ * `ha_call_service` normalizes to `{ objectId, domain, service }` so create-time
+ * grants match runtime args even when the model adds extra fields (Design §4.4).
+ */
+export function toolArgsDigest(tool: string, args: unknown): string {
+  if (tool === "ha_call_service" && args && typeof args === "object" && !Array.isArray(args)) {
+    const a = args as Record<string, unknown>;
+    return canonicalDigest({
+      objectId: String(a.objectId ?? "").trim(),
+      domain: String(a.domain ?? "").trim(),
+      service: String(a.service ?? "").trim(),
+    });
+  }
+  if (tool === "mqtt_publish" && args && typeof args === "object" && !Array.isArray(args)) {
+    const a = args as Record<string, unknown>;
+    return canonicalDigest({
+      objectId: String(a.objectId ?? "").trim(),
+      payload: String(a.payload ?? ""),
+    });
+  }
+  return canonicalDigest(args);
+}
+
 function canonicalJson(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
@@ -224,6 +248,14 @@ export class ApprovalStore {
     ) {
       throw Object.assign(new Error("envoyhome.grant_too_broad"), { code: "grant_too_broad" });
     }
+    // Dedup: reuse a live matching grant (same account + tool + digest).
+    const existing = (await this.listGrants(input.accountId)).find(
+      (g) =>
+        g.tool === input.tool &&
+        g.argsDigest === input.argsDigest &&
+        (g.expiresAt === null || Date.parse(g.expiresAt) > Date.now()),
+    );
+    if (existing) return existing;
     const grant: Grant = {
       id: randomUUID(),
       accountId: input.accountId,

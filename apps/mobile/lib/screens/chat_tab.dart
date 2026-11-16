@@ -191,6 +191,8 @@ class ChatTab extends StatefulWidget {
     this.purpose = 'general',
     this.onRequestConnect,
     this.onRequestPairAgain,
+    this.schedulesPaneOverride,
+    this.embedInSchedulesHub = false,
   });
 
   final SessionController session;
@@ -199,6 +201,10 @@ class ChatTab extends StatefulWidget {
   final VoidCallback? onRequestConnect;
   /// Opens the pairing screen to mint a fresh join (optional secondary).
   final VoidCallback? onRequestPairAgain;
+  /// When [embedInSchedulesHub] is true, hub owns Chat vs Histories selection.
+  final String? schedulesPaneOverride;
+  /// Hide inner Chat/Histories tabs — Schedules hub renders them.
+  final bool embedInSchedulesHub;
 
   @override
   State<ChatTab> createState() => _ChatTabState();
@@ -260,6 +266,10 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _scheduleDismissed = [];
   List<Map<String, dynamic>> _scheduleReceipts = [];
   bool _scheduleHistoryLoading = false;
+  /// Unarmed agent proposal for this Schedules session (Confirm / Cancel card).
+  Map<String, dynamic>? _pendingSchedule;
+  bool _scheduleCardBusy = false;
+  Timer? _pendingScheduleExpiry;
   /// General Chats: ChatGPT-style list ↔ thread (Home stays single-thread).
   bool _showSessionList = true;
   /// When true, the session list shows archived chats (includeArchived).
@@ -322,6 +332,15 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
     if (_inputFocus.hasFocus) _scrollToEnd();
   }
 
+  String get _effectiveSchedulesPane {
+    if (widget.embedInSchedulesHub) {
+      final o = widget.schedulesPaneOverride;
+      if (o == 'histories') return 'histories';
+      return 'chat';
+    }
+    return _schedulesPane;
+  }
+
   @override
   void didUpdateWidget(covariant ChatTab oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -337,11 +356,23 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
       _boundSession = widget.session.session;
       _bubbles.clear();
       _pendingFiles.clear();
+      _pendingSchedule = null;
+      _pendingScheduleExpiry?.cancel();
+      _pendingScheduleExpiry = null;
       _ensureSubscribed();
       unawaited(_restoreSession());
       unawaited(_refreshApprovals());
       unawaited(_refreshChoices());
       if (_isHome) unawaited(_loadBoundSources());
+    }
+    if (widget.embedInSchedulesHub &&
+        widget.schedulesPaneOverride != oldWidget.schedulesPaneOverride) {
+      if (widget.schedulesPaneOverride == 'histories') {
+        unawaited(_refreshScheduleHistories());
+      } else if (widget.schedulesPaneOverride == 'chat' ||
+          widget.schedulesPaneOverride == null) {
+        unawaited(_refreshPendingSchedule());
+      }
     }
   }
 
@@ -351,6 +382,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
     _inputFocus.removeListener(_onInputFocusChange);
     _inputFocus.dispose();
     widget.session.removeListener(_onSessionChanged);
+    _pendingScheduleExpiry?.cancel();
     _teardownSubs();
     unawaited(_speech.stop());
     _textCtrl.dispose();
@@ -390,12 +422,20 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
       _pendingNewChatTitle = '';
       _bubbles.clear();
       _assistantDraft = null;
+      _scheduleDismissed = [];
+      _scheduleReceipts = [];
+      _pendingSchedule = null;
+      _pendingScheduleExpiry?.cancel();
+      _pendingScheduleExpiry = null;
       if (_singleThread) {
         _showSessionList = false;
         unawaited(_restoreSession());
       } else {
         _showSessionList = true;
         unawaited(_loadSessionList());
+      }
+      if (_isSchedules && _effectiveSchedulesPane == 'histories') {
+        unawaited(_refreshScheduleHistories());
       }
     } else if (connected && !_wasConnected) {
       // SessionController is the same object — compare connected edge, not
@@ -405,6 +445,9 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
       } else {
         unawaited(_loadSessionList());
       }
+    } else if (!connected && _wasConnected) {
+      _armPendingScheduleExpiry(null);
+      if (mounted) setState(() => _pendingSchedule = null);
     }
     _wasConnected = connected;
     unawaited(_refreshApprovals());
@@ -443,6 +486,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
       try {
         await _reloadTranscript(id);
         unawaited(_refreshChoices());
+        if (_isSchedules) unawaited(_refreshPendingSchedule());
         return;
       } catch (_) {
         // Stale pointer — fall through (Home may still have a daemon session).
@@ -451,6 +495,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
           setState(() {
             _sessionId = null;
             _bubbles.clear();
+            _pendingSchedule = null;
           });
         }
         id = null;
@@ -472,6 +517,7 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
             setState(() => _sessionId = sid);
             await _reloadTranscript(sid);
             unawaited(_refreshChoices());
+            if (_isSchedules) unawaited(_refreshPendingSchedule());
             return;
           }
         }
@@ -558,6 +604,8 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
         'home:choice-needed',
         'home:choice-resolved',
         'home:session-plan',
+        'home:schedule-proposed',
+        'home:schedule-proposal-closed',
       ]);
       // Redial may have replaced the session while subscribe awaited.
       if (!mounted || !identical(widget.session.session, home)) return;
@@ -568,6 +616,10 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
       _unsubs.add(home.onEvent('home:choice-needed', _onChoiceEvent));
       _unsubs.add(home.onEvent('home:choice-resolved', _onChoiceEvent));
       _unsubs.add(home.onEvent('home:session-plan', _onSessionPlanEvent));
+      _unsubs.add(home.onEvent('home:schedule-proposed', _onScheduleProposed));
+      _unsubs.add(
+        home.onEvent('home:schedule-proposal-closed', _onScheduleProposalClosed),
+      );
       _subscribed = true;
     } catch (e) {
       if (!mounted || !identical(widget.session.session, home)) return;
@@ -620,6 +672,44 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
         _sessionPlan = Map<String, dynamic>.from(data);
       }
     });
+  }
+
+  void _onScheduleProposed(dynamic data) {
+    if (!_isSchedules || data is! Map) return;
+    final proposalId = data['proposalId']?.toString();
+    if (proposalId == null || proposalId.isEmpty) return;
+    final sid = data['sessionId']?.toString();
+    if (sid != null &&
+        sid.isNotEmpty &&
+        _sessionId != null &&
+        _sessionId!.isNotEmpty &&
+        sid != _sessionId) {
+      return;
+    }
+    final exp = data['expiresAt']?.toString();
+    final at = exp != null && exp.isNotEmpty ? DateTime.tryParse(exp) : null;
+    if (at != null && at.isBefore(DateTime.now())) return;
+    final pending = <String, dynamic>{
+      'proposalId': proposalId,
+      'resolvedLocal': data['resolvedLocal']?.toString() ?? '',
+      if (exp != null && exp.isNotEmpty) 'expiresAt': exp,
+      if (data['message'] != null) 'message': data['message'].toString(),
+      if (data['name'] != null) 'name': data['name'].toString(),
+    };
+    if (!mounted) return;
+    _armPendingScheduleExpiry(pending);
+    setState(() => _pendingSchedule = pending);
+  }
+
+  void _onScheduleProposalClosed(dynamic data) {
+    if (data is! Map) return;
+    final proposalId = data['proposalId']?.toString();
+    if (proposalId == null || proposalId.isEmpty) return;
+    final current = _pendingSchedule?['proposalId']?.toString();
+    if (current != proposalId) return;
+    if (!mounted) return;
+    _armPendingScheduleExpiry(null);
+    setState(() => _pendingSchedule = null);
   }
 
   Widget _sessionPlanChip(ThemeData theme) {
@@ -966,7 +1056,194 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
     if (!_singleThread) unawaited(_loadSessionList());
     unawaited(_refreshApprovals());
     unawaited(_refreshChoices());
+    if (_isSchedules) unawaited(_refreshPendingSchedule());
     _scrollToEnd();
+  }
+
+  void _armPendingScheduleExpiry(Map<String, dynamic>? pending) {
+    _pendingScheduleExpiry?.cancel();
+    _pendingScheduleExpiry = null;
+    if (pending == null) return;
+    final raw = pending['expiresAt']?.toString();
+    if (raw == null || raw.isEmpty) return;
+    final at = DateTime.tryParse(raw);
+    if (at == null) return;
+    final delay = at.difference(DateTime.now());
+    if (delay <= Duration.zero) return;
+    _pendingScheduleExpiry = Timer(delay + const Duration(milliseconds: 50), () {
+      if (!mounted) return;
+      if (_pendingSchedule == null) return;
+      setState(() => _pendingSchedule = null);
+    });
+  }
+
+  /// Desktop parity: `listSessions[].pendingSchedule` for Confirm/Cancel card.
+  Future<void> _refreshPendingSchedule() async {
+    if (!_isSchedules) {
+      if (mounted && _pendingSchedule != null) {
+        setState(() => _pendingSchedule = null);
+      }
+      return;
+    }
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    final sessionId = _sessionId;
+    if (home == null ||
+        accountId == null ||
+        accountId.isEmpty ||
+        sessionId == null ||
+        sessionId.isEmpty) {
+      _armPendingScheduleExpiry(null);
+      if (mounted) setState(() => _pendingSchedule = null);
+      return;
+    }
+    try {
+      final body = await home.listSessions(accountId: accountId);
+      final raw = body['sessions'];
+      Map<String, dynamic>? pending;
+      if (raw is List) {
+        for (final s in raw) {
+          if (s is! Map) continue;
+          if (s['sessionId']?.toString() != sessionId) continue;
+          final ps = s['pendingSchedule'];
+          if (ps is Map) {
+            pending = Map<String, dynamic>.from(ps);
+          }
+          break;
+        }
+      }
+      // Hide TTL-expired / malformed (same as desktop scheduleCardHtml).
+      if (pending != null) {
+        final pid = pending['proposalId']?.toString() ?? '';
+        if (pid.isEmpty) {
+          pending = null;
+        } else {
+          final exp = pending['expiresAt']?.toString();
+          final at = exp != null && exp.isNotEmpty ? DateTime.tryParse(exp) : null;
+          if (at != null && at.isBefore(DateTime.now())) {
+            pending = null;
+          }
+        }
+      }
+      if (!mounted) return;
+      _armPendingScheduleExpiry(pending);
+      setState(() => _pendingSchedule = pending);
+    } catch (_) {
+      /* keep prior card */
+    }
+  }
+
+  Future<void> _answerPendingSchedule({required bool confirm}) async {
+    final home = widget.session.session;
+    final accountId = widget.session.accountId;
+    final pending = _pendingSchedule;
+    final proposalId = pending?['proposalId']?.toString();
+    if (home == null ||
+        accountId == null ||
+        proposalId == null ||
+        proposalId.isEmpty ||
+        _scheduleCardBusy) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context);
+    setState(() => _scheduleCardBusy = true);
+    try {
+      if (confirm) {
+        await home.confirmSchedule(
+          accountId: accountId,
+          proposalId: proposalId,
+        );
+      } else {
+        await home.cancelScheduleProposal(
+          accountId: accountId,
+          proposalId: proposalId,
+        );
+      }
+      if (!mounted) return;
+      _armPendingScheduleExpiry(null);
+      setState(() {
+        _pendingSchedule = null;
+        _scheduleCardBusy = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            confirm
+                ? l10n.scheduleCardConfirmedToast
+                : l10n.scheduleCardCanceledToast,
+          ),
+        ),
+      );
+      if (_effectiveSchedulesPane == 'histories') {
+        unawaited(_refreshScheduleHistories());
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _scheduleCardBusy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l10n.scheduleCardFailed)),
+      );
+    }
+  }
+
+  Widget _scheduleCard(
+    Map<String, dynamic> pending,
+    AppLocalizations l10n,
+    ThemeData theme,
+  ) {
+    final proposalId = pending['proposalId']?.toString() ?? '';
+    if (proposalId.isEmpty) return const SizedBox.shrink();
+    final when = pending['resolvedLocal']?.toString() ?? '';
+    final msg = (pending['message'] ?? pending['name'])?.toString() ?? '';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.35),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              l10n.scheduleCardTitle,
+              style: theme.textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (when.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(when, style: theme.textTheme.bodyMedium),
+            ],
+            if (msg.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(
+                msg,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                FilledButton(
+                  onPressed: _scheduleCardBusy
+                      ? null
+                      : () => unawaited(_answerPendingSchedule(confirm: true)),
+                  child: Text(l10n.scheduleCardConfirm),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: _scheduleCardBusy
+                      ? null
+                      : () => unawaited(_answerPendingSchedule(confirm: false)),
+                  child: Text(l10n.scheduleCardCancel),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _reloadTranscript(String sessionId) async {
@@ -2442,7 +2719,12 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
       final dismissed = <Map<String, dynamic>>[];
       if (dismissedRaw is List) {
         for (final d in dismissedRaw) {
-          if (d is Map) dismissed.add(Map<String, dynamic>.from(d));
+          if (d is Map) {
+            final m = Map<String, dynamic>.from(d);
+            // Hide TTL-expired; keep user-canceled in Not set.
+            if (m['status']?.toString() == 'expired') continue;
+            dismissed.add(m);
+          }
         }
       }
       final receiptsBody = await home.listScheduleReceipts(
@@ -2592,19 +2874,12 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
             )
           else
             ..._scheduleDismissed.take(20).map((d) {
-              final expired = d['status']?.toString() == 'expired';
               return _histRow(
                 theme: theme,
                 title: _dismissedTitle(d, l10n),
-                badge: expired
-                    ? l10n.schedDismissedExpired
-                    : l10n.schedDismissedCanceled,
-                badgeFg: expired
-                    ? theme.colorScheme.tertiary
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.7),
-                badgeBg: expired
-                    ? theme.colorScheme.tertiary.withValues(alpha: 0.14)
-                    : theme.colorScheme.onSurface.withValues(alpha: 0.08),
+                badge: l10n.schedDismissedCanceled,
+                badgeFg: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                badgeBg: theme.colorScheme.onSurface.withValues(alpha: 0.08),
                 meta: _dismissedWhen(d),
                 foot: l10n.schedulesChatClosedAt(
                   _formatHistWhen(d['closedAt']?.toString()),
@@ -3867,6 +4142,31 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
     final empty = _bubbles.isEmpty && (draft == null || draft.isEmpty);
 
     if (!connected) {
+      // Hub Histories: slim connect (Jobs/Scenes parity) — not the full chat guide.
+      if (widget.embedInSchedulesHub && _effectiveSchedulesPane == 'histories') {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  l10n.settingsNeedConnect,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium,
+                ),
+                if (widget.onRequestConnect != null) ...[
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    onPressed: widget.session.busy ? null : widget.onRequestConnect,
+                    child: Text(l10n.shellConnect),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      }
       return _ConnectGuide(
         hasSavedPairing: widget.session.hasSavedPairing,
         busy: widget.session.busy,
@@ -3885,12 +4185,14 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
       );
     }
 
-    final showSchedulesHistories = _isSchedules && _schedulesPane == 'histories';
+    final showSchedulesHistories =
+        _isSchedules && _effectiveSchedulesPane == 'histories';
 
     return Column(
       children: [
         if (!_singleThread) _threadChrome(l10n, theme),
-        if (_isSchedules) _schedulesPaneTabs(l10n, theme),
+        if (_isSchedules && !widget.embedInSchedulesHub)
+          _schedulesPaneTabs(l10n, theme),
         if (showSchedulesHistories)
           Expanded(child: _schedulesHistoriesBody(l10n, theme))
         else ...[
@@ -3920,7 +4222,9 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
         if (_pending.isNotEmpty ||
             _approvalsLoading ||
             _pendingChoices.isNotEmpty ||
-            _choicesLoading)
+            _choicesLoading ||
+            _pendingSchedule != null ||
+            _sessionPlan != null)
           Material(
             color: theme.scaffoldBackgroundColor,
             child: Padding(
@@ -3943,6 +4247,8 @@ class _ChatTabState extends State<ChatTab> with WidgetsBindingObserver {
                     const LinearProgressIndicator(),
                   ..._pending.map((row) => _approvalCard(row, l10n, theme)),
                   if (_sessionPlan != null) _sessionPlanChip(theme),
+                  if (_pendingSchedule != null)
+                    _scheduleCard(_pendingSchedule!, l10n, theme),
                   if (_pendingChoices.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 6, left: 4, top: 4),

@@ -513,8 +513,14 @@ abstract class AppLocalizations {
   /// No description provided for @settingsSkillsSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'Skills, Workflows, Schedules'**
+  /// **'Install and manage skill packs'**
   String get settingsSkillsSubtitle;
+
+  /// No description provided for @settingsWorkflowsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'DAG workflows — draft, validate, run'**
+  String get settingsWorkflowsSubtitle;
 
   /// No description provided for @settingsSystemSubtitle.
   ///
@@ -1908,6 +1914,12 @@ abstract class AppLocalizations {
   /// **'Scenes'**
   String get skillsTabScenes;
 
+  /// No description provided for @schedulesTabJobs.
+  ///
+  /// In en, this message translates to:
+  /// **'Jobs'**
+  String get schedulesTabJobs;
+
   /// No description provided for @scenesHint.
   ///
   /// In en, this message translates to:
@@ -1979,6 +1991,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Confirm'**
   String get schedConfirm;
+
+  /// No description provided for @scheduleCardTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Set this reminder?'**
+  String get scheduleCardTitle;
+
+  /// No description provided for @scheduleCardConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get scheduleCardConfirm;
+
+  /// No description provided for @scheduleCardCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get scheduleCardCancel;
+
+  /// No description provided for @scheduleCardConfirmedToast.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder set.'**
+  String get scheduleCardConfirmedToast;
+
+  /// No description provided for @scheduleCardCanceledToast.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminder canceled.'**
+  String get scheduleCardCanceledToast;
+
+  /// No description provided for @scheduleCardFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not update that reminder.'**
+  String get scheduleCardFailed;
 
   /// No description provided for @schedKindNotify.
   ///
@@ -2073,7 +2121,7 @@ abstract class AppLocalizations {
   /// No description provided for @schedNoDismissed.
   ///
   /// In en, this message translates to:
-  /// **'No canceled or expired proposals.'**
+  /// **'No canceled proposals.'**
   String get schedNoDismissed;
 
   /// No description provided for @schedDismissedCanceled.
@@ -3573,7 +3621,7 @@ abstract class AppLocalizations {
   /// No description provided for @schedulesChatTabChat.
   ///
   /// In en, this message translates to:
-  /// **'Schedules'**
+  /// **'Chat'**
   String get schedulesChatTabChat;
 
   /// No description provided for @schedulesChatTabHistories.
@@ -3585,13 +3633,13 @@ abstract class AppLocalizations {
   /// No description provided for @schedulesChatHistoriesHint.
   ///
   /// In en, this message translates to:
-  /// **'Proposals you canceled or that expired, and recent job runs.'**
+  /// **'Proposals you canceled, and recent job runs.'**
   String get schedulesChatHistoriesHint;
 
   /// No description provided for @jobsHistoriesMovedHint.
   ///
   /// In en, this message translates to:
-  /// **'History moved to Schedules → Histories'**
+  /// **'Not set and runs are under Histories'**
   String get jobsHistoriesMovedHint;
 
   /// No description provided for @schedulesChatClosedAt.

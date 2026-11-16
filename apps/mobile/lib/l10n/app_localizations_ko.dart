@@ -223,7 +223,11 @@ class AppLocalizationsKo extends AppLocalizations {
       'Pairing, Home Assistant, MQTT, Channels';
 
   @override
-  String get settingsSkillsSubtitle => 'Skills, Workflows, Schedules';
+  String get settingsSkillsSubtitle => 'Install and manage skill packs';
+
+  @override
+  String get settingsWorkflowsSubtitle =>
+      'DAG workflows — draft, validate, run';
 
   @override
   String get settingsSystemSubtitle => 'Profiles, Shared files, Health, Grants';
@@ -999,7 +1003,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get skillsTabSchedules => 'Schedules';
 
   @override
-  String get skillsTabScenes => 'Scenes';
+  String get skillsTabScenes => '장면';
+
+  @override
+  String get schedulesTabJobs => 'Jobs';
 
   @override
   String get scenesHint =>
@@ -1038,6 +1045,24 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get schedConfirm => 'Confirm reminder';
+
+  @override
+  String get scheduleCardTitle => 'Set this reminder?';
+
+  @override
+  String get scheduleCardConfirm => 'Confirm';
+
+  @override
+  String get scheduleCardCancel => 'Cancel';
+
+  @override
+  String get scheduleCardConfirmedToast => 'Reminder set.';
+
+  @override
+  String get scheduleCardCanceledToast => 'Reminder canceled.';
+
+  @override
+  String get scheduleCardFailed => 'Could not update that reminder.';
 
   @override
   String get schedKindNotify => 'Notify';
@@ -1085,7 +1110,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get schedHistoryRuns => 'Runs';
 
   @override
-  String get schedNoDismissed => 'No canceled or expired proposals.';
+  String get schedNoDismissed => 'No canceled proposals.';
 
   @override
   String get schedDismissedCanceled => '취소됨';
@@ -1899,7 +1924,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get choiceCardTextPlaceholder => '답변 입력';
 
   @override
-  String get schedulesChatTabChat => '일정';
+  String get schedulesChatTabChat => 'Chat';
 
   @override
   String get schedulesChatTabHistories => '기록';
@@ -1908,7 +1933,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get schedulesChatHistoriesHint => '취소·만료된 제안과 최근 실행 기록.';
 
   @override
-  String get jobsHistoriesMovedHint => '기록은 일정 → 기록으로 이동';
+  String get jobsHistoriesMovedHint => 'Not set and runs are under Histories';
 
   @override
   String schedulesChatClosedAt(String when) {

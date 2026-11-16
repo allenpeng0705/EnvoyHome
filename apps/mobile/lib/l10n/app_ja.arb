@@ -87,7 +87,8 @@
   "settingsHubHint": "Configure the home daemon from your phone. Some owner-only actions need a trusted device.",
   "settingsLlmSubtitle": "Models, Local, Routing, Memory",
   "settingsConnectionsSubtitle": "Pairing, Home Assistant, MQTT, Channels",
-  "settingsSkillsSubtitle": "Skills, Workflows, Schedules",
+  "settingsSkillsSubtitle": "Install and manage skill packs",
+  "settingsWorkflowsSubtitle": "DAG workflows — draft, validate, run",
   "settingsSystemSubtitle": "Profiles, Shared files, Health, Grants",
   "homeChatSessionTitle": "Phone home chat",
   "homeChatEmptyTitle": "Talk to your home",
@@ -284,6 +285,8 @@
   "skillsVerified": "Skill verified",
   "skillsTabWorkflows": "Workflows",
   "skillsTabSchedules": "Schedules",
+  "skillsTabScenes": "シーン",
+  "schedulesTabJobs": "Jobs",
   "skillsInstallUrl": "Install from URL",
   "skillsInstall": "Install",
   "skillsClawHubSearch": "ClawHub search",
@@ -306,7 +309,7 @@
   "schedNoReceipts": "実行履歴はまだありません。",
   "schedHistoryNotSet": "Not set",
   "schedHistoryRuns": "Runs",
-  "schedNoDismissed": "No canceled or expired proposals.",
+  "schedNoDismissed": "No canceled proposals.",
   "schedDismissedCanceled": "キャンセル",
   "schedDismissedExpired": "期限切れ",
   "schedNext": "次回",
@@ -809,10 +812,10 @@
       }
     }
   },
-  "schedulesChatTabChat": "スケジュール",
+  "schedulesChatTabChat": "Chat",
   "schedulesChatTabHistories": "履歴",
   "schedulesChatHistoriesHint": "キャンセルまたは期限切れの提案と最近の実行。",
-  "jobsHistoriesMovedHint": "履歴はスケジュール → 履歴へ",
+  "jobsHistoriesMovedHint": "Not set and runs are under Histories",
   "schedulesChatClosedAt": "終了 {when}",
   "@schedulesChatClosedAt": {
     "placeholders": {

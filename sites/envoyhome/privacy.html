@@ -117,7 +117,7 @@
       <div class="page-inner">
         <div class="eyebrow">Legal · Privacy</div>
         <h1>Privacy Policy</h1>
-        <p class="updated">Last updated: 11 November 2026 · Applies to the EnvoyHome desktop Settings shell and mobile thin client, and to any self-hosted daemon you run. Mobile bundle id: <code>com.envoymesh.envoyhome</code>.</p>
+        <p class="updated">Last updated: 16 November 2026 · Applies to EnvoyHome <strong>0.2.0</strong> (desktop Settings shell and mobile thin client), and to any self-hosted daemon you run. Mobile bundle id: <code>com.envoymesh.envoyhome</code>.</p>
         <p class="lede"><strong>EnvoyHome is self-hosted.</strong> Chat, memory, documents, and smart-home control run on <strong>your</strong> home daemon — not on an EnvoyHome cloud brain. This page explains what the software processes, where it goes, and what the publisher does not collect.</p>
 
         <div class="policy">
@@ -174,7 +174,7 @@
           </table>
 
           <h2>4. Push notifications</h2>
-          <p>If you enable notifications, the daemon sends approval-needed events through <strong>Apple Push Notification service (APNs)</strong> on iOS or <strong>Firebase Cloud Messaging (FCM)</strong> on Android. Those platforms receive the push payload and device token needed to deliver the notification. On Android, Firebase is used only when the build includes a <code>google-services.json</code>; FCM is the messaging service in that case.</p>
+          <p>If you enable notifications, the daemon can send <strong>approval-needed</strong> and <strong>schedule</strong> notify-only wakes through <strong>Apple Push Notification service (APNs)</strong> on iOS or <strong>Firebase Cloud Messaging (FCM)</strong> on Android. Those platforms receive the push payload and device token needed to deliver the notification. On Android, Firebase is used only when the build includes a <code>google-services.json</code>; FCM is the messaging service in that case.</p>
 
           <h2>5. Pairing and network access</h2>
           <p>A phone pairs by scanning a QR code minted in desktop Settings, or by entering the daemon endpoint. iOS requires Local Network permission to reach a LAN address. Pairing binds the device to specific household accounts; a device cannot act for an account it is not bound to, and the daemon denies the request if that binding cannot be resolved.</p>

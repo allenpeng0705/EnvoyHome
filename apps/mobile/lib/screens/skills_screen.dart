@@ -7,7 +7,7 @@ import '../l10n/app_localizations.dart';
 import '../state/session_controller.dart';
 import 'workflow_editor_page.dart';
 
-/// Skills | Workflows | Scenes | Schedules.
+/// Skill-pack install / list only (Schedules hub owns Scenes / Jobs).
 class SkillsScreen extends StatelessWidget {
   const SkillsScreen({super.key, required this.session});
 
@@ -16,31 +16,23 @@ class SkillsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return DefaultTabController(
-      length: 4,
-      child: Scaffold(
-        appBar: AppBar(
-          title: Text(l10n.navSkills),
-          bottom: TabBar(
-            isScrollable: true,
-            tabs: [
-              Tab(text: l10n.skillsTabSkills),
-              Tab(text: l10n.skillsTabWorkflows),
-              Tab(text: l10n.skillsTabScenes),
-              Tab(text: l10n.skillsTabSchedules),
-            ],
-          ),
-        ),
-        body: TabBarView(
-          children: [
-            _SkillsListTab(session: session),
-            _WorkflowsTab(session: session),
-            _ScenesTab(session: session),
-            _SchedulesTab(session: session),
-          ],
-        ),
-      ),
+    return Scaffold(
+      appBar: AppBar(title: Text(l10n.navSkills)),
+      body: _SkillsListTab(session: session),
     );
+  }
+}
+
+/// Top-level Workflows (Settings hub / tablet rail) — not under Skills.
+class WorkflowsScreen extends StatelessWidget {
+  const WorkflowsScreen({super.key, required this.session});
+
+  final SessionController session;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return _WorkflowsTab(session: session, title: l10n.skillsTabWorkflows);
   }
 }
 
@@ -225,8 +217,9 @@ class _SkillsListTabState extends State<_SkillsListTab> {
 }
 
 class _WorkflowsTab extends StatefulWidget {
-  const _WorkflowsTab({required this.session});
+  const _WorkflowsTab({required this.session, this.title});
   final SessionController session;
+  final String? title;
 
   @override
   State<_WorkflowsTab> createState() => _WorkflowsTabState();
@@ -235,16 +228,40 @@ class _WorkflowsTab extends StatefulWidget {
 class _WorkflowsTabState extends State<_WorkflowsTab> {
   List<Map<String, dynamic>> _items = [];
   String? _error;
+  String? _trackedAccountId;
 
   @override
   void initState() {
     super.initState();
+    _trackedAccountId = widget.session.accountId;
+    widget.session.addListener(_onSessionChanged);
     unawaited(_reload());
+  }
+
+  @override
+  void dispose() {
+    widget.session.removeListener(_onSessionChanged);
+    super.dispose();
+  }
+
+  void _onSessionChanged() {
+    final accountId = widget.session.accountId;
+    if (accountId != _trackedAccountId || !widget.session.isConnected) {
+      _trackedAccountId = accountId;
+      unawaited(_reload());
+    }
   }
 
   Future<void> _reload() async {
     final home = widget.session.session;
-    if (home == null) return;
+    if (home == null || !widget.session.isConnected) {
+      if (!mounted) return;
+      setState(() {
+        _items = [];
+        _error = null;
+      });
+      return;
+    }
     try {
       final body = await home.listWorkflows(
         accountId: widget.session.accountId,
@@ -265,7 +282,9 @@ class _WorkflowsTabState extends State<_WorkflowsTab> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    final title = widget.title;
     return Scaffold(
+      appBar: title == null ? null : AppBar(title: Text(title)),
       body: RefreshIndicator(
         onRefresh: _reload,
         child: ListView(
@@ -348,15 +367,24 @@ class _WorkflowsTabState extends State<_WorkflowsTab> {
   }
 }
 
-class _SchedulesTab extends StatefulWidget {
-  const _SchedulesTab({required this.session});
+/// Job authoring (repeating / once) — Schedules hub Jobs tab.
+class ScheduleJobsPanel extends StatefulWidget {
+  const ScheduleJobsPanel({
+    super.key,
+    required this.session,
+    this.onOpenHistories,
+    this.onRequestConnect,
+  });
   final SessionController session;
+  /// Hub switches to Histories (Not set + Runs).
+  final VoidCallback? onOpenHistories;
+  final VoidCallback? onRequestConnect;
 
   @override
-  State<_SchedulesTab> createState() => _SchedulesTabState();
+  State<ScheduleJobsPanel> createState() => _ScheduleJobsPanelState();
 }
 
-class _SchedulesTabState extends State<_SchedulesTab> {
+class _ScheduleJobsPanelState extends State<ScheduleJobsPanel> {
   final _whenCtrl = TextEditingController();
   final _msgCtrl = TextEditingController();
   final _workflowIdCtrl = TextEditingController();
@@ -372,6 +400,7 @@ class _SchedulesTabState extends State<_SchedulesTab> {
   String _listView = 'repeating';
   String? _error;
   bool _busy = false;
+  String? _trackedAccountId;
 
   List<Map<String, dynamic>> get _repeating => _items
       .where((s) {
@@ -528,11 +557,14 @@ class _SchedulesTabState extends State<_SchedulesTab> {
   @override
   void initState() {
     super.initState();
+    _trackedAccountId = widget.session.accountId;
+    widget.session.addListener(_onSessionChanged);
     unawaited(_reload());
   }
 
   @override
   void dispose() {
+    widget.session.removeListener(_onSessionChanged);
     _whenCtrl.dispose();
     _msgCtrl.dispose();
     _workflowIdCtrl.dispose();
@@ -540,10 +572,34 @@ class _SchedulesTabState extends State<_SchedulesTab> {
     super.dispose();
   }
 
+  void _onSessionChanged() {
+    final accountId = widget.session.accountId;
+    if (accountId != _trackedAccountId) {
+      _trackedAccountId = accountId;
+      _proposal = null;
+      _toolArgValues.clear();
+      unawaited(_reload());
+      return;
+    }
+    if (!widget.session.isConnected) {
+      unawaited(_reload());
+    }
+  }
+
   Future<void> _reload() async {
     final home = widget.session.session;
     final accountId = widget.session.accountId;
-    if (home == null || accountId == null) return;
+    if (home == null || accountId == null || !widget.session.isConnected) {
+      if (!mounted) return;
+      setState(() {
+        _items = [];
+        _workflows = [];
+        _tools = [];
+        _proposal = null;
+        _error = null;
+      });
+      return;
+    }
     try {
       final body = await home.listSchedules(accountId: accountId);
       // Wire key is `jobs` (V-UX-12b) — never `schedules`.
@@ -714,6 +770,11 @@ class _SchedulesTabState extends State<_SchedulesTab> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final accountId = widget.session.accountId;
+    if (!widget.session.isConnected) {
+      return _SchedulesPanelNeedConnect(
+        onRequestConnect: widget.onRequestConnect,
+      );
+    }
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -946,10 +1007,29 @@ class _SchedulesTabState extends State<_SchedulesTab> {
         ),
         Padding(
           padding: const EdgeInsets.only(top: 8, bottom: 4),
-          child: Text(
-            l10n.jobsHistoriesMovedHint,
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          child: widget.onOpenHistories == null
+              ? Text(
+                  l10n.jobsHistoriesMovedHint,
+                  style: Theme.of(context).textTheme.bodySmall,
+                )
+              : Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      alignment: Alignment.centerLeft,
+                    ),
+                    onPressed: widget.onOpenHistories,
+                    child: Text(
+                      l10n.jobsHistoriesMovedHint,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                    ),
+                  ),
+                ),
         ),
         const SizedBox(height: 8),
         if (_listView == 'once') ...[
@@ -974,29 +1054,63 @@ class _SchedulesTabState extends State<_SchedulesTab> {
   }
 }
 
-class _ScenesTab extends StatefulWidget {
-  const _ScenesTab({required this.session});
+/// Scene templates — Schedules hub Scenes tab.
+class ScheduleScenesPanel extends StatefulWidget {
+  const ScheduleScenesPanel({
+    super.key,
+    required this.session,
+    this.onRequestConnect,
+  });
   final SessionController session;
+  final VoidCallback? onRequestConnect;
 
   @override
-  State<_ScenesTab> createState() => _ScenesTabState();
+  State<ScheduleScenesPanel> createState() => _ScheduleScenesPanelState();
 }
 
-class _ScenesTabState extends State<_ScenesTab> {
+class _ScheduleScenesPanelState extends State<ScheduleScenesPanel> {
   List<Map<String, dynamic>> _scenes = [];
   String? _error;
   bool _busy = false;
+  String? _trackedAccountId;
 
   @override
   void initState() {
     super.initState();
+    _trackedAccountId = widget.session.accountId;
+    widget.session.addListener(_onSessionChanged);
     unawaited(_reload());
+  }
+
+  @override
+  void dispose() {
+    widget.session.removeListener(_onSessionChanged);
+    super.dispose();
+  }
+
+  void _onSessionChanged() {
+    final accountId = widget.session.accountId;
+    if (accountId != _trackedAccountId) {
+      _trackedAccountId = accountId;
+      unawaited(_reload());
+      return;
+    }
+    if (!widget.session.isConnected) {
+      unawaited(_reload());
+    }
   }
 
   Future<void> _reload() async {
     final home = widget.session.session;
     final accountId = widget.session.accountId;
-    if (home == null || accountId == null) return;
+    if (home == null || accountId == null || !widget.session.isConnected) {
+      if (!mounted) return;
+      setState(() {
+        _scenes = [];
+        _error = null;
+      });
+      return;
+    }
     try {
       final body = await home.listStandingOrders(accountId: accountId);
       final raw = body['orders'];
@@ -1064,6 +1178,11 @@ class _ScenesTabState extends State<_ScenesTab> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
+    if (!widget.session.isConnected) {
+      return _SchedulesPanelNeedConnect(
+        onRequestConnect: widget.onRequestConnect,
+      );
+    }
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -1120,6 +1239,38 @@ class _ScenesTabState extends State<_ScenesTab> {
             },
           ),
       ],
+    );
+  }
+}
+
+class _SchedulesPanelNeedConnect extends StatelessWidget {
+  const _SchedulesPanelNeedConnect({this.onRequestConnect});
+  final VoidCallback? onRequestConnect;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              l10n.settingsNeedConnect,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            if (onRequestConnect != null) ...[
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: onRequestConnect,
+                child: Text(l10n.shellConnect),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

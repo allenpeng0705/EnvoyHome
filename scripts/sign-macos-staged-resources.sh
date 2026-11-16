@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Sign Mach-O binaries embedded in Tauri resources/ before notarization.
+#
+# Pattern: ../EnvoyCoder (EnvoyDev) + ../EnvoyMesh sign-macos-staged-resources.sh.
+# Tauri codesigns EnvoyHome.app but does not deep-sign natives under
+# resources/{daemon,node-runtime,obscura,…}/ (Node itself, .node addons, Obscura, …).
+# Apple notarization rejects the bundle until every nested Mach-O has a
+# Developer ID signature with hardened runtime and a secure timestamp.
+#
+# Requires APPLE_SIGNING_IDENTITY (set by require_apple_signing_env in build-desktop.sh).
+# Usage: bash scripts/sign-macos-staged-resources.sh [resources-dir]
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+RESOURCES="${1:-$ROOT/apps/desktop/src-tauri/resources}"
+
+# shellcheck source=codesign-macos-lib.sh
+source "${SCRIPT_DIR}/codesign-macos-lib.sh"
+
+if [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
+  echo "sign-macos-staged-resources: APPLE_SIGNING_IDENTITY not set — skip"
+  exit 0
+fi
+
+if [ ! -d "$RESOURCES" ]; then
+  echo "sign-macos-staged-resources: no resources dir at $RESOURCES — skip"
+  exit 0
+fi
+
+# Fail fast: root-owned natives → errSecInternalComponent (not a cert problem).
+root_sample="$(find "$RESOURCES" -user root 2>/dev/null | head -1 || true)"
+if [ -n "$root_sample" ]; then
+  echo "error: cannot codesign root-owned staged resources (errSecInternalComponent)." >&2
+  echo "  Example: $root_sample" >&2
+  echo "  Fix: sudo chown -R \"\$(whoami):staff\" \"$RESOURCES\"" >&2
+  exit 1
+fi
+
+codesign_macos_init
+codesign_macos_unlock_keychain
+
+# Node (V8) needs JIT entitlements under hardened runtime; without them the
+# sidecar dies at pthread_jit_write_protect_np and the window shows "Daemon unreachable".
+# macos-node.entitlements must be comment-free XML — codesign silently embeds
+# an empty entitlement set when the plist contains <!-- --> comments.
+NODE_ENTITLEMENTS="${SCRIPT_DIR}/macos-node.entitlements"
+
+candidate_paths() {
+  find "$RESOURCES" -depth -type f \( \
+    -name '*.node' -o -name '*.dylib' -o -name 'spawn-helper' \
+    -o -name 'node' -o -name 'obscura' -o -name 'obscura-worker' \
+    -o -path '*/bin/fd' -o -path '*/bin/rg' \
+  \) 2>/dev/null
+}
+
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  codesign_macos_is_macho "$f" || continue
+  case "$(basename "$f")" in
+    node)
+      CODESIGN_FILE_ENTITLEMENTS="$NODE_ENTITLEMENTS" codesign_macos_sign_file "$f" || true
+      ;;
+    *)
+      unset CODESIGN_FILE_ENTITLEMENTS
+      codesign_macos_sign_file "$f" || true
+      ;;
+  esac
+done < <(candidate_paths)
+
+codesign_macos_print_summary "nested Mach-O file(s) under resources/" || exit 1

@@ -1493,6 +1493,31 @@ export const METHODS: Readonly<Record<string, MethodSpec>> = {
     params: obj({ id: str({ minLength: 1 }) }, ["id"]),
     result: obj({ ok: bool() }, ["ok"]),
   },
+  "home.putUnattendedGrants": {
+    group: "approvals",
+    scope: "account-scoped",
+    paramsOptional: false,
+    summary:
+      "Attended create-time grants for Scenes/standing (seat-bound; full digest; safety refused; Design §4.4)",
+    params: obj(
+      {
+        accountId: str({ minLength: 1 }),
+        grants: arr(
+          obj(
+            {
+              tool: str({ minLength: 1 }),
+              objectId: str({ minLength: 1 }),
+              domain: str({ minLength: 1 }),
+              service: str({ minLength: 1 }),
+            },
+            ["tool", "objectId", "domain", "service"],
+          ),
+        ),
+      },
+      ["accountId", "grants"],
+    ),
+    result: obj({ ok: bool(), grants: arr(grant) }, ["ok", "grants"]),
+  },
   "home.listActuations": {
     group: "approvals",
     scope: "owner-scope",

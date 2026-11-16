@@ -12,6 +12,7 @@ import 'connections_screen.dart';
 import 'llm_screen.dart';
 import 'pair_screen.dart';
 import 'profiles_screen.dart';
+import 'schedules_hub_screen.dart';
 import 'settings_hub.dart';
 import 'skills_screen.dart';
 import 'system_screen.dart';
@@ -35,14 +36,16 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-  /// Phone: Chat / Home? / Settings. Tablet: Chat / Home? / Profiles / LLM / Connections / Skills / System.
+  /// Phone: Chat / Schedules / Home? / Settings. Tablet: Chat / Schedules / Home? / …
   int _tab = 0;
   bool _haHomeReady = false;
+  bool _wasConnected = false;
   final _settingsNav = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
     super.initState();
+    _wasConnected = widget.session.isConnected;
     final bound = _helloAccounts;
     if (bound.length == 1 &&
         (widget.session.accountId == null || widget.session.accountId!.isEmpty)) {
@@ -60,6 +63,40 @@ class _HomeShellState extends State<HomeShell> {
   String? _lastShownError;
 
   void _onSession() {
+    final connected = widget.session.isConnected;
+    // Tablet unpaired rail: Chat · Schedules · Settings(2).
+    // Connected rail inserts Profiles/LLM/… — Settings is no longer index 2.
+    if (connected != _wasConnected) {
+      final wide = MediaQuery.sizeOf(context).width >= _kWideBreakpoint;
+      if (wide) {
+        if (!_wasConnected && connected) {
+          // Was on unpaired Settings → jump to System (last connected dest).
+          if (_tab == 2) {
+            final destCount =
+                _tabletDestinations(AppLocalizations.of(context)).length;
+            _tab = destCount > 0 ? destCount - 1 : 0;
+          }
+        } else if (_wasConnected && !connected) {
+          // Drop into unpaired Settings if we were past Schedules.
+          if (_tab > 1) _tab = 2;
+          _haHomeReady = false;
+        }
+      } else if (_wasConnected && !connected) {
+        // Phone collapses to Chat · Schedules · Settings.
+        final hadHome = _haHomeReady;
+        if (hadHome) {
+          if (_tab == 2) {
+            _tab = 0; // was Home
+          } else if (_tab > 2) {
+            _tab = 2; // was Settings → Settings
+          }
+        } else if (_tab > 2) {
+          _tab = 2;
+        }
+        _haHomeReady = false;
+      }
+      _wasConnected = connected;
+    }
     unawaited(_refreshHaReady());
     _maybeShowSessionError();
     if (mounted) setState(() {});
@@ -125,13 +162,14 @@ class _HomeShellState extends State<HomeShell> {
       setState(() {
         final wasReady = _haHomeReady;
         _haHomeReady = ready;
-        // Home chat is inserted at index 1 when HA becomes ready — remap selection.
+        // Home chat inserts at index 2 (after Chat + Schedules) — remap selection.
+        const homeIdx = 2;
         if (!wasReady && ready) {
-          if (_tab >= 1) _tab = _tab + 1;
+          if (_tab >= homeIdx) _tab = _tab + 1;
         } else if (wasReady && !ready) {
-          if (_tab == 1) {
+          if (_tab == homeIdx) {
             _tab = 0;
-          } else if (_tab > 1) {
+          } else if (_tab > homeIdx) {
             _tab = _tab - 1;
           }
         }
@@ -141,10 +179,11 @@ class _HomeShellState extends State<HomeShell> {
         setState(() {
           final wasReady = _haHomeReady;
           _haHomeReady = false;
+          const homeIdx = 2;
           if (wasReady) {
-            if (_tab == 1) {
+            if (_tab == homeIdx) {
               _tab = 0;
-            } else if (_tab > 1) {
+            } else if (_tab > homeIdx) {
               _tab = _tab - 1;
             }
           }
@@ -253,9 +292,8 @@ class _HomeShellState extends State<HomeShell> {
         onRequestConnect: connected ? null : _requestConnect,
         onRequestPairAgain: connected ? null : _openPairing,
       ),
-      ChatTab(
+      SchedulesHubScreen(
         session: session,
-        purpose: 'schedules',
         onRequestConnect: connected ? null : _requestConnect,
         onRequestPairAgain: connected ? null : _openPairing,
       ),
@@ -312,9 +350,8 @@ class _HomeShellState extends State<HomeShell> {
           onRequestConnect: _requestConnect,
           onRequestPairAgain: _openPairing,
         ),
-        ChatTab(
+        SchedulesHubScreen(
           session: session,
-          purpose: 'schedules',
           onRequestConnect: _requestConnect,
           onRequestPairAgain: _openPairing,
         ),
@@ -329,13 +366,14 @@ class _HomeShellState extends State<HomeShell> {
     }
     return [
       ChatTab(session: session, purpose: 'general'),
-      ChatTab(session: session, purpose: 'schedules'),
+      SchedulesHubScreen(session: session),
       if (_haHomeReady) ChatTab(session: session, purpose: 'home'),
       // Nested navigator so each Settings section can push editors.
       _SettingsPane(child: ProfilesScreen(session: session)),
       _SettingsPane(child: LlmScreen(session: session)),
       _SettingsPane(child: ConnectionsScreen(session: session)),
       _SettingsPane(child: SkillsScreen(session: session)),
+      _SettingsPane(child: WorkflowsScreen(session: session)),
       _SettingsPane(child: SystemScreen(session: session)),
     ];
   }
@@ -397,6 +435,11 @@ class _HomeShellState extends State<HomeShell> {
         icon: const Icon(Icons.auto_awesome_outlined),
         selectedIcon: const Icon(Icons.auto_awesome),
         label: Text(l10n.navSkills),
+      ),
+      NavigationRailDestination(
+        icon: const Icon(Icons.account_tree_outlined),
+        selectedIcon: const Icon(Icons.account_tree),
+        label: Text(l10n.skillsTabWorkflows),
       ),
       NavigationRailDestination(
         icon: const Icon(Icons.settings_outlined),

@@ -117,7 +117,7 @@
       <div class="page-inner">
         <div class="eyebrow">法律 · 隐私</div>
         <h1>隐私政策</h1>
-        <p class="updated">最后更新：2026 年 11 月 11 日 · 适用于 EnvoyHome 桌面设置外壳、手机轻客户端，以及你自行运行的守护进程。手机包名：<code>com.envoymesh.envoyhome</code>。</p>
+        <p class="updated">最后更新：2026 年 11 月 16 日 · 适用于 EnvoyHome <strong>0.2.0</strong>（桌面设置外壳与手机轻客户端），以及你自行运行的守护进程。手机包名：<code>com.envoymesh.envoyhome</code>。</p>
         <p class="lede"><strong>EnvoyHome 是自托管的。</strong>对话、记忆、文档与智能家居控制都运行在<strong>你的</strong>家庭守护进程上——而不是 EnvoyHome 的云端大脑。本页说明软件会处理哪些数据、数据流向何处，以及发布方不收集什么。</p>
 
         <div class="policy">
@@ -174,7 +174,7 @@
           </table>
 
           <h2>4. 推送通知</h2>
-          <p>如果你启用通知，守护进程会在需要审批时通过 iOS 的 <strong>Apple 推送通知服务（APNs）</strong>或 Android 的 <strong>Firebase Cloud Messaging（FCM）</strong>发送事件。这些平台会收到投递通知所需的推送内容和设备令牌。在 Android 上，只有构建包含 <code>google-services.json</code> 时才会使用 Firebase；此时 FCM 是消息服务。</p>
+          <p>如果你启用通知，守护进程可通过 iOS 的 <strong>Apple 推送通知服务（APNs）</strong>或 Android 的 <strong>Firebase Cloud Messaging（FCM）</strong>发送<strong>审批</strong>与<strong>计划任务</strong>类仅通知唤醒。这些平台会收到投递通知所需的推送内容和设备令牌。在 Android 上，只有构建包含 <code>google-services.json</code> 时才会使用 Firebase；此时 FCM 是消息服务。</p>
 
           <h2>5. 配对与网络访问</h2>
           <p>手机通过扫描桌面设置中生成的二维码配对，或手动输入守护进程端点。iOS 需要“本地网络”权限才能访问局域网地址。配对会把设备绑定到特定的家庭账户；设备不能代表未绑定的账户行动，绑定关系无法解析时守护进程会拒绝请求。</p>

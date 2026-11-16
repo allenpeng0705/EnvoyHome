@@ -1,6 +1,6 @@
 {
   "name": "@envoyhome/desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Tauri thin UI; hosts/supervises the EnvoyHome daemon (B12 / §21 bar 7).",
   "type": "module",
