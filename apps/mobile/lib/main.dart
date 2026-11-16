@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -10,6 +12,12 @@ Future<void> main() async {
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
-  await PushService.instance.initialize();
+  // Push is optional. Never block first frame on FCM/APNs — a hang would leave
+  // the native splash up; a failure only means no wake notifications.
+  unawaited(
+    PushService.instance.initialize().catchError((Object e, StackTrace st) {
+      debugPrint('[push] initialize error (app continues): $e\n$st');
+    }),
+  );
   runApp(const EnvoyHomeApp());
 }

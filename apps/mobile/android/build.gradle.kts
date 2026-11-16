@@ -1,3 +1,5 @@
+import com.android.build.gradle.BaseExtension
+
 allprojects {
     repositories {
         google()
@@ -15,8 +17,24 @@ subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
+
+// Do not use evaluationDependsOn(":app") together with afterEvaluate — it marks
+// plugin projects evaluated too early and blocks compileSdk overrides.
+//
+// file_picker 8.x still declares compileSdk 34 while
+// flutter_plugin_android_lifecycle requires API 36+.
 subprojects {
-    project.evaluationDependsOn(":app")
+    afterEvaluate {
+        extensions.findByType<BaseExtension>()?.apply {
+            val current =
+                runCatching {
+                    compileSdkVersion?.removePrefix("android-")?.toIntOrNull()
+                }.getOrNull() ?: 0
+            if (current < 36) {
+                compileSdkVersion(36)
+            }
+        }
+    }
 }
 
 tasks.register<Delete>("clean") {

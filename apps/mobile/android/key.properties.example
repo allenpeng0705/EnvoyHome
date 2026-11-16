@@ -5,4 +5,5 @@
 # storePassword=...
 # keyPassword=...
 # keyAlias=upload
-# storeFile=/absolute/path/to/upload-keystore.jks
+# storeFile=upload-keystore.jks
+#   (path relative to android/, or an absolute path)

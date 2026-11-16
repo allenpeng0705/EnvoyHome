@@ -75,6 +75,8 @@ class PushService {
   static const _channel = MethodChannel(_channelName);
 
   bool _initialized = false;
+  /// False when FCM/APNs setup failed — the app keeps running without pushes.
+  bool _transportReady = false;
   String? _token;
   PushTokenHost? _host;
   String? _accountId;
@@ -83,11 +85,22 @@ class PushService {
   PushTapHandler? onTap;
   Map<String, dynamic>? _pendingTap;
 
+  /// Shared with [bindHost] so pairing can await the same in-flight FCM setup.
+  Future<bool>? _androidInitFuture;
+  FirebaseMessaging? _androidMessaging;
+  bool _androidListenersReady = false;
+  Timer? _androidTokenRetryTimer;
+  int _androidTokenRetryCount = 0;
+  static const _androidTokenRetryMax = 5;
+
   /// Test-only platform override (`ios` / `android`).
   @visibleForTesting
   String? debugPlatformOverride;
 
   String? get token => _token;
+
+  /// True after a successful native push transport setup (token may still be pending).
+  bool get isTransportReady => _transportReady;
 
   bool get isSupported {
     if (kIsWeb) return false;
@@ -100,7 +113,9 @@ class PushService {
 
   @visibleForTesting
   void debugReset() {
+    _cancelAndroidTokenRetry();
     _initialized = false;
+    _transportReady = false;
     _token = null;
     _host = null;
     _accountId = null;
@@ -108,24 +123,38 @@ class PushService {
     onTap = null;
     _pendingTap = null;
     debugPlatformOverride = null;
+    _androidInitFuture = null;
+    _androidMessaging = null;
+    _androidListenersReady = false;
+    _androidTokenRetryCount = 0;
   }
 
+  /// Best-effort push setup. **Fail-open:** any error is logged and ignored so
+  /// chat/pairing still work — the device simply will not receive wakes until
+  /// push succeeds on a later launch or token refresh.
   Future<void> initialize() async {
     if (_initialized) return;
     _initialized = true;
     if (!isSupported) return;
 
-    _channel.setMethodCallHandler(_onNative);
+    try {
+      _channel.setMethodCallHandler(_onNative);
+    } catch (e) {
+      debugPrint('[push] MethodChannel handler failed (continuing without push): $e');
+    }
 
     try {
       if (Platform.isIOS) {
         // Scene-based iOS may wire the MethodChannel a tick after launch.
         await _requestIosPushWithRetry();
+        _transportReady = true;
       } else if (Platform.isAndroid) {
-        await _initAndroidFcm();
+        _androidInitFuture ??= _initAndroidFcm();
+        _transportReady = await _androidInitFuture!;
       }
     } catch (e, st) {
-      debugPrint('[push] initialize failed: $e\n$st');
+      _transportReady = false;
+      debugPrint('[push] initialize failed (app continues without push): $e\n$st');
     }
   }
 
@@ -173,9 +202,8 @@ class PushService {
     _host = host;
     _accountId = accountId;
     _registerPending = true;
-    // Session often binds before APNs callback — re-request registration, pull
-    // native cache (covers race where token arrived before the MethodChannel
-    // handler was live), then register with the daemon.
+    // Session often binds before APNs/FCM token — re-request / pull, then
+    // register with the daemon.
     if (!kIsWeb && Platform.isIOS) {
       try {
         await _channel.invokeMethod<void>('requestPermissionAndRegister');
@@ -185,6 +213,10 @@ class PushService {
         debugPrint('[push] re-request on bind failed: $e');
       }
       await _pullIosCachedToken(attempts: 12);
+    } else if (!kIsWeb && Platform.isAndroid) {
+      // Mirror iOS: pairing after a timed-out getToken must retry, and must
+      // await any in-flight initialize() so we don't race first acquisition.
+      await _ensureAndroidTokenOnBind();
     }
     await _registerIfReady();
   }
@@ -231,31 +263,141 @@ class PushService {
     return tap;
   }
 
-  Future<void> _initAndroidFcm() async {
+  /// Returns `true` only when Firebase Messaging listeners are usable.
+  /// Failures return `false` without throwing — callers treat push as optional.
+  Future<bool> _initAndroidFcm() async {
     try {
-      await Firebase.initializeApp();
+      await Firebase.initializeApp().timeout(const Duration(seconds: 10));
     } catch (e) {
-      debugPrint('[push] Firebase not configured (add google-services.json): $e');
+      debugPrint(
+        '[push] Firebase unavailable (app continues without push): $e',
+      );
+      return false;
+    }
+
+    FirebaseMessaging messaging;
+    try {
+      messaging = FirebaseMessaging.instance;
+    } catch (e) {
+      debugPrint('[push] FirebaseMessaging.instance failed: $e');
+      return false;
+    }
+    _androidMessaging = messaging;
+
+    try {
+      await messaging
+          .requestPermission(alert: true, badge: true, sound: true)
+          .timeout(const Duration(seconds: 10));
+    } catch (e) {
+      // Permission denied / timed out — still try getToken; may work later.
+      debugPrint('[push] FCM requestPermission (continuing): $e');
+    }
+
+    // Listeners before getToken so a late first token via onTokenRefresh is kept.
+    if (!_androidListenersReady) {
+      try {
+        messaging.onTokenRefresh.listen(
+          _acceptToken,
+          onError: (Object e) => debugPrint('[push] onTokenRefresh error: $e'),
+        );
+        // Foreground delivery: do not navigate — Design tap targets are on open only.
+        FirebaseMessaging.onMessage.listen((msg) {
+          debugPrint('[push] foreground FCM data=${msg.data}');
+        });
+        FirebaseMessaging.onMessageOpenedApp.listen((msg) {
+          _routeTap(Map<String, dynamic>.from(msg.data));
+        });
+        _androidListenersReady = true;
+      } catch (e) {
+        debugPrint('[push] FCM listeners failed (app continues without push): $e');
+        return false;
+      }
+    }
+
+    // getToken() is known to hang without Play Services / first-run consent.
+    final got = await _fetchAndroidFcmToken(timeout: const Duration(seconds: 15));
+    if (!got) {
+      // onTokenRefresh alone is not enough for first acquisition — retry later
+      // and again from bindHost when the user pairs.
+      _scheduleAndroidTokenRetry();
+    }
+
+    try {
+      final initial = await messaging
+          .getInitialMessage()
+          .timeout(const Duration(seconds: 5));
+      if (initial != null) {
+        _routeTap(Map<String, dynamic>.from(initial.data));
+      }
+    } catch (e) {
+      debugPrint('[push] FCM getInitialMessage (ignored): $e');
+    }
+
+    return _androidListenersReady;
+  }
+
+  /// Pairing-time Android path: await in-flight init, then retry getToken.
+  Future<void> _ensureAndroidTokenOnBind() async {
+    try {
+      _androidInitFuture ??= _initAndroidFcm();
+      _transportReady = await _androidInitFuture!;
+      if (!_transportReady) return;
+      if (_token != null && _token!.isNotEmpty) return;
+      final got =
+          await _fetchAndroidFcmToken(timeout: const Duration(seconds: 10));
+      if (!got) {
+        _scheduleAndroidTokenRetry();
+      }
+    } catch (e) {
+      debugPrint('[push] Android token on bind failed: $e');
+    }
+  }
+
+  Future<bool> _fetchAndroidFcmToken({
+    Duration timeout = const Duration(seconds: 15),
+  }) async {
+    final messaging = _androidMessaging;
+    if (messaging == null) return false;
+    try {
+      final token = await messaging.getToken().timeout(timeout);
+      if (token != null && token.isNotEmpty) {
+        _acceptToken(token);
+        return true;
+      }
+      debugPrint('[push] FCM getToken returned empty (push deferred)');
+    } catch (e) {
+      debugPrint('[push] FCM getToken failed (app continues without push): $e');
+    }
+    return false;
+  }
+
+  void _scheduleAndroidTokenRetry() {
+    if (_androidMessaging == null || !_androidListenersReady) return;
+    if (_token != null && _token!.isNotEmpty) return;
+    if (_androidTokenRetryCount >= _androidTokenRetryMax) {
+      debugPrint('[push] FCM getToken retries exhausted');
       return;
     }
-    final messaging = FirebaseMessaging.instance;
-    await messaging.requestPermission(alert: true, badge: true, sound: true);
-    final token = await messaging.getToken();
-    if (token != null && token.isNotEmpty) {
-      _acceptToken(token);
-    }
-    messaging.onTokenRefresh.listen(_acceptToken);
-    // Foreground delivery: do not navigate — Design tap targets are on open only.
-    FirebaseMessaging.onMessage.listen((msg) {
-      debugPrint('[push] foreground FCM data=${msg.data}');
+    _androidTokenRetryTimer?.cancel();
+    final delaySec = (2 << _androidTokenRetryCount).clamp(2, 30);
+    _androidTokenRetryCount += 1;
+    _androidTokenRetryTimer = Timer(Duration(seconds: delaySec), () {
+      unawaited(_runAndroidTokenRetry());
     });
-    FirebaseMessaging.onMessageOpenedApp.listen((msg) {
-      _routeTap(Map<String, dynamic>.from(msg.data));
-    });
-    final initial = await messaging.getInitialMessage();
-    if (initial != null) {
-      _routeTap(Map<String, dynamic>.from(initial.data));
-    }
+    debugPrint(
+      '[push] FCM getToken retry #$_androidTokenRetryCount in ${delaySec}s',
+    );
+  }
+
+  Future<void> _runAndroidTokenRetry() async {
+    final got =
+        await _fetchAndroidFcmToken(timeout: const Duration(seconds: 10));
+    if (!got) _scheduleAndroidTokenRetry();
+  }
+
+  void _cancelAndroidTokenRetry() {
+    _androidTokenRetryTimer?.cancel();
+    _androidTokenRetryTimer = null;
   }
 
   @visibleForTesting
@@ -269,6 +411,7 @@ class PushService {
     if (_token == token && !_registerPending) return;
     _token = token;
     _registerPending = true;
+    _cancelAndroidTokenRetry();
     unawaited(_registerIfReady());
   }
 
