@@ -1,9 +1,9 @@
-# Build the Windows installer (NSIS EXE).
+﻿# Build the Windows installer (NSIS EXE).
 #
-# Single entry point for Windows — PowerShell twin of scripts/build-desktop.sh.
+# Single entry point for Windows - PowerShell twin of scripts/build-desktop.sh.
 # Calls the other scripts:
-#   sync-desktop-version → fetch-peers (local first, then git) → peers-check →
-#   stage-desktop-bundle → tauri build (NSIS) → release/
+#   sync-desktop-version -> fetch-peers (local first, then git) -> peers-check ->
+#   stage-desktop-bundle -> tauri build (NSIS) -> release/
 #
 # Run this on Windows, from the EnvoyHome checkout:
 #   .\scripts\build-desktop.ps1
@@ -18,7 +18,7 @@
 # resources\push\ (REQUIRE_PUSH_CREDENTIALS=1 by default). Set
 # $env:REQUIRE_PUSH_CREDENTIALS="0" to package without push.
 #
-# Obscura (Design §9.5f Stage D): stage fetches the pinned host binary into
+# Obscura (Design section 9.5f Stage D): stage fetches the pinned host binary into
 # resources\obscura\ (scripts/fetch-obscura.mjs). Release builds fail if
 # obscura.exe is missing. Set $env:ENVOYHOME_SKIP_OBSCURA="1" only for local
 # debug. Force re-download: $env:ENVOYHOME_OBSCURA_FORCE="1".
@@ -26,8 +26,8 @@
 #
 # Final installer is copied to the **repo-root** release folder:
 #   <EnvoyHome>\release\envoyhome-desktop-{version}-windows-{arch}-setup.exe
-#   <EnvoyHome>\release\envoyhome-desktop.exe   (stable mirror — EnvoyMesh / EnvoyDev)
-# Override with $env:OUT_DIR (relative → under repo root; absolute path allowed).
+#   <EnvoyHome>\release\envoyhome-desktop.exe   (stable mirror - EnvoyMesh / EnvoyDev)
+# Override with $env:OUT_DIR (relative -> under repo root; absolute path allowed).
 
 $ErrorActionPreference = "Stop"
 
@@ -129,14 +129,14 @@ if (-not (Test-Path $pushDir)) {
   Write-Error "Staging did not produce resources\push\ (push-config or .keep)"
   exit 1
 }
-# Obscura CLI (Stage D) — required for release unless explicitly skipped.
+# Obscura CLI (Stage D) - required for release unless explicitly skipped.
 # Tauri bundles resources\obscura\** via tauri.conf.bundle.json.
 if ($env:ENVOYHOME_SKIP_OBSCURA -eq "1") {
-  Write-Warning "ENVOYHOME_SKIP_OBSCURA=1 — installer will not embed Obscura"
+  Write-Warning "ENVOYHOME_SKIP_OBSCURA=1 - installer will not embed Obscura"
 } elseif (-not (Test-Path $obscuraExe) -and -not (Test-Path $obscuraUnix)) {
   Write-Error @"
 Staging did not produce resources\obscura\obscura.exe (or obscura).
-  Obscura is required in the desktop package (Design §9.5f Stage D).
+  Obscura is required in the desktop package (Design section 9.5f Stage D).
   Fix: pnpm obscura:fetch ; then re-run .\scripts\build-desktop.ps1
   Force: `$env:ENVOYHOME_OBSCURA_FORCE='1'; pnpm obscura:fetch
   Skip (debug only): `$env:ENVOYHOME_SKIP_OBSCURA='1'
@@ -144,7 +144,7 @@ Staging did not produce resources\obscura\obscura.exe (or obscura).
   exit 1
 } else {
   $obscuraShown = if (Test-Path $obscuraExe) { $obscuraExe } else { $obscuraUnix }
-  Write-Host "  ✓ Obscura bundled: $($obscuraShown.Substring($Root.Length).TrimStart('\','/'))"
+  Write-Host "  OK Obscura bundled: $($obscuraShown.Substring($Root.Length).TrimStart('\','/'))"
   if (Test-Path $obscuraVersion) {
     $pin = (Get-Content -TotalCount 1 $obscuraVersion).Trim()
     Write-Host "    pin: $pin"
@@ -162,7 +162,7 @@ if (-not $Tauri) {
   exit 1
 }
 
-# pnpm optional platform packages are missing after a Mac→Windows copy of node_modules.
+# pnpm optional platform packages are missing after a Mac->Windows copy of node_modules.
 function Find-TauriNative {
   @(
     (Join-Path $Root "node_modules\@tauri-apps\cli-win32-x64-msvc"),
@@ -179,13 +179,13 @@ if (-not $tauriNative) {
   } else {
     "@tauri-apps/cli-win32-x64-msvc"
   }
-  Write-Host "  Tauri Windows native binding missing — installing $nativePkg…"
+  Write-Host "  Tauri Windows native binding missing - installing $nativePkg..."
   Push-Location $Root
   try {
     # Prefer a fresh platform install over wiping the whole tree.
     pnpm add -D $nativePkg --filter @envoyhome/desktop
     if ($LASTEXITCODE -ne 0) {
-      Write-Host "  pnpm add failed — trying pnpm install --force…"
+      Write-Host "  pnpm add failed - trying pnpm install --force..."
       pnpm install --force
     }
   } finally {
@@ -214,7 +214,7 @@ try {
 }
 
 Write-Host "[4/4] Publishing the EXE to repo-root release folder..."
-Write-Host "  → $Out"
+Write-Host "  -> $Out"
 New-Item -ItemType Directory -Force -Path $Out | Out-Null
 $found = Get-ChildItem -Path (Join-Path $Root "apps\desktop\src-tauri\target") -Recurse -Filter "*-setup.exe" -ErrorAction SilentlyContinue |
   Sort-Object LastWriteTime -Descending
@@ -228,7 +228,7 @@ $versioned = "envoyhome-desktop-$Version-windows-$arch-setup.exe"
 $newest = $found | Select-Object -First 1
 $dest = Join-Path $Out $versioned
 Copy-Item -Force $newest.FullName $dest
-Write-Host "  $versioned  ←  $($newest.FullName)"
+Write-Host "  $versioned  <-  $($newest.FullName)"
 # Stable mirror filename (EnvoyMesh / EnvoyDev convention).
 $stable = Join-Path $Out "envoyhome-desktop.exe"
 Copy-Item -Force $newest.FullName $stable
