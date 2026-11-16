@@ -78,8 +78,14 @@ function whichOnPath(base) {
 }
 
 /**
- * Spawn a toolchain command. On Windows, never pass an unquoted
- * `C:\Program Files\...` path to `shell: true` — cmd.exe splits on the space.
+ * Spawn a toolchain command.
+ *
+ * On Windows, `.exe` / `process.execPath` must be spawned directly (no cmd.exe).
+ * `cmd /S /C "C:\Program Files\..."` strips the outer quotes and leaves
+ * `C:\Program` — which is exactly the `'C:\Program' is not recognized` failure
+ * seen when staging Obscura via `spawnTool(process.execPath, …)`.
+ *
+ * `.cmd` / `.bat` (e.g. pnpm.cmd) still go through cmd.exe with careful quoting.
  */
 function spawnTool(cmd, args, options = {}) {
   const cwd = options.cwd;
@@ -92,14 +98,28 @@ function spawnTool(cmd, args, options = {}) {
 
   let resolved = cmd;
   if (!/[\\/]/.test(cmd) && !/\.(cmd|exe|bat)$/i.test(cmd)) {
-    resolved = whichOnPath(cmd) ?? cmd;
+    resolved =
+      whichOnPath(cmd) ??
+      whichOnPath(`${cmd}.cmd`) ??
+      whichOnPath(`${cmd}.exe`) ??
+      cmd;
+  }
+
+  const isExe =
+    resolved === process.execPath ||
+    /\.exe$/i.test(resolved) ||
+    /\.exe$/i.test(cmd);
+
+  if (isExe) {
+    return spawnSync(resolved, args, { cwd, stdio, env, windowsHide: true });
   }
 
   const quote = (value) => {
     if (!/[ \t"]/.test(value)) return value;
     return `"${String(value).replace(/"/g, '""')}"`;
   };
-  const line = [resolved, ...args].map(quote).join(" ");
+  // Leading extra quote: cmd /S strips one pair; keeps paths with spaces intact.
+  const line = `"${[resolved, ...args].map(quote).join(" ")}"`;
   return spawnSync(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", line], {
     cwd,
     stdio,

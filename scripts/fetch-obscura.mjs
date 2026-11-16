@@ -7,8 +7,10 @@
  *   node scripts/fetch-obscura.mjs --platform darwin-arm64
  *
  * Env:
- *   ENVOYHOME_OBSCURA_FORCE=1   re-download even if binary already present
- *   ENVOYHOME_OBSCURA_OUT=dir   override output root (single-platform mode)
+ *   ENVOYHOME_OBSCURA_FORCE=1     re-download even if binary already present
+ *   ENVOYHOME_OBSCURA_OUT=dir     override output root (single-platform mode)
+ *   ENVOYHOME_OBSCURA_ARCHIVE=    use a local .zip/.tar.gz (sha256 still checked)
+ *   ENVOYHOME_OBSCURA_MIRRORS=    csv of mirror prefixes (empty = GitHub only)
  *
  * Catalog source of truth: packages/daemon/src/obscura-catalog.ts (duplicated
  * pin below so packagers need not compile the daemon first).
@@ -25,6 +27,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -106,34 +109,56 @@ function hostId() {
   fail(`Unsupported host platform: ${process.platform}/${process.arch}`);
 }
 
-/** Prefer curl when present (progress + resume-friendly); fall back to fetch. */
-function downloadWithCurl(url, dest, timeoutSec = 180) {
+/** Prefer curl.exe when present (progress + resume-friendly); fall back to fetch. */
+function curlBin() {
+  // On Windows, spawn "curl" can still resolve; prefer curl.exe to avoid quirks.
+  if (process.platform === "win32") {
+    const probe = spawnSync("curl.exe", ["--version"], { stdio: "ignore" });
+    if (probe.status === 0) return "curl.exe";
+  }
+  const probe = spawnSync("curl", ["--version"], { stdio: "ignore" });
+  return probe.status === 0 ? "curl" : null;
+}
+
+/**
+ * Timeouts:
+ * - Mirrors that hang under VPN must fail fast (probe).
+ * - Real downloads (~66 MB) need several minutes on a slow VPN — 90s was too short
+ *   and is a common "VPN on but still failed" cause.
+ */
+const DOWNLOAD_CONNECT_SEC = 15;
+const DOWNLOAD_PROBE_SEC = 45;
+const DOWNLOAD_FULL_SEC = 600;
+
+function downloadWithCurl(url, dest, timeoutSec) {
+  const bin = curlBin();
+  if (!bin) return false;
   const result = spawnSync(
-    "curl",
+    bin,
     [
       "-L",
       "--fail",
       "--retry",
       "2",
       "--retry-delay",
-      "2",
+      "1",
       "--connect-timeout",
-      "20",
+      String(DOWNLOAD_CONNECT_SEC),
       "--max-time",
       String(timeoutSec),
       "-o",
       dest,
       url,
     ],
-    { stdio: ["ignore", "inherit", "inherit"] },
+    { stdio: ["ignore", "inherit", "inherit"], shell: false },
   );
   return result.status === 0 && existsSync(dest);
 }
 
 async function downloadOnce(url, dest, timeoutMs) {
-  if (spawnSync("curl", ["--version"], { stdio: "ignore" }).status === 0) {
+  if (curlBin()) {
     if (downloadWithCurl(url, dest, Math.ceil(timeoutMs / 1000))) return;
-    throw new Error(`curl failed for ${url}`);
+    throw new Error(`curl failed / timed out for ${url}`);
   }
   const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
   if (!response.ok || !response.body) {
@@ -142,33 +167,81 @@ async function downloadOnce(url, dest, timeoutMs) {
   await pipeline(Readable.fromWeb(response.body), createWriteStream(dest));
 }
 
+function isCanonicalGithubUrl(url) {
+  return /^https:\/\/github\.com\//i.test(url);
+}
+
+function isLikelyFastMirror(url) {
+  return /ghfast\.top/i.test(url);
+}
+
+/** Longer budget for GitHub + ghfast; short probe for flaky proxies. */
+function timeoutForUrl(url) {
+  if (isCanonicalGithubUrl(url) || isLikelyFastMirror(url)) {
+    return DOWNLOAD_FULL_SEC * 1000;
+  }
+  return DOWNLOAD_PROBE_SEC * 1000;
+}
+
 /**
- * GitHub releases can be slow/unreachable; try optional mirrors first.
- * Override with ENVOYHOME_OBSCURA_MIRRORS=csv (empty = GitHub only).
- * Default mirrors: ghfast.top (common in regions with slow github.com).
+ * Candidate URLs for one GitHub release asset.
+ *
+ * Default: ghfast (often works in CN) → GitHub (long timeout) → other proxies.
+ * Offline/local archives are tried before any of these (see stageEntry).
+ *
+ * Override:
+ *   ENVOYHOME_OBSCURA_MIRRORS=          → GitHub only
+ *   ENVOYHOME_OBSCURA_MIRRORS=csv       → custom list
+ *   ENVOYHOME_OBSCURA_GITHUB_FIRST=1    → GitHub before mirrors (VPN TUN mode)
  */
 function downloadCandidates(githubUrl) {
   const raw = process.env.ENVOYHOME_OBSCURA_MIRRORS;
-  const mirrors =
-    raw === undefined
-      ? [`https://ghfast.top/${githubUrl}`, githubUrl]
-      : String(raw)
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
-          .map((prefix) => (prefix.includes("://github.com/") ? prefix : `${prefix.replace(/\/$/, "")}/${githubUrl}`));
-  // Always end with the canonical GitHub URL if not already listed.
+  const ghfast = `https://ghfast.top/${githubUrl}`;
+  const otherMirrors = [
+    `https://ghproxy.net/${githubUrl}`,
+    `https://mirror.ghproxy.com/${githubUrl}`,
+  ];
+  let mirrors;
+  if (raw === undefined) {
+    mirrors =
+      process.env.ENVOYHOME_OBSCURA_GITHUB_FIRST === "1"
+        ? [githubUrl, ghfast, ...otherMirrors]
+        : [ghfast, githubUrl, ...otherMirrors];
+  } else {
+    mirrors = String(raw)
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((prefix) =>
+        prefix.includes("://github.com/") || prefix.includes("/github.com/")
+          ? prefix
+          : `${prefix.replace(/\/$/, "")}/${githubUrl}`,
+      );
+  }
   if (!mirrors.includes(githubUrl)) mirrors.push(githubUrl);
   return mirrors;
 }
 
-async function download(url, dest) {
+/**
+ * Download until sha256 matches. Bad mirrors often return 200 + HTML — those
+ * must not abort the whole fetch (previous bug: sha256 fail exited immediately).
+ */
+async function downloadVerified(url, dest, expectedSha256, minBytes = 8 * 1024 * 1024) {
   const candidates = downloadCandidates(url);
   const errors = [];
   for (const candidate of candidates) {
+    const budgetMs = timeoutForUrl(candidate);
     try {
-      say(`  ↓ ${candidate}`);
-      await downloadOnce(candidate, dest, 180_000);
+      say(`  ↓ ${candidate}  (budget ${Math.round(budgetMs / 1000)}s)`);
+      await downloadOnce(candidate, dest, budgetMs);
+      const size = existsSync(dest) ? statSync(dest).size : 0;
+      if (size < minBytes) {
+        throw new Error(`file too small (${size} bytes) — likely an HTML/error page`);
+      }
+      const digest = sha256File(dest);
+      if (digest !== expectedSha256) {
+        throw new Error(`sha256 mismatch: expected ${expectedSha256}, got ${digest}`);
+      }
       return;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -183,9 +256,12 @@ async function download(url, dest) {
   fail(
     `Obscura download failed after ${candidates.length} attempt(s).\n` +
       errors.map((e) => `  - ${e}`).join("\n") +
-      `\n  Retry: pnpm obscura:fetch\n` +
-      `  Force: ENVOYHOME_OBSCURA_FORCE=1 pnpm obscura:fetch\n` +
-      `  Mirrors: ENVOYHOME_OBSCURA_MIRRORS= (empty = GitHub only)`,
+      `\n  Offline (recommended when GitHub is flaky):\n` +
+      `    1) Copy vendor/obscura/win32-x64/ from a machine that already fetched it, or\n` +
+      `    2) $env:ENVOYHOME_OBSCURA_ARCHIVE="D:\\path\\obscura-x86_64-windows.zip"\n` +
+      `       (zip also auto-used from vendor/obscura/archives/ if present)\n` +
+      `  VPN TUN + GitHub only: $env:ENVOYHOME_OBSCURA_MIRRORS=""\n` +
+      `  Skip (debug only): $env:ENVOYHOME_SKIP_OBSCURA="1"`,
   );
 }
 
@@ -201,10 +277,58 @@ function extractArchive(archivePath, destDir, kind) {
     kind === "tar.gz"
       ? ["-xzf", archivePath, "-C", destDir]
       : ["-xf", archivePath, "-C", destDir];
-  const result = spawnSync("tar", args, { encoding: "utf8" });
-  if (result.status !== 0) {
-    fail(`tar extract failed: ${result.stderr || result.stdout || result.status}`);
+  const tar = spawnSync("tar", args, { encoding: "utf8" });
+  if (tar.status === 0) return;
+
+  // Windows zip fallback: PowerShell Expand-Archive (tar sometimes missing/old).
+  if (kind === "zip" && process.platform === "win32") {
+    say("  tar extract failed — trying Expand-Archive…");
+    const ps = spawnSync(
+      "powershell.exe",
+      [
+        "-NoProfile",
+        "-Command",
+        `Expand-Archive -LiteralPath '${archivePath.replace(/'/g, "''")}' -DestinationPath '${destDir.replace(/'/g, "''")}' -Force`,
+      ],
+      { encoding: "utf8" },
+    );
+    if (ps.status === 0) return;
+    fail(
+      `zip extract failed (tar + Expand-Archive).\n` +
+        `  tar: ${tar.stderr || tar.stdout || tar.status}\n` +
+        `  Expand-Archive: ${ps.stderr || ps.stdout || ps.status}`,
+    );
   }
+
+  fail(`tar extract failed: ${tar.stderr || tar.stdout || tar.status}`);
+}
+
+/** Reuse vendor/obscura/<id> or an already-good outDir without re-downloading. */
+function tryReuseStaged(entry, outDir) {
+  const force = process.env.ENVOYHOME_OBSCURA_FORCE === "1";
+  if (force) return null;
+  const binaryDest = path.join(outDir, entry.binaryRelPath);
+  const stampPath = path.join(outDir, "OBSCURA_VERSION");
+  const stampedVersion = existsSync(stampPath)
+    ? readFileSync(stampPath, "utf8").split(/\r?\n/)[0]?.trim()
+    : "";
+  if (existsSync(binaryDest) && stampedVersion === OBSCURA_CATALOG_VERSION) {
+    return binaryDest;
+  }
+  const vendorDir = path.join(root, "vendor", "obscura", entry.id);
+  const vendorBin = path.join(vendorDir, entry.binaryRelPath);
+  const vendorStamp = path.join(vendorDir, "OBSCURA_VERSION");
+  const vendorVer = existsSync(vendorStamp)
+    ? readFileSync(vendorStamp, "utf8").split(/\r?\n/)[0]?.trim()
+    : "";
+  if (!existsSync(vendorBin) || vendorVer !== OBSCURA_CATALOG_VERSION) return null;
+  say(`Reusing vendor/obscura/${entry.id} → ${path.relative(root, outDir)}/`);
+  rmSync(outDir, { recursive: true, force: true });
+  mkdirSync(outDir, { recursive: true });
+  for (const name of readdirSync(vendorDir)) {
+    copyFileSync(path.join(vendorDir, name), path.join(outDir, name));
+  }
+  return existsSync(binaryDest) ? binaryDest : null;
 }
 
 /** Walk a few levels for `name` (Obscura archives sometimes nest one folder). */
@@ -260,13 +384,10 @@ function promoteObscuraLayout(outDir, binaryRelPath) {
 async function stageEntry(entry, outDir) {
   const binaryDest = path.join(outDir, entry.binaryRelPath);
   const stampPath = path.join(outDir, "OBSCURA_VERSION");
-  const force = process.env.ENVOYHOME_OBSCURA_FORCE === "1";
-  const stampedVersion = existsSync(stampPath)
-    ? readFileSync(stampPath, "utf8").split(/\r?\n/)[0]?.trim()
-    : "";
-  if (!force && existsSync(binaryDest) && stampedVersion === OBSCURA_CATALOG_VERSION) {
+  const reused = tryReuseStaged(entry, outDir);
+  if (reused) {
     say(`Obscura ${entry.id} already staged (${OBSCURA_CATALOG_VERSION}).`);
-    return binaryDest;
+    return reused;
   }
 
   say(`Fetching Obscura ${entry.id} (${entry.fileName})…`);
@@ -277,10 +398,32 @@ async function stageEntry(entry, outDir) {
   mkdirSync(stamp, { recursive: true });
   const archive = path.join(stamp, entry.fileName);
   try {
-    await download(entry.url, archive);
-    const digest = sha256File(archive);
-    if (digest !== entry.sha256) {
-      fail(`sha256 mismatch for ${entry.fileName}: expected ${entry.sha256}, got ${digest}`);
+    const envArchive = (process.env.ENVOYHOME_OBSCURA_ARCHIVE ?? "").trim();
+    const vendorArchive = path.join(root, "vendor", "obscura", "archives", entry.fileName);
+    const localArchive = envArchive || (existsSync(vendorArchive) ? vendorArchive : "");
+    if (localArchive) {
+      if (!existsSync(localArchive)) {
+        fail(`ENVOYHOME_OBSCURA_ARCHIVE not found: ${localArchive}`);
+      }
+      say(`  ← local archive ${localArchive}`);
+      copyFileSync(localArchive, archive);
+      const digest = sha256File(archive);
+      if (digest !== entry.sha256) {
+        fail(
+          `sha256 mismatch for local archive: expected ${entry.sha256}, got ${digest}`,
+        );
+      }
+    } else {
+      await downloadVerified(entry.url, archive, entry.sha256);
+      // Keep a copy so the next Windows/macOS build can go offline.
+      try {
+        const archivesDir = path.join(root, "vendor", "obscura", "archives");
+        mkdirSync(archivesDir, { recursive: true });
+        copyFileSync(archive, path.join(archivesDir, entry.fileName));
+        say(`  ↳ cached ${path.relative(root, path.join(archivesDir, entry.fileName))}`);
+      } catch {
+        /* non-fatal */
+      }
     }
     extractArchive(archive, outDir, entry.kind);
     const promoted = promoteObscuraLayout(outDir, entry.binaryRelPath);
