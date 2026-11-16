@@ -162,23 +162,45 @@ if (-not $Tauri) {
   exit 1
 }
 
-# pnpm optional platform packages can be missing after a cross-OS copy of node_modules.
-$tauriNative = @(
-  (Join-Path $Root "node_modules\@tauri-apps\cli-win32-x64-msvc"),
-  (Join-Path $Root "node_modules\@tauri-apps\cli-win32-arm64-msvc"),
-  (Join-Path $Root "apps\desktop\node_modules\@tauri-apps\cli-win32-x64-msvc"),
-  (Join-Path $Root "apps\desktop\node_modules\@tauri-apps\cli-win32-arm64-msvc")
-) | Where-Object { Test-Path $_ }
+# pnpm optional platform packages are missing after a Mac→Windows copy of node_modules.
+function Find-TauriNative {
+  @(
+    (Join-Path $Root "node_modules\@tauri-apps\cli-win32-x64-msvc"),
+    (Join-Path $Root "node_modules\@tauri-apps\cli-win32-arm64-msvc"),
+    (Join-Path $Root "apps\desktop\node_modules\@tauri-apps\cli-win32-x64-msvc"),
+    (Join-Path $Root "apps\desktop\node_modules\@tauri-apps\cli-win32-arm64-msvc")
+  ) | Where-Object { Test-Path $_ }
+}
+$tauriNative = Find-TauriNative
+if (-not $tauriNative) {
+  $arch = Get-DesktopArch
+  $nativePkg = if ($arch -eq "arm64") {
+    "@tauri-apps/cli-win32-arm64-msvc"
+  } else {
+    "@tauri-apps/cli-win32-x64-msvc"
+  }
+  Write-Host "  Tauri Windows native binding missing — installing $nativePkg…"
+  Push-Location $Root
+  try {
+    # Prefer a fresh platform install over wiping the whole tree.
+    pnpm add -D $nativePkg --filter @envoyhome/desktop
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host "  pnpm add failed — trying pnpm install --force…"
+      pnpm install --force
+    }
+  } finally {
+    Pop-Location
+  }
+  $tauriNative = Find-TauriNative
+}
 if (-not $tauriNative) {
   Write-Error @"
-The Tauri CLI native binding for Windows is missing (@tauri-apps/cli-win32-*-msvc).
+The Tauri CLI native binding for Windows is still missing (@tauri-apps/cli-win32-*-msvc).
 
-Fix from the EnvoyHome root (PowerShell):
-  Remove-Item -Recurse -Force node_modules
+node_modules was probably installed on macOS and copied here. From the EnvoyHome root:
+  Remove-Item -Recurse -Force node_modules, apps\desktop\node_modules -ErrorAction SilentlyContinue
   pnpm install
-Or:
-  pnpm add -D @tauri-apps/cli-win32-x64-msvc --filter @envoyhome/desktop
-Then re-run this script.
+  .\scripts\build-desktop.ps1
 "@
   exit 1
 }
