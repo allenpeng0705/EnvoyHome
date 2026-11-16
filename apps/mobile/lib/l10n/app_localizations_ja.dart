@@ -49,6 +49,25 @@ class AppLocalizationsJa extends AppLocalizations {
   String get pairScanQr => 'ペアリング QR をスキャン';
 
   @override
+  String get pairCameraDenied => 'ペアリング QR のスキャンにはカメラ権限が必要です。';
+
+  @override
+  String get pairCameraDeniedForever =>
+      'カメラへのアクセスがブロックされています。システム設定で許可してから再試行してください。';
+
+  @override
+  String get pairOpenSettings => '設定を開く';
+
+  @override
+  String get pairScannerHint => 'デスクトップのペアリング QR に向けてください';
+
+  @override
+  String get pairScannerError => 'カメラを起動できません。ペアリングリンクを貼り付けることもできます。';
+
+  @override
+  String get pairRetryCamera => '再試行';
+
+  @override
   String get pairUriLabel => 'ペアリング URI';
 
   @override

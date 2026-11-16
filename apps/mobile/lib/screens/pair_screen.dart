@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:envoyhome_mobile_client/envoyhome_mobile_client.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/local_network_prompt.dart';
@@ -32,7 +35,6 @@ class _PairScreenState extends State<PairScreen>
   final _sshPasswordCtrl = TextEditingController();
   final _daemonCtrl = TextEditingController(text: '127.0.0.1:4780');
   final _sshTokenCtrl = TextEditingController();
-  bool _scanning = false;
   String? _formError;
 
   @override
@@ -100,6 +102,70 @@ class _PairScreenState extends State<PairScreen>
     }
     setState(() => _formError = null);
     await widget.session.connectWithPairing((draft as JoinDraftBuilt).pairing);
+  }
+
+  /// Android: CameraX preview inside a [ListView] often stays black. Open a
+  /// full-screen scanner instead, after an explicit runtime CAMERA grant.
+  Future<void> _scanQr() async {
+    final l10n = AppLocalizations.of(context);
+    final status = await _requestCameraPermission();
+    if (!mounted) return;
+    if (!status.isGranted) {
+      final forever = status.isPermanentlyDenied;
+      setState(() {
+        _formError =
+            forever ? l10n.pairCameraDeniedForever : l10n.pairCameraDenied;
+      });
+      if (forever) {
+        final open = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(l10n.pairScanQr),
+            content: Text(l10n.pairCameraDeniedForever),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text(MaterialLocalizations.of(ctx).cancelButtonLabel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                child: Text(l10n.pairOpenSettings),
+              ),
+            ],
+          ),
+        );
+        if (open == true) {
+          await openAppSettings();
+        }
+      }
+      return;
+    }
+
+    // Let the Activity finish resuming after the system permission sheet
+    // before CameraX bindToLifecycle runs.
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    if (!mounted) return;
+
+    final uri = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => const _PairQrScannerPage()),
+    );
+    if (!mounted || uri == null || uri.isEmpty) return;
+    _uriCtrl.text = uri;
+    await _connectUri(uri);
+  }
+
+  Future<PermissionStatus> _requestCameraPermission() async {
+    if (kIsWeb) return PermissionStatus.denied;
+    try {
+      if (!(Platform.isAndroid || Platform.isIOS)) {
+        return PermissionStatus.denied;
+      }
+    } catch (_) {
+      return PermissionStatus.denied;
+    }
+    var status = await Permission.camera.status;
+    if (status.isGranted) return status;
+    return Permission.camera.request();
   }
 
   @override
@@ -170,41 +236,11 @@ class _PairScreenState extends State<PairScreen>
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
       children: [
-        if (_scanning) ...[
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: AspectRatio(
-              aspectRatio: 1,
-              child: MobileScanner(
-                onDetect: (capture) {
-                  final value = capture.barcodes
-                      .map((b) => b.rawValue)
-                      .whereType<String>()
-                      .firstWhere(
-                        (v) => v.startsWith('envoy://pair'),
-                        orElse: () => '',
-                      );
-                  if (value.isEmpty || session.busy) return;
-                  setState(() => _scanning = false);
-                  _uriCtrl.text = value;
-                  _connectUri(value);
-                },
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: () => setState(() => _scanning = false),
-            child: Text(AppLocalizations.of(context).pairCloseScanner),
-          ),
-        ] else ...[
-          FilledButton.icon(
-            onPressed:
-                session.busy ? null : () => setState(() => _scanning = true),
-            icon: const Icon(Icons.qr_code_scanner),
-            label: Text(AppLocalizations.of(context).pairScanQr),
-          ),
-        ],
+        FilledButton.icon(
+          onPressed: session.busy ? null : _scanQr,
+          icon: const Icon(Icons.qr_code_scanner),
+          label: Text(AppLocalizations.of(context).pairScanQr),
+        ),
         const SizedBox(height: 20),
         TextField(
           controller: _uriCtrl,
@@ -291,7 +327,8 @@ class _PairScreenState extends State<PairScreen>
         const SizedBox(height: 16),
         TextField(
           controller: _sshHostCtrl,
-          decoration: InputDecoration(labelText: AppLocalizations.of(context).pairSshHost),
+          decoration: InputDecoration(
+              labelText: AppLocalizations.of(context).pairSshHost),
         ),
         const SizedBox(height: 12),
         Row(
@@ -311,7 +348,8 @@ class _PairScreenState extends State<PairScreen>
               child: TextField(
                 controller: _sshPortCtrl,
                 keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: AppLocalizations.of(context).pairSshPort),
+                decoration: InputDecoration(
+                    labelText: AppLocalizations.of(context).pairSshPort),
               ),
             ),
           ],
@@ -320,7 +358,8 @@ class _PairScreenState extends State<PairScreen>
         TextField(
           controller: _sshPasswordCtrl,
           obscureText: true,
-          decoration: InputDecoration(labelText: AppLocalizations.of(context).pairSshPassword),
+          decoration: InputDecoration(
+              labelText: AppLocalizations.of(context).pairSshPassword),
         ),
         const SizedBox(height: 12),
         TextField(
@@ -350,6 +389,199 @@ class _PairScreenState extends State<PairScreen>
               : Text(AppLocalizations.of(context).pairConnect),
         ),
       ],
+    );
+  }
+}
+
+/// Full-screen QR scanner — avoids embedding CameraX in a scrollable [ListView].
+///
+/// Does **not** stop the camera on [AppLifecycleState.inactive]: that state
+/// fires during route transitions / permission UI on Android and was racing
+/// CameraX `bindToLifecycle`, leaving a permanent "camera could not start".
+class _PairQrScannerPage extends StatefulWidget {
+  const _PairQrScannerPage();
+
+  @override
+  State<_PairQrScannerPage> createState() => _PairQrScannerPageState();
+}
+
+class _PairQrScannerPageState extends State<_PairQrScannerPage> {
+  late MobileScannerController _controller;
+  /// Bumps to force a fresh [MobileScanner] + controller on Retry.
+  int _generation = 0;
+  bool _handled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = _newController();
+  }
+
+  MobileScannerController _newController() {
+    return MobileScannerController(
+      // Let MobileScanner attach() then start — avoids controllerNotAttached.
+      autoStart: true,
+      formats: const [BarcodeFormat.qrCode],
+      detectionSpeed: DetectionSpeed.noDuplicates,
+    );
+  }
+
+  Future<void> _retryCamera() async {
+    _handled = false;
+    final old = _controller;
+    setState(() {
+      _generation += 1;
+      _controller = _newController();
+    });
+    // Dispose after the widget tree drops the old MobileScanner.
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    try {
+      await old.dispose();
+    } catch (e) {
+      debugPrint('[pair] old controller dispose: $e');
+    }
+  }
+
+  void _onDetect(BarcodeCapture capture) {
+    if (_handled) return;
+    final value = capture.barcodes
+        .map((b) => b.rawValue)
+        .whereType<String>()
+        .firstWhere(
+          (v) => v.startsWith('envoy://pair'),
+          orElse: () => '',
+        );
+    if (value.isEmpty) return;
+    _handled = true;
+    unawaited(_controller.stop());
+    if (mounted) {
+      Navigator.of(context).pop(value);
+    }
+  }
+
+  @override
+  void dispose() {
+    unawaited(_controller.dispose());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final theme = Theme.of(context);
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        title: Text(l10n.pairScanQr),
+      ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          MobileScanner(
+            key: ValueKey<int>(_generation),
+            controller: _controller,
+            // Avoid stop-on-inactive; that races CameraX during push transitions.
+            useAppLifecycleState: false,
+            onDetect: _onDetect,
+            errorBuilder: (context, error) {
+              final detail =
+                  error.errorDetails?.message ?? error.errorCode.message;
+              debugPrint('[pair] scanner error: ${error.errorCode} $detail');
+              return _ScannerErrorPane(
+                message: l10n.pairScannerError,
+                detail: detail,
+                onRetry: () => unawaited(_retryCamera()),
+                onClose: () => Navigator.of(context).pop(),
+                closeLabel: l10n.pairCloseScanner,
+                retryLabel: l10n.pairRetryCamera,
+                errorColor: theme.colorScheme.error,
+              );
+            },
+          ),
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  l10n.pairScannerHint,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    shadows: [Shadow(blurRadius: 8, color: Colors.black)],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ScannerErrorPane extends StatelessWidget {
+  const _ScannerErrorPane({
+    required this.message,
+    required this.onRetry,
+    required this.onClose,
+    required this.closeLabel,
+    required this.retryLabel,
+    required this.errorColor,
+    this.detail,
+  });
+
+  final String message;
+  final String? detail;
+  final VoidCallback onRetry;
+  final VoidCallback onClose;
+  final String closeLabel;
+  final String retryLabel;
+  final Color errorColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: Colors.black,
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.videocam_off, color: errorColor, size: 48),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white),
+              ),
+              if (detail != null && detail!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text(
+                  detail!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.65),
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+              FilledButton(
+                onPressed: onRetry,
+                child: Text(retryLabel),
+              ),
+              TextButton(
+                onPressed: onClose,
+                child: Text(closeLabel),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

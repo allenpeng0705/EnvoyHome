@@ -49,6 +49,28 @@ class AppLocalizationsDe extends AppLocalizations {
   String get pairScanQr => 'Pairing-QR scannen';
 
   @override
+  String get pairCameraDenied =>
+      'Zum Scannen des Pairing-QR ist Kamerazugriff erforderlich.';
+
+  @override
+  String get pairCameraDeniedForever =>
+      'Kamerazugriff ist blockiert. Aktivieren Sie ihn in den Systemeinstellungen und versuchen Sie es erneut.';
+
+  @override
+  String get pairOpenSettings => 'Einstellungen öffnen';
+
+  @override
+  String get pairScannerHint =>
+      'Richten Sie die Kamera auf den Desktop-Pairing-QR';
+
+  @override
+  String get pairScannerError =>
+      'Kamera konnte nicht gestartet werden. Sie können den Pairing-Link auch einfügen.';
+
+  @override
+  String get pairRetryCamera => 'Erneut versuchen';
+
+  @override
   String get pairUriLabel => 'Pairing-URI';
 
   @override

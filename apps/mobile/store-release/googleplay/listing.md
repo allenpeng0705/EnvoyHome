@@ -2,7 +2,9 @@
 
 Paste these fields into [Google Play Console](https://play.google.com/console). Character limits are noted.
 
-Fill the live pairing URI before submit (contact emails below are set).
+**Operator shortcut:** [`../SUBMIT.md`](../SUBMIT.md). Fill the live pairing URI before submit (contact emails below are set).
+
+Version: **1.0.0+1** (`apps/mobile/pubspec.yaml`).
 
 ---
 
@@ -100,16 +102,64 @@ Initial public release of EnvoyHome Mobile.
 
 ---
 
+## Chinese (zh-Hans) — optional locale
+
+**应用名称:** `EnvoyHome`
+
+**简短说明 (≤80):**
+```
+手机上的自托管家庭智能体。扫码配对 — 无中央账号。
+```
+
+**完整说明:**
+```
+EnvoyHome 是 EnvoyHome 家庭智能体的 Android 伴侣应用 — 安全优先、自托管，运行在你自己的电脑上。
+
+配对一次后，即可在手机上与家庭智能体对话、处理审批，并查看日程与工作流。家庭守护进程运行智能体（envoy-harness）、工具、记忆与策略；手机只是同一家庭的轻量窗口。
+
+几秒配对
+• 扫描桌面端 EnvoyHome「设置」中的配对二维码
+• 或在同一网络下粘贴主机地址与短令牌
+• 或在外出时通过 SSH 跳转访问
+• 无中央 EnvoyHome 账号 — 身份与会话留在你家中
+
+对话与审批
+• 通过 home.* 与家庭配置文件对话
+• 工具需要同意时选择允许 / 拒绝
+• 可选推送提醒（FCM）
+• 需要时可附加文件或语音输入
+
+工作流与日程
+• 浏览家庭端配置的技能、工作流与日程
+• 手机不运行第二套智能体引擎
+
+可选智能家居
+• 当家庭守护进程已连接 Home Assistant 或 MQTT 时，相关工具可出现
+• EnvoyHome 增强你已有的中枢，而不是取代它们
+• 执行仍受审批与安全等级规则约束
+
+按设计为轻客户端
+• 手机从不运行家庭智能体，也不保存模型 API 密钥
+• 记忆与知识库留在家中电脑
+• 可通过局域网、mesh 或 SSH 重连
+
+要求
+• 在 Mac / Windows / Linux 上运行的 EnvoyHome 守护进程
+• 来自该桌面的配对二维码或邀请（设置 → 连接 → 配对设备）
+```
+
+---
+
 ## Contact details
 
 | Field | Value |
 |-------|--------|
 | Email | `shilei.peng@qq.com` (alternate: `shileipeng@gmail.com`) |
 | Phone | optional |
-| Website | `https://htmlpreview.github.io/?https://github.com/allenpeng0705/EnvoyHome/blob/main/sites/envoyhome/index.html` (canonical after deploy: `https://www.envoymesh.cn/envoyhome/`) |
-| Privacy policy | `https://htmlpreview.github.io/?https://github.com/allenpeng0705/EnvoyHome/blob/main/sites/envoyhome/privacy.html` · also `https://www.envoymesh.cn/privacy.html` · canonical `https://www.envoymesh.cn/envoyhome/privacy.html` |
+| Website | `https://www.envoymesh.cn/envoyhome/` |
+| Privacy policy | `https://www.envoymesh.cn/envoyhome/privacy.html` (family fallback: `https://www.envoymesh.cn/privacy.html`) |
 
-Deploy `sites/envoyhome/` before submit.
+Deploy `sites/envoyhome/` before submit if those URLs are not live yet.
 
 ---
 
@@ -134,23 +184,18 @@ Convenience copies also live in `../play-store-assets/` (same files).
 
 ## Screenshots checklist
 
-Minimum **2** phone screenshots. Recommended **5**:
+Minimum **2** phone screenshots. Pack includes **3** at **1080×1920**:
 
-1. Pairing — QR / paste URI
-2. Chat — household conversation
-3. Approval card (if available)
-4. Settings hub
-5. Schedules or Workflows
+| File | Screen |
+|------|--------|
+| `screenshots/01-pairing.png` | Pairing / Connect |
+| `screenshots/02-chat.png` | Chat |
+| `screenshots/03-settings.png` | Settings hub |
+| `screenshots/framed/*-framed.png` | Same shots with marketing captions (optional extras) |
 
-Use a recent phone resolution (e.g. 1080×1920 or device native). Avoid status-bar secrets.
+Recommended to add later (re-capture on device): Approval card, Schedules.
 
-Overlay caption ideas:
-
-1. Your home agent, from your phone
-2. Pair once with a QR code
-3. Chat and Approvals on the go
-4. Keys and memory stay at home
-5. Same tools for chat and workflows
+Avoid status-bar secrets / live pairing tokens. Prefer re-capturing Chat **without** the soft keyboard before final submit.
 
 Brand colors: indigo `#211962` / `#6366f1`, cyan `#22d3ee`, charcoal `#0c0f1d`, white text.
 
@@ -280,4 +325,4 @@ Do **not** commit `key.properties`, `*.jks`, or `*.keystore`.
 Current IDs:
 
 - `applicationId` / namespace (Android) and bundle ID (iOS): `com.envoymesh.envoyhome`
-- versionName / versionCode: from Flutter `pubspec.yaml` (`0.2.0+N` → name `0.2.0`, code `N`)
+- versionName / versionCode: from Flutter `pubspec.yaml` (`1.0.0+N` → name `1.0.0`, code `N`)

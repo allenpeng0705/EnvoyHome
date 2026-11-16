@@ -1,14 +1,15 @@
-# Screenshots (store-ready)
+# Screenshots (App Store)
 
-Generated from real Flutter captures under `sites/envoyhome/screens/`
-(mobile-pairing / mobile-chat / mobile-settings), padded to store pixel sizes.
+| Path | Size | Notes |
+|------|------|--------|
+| `01-pairing.png` / `02-chat.png` / `03-settings.png` | **1290×2796** (6.7") | Primary upload set |
+| `iphone-6.5/` | **1242×2688** (6.5") | Same three screens, scaled |
+| `framed/*-framed.png` | 1290×2796 | Captioned marketing frames (optional extras) |
 
-| File | Screen |
-|------|--------|
-| `01-pairing.png` | Pairing / Connect |
-| `02-chat.png` | Chat with assistant reply |
-| `03-settings.png` | Settings hub |
+Captions in framed set:
 
-App Store set: **1290×2796** (6.7"). Google Play set: **1080×1920**.
+1. Pair once with a QR code
+2. Chat with your home agent
+3. Keys and memory stay at home
 
-Re-capture on device before final submit if the UI has changed; do not show live pairing tokens.
+Re-capture on device before final submit if the UI has changed. Prefer Chat **without** the soft keyboard. Do not show live pairing tokens.

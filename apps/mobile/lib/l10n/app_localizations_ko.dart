@@ -49,6 +49,25 @@ class AppLocalizationsKo extends AppLocalizations {
   String get pairScanQr => '페어링 QR 스캔';
 
   @override
+  String get pairCameraDenied => '페어링 QR을 스캔하려면 카메라 권한이 필요합니다.';
+
+  @override
+  String get pairCameraDeniedForever =>
+      '카메라 접근이 차단되었습니다. 시스템 설정에서 허용한 뒤 다시 시도하세요.';
+
+  @override
+  String get pairOpenSettings => '설정 열기';
+
+  @override
+  String get pairScannerHint => '데스크톱 페어링 QR을 비추세요';
+
+  @override
+  String get pairScannerError => '카메라를 시작할 수 없습니다. 페어링 링크를 붙여넣을 수도 있습니다.';
+
+  @override
+  String get pairRetryCamera => '다시 시도';
+
+  @override
   String get pairUriLabel => '페어링 URI';
 
   @override

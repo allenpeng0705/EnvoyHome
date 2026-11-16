@@ -81,6 +81,17 @@ Notes for reviewers:
 - This URI is for store review only. Normal users mint their own QR from their own EnvoyHome desktop.
 ```
 
+**Reviewer landing page (preferred):** after deploy, point App Review / Play App access at:
+
+```text
+https://www.envoymesh.cn/envoyhome/app-review.html
+```
+
+The page shows a scannable QR for the demo `envoy://pair?…` string (override with
+`?uri=` + `encodeURIComponent(…)`, or `?pairing=` + payload). Source:
+`sites/envoyhome/app-review.html`. Rotate the demo mint by editing
+`DEFAULT_PAIRING_URI` or passing a query param — do not use a production household token.
+
 Also attach a **QR PNG** if the console allows attachments.
 
 **Demo content tip for 2.5.2:** leave a finished chat turn with ordinary messages; avoid a pending “admin / safety-class” actuation approval if you can. If one must stay, say in the notes that **Deny** is the intended review action.

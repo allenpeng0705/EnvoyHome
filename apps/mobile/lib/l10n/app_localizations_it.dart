@@ -49,6 +49,27 @@ class AppLocalizationsIt extends AppLocalizations {
   String get pairScanQr => 'Scansiona QR di abbinamento';
 
   @override
+  String get pairCameraDenied =>
+      'Serve l’accesso alla fotocamera per scansionare il QR di abbinamento.';
+
+  @override
+  String get pairCameraDeniedForever =>
+      'L’accesso alla fotocamera è bloccato. Abilitalo nelle Impostazioni di sistema e riprova.';
+
+  @override
+  String get pairOpenSettings => 'Apri Impostazioni';
+
+  @override
+  String get pairScannerHint => 'Inquadra il QR di abbinamento del desktop';
+
+  @override
+  String get pairScannerError =>
+      'Impossibile avviare la fotocamera. Puoi anche incollare il link di abbinamento.';
+
+  @override
+  String get pairRetryCamera => 'Riprova';
+
+  @override
   String get pairUriLabel => 'URI di abbinamento';
 
   @override

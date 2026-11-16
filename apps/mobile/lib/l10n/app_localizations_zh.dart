@@ -48,6 +48,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pairScanQr => '扫描配对二维码';
 
   @override
+  String get pairCameraDenied => '需要相机权限才能扫描配对二维码。';
+
+  @override
+  String get pairCameraDeniedForever => '相机权限已被禁用。请在系统设置中开启后重试。';
+
+  @override
+  String get pairOpenSettings => '打开设置';
+
+  @override
+  String get pairScannerHint => '对准桌面端的配对二维码';
+
+  @override
+  String get pairScannerError => '无法启动相机。你也可以粘贴配对链接。';
+
+  @override
+  String get pairRetryCamera => '重试';
+
+  @override
   String get pairUriLabel => '配对 URI';
 
   @override

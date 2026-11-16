@@ -4,13 +4,14 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import android.os.Bundle
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 
 /**
  * EnvoyHome phone shell — applicationId `com.envoymesh.envoyhome`.
- * Creates the FCM notification channel used by FirebaseMessaging meta-data.
+ * [FlutterFragmentActivity] is required for CameraX / mobile_scanner lifecycle
+ * binding. Creates the FCM notification channel used by FirebaseMessaging meta-data.
  */
-class MainActivity : FlutterActivity() {
+class MainActivity : FlutterFragmentActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
     ensureAlertChannel()

@@ -49,6 +49,27 @@ class AppLocalizationsFr extends AppLocalizations {
   String get pairScanQr => 'Scanner le QR d’appairage';
 
   @override
+  String get pairCameraDenied =>
+      'L’accès à la caméra est requis pour scanner le QR d’appairage.';
+
+  @override
+  String get pairCameraDeniedForever =>
+      'L’accès à la caméra est bloqué. Activez-le dans les Réglages système, puis réessayez.';
+
+  @override
+  String get pairOpenSettings => 'Ouvrir les Réglages';
+
+  @override
+  String get pairScannerHint => 'Pointez vers le QR d’appairage du bureau';
+
+  @override
+  String get pairScannerError =>
+      'Impossible de démarrer la caméra. Vous pouvez aussi coller le lien d’appairage.';
+
+  @override
+  String get pairRetryCamera => 'Réessayer';
+
+  @override
   String get pairUriLabel => 'URI d’appairage';
 
   @override

@@ -186,6 +186,42 @@ abstract class AppLocalizations {
   /// **'Scan pairing QR'**
   String get pairScanQr;
 
+  /// No description provided for @pairCameraDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera permission is required to scan the pairing QR.'**
+  String get pairCameraDenied;
+
+  /// No description provided for @pairCameraDeniedForever.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera access is blocked. Enable it in system Settings, then try again.'**
+  String get pairCameraDeniedForever;
+
+  /// No description provided for @pairOpenSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Settings'**
+  String get pairOpenSettings;
+
+  /// No description provided for @pairScannerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Point at the desktop pairing QR'**
+  String get pairScannerHint;
+
+  /// No description provided for @pairScannerError.
+  ///
+  /// In en, this message translates to:
+  /// **'Camera could not start. You can paste the pairing link instead.'**
+  String get pairScannerError;
+
+  /// No description provided for @pairRetryCamera.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get pairRetryCamera;
+
   /// No description provided for @pairUriLabel.
   ///
   /// In en, this message translates to:
