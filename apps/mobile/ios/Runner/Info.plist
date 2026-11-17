@@ -68,8 +68,16 @@
 	</array>
 	<key>NSCameraUsageDescription</key>
 	<string>EnvoyHome uses the camera to scan the pairing QR from your home Settings.</string>
+	<!-- file_picker / attach APIs reference the photo library even when unused paths are never taken. -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>EnvoyHome can attach a photo from your library to a chat message sent to your home daemon.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>EnvoyHome may save an exported file or image to your photo library when you choose to save it.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>EnvoyHome can use your location for this chat turn only (local weather and context). It is not stored as lasting memory.</string>
+	<!-- geolocator links Always APIs; we only request When In Use — string still required for App Store validation. -->
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>EnvoyHome can use your location for this chat turn only (local weather and context). It is not stored as lasting memory. Background location is not used.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>EnvoyHome uses the microphone for voice dictation into Chat and Home chat.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
@@ -95,6 +103,9 @@
 	<!-- iOS uses native APNs (envoyhome/alert_push), not FCM. Disable Firebase's
 	     AppDelegate swizzling so didRegisterForRemoteNotifications reaches us. -->
 	<key>FirebaseAppDelegateProxyEnabled</key>
+	<false/>
+	<!-- Standard TLS / HTTPS only — skip the post-upload export-compliance quiz in Connect. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>
 </plist>

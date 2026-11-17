@@ -1,7 +1,7 @@
 name: envoyhome
 description: EnvoyHome phone thin client — pair via QR, chat/approvals over home.* (V-P2-MOB-1).
 publish_to: "none"
-version: 1.0.0+1
+version: 1.0.0+3
 
 environment:
   sdk: ^3.3.0
