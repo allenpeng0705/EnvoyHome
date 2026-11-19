@@ -1,0 +1,52 @@
+IMPORTANT — Guideline 2.5.2 (please read first)
+
+EnvoyHome Mobile does NOT download, install, or execute agent/tool/code on the iPhone.
+It is a thin companion UI only. The home agent (envoy-harness), tools, workflows, memory,
+and Approvals run exclusively on the paired EnvoyHome daemon on the user’s own computer.
+The phone only shows chat/transcripts and sends home.* RPCs (pair, chat, Allow/Deny).
+There is no on-device agent runtime, terminal/shell, OTA update mechanism, or downloaded
+native agent code. Optional SSH in the app is only a local port-forward to reach the
+home daemon — not an interactive shell on the phone.
+
+No username/password / no central account
+Pairing uses a QR code (or paste of an envoy://pair link). There is nothing to sign up for.
+
+=== Demo home for App Review (kept online during review) ===
+
+Easiest path — open this page and scan the on-screen QR:
+https://www.envoymesh.cn/envoyhome/app-review.html
+
+Product site / privacy:
+https://www.envoymesh.cn/envoyhome/
+https://www.envoymesh.cn/envoyhome/privacy.html
+
+Step-by-step test (about 2–3 minutes):
+1. Install EnvoyHome from this build.
+2. Open the app → Connect / Pair (or “Pair now” from onboarding).
+3. Tap “Scan pairing QR”. Allow Camera when prompted.
+4. Scan the QR on https://www.envoymesh.cn/envoyhome/app-review.html
+   — OR paste the Pairing URI below into the Pairing URI field and tap Connect.
+5. If iOS asks for Local Network, tap Allow (helps LAN; cellular/mesh still works if denied).
+6. After pairing succeeds, open Chat → send: hello
+7. Wait for the home agent reply (first dial may take a short time).
+8. If an Approval / Allow–Deny card appears: tap Deny (safe review action). That only
+   answers the home daemon; it does not run code on the phone.
+9. Optional: open Settings (bottom tab) to browse LLM / Connections / Skills / System.
+   Home Assistant / MQTT are optional and are NOT required for this review.
+
+Pairing URI (paste fallback):
+envoy://pair?pairing=H4sIAAAAAAAAE7WTW2-bQBBG_0o0z3hhlztSH2xMjDEhjh2MnaaqWExiMGG35ma76n-vcF-SqlKlyp3HkebMmZG-79CChQXoKrCgqyxRxCZBWDOQjAzVUnRDErsKBKjZHixwXsqntt434ehrUju2ers_2eF4Wt4dn1RidgMQgGVbsCAtW3ayWFemB6tgSVwMiBHrmBoSJoRuNVUGAYq4_NvWCwyTsTxjLDIPIWtv3SYzF-Fr1zS72TddaZVkTZPQ9HfVLDBdunboejVegQCUg_UZxIwrIiY6kpCEsFgnXFQNXZNETrj4j-RfzHfKV8QqOjJlhDEimFywiiThD1Q_WCjRJnJHVZcazVE9R9VJS5rJqSs3c49uaTyklL95dzll_eAgyQ5Jk9XXUCMqRiZGpv5ntWGUrZa8snOex83ZkLPcb16P3TJZeJlhBsp8iFcP2D5XZUKvrXbFr_2fg-GLADHnfYz6dLjsLe3zwvtgDfoaOZNpcDMPR_7Uvpk5m0vzuXzxvcdCZpm7YpGmZZPjqRiX06KVlo-pKg3r80O7mN_vvPt8-Om5vAw5wfh3Dvz4CTeNF1rsAwAA
+
+Permissions you may see (all optional except Camera for QR):
+• Camera — scan the desktop / review QR
+• Local Network — reach the home computer on Wi‑Fi
+• Microphone / Speech — optional dictation into Chat (skip if unused)
+• Photos — optional chat attachments (skip if unused)
+• Location — optional “share for this turn” only (skip if unused)
+
+Contact (demo home / questions during review):
+shilei.peng@qq.com
+Alternate: shileipeng@gmail.com
+
+This pairing URI is for App Review only. End users mint their own QR from their own
+EnvoyHome desktop (Settings → Pair devices).
