@@ -1,6 +1,21 @@
 /**
- * Design §19.13 / 2026-10-27 — attended long-task continue helpers (pure, testable).
+ * Design §19.13 / 2026-10-27 / 2026-11-23 — attended long-task continue helpers
+ * (pure, testable).
  */
+
+/**
+ * Silent in-run `maxContinuationPhases` for the parent Agent.
+ * Attended interactive only; schedule / unattended always 0 (fail closed).
+ */
+export function parentContinuationPhasesForOrigin(opts: {
+  origin: string;
+  callerKind?: string;
+  /** Attended default (already clamped). */
+  attendedDefault: number;
+}): number {
+  if (opts.origin !== "attended" || opts.callerKind === "schedule") return 0;
+  return opts.attendedDefault;
+}
 
 /** Emit “reply continue” only when an auto-hop will not follow. */
 export function shouldEmitIncompleteCue(opts: {

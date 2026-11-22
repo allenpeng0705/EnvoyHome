@@ -8,11 +8,13 @@ import { join } from "node:path";
 import type { ModelAdapter, ModelResponse } from "@envoymesh/envoy-harness";
 import {
   HomeModelAdapter,
+  HOME_PARENT_CONTINUATION_PHASES,
   HOME_PARENT_MAX_ITERATIONS,
   HOME_SCHEDULE_MAX_TOOL_ROUNDS,
   TURN_INCOMPLETE_CONTINUE_CUE,
   TURN_INCOMPLETE_ERROR,
   buildParentToolRegistry,
+  clampParentContinuationPhases,
   clampScheduleMaxToolRounds,
   homeTaskArgsToHarness,
   isTurnContinueIntent,
@@ -550,6 +552,9 @@ test("V-P2-AGENT-5: parent default maxIterations is 48 (env unset)", () => {
     assert.equal(clampScheduleMaxToolRounds(3), 3);
     assert.equal(clampScheduleMaxToolRounds(99), 5);
     assert.equal(clampScheduleMaxToolRounds(undefined), 5);
+    // Silent phases (Design 2026-11-23) — band + clamp (constant may follow env at load).
+    assert.ok(HOME_PARENT_CONTINUATION_PHASES >= 0 && HOME_PARENT_CONTINUATION_PHASES <= 3);
+    assert.equal(clampParentContinuationPhases(9), 3);
   } finally {
     if (prev === undefined) delete process.env.ENVOYHOME_PARENT_MAX_ITERATIONS;
     else process.env.ENVOYHOME_PARENT_MAX_ITERATIONS = prev;
@@ -598,6 +603,7 @@ test("V-P2-AGENT-5: maxIterations cap emits continue cue + onIterationCap", asyn
     turnId: "turn-1",
     model: fenceModel,
     maxIterations: 1,
+    maxContinuationPhases: 0,
     emitIncompleteCue: true,
     onIterationCap: () => {
       capped += 1;

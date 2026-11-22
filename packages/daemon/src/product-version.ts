@@ -5,4 +5,4 @@
  * `scripts/sync-desktop-version.mjs` (`pnpm version:desktop`). Do not edit by hand
  * when bumping — bump `VERSION` and re-sync.
  */
-export const PRODUCT_VERSION = "0.2.0";
+export const PRODUCT_VERSION = "0.3.0";

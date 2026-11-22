@@ -772,7 +772,7 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-P2-AGENT-1, V-P2-AGENT-2 | **P2-E** | spawn_helper origin/allow-list; depth/caps; Q10 default (Design §19.13) |
 | V-P2-AGENT-3 | **P2-E2** | harness `task`/meshSubmitter; caps/batching; origin inherit; no sessions_spawn (Design §19.13 E2) |
 | V-P2-AGENT-4 | **P2-E3** | parent Agent path; tools via ApprovalSink; transcript durable; task depth-1 (Design §19.13 E3) |
-| V-P2-AGENT-5 | **P2-E3** | long-task: parent default iterations; schedule `maxToolRounds` enforced; attended continue cue + one auto-hop (Design §19.13 / `2026-10-27`) |
+| V-P2-AGENT-5 | **P2-E3** | long-task: parent default iterations; attended silent `maxContinuationPhases` (default 2); schedule `maxToolRounds` enforced + phases `0`; attended continue cue + one auto-hop (Design §19.13 / `2026-10-27` / `2026-11-23`) |
 | V-P2-AGENT-6, V-P2-AGENT-7, V-P2-AGENT-8 | **P2-E4** | plan-execute: simple/medium corpus; write/admin confirm; attended hop budget / unattended no-op (Design §19.13 E4 / `2026-11-03`) |
 | Design Appendix C.2 (pre-MVP floor) | **B0–B14 (gate)** | every C.2 row green, including the smart-home safety IDs (V-HA-4/5/7/8/11/13/14/19) in the every-PR `smarthome` suite |
 
@@ -1003,6 +1003,7 @@ If you need to change the answer to "in what order we build," edit this doc and 
 | 2026-11-03 | **P2-E4 shipped:** attended plan→execute; V-P2-AGENT-6/7/8; simple/medium non-regression. Aligns Design `2026-11-03`. |
 | 2026-10-27b | **KB SQLite indexes:** `knowledge-index.sqlite` / `episodic-index.sqlite` via `node:sqlite` + FTS5 trigram + sqlite-vec (BLOB cosine fallback); JSON migrate-once; Active coding epic cleared. |
 | 2026-10-27 | **KB item 5 close:** live `agent:eval:kb` green (auto-inject + standing filter); ship `knowledgeInject`/`episodicInject` default **`auto`**; V-KB/V-KY/V-EMB checklist in Plan. |
+| 2026-11-23 | **Long-task silent phases:** attended parent `maxContinuationPhases` default 2 (env clamp 0…3) on first run + auto-hop; unattended/schedule `0`; stacks with continue cue + one auto-hop. V-P2-AGENT-5 revisit. Aligns Design `2026-11-23`. |
 | 2026-10-27 | **Long-task enhancements:** parent default maxIterations 48; schedule `maxToolRounds` enforced on agentTurn fire; attended incomplete marker + continue intent + one auto-continue. V-P2-AGENT-5. Aligns Design `2026-10-27`. |
 | 2026-10-25d | **Settings Knowledge & embed UI:** LLM → Memory card — curated embed download/progress, enable spawn/Ollama/disable, inject defaults `tool`, reindex; `home:embed-model-download` + cancel/resume RPCs. |
 | 2026-10-25c | **KB hardening:** session→episodic purge; V-KY-7 PendingLearn on L1/L2 conflict; real `downloadEmbedModel` + TOFU sha256; Doctor embed/stale; V-KB-7 artifact open; Settings Memory stub; KnowYou journeys; JSON day-one paths Normative note. |

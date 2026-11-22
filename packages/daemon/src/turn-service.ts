@@ -3056,11 +3056,16 @@ ${lines.join("\n")}
         TURN_INCOMPLETE_CONTINUE_CUE,
         TURN_INCOMPLETE_ERROR,
       } = await import("./home-agent-turn.js");
-      const { HOME_SCHEDULE_MAX_TOOL_ROUNDS } = await import("./home-harness-bridge.js");
+      const {
+        HOME_SCHEDULE_MAX_TOOL_ROUNDS,
+        HOME_PARENT_CONTINUATION_PHASES,
+        clampParentContinuationPhases,
+      } = await import("./home-harness-bridge.js");
       const {
         shouldEmitIncompleteCue,
         shouldAttemptAutoContinue,
         nextAutoContinueUsedOnCap,
+        parentContinuationPhasesForOrigin,
       } = await import("./long-task-continue.js");
       const useParentAgent =
         (plannedTools === undefined || plannedTools.length === 0) &&
@@ -3072,6 +3077,12 @@ ${lines.join("\n")}
           : input.callerKind === "schedule"
             ? HOME_SCHEDULE_MAX_TOOL_ROUNDS
             : undefined;
+      // Design 2026-11-23: silent phases attended-only; schedule/unattended force 0.
+      const resolvedContinuationPhases = parentContinuationPhasesForOrigin({
+        origin,
+        callerKind: input.callerKind,
+        attendedDefault: clampParentContinuationPhases(HOME_PARENT_CONTINUATION_PHASES),
+      });
       /** Only when this turn is an explicit continue of an incomplete marker — not plan framing. */
       const priorAutoContinueUsed =
         continuingIncomplete === true && incompleteMeta?.autoContinueUsed === true;
@@ -3237,6 +3248,7 @@ ${lines.join("\n")}
             ...(resolvedMaxIterations !== undefined
               ? { maxIterations: resolvedMaxIterations }
               : {}),
+            maxContinuationPhases: resolvedContinuationPhases,
             ...(resumePreamble ? { resumePreamble } : {}),
             ...(mcpTools.length ? { mcpTools } : {}),
             ...(localSqlReady ? { localSqlReady: true } : {}),
@@ -3299,6 +3311,8 @@ ${lines.join("\n")}
               ...(resolvedMaxIterations !== undefined
                 ? { maxIterations: resolvedMaxIterations }
                 : {}),
+              // Same silent-phase budget on the auto-hop (Design 2026-11-23).
+              maxContinuationPhases: resolvedContinuationPhases,
               ...(mcpTools.length ? { mcpTools } : {}),
               ...(localSqlReady ? { localSqlReady: true } : {}),
               resumePreamble:

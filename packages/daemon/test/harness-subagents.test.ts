@@ -12,7 +12,7 @@ import {
   textFromSubagentResult,
   HomeModelAdapter,
 } from "../dist/index.js";
-import type { ModelAdapter, ModelResponse } from "@envoymesh/envoy-harness";
+import type { Agent, ModelAdapter, ModelResponse } from "@envoymesh/envoy-harness";
 
 function scriptedModel(script: ModelResponse[]): ModelAdapter {
   let i = 0;
@@ -45,6 +45,28 @@ test("V-P2-AGENT-3: LocalMeshSubmitter + Agent returns completed text", async ()
   assert.equal(result.status, "completed");
   assert.match(textFromSubagentResult(result), /reviewed PR/);
   assert.equal(result.workerPeerId, "envoyhome-local");
+});
+
+test("V-P2-AGENT-5: child Agent maxContinuationPhases is 0", () => {
+  const model = scriptedModel([
+    {
+      content: [{ type: "text", text: "ok" }],
+      stopReason: "end_turn",
+    },
+  ]);
+  const submitter = createHomeMeshSubmitter({
+    model,
+    allowTools: ["read_file"],
+    cwd: "/tmp",
+    dispatch: async () => "unused",
+  });
+  // LocalMeshSubmitter keeps buildSubagent private; assert via the factory handle.
+  const build = (
+    submitter as unknown as { buildSubagent: (input: ReturnType<typeof homeSubagentInput>) => Agent }
+  ).buildSubagent;
+  assert.equal(typeof build, "function");
+  const child = build(homeSubagentInput("short child"));
+  assert.equal(child.maxContinuationPhases, 0);
 });
 
 test("V-P2-AGENT-3: Agent runs Home tool from envoyhome-tools fence", async () => {

@@ -312,9 +312,12 @@ export {
   textFromSubagentResult,
   stripHarnessAutoTools,
   HOME_PARENT_MAX_ITERATIONS,
+  HOME_PARENT_CONTINUATION_PHASES,
   HOME_SCHEDULE_MAX_TOOL_ROUNDS,
   clampScheduleMaxToolRounds,
   clampParentMaxIterations,
+  clampParentContinuationPhases,
+  parseParentContinuationPhasesEnv,
 } from "./home-harness-bridge.js";
 
 export {
@@ -336,6 +339,7 @@ export {
   shouldEmitIncompleteCue,
   shouldAttemptAutoContinue,
   nextAutoContinueUsedOnCap,
+  parentContinuationPhasesForOrigin,
 } from "./long-task-continue.js";
 
 export {

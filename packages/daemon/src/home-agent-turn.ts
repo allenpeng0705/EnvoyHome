@@ -31,7 +31,9 @@ import {
   homeTaskArgsToHarness,
   stripHarnessAutoTools,
   HOME_PARENT_MAX_ITERATIONS,
+  HOME_PARENT_CONTINUATION_PHASES,
   clampParentMaxIterations,
+  clampParentContinuationPhases,
   type HomeModelAdapterOptions,
 } from "./home-harness-bridge.js";
 import {
@@ -284,6 +286,13 @@ export interface RunAgentTurnInput {
    * schedule agentTurn MUST pass stored maxToolRounds (≤ HOME_SCHEDULE_MAX_TOOL_ROUNDS).
    */
   maxIterations?: number;
+  /**
+   * Silent in-run continuation phases (Design 2026-11-23). Attended defaults to
+   * HOME_PARENT_CONTINUATION_PHASES; schedule/unattended MUST pass 0 from TurnService.
+   * Distinct from the outer one-hop auto-continue — cue still fires only after
+   * phases exhaust and `stopReason: "max_iterations"`.
+   */
+  maxContinuationPhases?: number;
   /** Extra system lines (e.g. resume-after-cap preamble). */
   resumePreamble?: string;
   /** Fired when the loop throws on max iterations (before partial/error emit). */
@@ -432,6 +441,11 @@ export async function* runAgentTurn(
     typeof input.maxIterations === "number" && Number.isFinite(input.maxIterations)
       ? clampParentMaxIterations(input.maxIterations)
       : HOME_PARENT_MAX_ITERATIONS;
+  const maxContinuationPhases =
+    typeof input.maxContinuationPhases === "number" &&
+    Number.isFinite(input.maxContinuationPhases)
+      ? clampParentContinuationPhases(input.maxContinuationPhases)
+      : HOME_PARENT_CONTINUATION_PHASES;
   const emitIncompleteCue = input.emitIncompleteCue !== false;
 
   // Snapshot Home's declared surface before the constructor widens it.
@@ -444,6 +458,7 @@ export async function* runAgentTurn(
     hooks,
     cwd: deps.ctx.sandbox_root,
     maxIterations,
+    maxContinuationPhases,
     maxSubagents: TASK_MAX_SUBAGENTS,
     maxParallelToolCalls: TASK_MAX_PARALLEL,
     retryPolicy: { ...DEFAULT_RETRY_POLICY, maxRetries: 0 },

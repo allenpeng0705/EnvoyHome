@@ -87,6 +87,31 @@ function resolveParentMaxIterations(): number {
 }
 const HOME_PARENT_MAX_ITERATIONS = resolveParentMaxIterations();
 
+/**
+ * Parse `ENVOYHOME_PARENT_CONTINUATION_PHASES` (or any raw string).
+ * Valid integers in 0…3 win; empty / invalid → default **2**.
+ * Exported for unit tests (module-load constant cannot be re-resolved).
+ */
+export function parseParentContinuationPhasesEnv(
+  raw: string | undefined,
+): number {
+  const t = (raw ?? "").trim();
+  if (t) {
+    const n = Number(t);
+    if (Number.isFinite(n) && n >= 0 && n <= 3) return Math.floor(n);
+  }
+  return 2;
+}
+
+/**
+ * Attended silent in-run continuation phases (Design §19.13 / 2026-11-23).
+ * Default 2; override with ENVOYHOME_PARENT_CONTINUATION_PHASES (clamped 0…3).
+ * Schedule/unattended MUST pass 0 via TurnService — never this default alone.
+ */
+const HOME_PARENT_CONTINUATION_PHASES = parseParentContinuationPhasesEnv(
+  process.env.ENVOYHOME_PARENT_CONTINUATION_PHASES,
+);
+
 /** Fail-closed default for schedule / unattended agentTurn when maxToolRounds omitted. */
 const HOME_SCHEDULE_MAX_TOOL_ROUNDS = 5;
 
@@ -102,6 +127,12 @@ export function clampScheduleMaxToolRounds(n: number | undefined): number {
 export function clampParentMaxIterations(n: number): number {
   if (!Number.isFinite(n)) return HOME_PARENT_MAX_ITERATIONS;
   return Math.min(80, Math.max(1, Math.floor(n)));
+}
+
+/** Clamp attended parent maxContinuationPhases to 0…3. */
+export function clampParentContinuationPhases(n: number): number {
+  if (!Number.isFinite(n)) return HOME_PARENT_CONTINUATION_PHASES;
+  return Math.min(3, Math.max(0, Math.floor(n)));
 }
 
 /** Flexible args — Home tools validate further inside dispatch. */
@@ -390,6 +421,8 @@ export function createHomeMeshSubmitter(
         cwd: opts.cwd,
         maxCostUsd: input.costCeilingUsd,
         maxIterations: HOME_CHILD_MAX_ITERATIONS,
+        // Children stay short — no silent continuation phases (Design 2026-11-23).
+        maxContinuationPhases: 0,
         retryPolicy: { ...DEFAULT_RETRY_POLICY, maxRetries: 0 },
         systemPrompt,
         // No meshSubmitter → child cannot spawn further task tools.
@@ -424,5 +457,6 @@ export {
   HOME_CHILD_DEADLINE_MS,
   HOME_CHILD_MAX_ITERATIONS,
   HOME_PARENT_MAX_ITERATIONS,
+  HOME_PARENT_CONTINUATION_PHASES,
   HOME_SCHEDULE_MAX_TOOL_ROUNDS,
 };
