@@ -69,6 +69,33 @@ Edit `scripts/envoy-harness.pin` (full 40-char sha) to bump the harness shipped
 inside the daemon. Overrides: `ENVOY_HARNESS_DIR`, `ENVOY_HARNESS_COMMIT`,
 `ENVOYHOME_HARNESS_FORCE_PIN=1` (destructive replace of `../envoy-harness`).
 
+Bump checklist (the pin is the *only* version handle — these packages are `0.0.0`
+and `@envoymesh/envoy-harness` is not published):
+
+1. Build the target commit from a clean checkout: `pnpm install` then
+   `pnpm run build` at the harness root (its `scripts/build-workspace.mjs` graph —
+   `pnpm -r build` mis-orders `envoy-harness-tui` vs `envoy-harness-client`). That
+   is what a desktop bundle embeds.
+   Use a **plain** `pnpm install`, never `--frozen-lockfile`: pnpm 10 records the
+   three `@envoymesh/*` sibling overrides in the harness lockfile as absolute
+   `file:/…` paths, so frozen mode only passes on the machine that generated that
+   lockfile (verified by regenerating it in a clean clone at another path).
+2. `pnpm -C packages/daemon lint` plus `test/parent-agent.test.ts`,
+   `test/harness-subagents.test.ts`, and `test/harness-contract.test.ts`.
+   The contract test guards the two things that have broken silently: `Session`'s
+   required methods, and Home's explicit tool surface. `Agent` registers into any
+   registry it is given (`wait_inbox`, `todo_write`, and — with a mesh submitter —
+   `workflow` plus the `spawn_agent` alias family), so Home snapshots its own
+   tools before construction and keeps only `HARNESS_ALLOWED_AUTO_TOOLS`.
+3. Look at upstream failures that touch the API Home uses. The sibling suite is
+   not an EnvoyHome release gate, but a red area must be understood, not assumed.
+
+Pinned revision `4d2905f` (2026-11-22): build green; the sibling's own suite has
+17 failures confined to `test/protocol/*`, `test/repl-info.test.ts`,
+`test/lsp-tools.test.ts`, `test/step-snapshot.test.ts`, `test/trace-agent.test.ts`
+— stale test doubles and exact-tool-list assertions from its own unrelated
+refactors, none in the API EnvoyHome consumes.
+
 ### Push credentials (optional for packaging)
 
 Put `push-config.json`, `AuthKey_*.p8`, and `serviceAccountKey.json` at the

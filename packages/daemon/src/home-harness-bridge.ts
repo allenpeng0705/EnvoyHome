@@ -25,6 +25,46 @@ import {
 import { parseAssistantToolCalls, type ProviderHandle } from "@envoyhome/harness-host";
 import type { ChatMessage } from "@envoyhome/providers";
 
+/**
+ * Harness-registered tools Home deliberately keeps after `new Agent(...)`.
+ *
+ * Home's surface is an explicit allow-list (`parentToolNamesForSurface` for the
+ * parent, `allowTools` for a child), so the constructor's own additions are
+ * treated as suspects, not as surface. `Agent` registers into *any*
+ * `ToolRegistry` it is handed (and, with a `meshSubmitter`, adds a whole
+ * orchestrator set), so the default must be "strip unless listed here":
+ *
+ *  - `task` — the harness-native child spawner the turn relies on
+ *    (Design §19.13 P2-E2/E3; `parentToolNamesForSurface` omits it for exactly
+ *    this reason).
+ *  - `suggest_follow_ups` — predates the pin; feeds TurnHints.
+ *
+ * Everything else the constructor adds is dropped, notably:
+ *  - `wait_inbox` — blocks up to 10 min for an inbox producer Home never wires;
+ *  - `todo_write` — ACP `plan_update` state no Home client renders;
+ *  - `workflow` — a second orchestration engine (Design §19.3 / AGENTS.md:
+ *    Home's workflows are `@envoyhome/workflows`, never a harness engine);
+ *  - `spawn_agent` / `followup_task` / `send_input` / `wait_agent` /
+ *    `close_agent` — new aliases over the same submitter, duplicating `task`;
+ *  - `interrupt_agent` / `list_agents` / `send_message` — the pre-`4d2905f`
+ *    child-control trio. Home's children are synchronous (`task` awaits; there
+ *    is no background path) and nothing in Home dispatches these, so they only
+ *    advertised steering that could never work.
+ */
+const HARNESS_ALLOWED_AUTO_TOOLS = new Set(["suggest_follow_ups", "task"]);
+
+/**
+ * Remove every tool the harness added on top of `keep` (the caller's own tool
+ * names, snapshotted *before* constructing the `Agent`).
+ */
+export function stripHarnessAutoTools(registry: ToolRegistry, keep: Iterable<string>): void {
+  const allowed = new Set(HARNESS_ALLOWED_AUTO_TOOLS);
+  for (const name of keep) allowed.add(name);
+  for (const tool of registry.list()) {
+    if (!allowed.has(tool.name)) registry.unregister(tool.name);
+  }
+}
+
 const HOME_CHILD_COST_USD = 1;
 const HOME_CHILD_DEADLINE_MS = 120_000;
 const HOME_CHILD_MAX_ITERATIONS = 4;
@@ -340,7 +380,9 @@ export function createHomeMeshSubmitter(
       ]
         .filter((l) => l.length > 0)
         .join("\n");
-      return new Agent({
+      // Snapshot the child's declared tools *before* the constructor widens them.
+      const declaredTools = tools.list().map((tool) => tool.name);
+      const agent = new Agent({
         model: opts.model,
         tools,
         session,
@@ -353,6 +395,9 @@ export function createHomeMeshSubmitter(
         // No meshSubmitter → child cannot spawn further task tools.
         ...(opts.parentSessionId ? { subagentOf: opts.parentSessionId } : {}),
       });
+      // Keep the child registry exactly `allowTools` (see HARNESS_ALLOWED_AUTO_TOOLS).
+      stripHarnessAutoTools(tools, declaredTools);
+      return agent;
     },
   });
 }

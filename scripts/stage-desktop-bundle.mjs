@@ -311,8 +311,15 @@ function ensureHarnessBuilt() {
   const harnessRoot = ensureHarnessCheckout();
   const harnessDist = path.join(harnessRoot, "packages", "envoy-harness", "dist");
   say("Building envoy-harness (embedded into the daemon bundle)…");
+  // Plain install, never `--frozen-lockfile`: the harness lockfile records the
+  // `@envoymesh/*` sibling overrides as absolute `file:/…` paths (pnpm 10), so
+  // frozen mode only passes on the machine that generated it. Re-resolving those
+  // few specifiers is what makes a clean checkout work anywhere.
   run("pnpm", ["install"], { cwd: harnessRoot });
-  run("pnpm", ["-r", "build"], { cwd: harnessRoot });
+  // Use the harness's own build graph (`scripts/build-workspace.mjs`), not
+  // `pnpm -r build`: `file:` workspace deps are not ordering edges, so `-r`
+  // builds envoy-harness-tui before envoy-harness-client on a clean checkout.
+  run("pnpm", ["run", "build"], { cwd: harnessRoot });
   if (!existsSync(harnessDist)) {
     fail(`envoy-harness build did not produce ${harnessDist}.`);
   }

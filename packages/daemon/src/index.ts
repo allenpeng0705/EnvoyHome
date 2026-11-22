@@ -310,6 +310,7 @@ export {
   homeTaskArgsToHarness,
   homeSubagentInput,
   textFromSubagentResult,
+  stripHarnessAutoTools,
   HOME_PARENT_MAX_ITERATIONS,
   HOME_SCHEDULE_MAX_TOOL_ROUNDS,
   clampScheduleMaxToolRounds,

@@ -29,6 +29,7 @@ import {
   buildParentToolRegistry,
   createHomeMeshSubmitter,
   homeTaskArgsToHarness,
+  stripHarnessAutoTools,
   HOME_PARENT_MAX_ITERATIONS,
   clampParentMaxIterations,
   type HomeModelAdapterOptions,
@@ -302,6 +303,21 @@ export interface RunAgentTurnInput {
 }
 
 /**
+ * Last assistant text in the session — the fallback answer when the loop stops
+ * on its iteration cap (the harness returns an empty `content` there).
+ */
+function lastAssistantText(session: HomeAgentSession): string {
+  const last = [...session.messages].reverse().find((m) => m.role === "assistant");
+  if (!last) return "";
+  return last.content
+    .filter((b): b is { type: "text"; text: string } => b.type === "text")
+    .map((b) => b.text.trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+}
+
+/**
  * Build + run parent Agent; yield TurnEvents as Tracer fires (live),
  * then final text after home recover / honesty (same order as runTurn).
  */
@@ -418,6 +434,9 @@ export async function* runAgentTurn(
       : HOME_PARENT_MAX_ITERATIONS;
   const emitIncompleteCue = input.emitIncompleteCue !== false;
 
+  // Snapshot Home's declared surface before the constructor widens it.
+  const declaredTools = tools.list().map((tool) => tool.name);
+
   const agent = new Agent({
     model,
     tools,
@@ -433,10 +452,57 @@ export async function* runAgentTurn(
     tracer,
     ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
   });
+  // The constructor also adds `wait_inbox`, `todo_write`, `workflow`, and the
+  // `spawn_agent` alias family; keep only `HARNESS_ALLOWED_AUTO_TOOLS`.
+  stripHarnessAutoTools(tools, declaredTools);
 
   const runPromise = (async () => {
+    /**
+     * Iteration cap: since envoy-harness `4d2905f` the loop *returns*
+     * `stopReason: "max_iterations"` instead of throwing, so this branch — not
+     * the `catch` regex — is the live path. Keep the catch for other failures
+     * and older harness builds.
+     */
+    const finishCappedTurn = async (): Promise<void> => {
+      try {
+        await input.onIterationCap?.();
+      } catch {
+        /* marker best-effort */
+      }
+      const partial = lastAssistantText(session);
+      let emittedPartial = false;
+      if (partial) {
+        try {
+          const rawOut = emitIncompleteCue
+            ? `${partial.trimEnd()}\n\n${TURN_INCOMPLETE_CONTINUE_CUE}`
+            : partial;
+          await finalizeHomeText({
+            raw: rawOut,
+            userText,
+            deps,
+            toolLoop,
+            queue,
+          });
+          emittedPartial = true;
+        } catch {
+          /* fall through to soft error */
+        }
+      }
+      if (!emittedPartial && emitIncompleteCue) {
+        queue.push({
+          kind: "error",
+          text: TURN_INCOMPLETE_ERROR,
+        });
+      }
+      // When emitIncompleteCue is false, TurnService auto-continues — no stop cue.
+    };
+
     try {
       const result = await agent.run(userText);
+      if (result.stopReason === "max_iterations") {
+        await finishCappedTurn();
+        return;
+      }
       const finalText = result.content
         .filter((b): b is { type: "text"; text: string } => b.type === "text")
         .map((b) => b.text.trim())
@@ -445,14 +511,7 @@ export async function* runAgentTurn(
         .trim();
       let raw = finalText;
       if (!raw) {
-        const last = [...session.messages].reverse().find((m) => m.role === "assistant");
-        if (last) {
-          raw = last.content
-            .filter((b): b is { type: "text"; text: string } => b.type === "text")
-            .map((b) => b.text)
-            .join("\n")
-            .trim();
-        }
+        raw = lastAssistantText(session);
       }
       if (raw) {
         await finalizeHomeText({
@@ -465,48 +524,9 @@ export async function* runAgentTurn(
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      // Prefer last assistant text when the loop hit the iteration cap — the
-      // model may already have a usable answer after many tool rounds.
+      // Older harness builds throw on the cap; prefer the last assistant text.
       if (/exceeded max iterations/i.test(message)) {
-        try {
-          await input.onIterationCap?.();
-        } catch {
-          /* marker best-effort */
-        }
-        const last = [...session.messages].reverse().find((m) => m.role === "assistant");
-        const partial = last
-          ? last.content
-              .filter((b): b is { type: "text"; text: string } => b.type === "text")
-              .map((b) => b.text.trim())
-              .filter(Boolean)
-              .join("\n")
-              .trim()
-          : "";
-        let emittedPartial = false;
-        if (partial) {
-          try {
-            const rawOut = emitIncompleteCue
-              ? `${partial.trimEnd()}\n\n${TURN_INCOMPLETE_CONTINUE_CUE}`
-              : partial;
-            await finalizeHomeText({
-              raw: rawOut,
-              userText,
-              deps,
-              toolLoop,
-              queue,
-            });
-            emittedPartial = true;
-          } catch {
-            /* fall through to soft error */
-          }
-        }
-        if (!emittedPartial && emitIncompleteCue) {
-          queue.push({
-            kind: "error",
-            text: TURN_INCOMPLETE_ERROR,
-          });
-        }
-        // When emitIncompleteCue is false, TurnService auto-continues — no stop cue.
+        await finishCappedTurn();
       } else {
         queue.push({ kind: "error", text: message });
       }

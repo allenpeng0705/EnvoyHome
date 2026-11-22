@@ -6,6 +6,8 @@ import {
   appendDiagnostic,
   type ContentBlock,
   type Message,
+  type PendingChildSnapshot,
+  type PendingInboxSnapshot,
   type Role,
   type Session,
   type SessionDiagnosticEvent,
@@ -42,24 +44,14 @@ export type HomeHistoryLine = {
 };
 
 /**
- * ACP-style live checklist (todo_write / plan_update).
+ * ACP-style live checklist item (todo_write / plan_update).
  *
- * Declared structurally on purpose: `envoy-harness` added `setPlanItems` /
- * `getPlanItems` to its `Session` contract on `main`, but `scripts/envoy-harness.pin`
- * pins an older commit (used by `build-desktop.sh` when the sibling is absent) that
- * has neither the methods nor `SessionMetadata.planItems`. A local structural type
- * keeps this adapter compiling against BOTH harness versions — importing the
- * upstream type would break the pinned build, and reading `metadata.planItems`
- * would break against the pinned `SessionMetadata`.
- *
- * Keep in sync with upstream `PlanItem` (packages/envoy-harness/src/plan/items.ts).
+ * Derived from the harness contract, not restated: `PlanItem` lives in
+ * `plan/index.js` but is not re-exported from the package root, while
+ * `Session["getPlanItems"]` is the public handle Home actually consumes — so this
+ * alias cannot drift from the pinned revision.
  */
-export type HomePlanItem = {
-  id: string;
-  content: string;
-  status: "pending" | "in_progress" | "completed" | "cancelled";
-  priority?: "high" | "medium" | "low";
-};
+export type HomePlanItem = ReturnType<Session["getPlanItems"]>[number];
 
 export interface HomeAgentSessionOptions {
   id: string;
@@ -94,7 +86,7 @@ export class HomeAgentSession implements Session {
   private userAlreadyPersisted: boolean;
   private readonly persistAssistant: boolean;
   private _messages: Message[] = [];
-  /** Live ACP checklist (todo_write). Private field — `metadata.planItems` may not exist on older harness. */
+  /** Live ACP checklist (todo_write). Kept off `metadata` so a Home turn's header stays text-only. */
   private _planItems: readonly HomePlanItem[] = [];
 
   constructor(opts: HomeAgentSessionOptions) {
@@ -221,5 +213,49 @@ export class HomeAgentSession implements Session {
         updatedAt: this.metadata.startedAt,
       }
     );
+  }
+
+  /**
+   * Gap 4b — durable pending inbox.
+   *
+   * A Home turn has no cross-process resume: this session is rebuilt per turn
+   * from the Home transcript, so the queues only need to outlive one
+   * `Agent.run` (harness `steer` / `followup` / `inject`). Storing them on
+   * `metadata` keeps the harness contract honest without pretending to persist
+   * a resume that EnvoyHome does not implement.
+   */
+  setPendingInbox(snapshot: PendingInboxSnapshot | undefined): void {
+    if (
+      snapshot === undefined ||
+      (snapshot.nextTurn.length === 0 && snapshot.nextStep.length === 0)
+    ) {
+      delete this.metadata.pendingInbox;
+      return;
+    }
+    this.metadata.pendingInbox = {
+      nextTurn: snapshot.nextTurn.map((entry) => ({ ...entry })),
+      nextStep: snapshot.nextStep.map((entry) => ({ ...entry })),
+    };
+  }
+
+  getPendingInbox(): PendingInboxSnapshot | undefined {
+    return this.metadata.pendingInbox;
+  }
+
+  /**
+   * Gap 1 — continuable-child snapshot. Home children are turn-scoped
+   * (`LocalMeshSubmitter`, depth 1) and are not rehydrated after restart, so
+   * this is in-memory bookkeeping only; `recordEvent`/`events` stay unimplemented.
+   */
+  setPendingChildren(children: ReadonlyArray<PendingChildSnapshot> | undefined): void {
+    if (children === undefined || children.length === 0) {
+      delete this.metadata.pendingChildren;
+      return;
+    }
+    this.metadata.pendingChildren = children.map((child) => ({ ...child }));
+  }
+
+  getPendingChildren(): ReadonlyArray<PendingChildSnapshot> {
+    return this.metadata.pendingChildren ?? [];
   }
 }
