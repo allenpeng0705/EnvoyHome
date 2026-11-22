@@ -175,6 +175,9 @@ export async function fetchLibreOfficeAllowingRedirects(
           `envoyhome.libreoffice_bad_url: redirect host ${next.hostname} refused (private/link-local)`,
         );
       }
+      // Release the redirect's connection before opening the next hop: an
+      // unconsumed 3xx body keeps the socket open past shutdown.
+      await res.body?.cancel().catch(() => undefined);
       current = next.toString();
       continue;
     }
@@ -290,6 +293,9 @@ async function defaultDownload(input: {
     }
     await rename(partial, input.destPath);
   } catch (err) {
+    // Abort/shutdown lands here mid-body; cancel the reader so the socket is
+    // torn down instead of lingering half-open after `stop()`.
+    await reader.cancel().catch(() => undefined);
     file.destroy();
     await rm(partial, { force: true }).catch(() => undefined);
     throw err;
@@ -436,6 +442,8 @@ export class LibreOfficeInstallService {
   private running: Promise<void> | null = null;
   /** Synchronous gate so concurrent startInstall cannot double-download. */
   private starting = false;
+  /** Set by `cancelInstall` (daemon shutdown): no new download may start. */
+  private stopped = false;
   private liveStatus: LibreOfficeRuntimeStatus | null = null;
 
   constructor(
@@ -458,6 +466,7 @@ export class LibreOfficeInstallService {
     this.controller = null;
     this.running = null;
     this.starting = false;
+    this.stopped = false;
     this.liveStatus = null;
     this.progress = { bytesReceived: 0, phase: "idle" };
   }
@@ -517,6 +526,7 @@ export class LibreOfficeInstallService {
    * and not already failed for this catalog version.
    */
   async maybeAutoInstall(): Promise<void> {
+    if (this.stopped) return;
     if (!this.autoEnabled() || this.persisted.declined) return;
     if (this.running || this.starting) return;
     const { probeLibreOffice } = await import("./document-export-lo.js");
@@ -549,6 +559,8 @@ export class LibreOfficeInstallService {
   }
 
   async startInstall(_opts?: { silent?: boolean }): Promise<DocumentExportStatus> {
+    // A download that would begin after shutdown must never open a socket.
+    if (this.stopped) return this.getStatus();
     // Sync lock before any await — prevents double ~1GB download (V-OFFICE soft-risk).
     if (this.running || this.starting) return this.getStatus();
     this.starting = true;
@@ -624,8 +636,10 @@ export class LibreOfficeInstallService {
           if (this.controller?.signal.aborted) {
             this.liveStatus = null;
             this.progress = { bytesReceived: 0, phase: "idle" };
-            this.persisted.status = "failed";
-            this.persisted.lastError = "envoyhome.libreoffice_cancelled";
+            // A shutdown/cancel is not a failure: leave it retryable so the next
+            // boot resumes instead of the "no silent retry storm" guard skipping.
+            this.persisted.status = "idle";
+            delete this.persisted.lastError;
             await this.save();
             return;
           }
@@ -657,6 +671,7 @@ export class LibreOfficeInstallService {
   }
 
   async cancelInstall(): Promise<DocumentExportStatus> {
+    this.stopped = true;
     this.controller?.abort();
     if (this.running) {
       await this.running.catch(() => undefined);

@@ -699,6 +699,19 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<Run
   const localSqlInstall = new LocalSqlInstallService(paths);
   await localSqlInstall.load();
 
+  // First-boot provisioning is fire-and-forget; aborted on shutdown so `stop()`
+  // releases the download sockets. Without this an open fetch keeps the process
+  // (and every test that boots a daemon) alive after the suite has finished.
+  stoppers.push(() =>
+    libreOfficeInstall.cancelInstall().then(() => undefined).catch(() => undefined),
+  );
+  stoppers.push(() =>
+    obscuraInstall.cancelInstall().then(() => undefined).catch(() => undefined),
+  );
+  stoppers.push(() =>
+    localSqlInstall.cancelInstall().then(() => undefined).catch(() => undefined),
+  );
+
   return {
     config: { ...config, wsPort: ws.host.port, httpPort },
     logger,

@@ -33,7 +33,9 @@ async function boot() {
       await daemon.stop().catch(() => undefined);
       const idx = daemons.indexOf(daemon);
       if (idx >= 0) daemons.splice(idx, 1);
-      await rm(stateDir, { recursive: true, force: true });
+      // Memory/audit writers can still be flushing; retry ENOTEMPTY instead of
+      // failing teardown (the turn itself already asserted).
+      await rm(stateDir, { recursive: true, force: true, maxRetries: 20, retryDelay: 50 });
     },
   };
 }
@@ -60,6 +62,29 @@ async function rpc(
     socket.on("open", () => socket.send(JSON.stringify({ id: 1, method, params })));
     socket.on("error", reject);
   });
+}
+
+/**
+ * Poll until `ok(value)`, or the deadline passes (then return the last value so
+ * the caller's assertion reports the real shape). `sendMessage` is fire-and-
+ * forget, and a single `flushLoop()` is a race on a loaded machine. Reads may
+ * briefly throw while the session is still being registered — retried too.
+ */
+async function waitFor<T>(
+  read: () => Promise<T>,
+  ok: (value: T) => boolean,
+  timeoutMs = 5_000,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      const value = await read();
+      if (ok(value) || Date.now() >= deadline) return value;
+    } catch (err) {
+      if (Date.now() >= deadline) throw err;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
 }
 
 test("V-HAR-1: openSession + sendMessage turn under account A", async () => {
@@ -274,8 +299,10 @@ test("V-SEC-8: grant permits unattended exec", async () => {
     plannedTools: [{ tool: "exec", args: { cmd: "echo ok" } }],
     completionText: "done",
   });
-  await flushLoop();
-  const transcript = await daemon.turns.getTranscript("alice", sessionId);
+  const transcript = await waitFor(
+    () => daemon.turns.getTranscript("alice", sessionId),
+    (rows) => rows.some((m) => m["kind"] === "tool_result" || m["text"] === "done"),
+  );
   assert.ok(transcript.some((m) => m["kind"] === "tool_result" || m["text"] === "done"));
   await cleanup();
 });

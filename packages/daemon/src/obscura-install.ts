@@ -195,6 +195,9 @@ async function fetchObscuraAllowingRedirects(
           `envoyhome.obscura_bad_url: redirect host ${next.hostname} refused`,
         );
       }
+      // Release the redirect's connection before opening the next hop: an
+      // unconsumed 3xx body keeps the socket open past shutdown.
+      await res.body?.cancel().catch(() => undefined);
       current = next.toString();
       continue;
     }
@@ -263,6 +266,9 @@ async function defaultDownload(input: {
     }
     await rename(partial, input.destPath);
   } catch (err) {
+    // Abort/shutdown lands here mid-body; cancel the reader so the socket is
+    // torn down instead of lingering half-open after `stop()`.
+    await reader.cancel().catch(() => undefined);
     file.destroy();
     await rm(partial, { force: true }).catch(() => undefined);
     throw err;
@@ -372,6 +378,8 @@ export class ObscuraInstallService {
   private controller: AbortController | null = null;
   private running: Promise<void> | null = null;
   private starting = false;
+  /** Set by `cancelInstall` (daemon shutdown): no new download may start. */
+  private stopped = false;
   private liveStatus: ObscuraManagedRuntimeStatus | null = null;
 
   constructor(
@@ -394,7 +402,20 @@ export class ObscuraInstallService {
     this.controller = null;
     this.running = null;
     this.starting = false;
+    this.stopped = false;
     this.liveStatus = null;
+  }
+
+  /**
+   * Daemon shutdown: abort an in-flight silent first-boot download so `stop()`
+   * releases its sockets. Without this the process (and any test that boots a
+   * daemon) stays alive on the open fetch after every test has finished.
+   */
+  async cancelInstall(): Promise<void> {
+    this.stopped = true;
+    this.controller?.abort();
+    if (this.running) await this.running.catch(() => undefined);
+    this.running = null;
   }
 
   async load(): Promise<void> {
@@ -465,6 +486,7 @@ export class ObscuraInstallService {
    * Skipped when a bundled/env binary is already usable (caller checks resolve).
    */
   async maybeAutoInstall(opts?: { alreadyReady?: boolean }): Promise<void> {
+    if (this.stopped) return;
     if (opts?.alreadyReady) return;
     if (!this.autoEnabled() || this.persisted.declined) return;
     if (this.running || this.starting) return;
@@ -491,6 +513,8 @@ export class ObscuraInstallService {
   }
 
   async startInstall(_opts?: { silent?: boolean }): Promise<ObscuraInstallStatus> {
+    // A download that would begin after shutdown must never open a socket.
+    if (this.stopped) return this.getStatus();
     if (this.running || this.starting) return this.getStatus();
     this.starting = true;
     try {
@@ -544,6 +568,15 @@ export class ObscuraInstallService {
           this.liveStatus = null;
           await this.save();
         } catch (err) {
+          if (this.controller?.signal.aborted) {
+            // A shutdown/cancel is not a failure: leave it retryable so the next
+            // boot resumes instead of the "no silent retry storm" guard skipping.
+            this.persisted.status = "idle";
+            delete this.persisted.lastError;
+            this.liveStatus = null;
+            await this.save();
+            return;
+          }
           this.persisted.status = "failed";
           this.persisted.lastError =
             err instanceof Error ? err.message : String(err);
