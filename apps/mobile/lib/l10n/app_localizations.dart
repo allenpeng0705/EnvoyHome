@@ -147,7 +147,7 @@ abstract class AppLocalizations {
   /// No description provided for @pairLede.
   ///
   /// In en, this message translates to:
-  /// **'Join the home desktop over EnvoyMesh — scan a QR, enter host:port, or hop via SSH.'**
+  /// **'Scan the pairing QR from desktop Settings → Pair devices — or paste the pairing link.'**
   String get pairLede;
 
   /// No description provided for @pairTabLink.
@@ -168,11 +168,281 @@ abstract class AppLocalizations {
   /// **'SSH'**
   String get pairTabSsh;
 
+  /// No description provided for @pairPasteInstead.
+  ///
+  /// In en, this message translates to:
+  /// **'Or paste a pairing link'**
+  String get pairPasteInstead;
+
+  /// No description provided for @pairAdvanced.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced'**
+  String get pairAdvanced;
+
+  /// No description provided for @pairAdvancedSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Host:port and SSH hop (power users)'**
+  String get pairAdvancedSubtitle;
+
+  /// No description provided for @pairConnectHost.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect with host'**
+  String get pairConnectHost;
+
+  /// No description provided for @pairConnectSsh.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect over SSH'**
+  String get pairConnectSsh;
+
+  /// No description provided for @pairProgressTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to home'**
+  String get pairProgressTitle;
+
+  /// No description provided for @pairProgressSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Reaching your EnvoyHome desktop…'**
+  String get pairProgressSubtitle;
+
+  /// No description provided for @pairElapsed.
+  ///
+  /// In en, this message translates to:
+  /// **'Elapsed {time}'**
+  String pairElapsed(String time);
+
+  /// No description provided for @pairStageInitial.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting'**
+  String get pairStageInitial;
+
+  /// No description provided for @pairStageInitialHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Preparing a secure connection to your home computer.'**
+  String get pairStageInitialHint;
+
+  /// No description provided for @pairStageConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting'**
+  String get pairStageConnecting;
+
+  /// No description provided for @pairStageConnectingHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Trying the local network first, then mesh paths.'**
+  String get pairStageConnectingHint;
+
+  /// No description provided for @pairStageHandshaking.
+  ///
+  /// In en, this message translates to:
+  /// **'Handshaking'**
+  String get pairStageHandshaking;
+
+  /// No description provided for @pairStageHandshakingHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Verifying the pairing token with the home daemon.'**
+  String get pairStageHandshakingHint;
+
+  /// No description provided for @pairStageVerifying.
+  ///
+  /// In en, this message translates to:
+  /// **'Almost there'**
+  String get pairStageVerifying;
+
+  /// No description provided for @pairStageSlowHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Still working — first connections can take a minute.'**
+  String get pairStageSlowHint;
+
+  /// No description provided for @pairStageVerySlowHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Check that the phone and desktop share a network, or try Advanced host:port.'**
+  String get pairStageVerySlowHint;
+
+  /// No description provided for @pairStillWorking.
+  ///
+  /// In en, this message translates to:
+  /// **'Still working — keep this screen open. A first pair can take a minute or two.'**
+  String get pairStillWorking;
+
+  /// No description provided for @pairTroubleHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Tips: desktop EnvoyHome is running · same Wi‑Fi / Tailscale · scan a fresh QR from Settings → Pair devices.'**
+  String get pairTroubleHint;
+
+  /// No description provided for @pairDontClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Don’t close the app while connecting.'**
+  String get pairDontClose;
+
+  /// No description provided for @pairCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get pairCancel;
+
+  /// No description provided for @pairKeepWaiting.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep waiting'**
+  String get pairKeepWaiting;
+
+  /// No description provided for @pairCancelConfirmTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel connecting?'**
+  String get pairCancelConfirmTitle;
+
+  /// No description provided for @pairCancelConfirmBody.
+  ///
+  /// In en, this message translates to:
+  /// **'You can reconnect anytime from the connection banner.'**
+  String get pairCancelConfirmBody;
+
+  /// No description provided for @pairErrorWrongApp.
+  ///
+  /// In en, this message translates to:
+  /// **'That QR is for a different Envoy app. Scan an EnvoyHome pairing code.'**
+  String get pairErrorWrongApp;
+
+  /// No description provided for @pairErrorTimeout.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection timed out. Check the desktop is online and try again.'**
+  String get pairErrorTimeout;
+
+  /// No description provided for @pairErrorUnreachable.
+  ///
+  /// In en, this message translates to:
+  /// **'Home desktop is unreachable on this network.'**
+  String get pairErrorUnreachable;
+
+  /// No description provided for @pairErrorExpired.
+  ///
+  /// In en, this message translates to:
+  /// **'Pairing code is invalid or expired — mint a fresh QR on the desktop.'**
+  String get pairErrorExpired;
+
+  /// No description provided for @pairErrorGeneric.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not connect. Try scanning again.'**
+  String get pairErrorGeneric;
+
   /// No description provided for @pairFooter.
   ///
   /// In en, this message translates to:
   /// **'com.envoymesh.envoyhome · push after pair'**
   String get pairFooter;
+
+  /// No description provided for @shellPairNewDevice.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair new device'**
+  String get shellPairNewDevice;
+
+  /// No description provided for @bannerOfflineSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected to home'**
+  String get bannerOfflineSaved;
+
+  /// No description provided for @bannerOfflineUnpaired.
+  ///
+  /// In en, this message translates to:
+  /// **'Pair this phone with your home desktop'**
+  String get bannerOfflineUnpaired;
+
+  /// No description provided for @navReminders.
+  ///
+  /// In en, this message translates to:
+  /// **'Reminders'**
+  String get navReminders;
+
+  /// No description provided for @navMore.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get navMore;
+
+  /// No description provided for @moreHubHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily controls first. Advanced household setup stays under Advanced.'**
+  String get moreHubHint;
+
+  /// No description provided for @moreSectionDaily.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily'**
+  String get moreSectionDaily;
+
+  /// No description provided for @moreSectionAdvanced.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced'**
+  String get moreSectionAdvanced;
+
+  /// No description provided for @moreFilesSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Sandbox files, exports, and knowledge'**
+  String get moreFilesSubtitle;
+
+  /// No description provided for @moreHomeChatSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Talk to smart-home devices (Home Assistant)'**
+  String get moreHomeChatSubtitle;
+
+  /// No description provided for @moreAdvancedOwnerOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'LLM, Connections, Skills, and Workflows need the household Owner device.'**
+  String get moreAdvancedOwnerOnly;
+
+  /// No description provided for @remindersAskCta.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask to schedule'**
+  String get remindersAskCta;
+
+  /// No description provided for @remindersAskTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Schedule with chat'**
+  String get remindersAskTitle;
+
+  /// No description provided for @remindersNeedConnect.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect to your home to manage jobs, scenes, and schedule history.'**
+  String get remindersNeedConnect;
+
+  /// No description provided for @needsYouTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs you · {count}'**
+  String needsYouTitle(int count);
+
+  /// No description provided for @needsYouOpenChat.
+  ///
+  /// In en, this message translates to:
+  /// **'Review'**
+  String get needsYouOpenChat;
 
   /// No description provided for @pairCloseScanner.
   ///

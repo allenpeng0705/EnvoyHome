@@ -10,7 +10,9 @@ import 'package:permission_handler/permission_handler.dart';
 import '../l10n/app_localizations.dart';
 import '../services/local_network_prompt.dart';
 import '../state/session_controller.dart';
+import 'pairing/pairing_progress_screen.dart';
 
+/// QR-first pairing (EnvoyGo scan peer). Host/SSH live under Advanced.
 class PairScreen extends StatefulWidget {
   const PairScreen({
     super.key,
@@ -23,9 +25,7 @@ class PairScreen extends StatefulWidget {
   State<PairScreen> createState() => _PairScreenState();
 }
 
-class _PairScreenState extends State<PairScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabs;
+class _PairScreenState extends State<PairScreen> {
   final _uriCtrl = TextEditingController();
   final _endpointCtrl = TextEditingController(text: '192.168.1.1:4780');
   final _tokenCtrl = TextEditingController();
@@ -36,27 +36,16 @@ class _PairScreenState extends State<PairScreen>
   final _daemonCtrl = TextEditingController(text: '127.0.0.1:4780');
   final _sshTokenCtrl = TextEditingController();
   String? _formError;
+  bool _advancedOpen = false;
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 3, vsync: this);
-    widget.session.addListener(_onSession);
-    // Surface iOS Local Network permission before the first pair dial.
     unawaited(promptLocalNetworkAccessEarly());
-  }
-
-  void _onSession() {
-    if (!mounted) return;
-    if (widget.session.isConnected && Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    }
   }
 
   @override
   void dispose() {
-    widget.session.removeListener(_onSession);
-    _tabs.dispose();
     _uriCtrl.dispose();
     _endpointCtrl.dispose();
     _tokenCtrl.dispose();
@@ -69,9 +58,45 @@ class _PairScreenState extends State<PairScreen>
     super.dispose();
   }
 
-  Future<void> _connectUri(String uri) async {
+  Future<void> _runWithProgress(Future<void> Function() connect) async {
     setState(() => _formError = null);
-    await widget.session.connectWithUri(uri);
+    final result = await Navigator.of(context).push<PairingProgressResult>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => PairingProgressScreen(
+          connect: connect,
+          onCancelRequested: () async {
+            // Soft-pause so auto-redial does not fight the cancel.
+            await widget.session.disconnect();
+          },
+        ),
+      ),
+    );
+    if (!mounted || result == null) return;
+    if (result.cancelled) return;
+    if (result.error != null && result.error!.isNotEmpty) {
+      setState(() => _formError = result.error);
+      return;
+    }
+    if (widget.session.isConnected && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else if (widget.session.error != null) {
+      setState(() => _formError = widget.session.error);
+    }
+  }
+
+  Future<void> _connectUri(String uri) async {
+    final trimmed = uri.trim();
+    if (trimmed.isEmpty) {
+      setState(() => _formError = AppLocalizations.of(context).pairUriHint);
+      return;
+    }
+    await _runWithProgress(() async {
+      await widget.session.connectWithUri(trimmed);
+      if (!widget.session.isConnected) {
+        throw StateError(widget.session.error ?? 'Connect failed');
+      }
+    });
   }
 
   Future<void> _connectDirect() async {
@@ -83,8 +108,12 @@ class _PairScreenState extends State<PairScreen>
       setState(() => _formError = draft.message);
       return;
     }
-    setState(() => _formError = null);
-    await widget.session.connectWithPairing((draft as JoinDraftBuilt).pairing);
+    await _runWithProgress(() async {
+      await widget.session.connectWithPairing((draft as JoinDraftBuilt).pairing);
+      if (!widget.session.isConnected) {
+        throw StateError(widget.session.error ?? 'Connect failed');
+      }
+    });
   }
 
   Future<void> _connectSsh() async {
@@ -100,12 +129,14 @@ class _PairScreenState extends State<PairScreen>
       setState(() => _formError = draft.message);
       return;
     }
-    setState(() => _formError = null);
-    await widget.session.connectWithPairing((draft as JoinDraftBuilt).pairing);
+    await _runWithProgress(() async {
+      await widget.session.connectWithPairing((draft as JoinDraftBuilt).pairing);
+      if (!widget.session.isConnected) {
+        throw StateError(widget.session.error ?? 'Connect failed');
+      }
+    });
   }
 
-  /// Android: CameraX preview inside a [ListView] often stays black. Open a
-  /// full-screen scanner instead, after an explicit runtime CAMERA grant.
   Future<void> _scanQr() async {
     final l10n = AppLocalizations.of(context);
     final status = await _requestCameraPermission();
@@ -134,15 +165,11 @@ class _PairScreenState extends State<PairScreen>
             ],
           ),
         );
-        if (open == true) {
-          await openAppSettings();
-        }
+        if (open == true) await openAppSettings();
       }
       return;
     }
 
-    // Let the Activity finish resuming after the system permission sheet
-    // before CameraX bindToLifecycle runs.
     await Future<void>.delayed(const Duration(milliseconds: 250));
     if (!mounted) return;
 
@@ -174,230 +201,187 @@ class _PairScreenState extends State<PairScreen>
     final err = _formError ?? session.error;
     final theme = Theme.of(context);
     final l10n = AppLocalizations.of(context);
+    final busy = session.busy;
+
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.shellConnect),
-      ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      appBar: AppBar(title: Text(l10n.shellConnect)),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-            child: Text(
-              l10n.pairLede,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
-                height: 1.35,
-              ),
+          Text(
+            l10n.pairLede,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.65),
+              height: 1.35,
             ),
           ),
-          TabBar(
-            controller: _tabs,
-            isScrollable: true,
-            tabs: [
-              Tab(text: l10n.pairTabLink),
-              Tab(text: l10n.pairTabHost),
-              Tab(text: l10n.pairTabSsh),
+          const SizedBox(height: 20),
+          FilledButton.icon(
+            onPressed: busy ? null : () => unawaited(_scanQr()),
+            icon: const Icon(Icons.qr_code_scanner),
+            label: Text(l10n.pairScanQr),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            l10n.pairPasteInstead,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _uriCtrl,
+            minLines: 2,
+            maxLines: 4,
+            decoration: InputDecoration(
+              labelText: l10n.pairUriLabel,
+              hintText: l10n.pairUriHint,
+            ),
+          ),
+          const SizedBox(height: 12),
+          FilledButton.tonal(
+            onPressed: busy ? null : () => unawaited(_connectUri(_uriCtrl.text)),
+            child: Text(l10n.pairConnect),
+          ),
+          if (err != null && err.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              err,
+              style: TextStyle(color: theme.colorScheme.error, height: 1.35),
+            ),
+          ],
+          const SizedBox(height: 20),
+          ExpansionTile(
+            initiallyExpanded: _advancedOpen,
+            onExpansionChanged: (v) => setState(() => _advancedOpen = v),
+            title: Text(l10n.pairAdvanced),
+            subtitle: Text(l10n.pairAdvancedSubtitle),
+            childrenPadding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  l10n.pairTabHost,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                l10n.pairDirectHint,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _endpointCtrl,
+                decoration: InputDecoration(
+                  labelText: l10n.pairHostPort,
+                  hintText: l10n.pairHostPortHint,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _tokenCtrl,
+                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: l10n.pairToken,
+                  helperText: l10n.pairTokenHelper,
+                ),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.tonal(
+                onPressed: busy ? null : () => unawaited(_connectDirect()),
+                child: Text(l10n.pairConnectHost),
+              ),
+              const SizedBox(height: 24),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  l10n.pairTabSsh,
+                  style: theme.textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                l10n.pairSshHint,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _sshHostCtrl,
+                decoration: InputDecoration(labelText: l10n.pairSshHost),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _sshUserCtrl,
+                      decoration: InputDecoration(
+                        labelText: l10n.pairSshUser,
+                        hintText: l10n.pairSshUserHint,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 96,
+                    child: TextField(
+                      controller: _sshPortCtrl,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(labelText: l10n.pairSshPort),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _sshPasswordCtrl,
+                obscureText: true,
+                decoration: InputDecoration(labelText: l10n.pairSshPassword),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _daemonCtrl,
+                decoration: InputDecoration(
+                  labelText: l10n.pairDaemon,
+                  hintText: l10n.pairDaemonHint,
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _sshTokenCtrl,
+                obscureText: true,
+                decoration: InputDecoration(labelText: l10n.pairTokenOptional),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.tonal(
+                onPressed: busy ? null : () => unawaited(_connectSsh()),
+                child: Text(l10n.pairConnectSsh),
+              ),
             ],
           ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabs,
-              children: [
-                _linkTab(session),
-                _directTab(session),
-                _sshTab(session),
-              ],
-            ),
-          ),
-          if (err != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-              child: Text(
-                err,
-                style: TextStyle(color: theme.colorScheme.error),
-              ),
-            ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-            child: Text(
-              l10n.pairFooter,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-              ),
+          const SizedBox(height: 12),
+          Text(
+            l10n.pairFooter,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
             ),
           ),
         ],
       ),
     );
   }
-
-  Widget _linkTab(SessionController session) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-      children: [
-        FilledButton.icon(
-          onPressed: session.busy ? null : _scanQr,
-          icon: const Icon(Icons.qr_code_scanner),
-          label: Text(AppLocalizations.of(context).pairScanQr),
-        ),
-        const SizedBox(height: 20),
-        TextField(
-          controller: _uriCtrl,
-          minLines: 3,
-          maxLines: 5,
-          decoration: InputDecoration(
-            labelText: AppLocalizations.of(context).pairUriLabel,
-            hintText: AppLocalizations.of(context).pairUriHint,
-          ),
-        ),
-        const SizedBox(height: 12),
-        FilledButton(
-          onPressed: session.busy ? null : () => _connectUri(_uriCtrl.text),
-          child: session.busy
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Text(AppLocalizations.of(context).pairConnect),
-        ),
-      ],
-    );
-  }
-
-  Widget _directTab(SessionController session) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-      children: [
-        Text(
-          AppLocalizations.of(context).pairDirectHint,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.65),
-              ),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _endpointCtrl,
-          decoration: InputDecoration(
-            labelText: AppLocalizations.of(context).pairHostPort,
-            hintText: AppLocalizations.of(context).pairHostPortHint,
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _tokenCtrl,
-          obscureText: true,
-          decoration: InputDecoration(
-            labelText: AppLocalizations.of(context).pairToken,
-            helperText: AppLocalizations.of(context).pairTokenHelper,
-          ),
-        ),
-        const SizedBox(height: 16),
-        FilledButton(
-          onPressed: session.busy ? null : _connectDirect,
-          child: session.busy
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Text(AppLocalizations.of(context).pairConnect),
-        ),
-      ],
-    );
-  }
-
-  Widget _sshTab(SessionController session) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-      children: [
-        Text(
-          AppLocalizations.of(context).pairSshHint,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context)
-                    .colorScheme
-                    .onSurface
-                    .withValues(alpha: 0.65),
-              ),
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: _sshHostCtrl,
-          decoration: InputDecoration(
-              labelText: AppLocalizations.of(context).pairSshHost),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _sshUserCtrl,
-                decoration: InputDecoration(
-                  labelText: AppLocalizations.of(context).pairSshUser,
-                  hintText: AppLocalizations.of(context).pairSshUserHint,
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            SizedBox(
-              width: 96,
-              child: TextField(
-                controller: _sshPortCtrl,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                    labelText: AppLocalizations.of(context).pairSshPort),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _sshPasswordCtrl,
-          obscureText: true,
-          decoration: InputDecoration(
-              labelText: AppLocalizations.of(context).pairSshPassword),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _daemonCtrl,
-          decoration: InputDecoration(
-            labelText: AppLocalizations.of(context).pairDaemon,
-            hintText: AppLocalizations.of(context).pairDaemonHint,
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _sshTokenCtrl,
-          obscureText: true,
-          decoration: InputDecoration(
-            labelText: AppLocalizations.of(context).pairTokenOptional,
-          ),
-        ),
-        const SizedBox(height: 16),
-        FilledButton(
-          onPressed: session.busy ? null : _connectSsh,
-          child: session.busy
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : Text(AppLocalizations.of(context).pairConnect),
-        ),
-      ],
-    );
-  }
 }
 
 /// Full-screen QR scanner — avoids embedding CameraX in a scrollable [ListView].
-///
-/// Does **not** stop the camera on [AppLifecycleState.inactive]: that state
-/// fires during route transitions / permission UI on Android and was racing
-/// CameraX `bindToLifecycle`, leaving a permanent "camera could not start".
 class _PairQrScannerPage extends StatefulWidget {
   const _PairQrScannerPage();
 
@@ -407,7 +391,6 @@ class _PairQrScannerPage extends StatefulWidget {
 
 class _PairQrScannerPageState extends State<_PairQrScannerPage> {
   late MobileScannerController _controller;
-  /// Bumps to force a fresh [MobileScanner] + controller on Retry.
   int _generation = 0;
   bool _handled = false;
 
@@ -419,7 +402,6 @@ class _PairQrScannerPageState extends State<_PairQrScannerPage> {
 
   MobileScannerController _newController() {
     return MobileScannerController(
-      // Let MobileScanner attach() then start — avoids controllerNotAttached.
       autoStart: true,
       formats: const [BarcodeFormat.qrCode],
       detectionSpeed: DetectionSpeed.noDuplicates,
@@ -433,7 +415,6 @@ class _PairQrScannerPageState extends State<_PairQrScannerPage> {
       _generation += 1;
       _controller = _newController();
     });
-    // Dispose after the widget tree drops the old MobileScanner.
     await Future<void>.delayed(const Duration(milliseconds: 50));
     try {
       await old.dispose();
@@ -454,9 +435,7 @@ class _PairQrScannerPageState extends State<_PairQrScannerPage> {
     if (value.isEmpty) return;
     _handled = true;
     unawaited(_controller.stop());
-    if (mounted) {
-      Navigator.of(context).pop(value);
-    }
+    if (mounted) Navigator.of(context).pop(value);
   }
 
   @override
@@ -482,7 +461,6 @@ class _PairQrScannerPageState extends State<_PairQrScannerPage> {
           MobileScanner(
             key: ValueKey<int>(_generation),
             controller: _controller,
-            // Avoid stop-on-inactive; that races CameraX during push transitions.
             useAppLifecycleState: false,
             onDetect: _onDetect,
             errorBuilder: (context, error) {
@@ -570,14 +548,8 @@ class _ScannerErrorPane extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 20),
-              FilledButton(
-                onPressed: onRetry,
-                child: Text(retryLabel),
-              ),
-              TextButton(
-                onPressed: onClose,
-                child: Text(closeLabel),
-              ),
+              FilledButton(onPressed: onRetry, child: Text(retryLabel)),
+              TextButton(onPressed: onClose, child: Text(closeLabel)),
             ],
           ),
         ),

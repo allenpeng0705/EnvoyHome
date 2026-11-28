@@ -242,9 +242,13 @@ export class KnowledgeService {
   async searchKnowYou(
     accountId: string,
     query: string,
-    opts?: { limit?: number },
+    opts?: { limit?: number; touch?: boolean },
   ): Promise<{ hits: EpisodicHit[] }> {
-    const searchOpts: { limit?: number; queryEmbedding?: number[] } = {};
+    // Default touch:false — callers that filter standing (inject / knowyou_search)
+    // MUST touch only surviving hits (V-KY-8). Explicit touch:true for raw browse.
+    const searchOpts: { limit?: number; queryEmbedding?: number[]; touch: boolean } = {
+      touch: opts?.touch === true,
+    };
     if (opts?.limit !== undefined) searchOpts.limit = opts.limit;
     const st = await this.episodic.status(accountId);
     if (!st.embedStale) {
@@ -258,6 +262,15 @@ export class KnowledgeService {
       }
     }
     return this.episodic.search(accountId, query, searchOpts);
+  }
+
+  /** FSRS/hebbian touch after standing filter (KB-P6 / V-KY-8). Soft-fail. */
+  async touchKnowYouHits(accountId: string, ids: string[]): Promise<void> {
+    try {
+      await this.episodic.touchHits(accountId, ids);
+    } catch {
+      /* non-fatal */
+    }
   }
 
   async updateKnowYou(
@@ -377,8 +390,17 @@ export class KnowledgeService {
     }
 
     if (policy.episodicInject === "auto" && userMessage.trim()) {
-      let { hits } = await this.searchKnowYou(accountId, userMessage, { limit: 6 });
+      let { hits } = await this.searchKnowYou(accountId, userMessage, {
+        limit: 6,
+        touch: false,
+      });
       hits = filterEpisodicAgainstStanding(hits, profileFacts, memoryMd);
+      if (hits.length > 0) {
+        await this.touchKnowYouHits(
+          accountId,
+          hits.map((h) => h.id),
+        );
+      }
       episodic = buildEpisodicInjectBlock(hits, policy.episodicInjectBudget).text;
     }
 

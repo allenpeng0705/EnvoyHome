@@ -5,7 +5,7 @@
 | **Document** | Single all-in-one design for EnvoyHome |
 | **Role** | Ground truth for **implementation** and **verification** |
 | **Status** | Living draft — refine in place; bump changelog |
-| **Last updated** | 2026-11-15 (Schedules hub: Histories last tab) |
+| **Last updated** | 2026-11-28 (mobile companion IA) |
 | **Not** | A port of HomeClaw; a clone of Hermes / OpenClaw / OpenHuman |
 
 **How to use this doc**
@@ -22,6 +22,11 @@
 
 | Date | Change |
 |------|--------|
+| 2026-11-28 | **Product (mobile companion IA):** Phone/tablet bottom nav **Chat · Reminders · More** (drop morphing HA Home tab; Home chat via mode chip / More). Reminders = Jobs · Scenes · Histories + Ask-to-schedule (no nested schedules-chat tab). Pairing QR-first + Advanced Host/SSH + progress waiting room (EnvoyGo peer). Member More daily vs Owner Advanced. Sticky Needs-you above composer. Calmer teal theme. No wire bump. |
+| 2026-11-27e | **Ship harden (KB-P6) + product 0.4.0:** touch-after-standing-filter; keyed KnowYou soft-cap keep; additive `home.searchKnowYou` `engine: multiarm` (+ optional arm scores). No `protocolApiVersion` bump. |
+| 2026-11-27d | **Decision (§9 / Knowledge-RAG):** OpenViking **deferred** — no Home integration, Settings, or managed sidecar near-term. Ship path = KB-P6 + standing keepers. Aligns Mesh CM native-first. OV later only as opt-in L4′/L6 plugin. No wire bump. |
+| 2026-11-27b | **Ship (KB-P6):** KnowYou multi-arm Adapt landed (`@envoyhome/memory` `knowyou-multiarm` + episodic search). V-KY-8…10. No wire bump. |
+| 2026-11-27 | **Normative (memory hybrid Adapt):** KnowYou (L4′) MAY adopt Mesh context-memory / Nebula **multi-arm** ranking (Knowledge-RAG §4.7 / Plan KB-P6). Standing Markdown/JSON + scarce bootstrap + LearnQueue + multi-account + HA taint stay Normative (Memory Design §2.3). **Reject** flat JSONL as sole memory; OpenViking only as optional L4′/L6 sidecar. No wire bump. |
 | 2026-11-15 | **Product (§10.1 nav):** Schedules hub tab order — **Histories** moves to last (Chat · Jobs · Scenes · Household rules · Heartbeat · Histories; mobile Chat · Jobs · Scenes · Histories). No wire bump. |
 | 2026-11-13d | **Product (§10.1 nav):** Sidebar **Schedules** is a hub — Chat · Jobs · Scenes · Household rules · Heartbeat · Histories. **Skills** is skill-pack install only. Workflows stays top-level. Legacy `jobs`/`scenes`/`standing`/`heartbeat` deep-link to the Schedules hub tab. Mobile: Schedules hub tabs Chat/Jobs/Scenes/Histories; Skills packs only; Workflows separate Settings/rail item. No wire bump. |
 | 2026-11-13c | **Product (§10.1 nav):** Sidebar **Workflows** is a top-level item (no longer a Skills tab). Skills (`automation`) keeps Skills / Scenes / Schedules / Heartbeat / Household rules. Legacy `workflows` deep-link opens the new view. No wire bump. |
@@ -2024,7 +2029,9 @@ A home agent **must remember** and **must be able to learn**. Both are **v1 Norm
 
 **Honesty:** if the model never calls write tools and background review is off, facts are missed (same Hermes/HomeClaw). Defaults: tools on; background review **on** with proposals to Approvals/Pending learns (not auto-apply skills). KnowYou/Doc KB auto-inject is **budgeted** and labeled below L1–L3 authority (Knowledge-RAG §6).
 
-**Still reject day-one:** full OpenHuman Memory Tree, mem0/Cognee **as required core**, auto-fetch fleets, TokenJuice, silent Hermes-style skill overwrite, attaching Mesh embed/chat Local.
+**Still reject day-one:** full OpenHuman Memory Tree, mem0/Cognee **as required core**, auto-fetch fleets, TokenJuice, silent Hermes-style skill overwrite, attaching Mesh embed/chat Local, **flat JSONL (or any fact bank) as sole memory**, **OpenViking as required/near-term memory** (Deferred `2026-11-27d`).
+
+**KnowYou Adapt (Knowledge-RAG P6 / §4.7):** multi-arm recall over a Home-owned derived fact bank is allowed; standing L1–L3 + LearnQueue + taint keepers are **not** optional (Memory Design §2.3).
 
 ### 9.1 Memory layers (Normative)
 
@@ -2878,7 +2885,7 @@ Naming only; architecture unchanged.
 ### 11.3 Mobile (Q12 — closed; shipped as thin client)
 
 - **Shipped:** Flutter app `apps/mobile` (`com.envoymesh.envoyhome`) + Dart library `packages/mobile-client` speaking `home.*` over EnvoyMesh **hosting** (QR / direct / SSH hop). Phone is a **thin client** — not a second brain; no local model; dial path asserts hosting (V-P2-MOB-1, V-P2-MESH-1/2).
-- **IA:** Chat · Schedules hub (Chat / Jobs / Scenes / Histories) · Home (HA-gated) · Settings hub (LLM / Connections / Skills packs / Workflows / System including **This machine** read-only health). Owner-bound phones may mint/revoke pairing. OS service install remains **loopback-owner** on desktop (§4.3.1).
+- **IA (`2026-11-28`):** Bottom nav **Chat · Reminders · More**. Chat may switch Home purpose via mode chip when HA is ready (no morphing Home tab). Reminders = Jobs · Scenes · Histories + Ask-to-schedule (schedules chat is a push, not a nested tab). More = daily (Profile / Files / Appearance) then Owner **Advanced** (LLM / Connections / Skills / Workflows) + System (**This machine** read-only). Pairing is QR-first with Host/SSH under Advanced + progress waiting room. Owner-bound phones may mint/revoke pairing. OS service install remains **loopback-owner** on desktop (§4.3.1).
 - **Store / preview:** early-adopter claim sheet + [`docs/mobile-live-verify.md`](../docs/mobile-live-verify.md); do not claim App Store production until live verify + release signing + privacy URL.
 - Do not fork EnvoyGo into a separate product brain. Do not require EnvoyDev mobile.
 - **Q12 history:** MVP1 originally deferred a full mobile app; that deferral is **superseded** by the shipped Flutter thin client. The closed decision that remains is **thin client only** (no on-phone brain).
@@ -2893,7 +2900,7 @@ Push wakes a human who is **away**, not a second chat mirror. Live `home.*` fram
 | Interactive | `home:choice-needed` | Yes | Yes | `choice` | Chat |
 | Interactive | Heartbeat needs-attention (non-`HEARTBEAT_OK`) | Yes | Yes | `heartbeat` | Chat |
 | Interactive | `home:turn-finished` (`status: ok`) — reply ready (generic lock-screen body; prefer originating device) | Yes | Yes | `turn` | Chat |
-| Always | Schedule `payload.kind === notify` | Yes | **No** | `schedule` | Schedules |
+| Always | Schedule `payload.kind === notify` | Yes | **No** | `schedule` | Reminders |
 | Always | Standing-order notify | Yes | **No** | `standing-order` | Chat |
 | Always | `home.sendTestPush` | Yes | No | `test` | Chat |
 | Never | `home:turn-delta` (streaming chunks) | No | — | — | — |
@@ -3248,6 +3255,8 @@ Federation, Bot Mode, silent skill overwrite, vLLM-as-required, **EnvoyMesh Soci
 
 | Candidate | Peer source | Problem it solves | Decision |
 |-----------|-------------|-------------------|----------|
+| **Nebula / Mesh CM multi-arm** | Nebula ideas + EnvoyMesh context-memory | Ranked episodic fact bank without inject-all | **Adapt** into KnowYou L4′ only (Knowledge-RAG §4.7 / P6); **keep** Markdown standing + scarce bootstrap + LearnQueue + taint; **reject** flat JSONL as sole memory |
+| **OpenViking** | Volcengine OV / Mesh optional CM backend | Hierarchical viking:// + session distill | **Defer** (`2026-11-27d`) — Mesh parks OV quality; Home does not integrate near-term; later opt-in L4′/L6 only |
 | **Memory Tree** | OpenHuman | Hierarchical summary forest (append leaves → bucket seal → summarize cascade; walk/drill; human-readable Markdown vault) | **Invent later / Adapt light** — optional memory-plugin shape when multi-source KB is a goal; **no tree engine in core v1** |
 | **Auto-fetch (A) sync** | OpenHuman | Timer pulls integrations into memory | **Adapt** as Channel/workflow/plugin **jobs**, not core memory subsystem |
 | **Auto-fetch (B) pre-turn recall** | OpenClaw active-memory | Inject recall before main reply | **Defer / Adapt opt-in** — escalate-mode only; **default off** |

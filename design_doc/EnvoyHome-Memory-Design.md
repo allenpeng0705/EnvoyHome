@@ -4,7 +4,7 @@
 |-------|--------|
 | **Document** | Dedicated Normative design for the **memory + learning** subsystem |
 | **Status** | Living draft |
-| **Last updated** | 2026-10-25 (Knowledge + RAG / KnowYou — see sibling design) |
+| **Last updated** | 2026-11-27 (hybrid KnowYou Adapt keepers — see sibling) |
 | **Parent** | [`EnvoyHome-Design.md`](EnvoyHome-Design.md) — product-wide ground truth |
 | **Summary in parent** | Design §9 |
 | **Sibling** | [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md) — Doc KB (L6), KnowYou (L4′), local embed `:18793`, hybrid RAG |
@@ -19,6 +19,7 @@
 
 | Date | Change |
 |------|--------|
+| 2026-11-27 | **Normative keepers for KnowYou Adapt:** Hybrid simplify of L4′ (Knowledge-RAG §4.7) MUST NOT remove (1) human-editable Markdown/JSON standing, (2) scarce L1/L2 bootstrap, (3) multi-account / LearnQueue seat scope, (4) skill/profile PendingLearn gate, (5) HA/presence taint. **Reject** flat JSONL as sole memory. §2.2 / §2.3 / fitness. |
 | 2026-10-25 | **Knowledge + KnowYou pointer:** Doc KB (L6), KnowYou episodic (L4′), local SQLite hybrid RAG, and Home embed sidecar (`:18793`) are Normative in [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md). §2.2: “eager every-turn deep recall” still rejects unbounded L5 Tree; **bounded** L4′/L6 auto-inject is allowed under that sibling. §4.5 “Not in v1” hybrid/auto-inject superseded for L6/L4′ by Knowledge-RAG phased delivery. §4.1 authority extended: L1>L2>L3>L4′>L6. §15/§16/§18 cross-links + V-KB/V-KY/V-EMB live in the sibling. |
 | 2026-10-18w | **§13 trust:** Member paired turns are `untrusted` (Design §4.1.1 R5 resolved). `owner` = loopback or exclusive-Owner device acting as `ownerAccountId`. `trustedChannel` IM remains `agent`. |
 | 2026-10-18v | **§13 trust derivation:** superseded by `2026-10-18w` for member paired trust. |
@@ -84,6 +85,17 @@ Full matrix: [analysis/peer-memory-systems.md](analysis/peer-memory-systems.md).
 | Required Cognee/heavy graph / mem0 core | Optional MemoryBackend later; Home owns light SQLite+embed |
 | Opaque embedding-only standing memory | Violates inspectability |
 | One undifferentiated “memory blob” | Peer debt everywhere |
+| **Flat JSONL / fact bank as sole memory** | Loses Markdown truth, scarce bootstrap, LearnQueue, household isolation — Knowledge-RAG §4.7 |
+
+### 2.3 Keepers under KnowYou Adapt (Normative — `2026-11-27`)
+
+When Knowledge-RAG P6 simplifies L4′ toward multi-arm / Nebula-shaped ranking, these remain **this file’s** invariants:
+
+1. Standing L1–L3 stay human-editable files (`profile.json`, `MEMORY.md`, dailies); StandingStore is sole writer of those paths (§5.3).  
+2. Scarce bootstrap inject budgets (§4.2 / §4.2.1) stay always-on — bank recall is budgeted **below** L1–L3 authority.  
+3. All memory APIs + LearnQueue are per-`accountId`; no cross-account bleed.  
+4. Skill / identity / profile mutations go through PendingLearn except the explicit §8.1 / §9 paths.  
+5. Tainted / event-source / `sensitive` content does not auto-enter standing or durable KnowYou facts (§13; Design §5.7.4).
 
 ---
 
@@ -691,6 +703,7 @@ Deprecated: `ownerTrusted` on a device binding **MUST NOT** produce `trust: "own
 |-------|---------|
 | **v1** | Facade + L1–L3 files + L4 session_search + LearnQueue + flush + consolidate + COMPACT.md + tools/RPCs/Settings + refresh-after-write |
 | **v1.x / Knowledge-RAG P1–P5** | Doc KB SQLite FTS → Home embed `:18793` → hybrid KB; KnowYou ADD\|SUPERSEDE\|SKIP + summarize; budgeted auto-inject — see Knowledge-RAG Design §9 |
+| **v1.x / Knowledge-RAG P6** | KnowYou multi-arm Adapt; keepers §2.3; **not** flat-JSONL-sole — Knowledge-RAG §4.7 |
 | **Later** | Optional Cognee/Graphiti MemoryBackend; Channel ingest jobs; soft nudges |
 | **Not memory** | TokenJuice; fleets |
 
@@ -753,6 +766,8 @@ Deprecated: `ownerTrusted` on a device binding **MUST NOT** produce `trust: "own
 | Auto-fetch default | OpenHuman | **Defer** jobs | Design §19.7 |
 | Active-memory always | OpenClaw | **Reject** default | Design §19.7 |
 | Cognee / mem0 required | HomeClaw / ecosystem | **Reject** | §5; Knowledge-RAG §1.4 |
+| Flat JSONL as sole memory | Aggressive simplify | **Reject** | §2.2, §2.3; Knowledge-RAG §4.7 |
+| Multi-arm KnowYou Adapt | Mesh CM / Nebula ideas | **Adapt** L4′ only | Knowledge-RAG §4.7 |
 | Action-sensitive notes | OpenClaw | **Adapt** | §7.1 |
 
 ---

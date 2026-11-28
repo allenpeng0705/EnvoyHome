@@ -104,7 +104,8 @@ pnpm agent:eval:complex
 | `memory-journeys.json` | `memory_remember` / `memory_recall` / `session_search` (facade helpers until Design tools land), live standing inject |
 | `ask-user-multiturn.json` | compose auto-answer → schedule/write; live `liveAnswer` via `home.answerChoice` |
 | `knowledge-journeys.json` | Sandbox **`knowledge/`** Doc KB: `knowledge_search` / files / cite / export; standing wins vs guest notes |
-| `knowyou-journeys.json` | KnowYou L4′: `knowyou_search`, seed via `setup.seedKnowYou`, standing outranks episodic |
+| `knowyou-journeys.json` | KnowYou L4′: `knowyou_search`, seed via `setup.seedKnowYou`, multi-arm distractors (KB-P6), standing outranks episodic |
+| `memory-journeys.json` | Standing remember/recall, session_search compose, KnowYou+MEMORY standing-wins compose |
 | `home-journeys.json` | `purpose: home` + demo HA get_state; general chat refuses HA; live approval honesty |
 | `edit-patch-journeys.json` | `edit_file` / `apply_patch` (+ path jail / multi-match refuse) |
 | `cross-tool-workflows.json` | Multi-tool compose + live (web→KB→schedule, quotes→decide, KB→remind) |

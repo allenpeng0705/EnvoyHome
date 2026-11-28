@@ -156,5 +156,179 @@
       "requireHonesty": true,
       "honestyMatching": ["genmaicha|ky-auto-genmai-3|tea|prefer|drink"]
     }
+  },
+  {
+    "id": "gen-tool-knowyou-search-ranks-over-distractors",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "KB-P6: multi-arm search should surface drink preference among distractors.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedKnowYou": [
+        {
+          "key": "pref.drink",
+          "text": "I prefer genmaicha in the afternoon. Token: ky-rank-genmai-7"
+        },
+        {
+          "key": "note.garage",
+          "text": "Garage door squeaks on rainy days and needs paint."
+        },
+        {
+          "key": "note.plumbing",
+          "text": "River Plumbing fixed the kitchen sink last spring."
+        },
+        {
+          "key": "note.ladder",
+          "text": "Household ladder lives behind the furnace."
+        }
+      ]
+    },
+    "tool": {
+      "name": "knowyou_search",
+      "args": { "query": "afternoon drink preference tea", "limit": 3 }
+    },
+    "expect": {
+      "toolOk": true,
+      "bodyMatching": "genmaicha|ky-rank-genmai-7|prefer"
+    }
+  },
+  {
+    "id": "gen-tool-knowyou-search-empty-query-refuse",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "knowyou_search with empty query must refuse.",
+    "tool": {
+      "name": "knowyou_search",
+      "args": { "query": "  " },
+      "refuse": true
+    },
+    "expect": {
+      "refuseMatching": "query|bad_params|required"
+    }
+  },
+  {
+    "id": "gen-tool-knowyou-search-allergy-seed",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Search KnowYou for allergy note.",
+    "setup": {
+      "seedKnowYou": [
+        {
+          "key": "allergy.shellfish",
+          "text": "Allergic to shellfish — avoid shrimp. Token: ky-tool-shell-5"
+        }
+      ]
+    },
+    "tool": {
+      "name": "knowyou_search",
+      "args": { "query": "food allergy shellfish shrimp", "limit": 5 }
+    },
+    "expect": {
+      "toolOk": true,
+      "bodyMatching": "shellfish|shrimp|ky-tool-shell-5|allerg"
+    }
+  },
+  {
+    "id": "gen-seq-knowyou-then-memory-recall",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Search KnowYou then standing recall (composition).",
+    "setup": {
+      "sandboxFiles": true,
+      "seedKnowYou": [
+        {
+          "key": "pref.drink",
+          "text": "I prefer jasmine tea. Token: ky-seq-jasmine-2"
+        }
+      ],
+      "seedMemory": [
+        {
+          "text": "Standing: favorite tea is jasmine green (token mem-seq-jasmine-2).",
+          "target": "l2"
+        }
+      ]
+    },
+    "toolSequence": [
+      {
+        "name": "knowyou_search",
+        "args": { "query": "jasmine tea preference", "limit": 5 }
+      },
+      {
+        "name": "memory_recall",
+        "args": { "query": "jasmine", "limit": 5 }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "bodyMatching": "jasmine|ky-seq-jasmine-2|prefer" },
+      "step1": { "bodyMatching": "jasmine|mem-seq-jasmine-2|tea" }
+    }
+  },
+  {
+    "id": "gen-compose-knowyou-distractors-then-answer",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "What drink do I prefer in the afternoon? Search KnowYou first.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedKnowYou": [
+        {
+          "key": "pref.drink",
+          "text": "I prefer genmaicha in the afternoon. Token: ky-compose-genmai-4"
+        },
+        {
+          "key": "note.garage",
+          "text": "Garage door squeaks on rainy days."
+        }
+      ]
+    },
+    "allowTools": ["knowyou_search"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"knowyou_search\",\"args\":{\"query\":\"afternoon drink preference\",\"limit\":3}}]\n```"
+      },
+      {
+        "reply": "KnowYou says you prefer genmaicha in the afternoon (ky-compose-genmai-4)."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["knowyou_search"],
+      "finalMatching": "genmaicha|ky-compose-genmai-4|prefer"
+    }
+  },
+  {
+    "id": "gen-live-knowyou-multiarm-distractors",
+    "pack": "general",
+    "mode": "turn",
+    "live": true,
+    "purpose": "general",
+    "setup": {
+      "seedKnowYou": [
+        {
+          "key": "pref.drink",
+          "text": "I prefer genmaicha in the afternoon. Token: ky-live-rank-genmai-6"
+        },
+        {
+          "key": "note.garage",
+          "text": "Garage door squeaks on rainy days and needs paint."
+        },
+        {
+          "key": "note.plumbing",
+          "text": "River Plumbing fixed the kitchen sink."
+        }
+      ],
+      "knowledgePolicy": { "episodicInject": "tool" }
+    },
+    "prompt": "Use knowyou_search for my afternoon drink preference among household notes. Quote ky-live-rank-genmai-6. Do not invent drinks.",
+    "expect": {
+      "liveTools": ["knowyou_search", "memory_recall"],
+      "requireHonesty": true,
+      "honestyMatching": ["genmaicha|ky-live-rank-genmai-6|tea|prefer|drink"]
+    }
   }
 ]

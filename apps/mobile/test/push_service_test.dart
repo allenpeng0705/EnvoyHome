@@ -70,6 +70,20 @@ void main() {
     });
   });
 
+  group('pushTapOpensNeedsYou', () {
+    test('approval / choice / standing-order / test open strip', () {
+      for (final type in ['approval', 'choice', 'standing-order', 'test']) {
+        expect(pushTapOpensNeedsYou(type), isTrue, reason: type);
+      }
+    });
+
+    test('schedule / turn / heartbeat / null do not', () {
+      for (final type in ['schedule', 'schedule-fired', 'turn', 'heartbeat', null]) {
+        expect(pushTapOpensNeedsYou(type), isFalse, reason: '$type');
+      }
+    });
+  });
+
   group('iOS MethodChannel path', () {
     test('onAlertToken registers as ios with accountId', () async {
       final host = _FakeHost();

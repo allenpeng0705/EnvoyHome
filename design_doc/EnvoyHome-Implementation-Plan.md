@@ -5,7 +5,7 @@ Living plan for **active** EnvoyHome build work. Style aligned with EnvoyMesh [`
 | Field | Value |
 |-------|-------|
 | **Role** | Subordinate to [`EnvoyHome-Design.md`](EnvoyHome-Design.md), [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Design.md), and [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md). **Design wins.** |
-| **Last updated** | 2026-11-10g |
+| **Last updated** | 2026-11-28 |
 | **Owner** | Allen Peng |
 | **G6** | **Accepted 2026-10-09** for Plan text matching Design `2026-10-08f` (with G1) |
 
@@ -45,7 +45,7 @@ EnvoyHome is a self-hosted **home agent control plane** (Design §1). Spine **B0
 **Next (after early-adopter ops):** Live HA checklist ([`docs/smart-home-live-checklist.md`](../docs/smart-home-live-checklist.md)); then **First-party IM live** (Telegram first) when Mesh phone path is solid  
 **Deferred from early-adopter claims:** Production IM zoo; Privacy Mode product toggle (`home.setPrivacyMode` stays Phase 2); agentskills.io conformance  
 
-**Active coding epic:** *(none — P2-S complete)* C3 Deferred. Next Owner pick after office BI path.
+**Active coding epic:** *(none — KB-P6 shipped)* C3 Deferred.
 
 **Last shipped:** P2-S4 Doctor/Settings/Privacy (`2026-11-12l`, V-OFFICE-43); P2-S0…S3 (`2026-11-12i`…`k`)
 
@@ -152,10 +152,11 @@ Tag `v1.0.0` when (1)–(8) are honestly `[x]` including bar 1’s e2e bar you c
 | **P2-A…E agent capabilities** | `[x]` | Accepted 2026-10-20; A–E + D2 shipped (`2026-10-20o`) |
 | Memory Tree / fleets / TokenJuice | `[>]` | §19.7 — not core |
 | **Knowledge + RAG / KnowYou (KB-P1…P5)** | `[x]` | Knowledge-RAG Design — see board below |
+| **KB-P6 KnowYou multi-arm Adapt** | `[x]` | Knowledge-RAG §4.7 — hybrid; keepers; reject flat-JSONL-sole |
 
-## Knowledge + RAG / KnowYou (KB-P1…P5)
+## Knowledge + RAG / KnowYou (KB-P1…P5 + P6)
 
-Ground truth: [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md). Standing L1–L3 unchanged.
+Ground truth: [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Design.md). Standing L1–L3 unchanged (Memory Design §2.3 keepers).
 
 | Epic | Status | Deliverable | Verify IDs |
 |------|--------|-------------|------------|
@@ -164,6 +165,7 @@ Ground truth: [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Desi
 | **KB-P3** Hybrid KB + optional inject | `[x]` | RRF FTS∪vec; `knowledgeInject` tool→auto Settings | V-KB-5, V-KB-6 |
 | **KB-P4** KnowYou engine | `[x]` | ADD\|SUPERSEDE\|SKIP; summarize/TTL on consolidate | V-KY-1…4, V-KY-6, V-KY-7 |
 | **KB-P5** Auto episodic inject | `[x]` | `episodicInject=auto` + L1/L2 filter; duty line + `knowledge_search` | V-KY-5 |
+| **KB-P6** Multi-arm Adapt | `[x]` | L4′ fact-bank multi-arm recall (Mesh CM / Nebula ideas); keepers; **not** flat-JSONL-sole | V-KY-8, V-KY-9, V-KY-10 |
 
 **Defaults:** `knowledgeInject` / `episodicInject` = **`auto`** (live `pnpm agent:eval:kb` green 2026-10-27). Settings may set `tool`/`off`. Embed off until Owner enables.
 
@@ -177,6 +179,7 @@ Ground truth: [`EnvoyHome-Knowledge-RAG-Design.md`](EnvoyHome-Knowledge-RAG-Desi
 | V-KY-1…4, V-KY-6 | Unit | `[x]` |
 | V-KY-5 | Budgeted episodic auto-inject | `[x]` + live `gen-live-knowyou-auto-inject-drink` |
 | V-KY-7 | PendingLearn on L1/L2 conflict | `[x]` |
+| V-KY-8…10 | KB-P6 keepers + multi-arm + not-sole-JSONL | `[x]` |
 | V-EMB-1…7 | Embed engine / Doctor stale | `[x]` |
 | Settings Memory/Knowledge | Desktop LLM → Memory card | `[x]` |
 | Live eval | `pnpm agent:eval:kb` | `[x]` 15/15 (2026-10-27) |
@@ -627,6 +630,9 @@ Every verification ID from Design §3.6, §3.7, §4.5, §5.6, **§5.7.6**, §6.4
 | V-LEARN-1 | **B8** | skill unchanged until `acceptLearn` |
 | V-LEARN-2 | **B8** | background review: skills always pending; L1/L2 pending by default |
 | V-LEARN-3 | **B8** | provenance recorded on flush/consolidate/learn writes |
+| V-KY-8 | **KB-P6** | after multi-arm Adapt: Markdown/JSON standing + scarce bootstrap + LearnQueue + taint keepers still hold (Memory Design §2.3) |
+| V-KY-9 | **KB-P6** | KnowYou retrieve uses multi-arm / budgeted ranking — not inject-all of the fact bank |
+| V-KY-10 | **KB-P6** | fact bank / JSONL is never sole memory; StandingStore + LearnQueue remain required |
 | V-SKILL-1 | **B10** | install + verify before skill tools are available |
 | V-OUT-1 | **B11** | replay after TTL → 403; long artifact → summary + openable URL / mesh path |
 | V-OUT-2 | **B11** | getArtifactContent opens cited workspace/… (jail); listArtifacts sandbox-only; stat-before-read 8 MiB |
@@ -974,6 +980,12 @@ If you need to change the answer to "in what order we build," edit this doc and 
 
 | Date | Change |
 |------|--------|
+| 2026-11-28 | **Mobile companion IA:** Chat · Reminders · More; QR-first pairing + progress; Member/Owner More; sticky Needs-you; calmer theme. Aligns Design `2026-11-28`. |
+| 2026-11-27e | **KB-P6 review harden + product 0.4.0:** touch-after-standing-filter; keyed soft-cap keep; protocol `multiarm` additive. Aligns Knowledge-RAG `2026-11-27e`. |
+| 2026-11-27d | **OV deferred:** no OpenViking epic / Settings / managed download. Aligns Design + Knowledge-RAG `2026-11-27d`. Ship memory = KB-P6 + standing keepers. |
+| 2026-11-27c | **KB-P6 harden:** hebbian prune/cap; JSON migrate edges+FSRS; pin soft-cap; expanded tests (memory 99 green). Aligns Knowledge-RAG `2026-11-27c`. |
+| 2026-11-27 | **KB-P6 shipped:** KnowYou multi-arm Adapt (`knowyou-multiarm` + `EpisodicIndex.search`); FSRS touch + hebbian edges; keepers intact; V-KY-8…10 green. Aligns Design / Memory / Knowledge-RAG `2026-11-27`. |
+| 2026-11-27 | **KB-P6 Design lock:** KnowYou multi-arm Adapt (Mesh CM / Nebula ideas) — hybrid keepers; reject flat-JSONL-sole. Board opened; V-KY-8…10. Aligns Design / Memory / Knowledge-RAG `2026-11-27`. |
 | 2026-11-12i | **P2-S0/S1 shipped:** local SQL policy freeze + managed DuckDB install RPCs/UI; V-OFFICE-39. Aligns Design `2026-11-12i`. |
 | 2026-11-12h | **C1+C2 Accept:** Owner MCP prefer (C1 docs) + optional local SQL (C2 → **P2-S**). C3 Deferred. Aligns Design `2026-11-12h`. |
 | 2026-11-12g | **P2-R shipped:** thin table prep + MCP prefer (R0–R4); V-OFFICE-34…38 green. Aligns Design `2026-11-12g`. (Letter **R** — historical P2-Q* was product Qs.) |

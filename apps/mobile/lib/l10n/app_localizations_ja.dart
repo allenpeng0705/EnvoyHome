@@ -40,7 +40,151 @@ class AppLocalizationsJa extends AppLocalizations {
   String get pairTabSsh => 'SSH';
 
   @override
+  String get pairPasteInstead => 'またはペアリングリンクを貼り付け';
+
+  @override
+  String get pairAdvanced => '詳細';
+
+  @override
+  String get pairAdvancedSubtitle => 'ホスト:ポートと SSH 経由（上級者向け）';
+
+  @override
+  String get pairConnectHost => 'ホストで接続';
+
+  @override
+  String get pairConnectSsh => 'SSH で接続';
+
+  @override
+  String get pairProgressTitle => 'ホームに接続中';
+
+  @override
+  String get pairProgressSubtitle => 'EnvoyHome デスクトップに接続しています…';
+
+  @override
+  String pairElapsed(String time) {
+    return '経過 $time';
+  }
+
+  @override
+  String get pairStageInitial => '開始中';
+
+  @override
+  String get pairStageInitialHint => 'ホームパソコンへの安全な接続を準備しています。';
+
+  @override
+  String get pairStageConnecting => '接続中';
+
+  @override
+  String get pairStageConnectingHint => 'まずローカルネットワーク、次にメッシュ経路を試します。';
+
+  @override
+  String get pairStageHandshaking => 'ハンドシェイク中';
+
+  @override
+  String get pairStageHandshakingHint => 'ホームデーモンとペアリングトークンを検証しています。';
+
+  @override
+  String get pairStageVerifying => 'もうすぐ完了';
+
+  @override
+  String get pairStageSlowHint => '処理中です — 初回接続には1分ほどかかることがあります。';
+
+  @override
+  String get pairStageVerySlowHint =>
+      'スマホとデスクトップが同じネットワークか確認するか、詳細のホスト:ポートを試してください。';
+
+  @override
+  String get pairStillWorking =>
+      '処理中です — この画面を開いたままにしてください。初回ペアリングには1〜2分かかることがあります。';
+
+  @override
+  String get pairTroubleHint =>
+      'ヒント: デスクトップの EnvoyHome が起動中 · 同じ Wi‑Fi / Tailscale · 設定 → デバイスのペアリング で新しい QR をスキャン。';
+
+  @override
+  String get pairDontClose => '接続中はアプリを閉じないでください。';
+
+  @override
+  String get pairCancel => 'キャンセル';
+
+  @override
+  String get pairKeepWaiting => '待ち続ける';
+
+  @override
+  String get pairCancelConfirmTitle => '接続をキャンセルしますか？';
+
+  @override
+  String get pairCancelConfirmBody => '接続バナーからいつでも再接続できます。';
+
+  @override
+  String get pairErrorWrongApp =>
+      'その QR は別の Envoy アプリ用です。EnvoyHome のペアリングコードをスキャンしてください。';
+
+  @override
+  String get pairErrorTimeout => '接続がタイムアウトしました。デスクトップがオンラインか確認して再試行してください。';
+
+  @override
+  String get pairErrorUnreachable => 'このネットワークではホームデスクトップに到達できません。';
+
+  @override
+  String get pairErrorExpired =>
+      'ペアリングコードが無効または期限切れです — デスクトップで新しい QR を発行してください。';
+
+  @override
+  String get pairErrorGeneric => '接続できませんでした。もう一度スキャンしてください。';
+
+  @override
   String get pairFooter => 'com.envoymesh.envoyhome · ペア後にプッシュ';
+
+  @override
+  String get shellPairNewDevice => '新しいデバイスをペアリング';
+
+  @override
+  String get bannerOfflineSaved => 'ホームに未接続';
+
+  @override
+  String get bannerOfflineUnpaired => 'このスマホをホームデスクトップとペアリング';
+
+  @override
+  String get navReminders => 'リマインダー';
+
+  @override
+  String get navMore => 'その他';
+
+  @override
+  String get moreHubHint => '日常操作を優先。高度な世帯設定は「詳細」にまとめます。';
+
+  @override
+  String get moreSectionDaily => '日常';
+
+  @override
+  String get moreSectionAdvanced => '詳細';
+
+  @override
+  String get moreFilesSubtitle => 'サンドボックスファイル、エクスポート、ナレッジ';
+
+  @override
+  String get moreHomeChatSubtitle => 'スマートホーム機器と会話（Home Assistant）';
+
+  @override
+  String get moreAdvancedOwnerOnly => 'LLM・接続・スキル・ワークフローは世帯 Owner デバイスが必要です。';
+
+  @override
+  String get remindersAskCta => 'チャットで予定';
+
+  @override
+  String get remindersAskTitle => 'チャットでスケジュール';
+
+  @override
+  String get remindersNeedConnect => 'ホームに接続するとジョブ・シーン・スケジュール履歴を管理できます。';
+
+  @override
+  String needsYouTitle(int count) {
+    return '要対応 · $count';
+  }
+
+  @override
+  String get needsYouOpenChat => '確認';
 
   @override
   String get pairCloseScanner => 'スキャナーを閉じる';

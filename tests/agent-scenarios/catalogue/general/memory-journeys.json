@@ -143,5 +143,66 @@
       "requireHonesty": true,
       "honestyMatching": ["cannot|can't|refuse|sensitive|PendingLearn|lock|presence|standing|不安全|不能|敏感|pending"]
     }
+  },
+  {
+    "id": "gen-seq-memory-remember-then-recall-token",
+    "pack": "general",
+    "mode": "tool",
+    "live": false,
+    "prompt": "Remember a standing fact with a token, then recall it.",
+    "setup": { "sandboxFiles": true },
+    "toolSequence": [
+      {
+        "name": "memory_remember",
+        "args": {
+          "text": "Household snack preference is roasted almonds. Token: mem-seq-almond-3",
+          "target": "l2"
+        }
+      },
+      {
+        "name": "memory_recall",
+        "args": { "query": "almond", "limit": 5 }
+      }
+    ],
+    "expect": {
+      "sequenceOk": true,
+      "step0": { "jsonFields": ["ok", "layer"] },
+      "step1": { "bodyMatching": "almond|mem-seq-almond-3|snack" }
+    }
+  },
+  {
+    "id": "gen-compose-memory-and-knowyou-standing-wins",
+    "pack": "general",
+    "mode": "compose",
+    "live": false,
+    "prompt": "What is my favorite drink? Check standing memory and KnowYou.",
+    "setup": {
+      "sandboxFiles": true,
+      "seedMemory": [
+        {
+          "text": "Standing preference: favorite drink is tea (token mem-compose-tea-9).",
+          "target": "l2"
+        }
+      ],
+      "seedKnowYou": [
+        {
+          "key": "pref.drink",
+          "text": "Someone once said coffee is best. Token: ky-compose-stale-coffee-9"
+        }
+      ]
+    },
+    "allowTools": ["memory_recall", "knowyou_search"],
+    "rounds": [
+      {
+        "reply": "```envoyhome-tools\n[{\"tool\":\"memory_recall\",\"args\":{\"query\":\"favorite drink tea\",\"limit\":5}},{\"tool\":\"knowyou_search\",\"args\":{\"query\":\"drink preference\",\"limit\":5}}]\n```"
+      },
+      {
+        "reply": "Standing MEMORY says your favorite drink is tea (mem-compose-tea-9). That outranks the stale coffee KnowYou note."
+      }
+    ],
+    "expect": {
+      "dispatchOrder": ["memory_recall", "knowyou_search"],
+      "finalMatching": "tea|mem-compose-tea-9|standing"
+    }
   }
 ]

@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-const _seed = Color(0xFF6D5AE6);
-const _seedBright = Color(0xFF8B7CF0);
-const _hot = Color(0xFFE879F9);
+/// Calm home accent — teal/slate (avoid purple-on-lilac AI default).
+const _seed = Color(0xFF2F6F6A);
+const _seedBright = Color(0xFF4A9A93);
+const _hot = Color(0xFFC46B3A);
 
-/// Light surfaces — soft lilac page, white cards (readable body ink).
+/// Light surfaces — warm neutral page, white cards.
 ColorScheme _lightScheme() {
-  const ink = Color(0xFF1A1430);
-  const page = Color(0xFFF5F3FB);
+  const ink = Color(0xFF1C2422);
+  const page = Color(0xFFF4F5F3);
   const card = Color(0xFFFFFFFF);
-  const muted = Color(0xFF5B5678);
+  const muted = Color(0xFF5C6764);
   return const ColorScheme(
     brightness: Brightness.light,
     primary: _seed,
@@ -18,29 +19,29 @@ ColorScheme _lightScheme() {
     secondary: _seed,
     onSecondary: Colors.white,
     tertiary: _hot,
-    onTertiary: Color(0xFF2A1438),
+    onTertiary: Color(0xFF2A1A10),
     error: Color(0xFFB42318),
     onError: Colors.white,
     surface: page,
     onSurface: ink,
     onSurfaceVariant: muted,
-    surfaceContainerHighest: Color(0xFFE8E4F4),
-    surfaceContainerHigh: Color(0xFFEEEAF8),
+    surfaceContainerHighest: Color(0xFFE4E8E6),
+    surfaceContainerHigh: Color(0xFFEBEEEC),
     surfaceContainer: card,
-    surfaceContainerLow: Color(0xFFFAF8FF),
-    outline: Color(0xFFC8C2D8),
-    outlineVariant: Color(0xFFE0DBEC),
-    shadow: Color(0xFF1A1430),
-    scrim: Color(0xFF1A1430),
-    inverseSurface: Color(0xFF2A2438),
-    onInverseSurface: Color(0xFFF0EEF8),
+    surfaceContainerLow: Color(0xFFFAFBFA),
+    outline: Color(0xFFC5CBC8),
+    outlineVariant: Color(0xFFDDE2DF),
+    shadow: Color(0xFF1C2422),
+    scrim: Color(0xFF1C2422),
+    inverseSurface: Color(0xFF24302E),
+    onInverseSurface: Color(0xFFEEF1F0),
     inversePrimary: _seedBright,
-    primaryContainer: Color(0xFFE4DEFF),
-    onPrimaryContainer: Color(0xFF1A1430),
+    primaryContainer: Color(0xFFD5EBE8),
+    onPrimaryContainer: Color(0xFF122826),
   );
 }
 
-/// Dark surfaces — aligned with desktop night shell.
+/// Dark surfaces — aligned with desktop night shell (teal accent).
 ColorScheme _darkScheme() {
   const elevated = Color(0xFF12181F);
   const panel = Color(0xFF171E27);
@@ -50,11 +51,11 @@ ColorScheme _darkScheme() {
   return const ColorScheme(
     brightness: Brightness.dark,
     primary: _seedBright,
-    onPrimary: Color(0xFF1A1430),
+    onPrimary: Color(0xFF0C1A18),
     secondary: _seedBright,
-    onSecondary: Color(0xFF1A1430),
+    onSecondary: Color(0xFF0C1A18),
     tertiary: _hot,
-    onTertiary: Color(0xFF1A1430),
+    onTertiary: Color(0xFF1A1008),
     error: Color(0xFFF97066),
     onError: Color(0xFF1A1430),
     surface: elevated,
@@ -71,7 +72,7 @@ ColorScheme _darkScheme() {
     inverseSurface: Color(0xFFE8EEF4),
     onInverseSurface: Color(0xFF12181F),
     inversePrimary: _seed,
-    primaryContainer: Color(0xFF3A3270),
+    primaryContainer: Color(0xFF1F3F3C),
     onPrimaryContainer: text,
   );
 }
@@ -79,7 +80,7 @@ ColorScheme _darkScheme() {
 ThemeData buildEnvoyHomeTheme({Brightness brightness = Brightness.light}) {
   final isDark = brightness == Brightness.dark;
   final scheme = isDark ? _darkScheme() : _lightScheme();
-  final scaffold = isDark ? const Color(0xFF0C1117) : const Color(0xFFF0EEF8);
+  final scaffold = isDark ? const Color(0xFF0C1117) : const Color(0xFFF2F3F1);
   final cardFill = isDark ? const Color(0xFF171E27) : Colors.white;
   final inputFill = isDark ? const Color(0xFF1C2530) : Colors.white;
   final navBg = isDark ? const Color(0xFF12181F) : Colors.white;

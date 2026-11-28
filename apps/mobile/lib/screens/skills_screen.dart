@@ -773,6 +773,7 @@ class _ScheduleJobsPanelState extends State<ScheduleJobsPanel> {
     if (!widget.session.isConnected) {
       return _SchedulesPanelNeedConnect(
         onRequestConnect: widget.onRequestConnect,
+        hasSavedPairing: widget.session.hasSavedPairing,
       );
     }
     return ListView(
@@ -1181,6 +1182,7 @@ class _ScheduleScenesPanelState extends State<ScheduleScenesPanel> {
     if (!widget.session.isConnected) {
       return _SchedulesPanelNeedConnect(
         onRequestConnect: widget.onRequestConnect,
+        hasSavedPairing: widget.session.hasSavedPairing,
       );
     }
     return ListView(
@@ -1244,8 +1246,12 @@ class _ScheduleScenesPanelState extends State<ScheduleScenesPanel> {
 }
 
 class _SchedulesPanelNeedConnect extends StatelessWidget {
-  const _SchedulesPanelNeedConnect({this.onRequestConnect});
+  const _SchedulesPanelNeedConnect({
+    this.onRequestConnect,
+    this.hasSavedPairing = false,
+  });
   final VoidCallback? onRequestConnect;
+  final bool hasSavedPairing;
 
   @override
   Widget build(BuildContext context) {
@@ -1257,7 +1263,7 @@ class _SchedulesPanelNeedConnect extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              l10n.settingsNeedConnect,
+              l10n.remindersNeedConnect,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium,
             ),
@@ -1265,7 +1271,9 @@ class _SchedulesPanelNeedConnect extends StatelessWidget {
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: onRequestConnect,
-                child: Text(l10n.shellConnect),
+                child: Text(
+                  hasSavedPairing ? l10n.shellReconnect : l10n.shellConnect,
+                ),
               ),
             ],
           ],

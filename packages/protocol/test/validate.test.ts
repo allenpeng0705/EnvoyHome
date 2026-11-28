@@ -658,6 +658,39 @@ test("approvals: a digest must be the canonical sha256 form", () => {
   );
 });
 
+test("home.searchKnowYou: multiarm engine + optional arm scores are additive", () => {
+  assert.deepEqual(
+    validateMethodResult("home.searchKnowYou", {
+      hits: [
+        {
+          id: "ep_1",
+          key: "pref.drink",
+          text: "I prefer tea",
+          score: 0.82,
+          engine: "multiarm",
+          lexical: 0.5,
+          activation: 0.2,
+          graph: 0.1,
+        },
+      ],
+    }),
+    [],
+  );
+  assert.ok(
+    validateMethodResult("home.searchKnowYou", {
+      hits: [
+        {
+          id: "ep_1",
+          key: "pref.drink",
+          text: "I prefer tea",
+          score: 0.82,
+          engine: "not-an-engine",
+        },
+      ],
+    }).length > 0,
+  );
+});
+
 test("subscribe: unknown event names are reported before the daemon accepts them", () => {
   assert.deepEqual(validateSubscriptions(["home:turn-delta", "home:approval-needed"]), []);
   assert.deepEqual(validateSubscriptions(["home:turn-delta", "home:nope"]), ["home:nope"]);

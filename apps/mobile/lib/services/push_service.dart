@@ -43,7 +43,7 @@ class _SessionPushHost implements PushTokenHost {
 
 /// Design `2026-10-22f` — bottom-nav index for a push [data.type] tap.
 ///
-/// Returns `0` (Chat), `1` (Schedules), or `null` if the type is unknown.
+/// Returns `0` (Chats), `1` (Reminders), or `null` if the type is unknown.
 int? pushTapTabIndex(String? type) {
   switch (type) {
     case 'approval':
@@ -58,6 +58,19 @@ int? pushTapTabIndex(String? type) {
       return 1;
     default:
       return null;
+  }
+}
+
+/// Whether a push tap should expand the shell Needs-you strip on Chat.
+bool pushTapOpensNeedsYou(String? type) {
+  switch (type) {
+    case 'approval':
+    case 'choice':
+    case 'standing-order':
+    case 'test':
+      return true;
+    default:
+      return false;
   }
 }
 

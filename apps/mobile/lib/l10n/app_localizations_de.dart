@@ -40,7 +40,162 @@ class AppLocalizationsDe extends AppLocalizations {
   String get pairTabSsh => 'SSH';
 
   @override
+  String get pairPasteInstead => 'Oder Pairing-Link einfügen';
+
+  @override
+  String get pairAdvanced => 'Erweitert';
+
+  @override
+  String get pairAdvancedSubtitle => 'Host:Port und SSH-Hop (für Profis)';
+
+  @override
+  String get pairConnectHost => 'Mit Host verbinden';
+
+  @override
+  String get pairConnectSsh => 'Über SSH verbinden';
+
+  @override
+  String get pairProgressTitle => 'Verbindung zum Zuhause';
+
+  @override
+  String get pairProgressSubtitle => 'Erreiche Ihren EnvoyHome-Desktop…';
+
+  @override
+  String pairElapsed(String time) {
+    return 'Vergangen $time';
+  }
+
+  @override
+  String get pairStageInitial => 'Start';
+
+  @override
+  String get pairStageInitialHint =>
+      'Sichere Verbindung zum Heimcomputer wird vorbereitet.';
+
+  @override
+  String get pairStageConnecting => 'Verbinden';
+
+  @override
+  String get pairStageConnectingHint => 'Zuerst lokales Netz, dann Mesh-Pfade.';
+
+  @override
+  String get pairStageHandshaking => 'Handshake';
+
+  @override
+  String get pairStageHandshakingHint =>
+      'Pairing-Token wird mit dem Home-Daemon geprüft.';
+
+  @override
+  String get pairStageVerifying => 'Gleich fertig';
+
+  @override
+  String get pairStageSlowHint =>
+      'Noch beschäftigt — erste Verbindungen können eine Minute dauern.';
+
+  @override
+  String get pairStageVerySlowHint =>
+      'Prüfen Sie, ob Telefon und Desktop im selben Netz sind, oder nutzen Sie Erweitert Host:Port.';
+
+  @override
+  String get pairStillWorking =>
+      'Noch beschäftigt — lassen Sie diesen Bildschirm offen. Erste Paarung kann ein bis zwei Minuten dauern.';
+
+  @override
+  String get pairTroubleHint =>
+      'Tipps: Desktop-EnvoyHome läuft · gleiches WLAN / Tailscale · frischen QR unter Einstellungen → Geräte koppeln scannen.';
+
+  @override
+  String get pairDontClose => 'App während der Verbindung nicht schließen.';
+
+  @override
+  String get pairCancel => 'Abbrechen';
+
+  @override
+  String get pairKeepWaiting => 'Weiter warten';
+
+  @override
+  String get pairCancelConfirmTitle => 'Verbinden abbrechen?';
+
+  @override
+  String get pairCancelConfirmBody =>
+      'Sie können jederzeit über das Verbindungsbanner erneut verbinden.';
+
+  @override
+  String get pairErrorWrongApp =>
+      'Dieser QR gehört zu einer anderen Envoy-App. Scannen Sie einen EnvoyHome-Pairing-Code.';
+
+  @override
+  String get pairErrorTimeout =>
+      'Zeitüberschreitung. Prüfen Sie, ob der Desktop online ist, und versuchen Sie es erneut.';
+
+  @override
+  String get pairErrorUnreachable =>
+      'Heim-Desktop in diesem Netz nicht erreichbar.';
+
+  @override
+  String get pairErrorExpired =>
+      'Pairing-Code ungültig oder abgelaufen — neuen QR am Desktop erzeugen.';
+
+  @override
+  String get pairErrorGeneric => 'Verbindung fehlgeschlagen. Erneut scannen.';
+
+  @override
   String get pairFooter => 'com.envoymesh.envoyhome · Push nach Pairing';
+
+  @override
+  String get shellPairNewDevice => 'Neues Gerät koppeln';
+
+  @override
+  String get bannerOfflineSaved => 'Nicht mit dem Zuhause verbunden';
+
+  @override
+  String get bannerOfflineUnpaired =>
+      'Dieses Telefon mit dem Heim-Desktop koppeln';
+
+  @override
+  String get navReminders => 'Erinnerungen';
+
+  @override
+  String get navMore => 'Mehr';
+
+  @override
+  String get moreHubHint =>
+      'Alltägliches zuerst. Erweiterte Haushaltseinstellungen unter Erweitert.';
+
+  @override
+  String get moreSectionDaily => 'Alltag';
+
+  @override
+  String get moreSectionAdvanced => 'Erweitert';
+
+  @override
+  String get moreFilesSubtitle => 'Sandbox-Dateien, Exporte und Wissen';
+
+  @override
+  String get moreHomeChatSubtitle =>
+      'Mit Smart-Home-Geräten sprechen (Home Assistant)';
+
+  @override
+  String get moreAdvancedOwnerOnly =>
+      'LLM, Verbindungen, Skills und Workflows brauchen das Owner-Gerät des Haushalts.';
+
+  @override
+  String get remindersAskCta => 'Per Chat planen';
+
+  @override
+  String get remindersAskTitle => 'Mit Chat planen';
+
+  @override
+  String get remindersNeedConnect =>
+      'Verbinden Sie sich mit dem Zuhause, um Jobs, Szenen und Zeitplan-Verlauf zu verwalten.';
+
+  @override
+  String needsYouTitle(int count) {
+    return 'Braucht dich · $count';
+  }
+
+  @override
+  String get needsYouOpenChat => 'Prüfen';
 
   @override
   String get pairCloseScanner => 'Scanner schließen';

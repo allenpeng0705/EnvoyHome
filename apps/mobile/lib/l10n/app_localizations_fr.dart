@@ -40,7 +40,166 @@ class AppLocalizationsFr extends AppLocalizations {
   String get pairTabSsh => 'SSH';
 
   @override
+  String get pairPasteInstead => 'Ou coller un lien d’appairage';
+
+  @override
+  String get pairAdvanced => 'Avancé';
+
+  @override
+  String get pairAdvancedSubtitle =>
+      'Hôte:port et saut SSH (utilisateurs avancés)';
+
+  @override
+  String get pairConnectHost => 'Se connecter avec l’hôte';
+
+  @override
+  String get pairConnectSsh => 'Se connecter via SSH';
+
+  @override
+  String get pairProgressTitle => 'Connexion à la maison';
+
+  @override
+  String get pairProgressSubtitle => 'Accès à votre bureau EnvoyHome…';
+
+  @override
+  String pairElapsed(String time) {
+    return 'Écoulé $time';
+  }
+
+  @override
+  String get pairStageInitial => 'Démarrage';
+
+  @override
+  String get pairStageInitialHint =>
+      'Préparation d’une connexion sécurisée à votre ordinateur domestique.';
+
+  @override
+  String get pairStageConnecting => 'Connexion';
+
+  @override
+  String get pairStageConnectingHint =>
+      'Réseau local d’abord, puis chemins mesh.';
+
+  @override
+  String get pairStageHandshaking => 'Négociation';
+
+  @override
+  String get pairStageHandshakingHint =>
+      'Vérification du jeton d’appairage avec le démon domestique.';
+
+  @override
+  String get pairStageVerifying => 'Presque terminé';
+
+  @override
+  String get pairStageSlowHint =>
+      'Toujours en cours — une première connexion peut prendre une minute.';
+
+  @override
+  String get pairStageVerySlowHint =>
+      'Vérifiez que le téléphone et le bureau partagent un réseau, ou essayez Avancé hôte:port.';
+
+  @override
+  String get pairStillWorking =>
+      'Toujours en cours — gardez cet écran ouvert. Un premier appairage peut prendre une à deux minutes.';
+
+  @override
+  String get pairTroubleHint =>
+      'Astuces : EnvoyHome bureau démarré · même Wi‑Fi / Tailscale · scanner un QR frais dans Réglages → Appairer des appareils.';
+
+  @override
+  String get pairDontClose => 'Ne fermez pas l’app pendant la connexion.';
+
+  @override
+  String get pairCancel => 'Annuler';
+
+  @override
+  String get pairKeepWaiting => 'Continuer d’attendre';
+
+  @override
+  String get pairCancelConfirmTitle => 'Annuler la connexion ?';
+
+  @override
+  String get pairCancelConfirmBody =>
+      'Vous pourrez vous reconnecter à tout moment depuis la bannière de connexion.';
+
+  @override
+  String get pairErrorWrongApp =>
+      'Ce QR concerne une autre app Envoy. Scannez un code d’appairage EnvoyHome.';
+
+  @override
+  String get pairErrorTimeout =>
+      'Délai dépassé. Vérifiez que le bureau est en ligne, puis réessayez.';
+
+  @override
+  String get pairErrorUnreachable =>
+      'Le bureau domestique est injoignable sur ce réseau.';
+
+  @override
+  String get pairErrorExpired =>
+      'Code d’appairage invalide ou expiré — générez un nouveau QR sur le bureau.';
+
+  @override
+  String get pairErrorGeneric =>
+      'Impossible de se connecter. Réessayez de scanner.';
+
+  @override
   String get pairFooter => 'com.envoymesh.envoyhome · push après appairage';
+
+  @override
+  String get shellPairNewDevice => 'Apparier un nouvel appareil';
+
+  @override
+  String get bannerOfflineSaved => 'Non connecté à la maison';
+
+  @override
+  String get bannerOfflineUnpaired =>
+      'Appariez ce téléphone avec le bureau domestique';
+
+  @override
+  String get navReminders => 'Rappels';
+
+  @override
+  String get navMore => 'Plus';
+
+  @override
+  String get moreHubHint =>
+      'Les contrôles du quotidien d’abord. La config avancée du foyer reste sous Avancé.';
+
+  @override
+  String get moreSectionDaily => 'Quotidien';
+
+  @override
+  String get moreSectionAdvanced => 'Avancé';
+
+  @override
+  String get moreFilesSubtitle =>
+      'Fichiers bac à sable, exports et connaissances';
+
+  @override
+  String get moreHomeChatSubtitle =>
+      'Parler aux appareils domotiques (Home Assistant)';
+
+  @override
+  String get moreAdvancedOwnerOnly =>
+      'LLM, Connexions, Compétences et Workflows nécessitent l’appareil Owner du foyer.';
+
+  @override
+  String get remindersAskCta => 'Planifier par chat';
+
+  @override
+  String get remindersAskTitle => 'Planifier avec le chat';
+
+  @override
+  String get remindersNeedConnect =>
+      'Connectez-vous à la maison pour gérer tâches, scènes et historique des plannings.';
+
+  @override
+  String needsYouTitle(int count) {
+    return 'Besoin de vous · $count';
+  }
+
+  @override
+  String get needsYouOpenChat => 'Voir';
 
   @override
   String get pairCloseScanner => 'Fermer le scanneur';

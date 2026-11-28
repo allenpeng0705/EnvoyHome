@@ -40,7 +40,164 @@ class AppLocalizationsIt extends AppLocalizations {
   String get pairTabSsh => 'SSH';
 
   @override
+  String get pairPasteInstead => 'Oppure incolla un link di associazione';
+
+  @override
+  String get pairAdvanced => 'Avanzate';
+
+  @override
+  String get pairAdvancedSubtitle => 'Host:porta e hop SSH (utenti avanzati)';
+
+  @override
+  String get pairConnectHost => 'Connetti con host';
+
+  @override
+  String get pairConnectSsh => 'Connetti via SSH';
+
+  @override
+  String get pairProgressTitle => 'Connessione a casa';
+
+  @override
+  String get pairProgressSubtitle => 'Raggiungimento del desktop EnvoyHome…';
+
+  @override
+  String pairElapsed(String time) {
+    return 'Trascorsi $time';
+  }
+
+  @override
+  String get pairStageInitial => 'Avvio';
+
+  @override
+  String get pairStageInitialHint =>
+      'Preparazione di una connessione sicura al computer di casa.';
+
+  @override
+  String get pairStageConnecting => 'Connessione';
+
+  @override
+  String get pairStageConnectingHint =>
+      'Prima la rete locale, poi i percorsi mesh.';
+
+  @override
+  String get pairStageHandshaking => 'Handshake';
+
+  @override
+  String get pairStageHandshakingHint =>
+      'Verifica del token di associazione con il daemon di casa.';
+
+  @override
+  String get pairStageVerifying => 'Quasi fatto';
+
+  @override
+  String get pairStageSlowHint =>
+      'Ancora in corso — la prima connessione può richiedere un minuto.';
+
+  @override
+  String get pairStageVerySlowHint =>
+      'Verifica che telefono e desktop condividano una rete, oppure prova Avanzate host:porta.';
+
+  @override
+  String get pairStillWorking =>
+      'Ancora in corso — tieni aperta questa schermata. La prima associazione può richiedere uno o due minuti.';
+
+  @override
+  String get pairTroubleHint =>
+      'Suggerimenti: EnvoyHome desktop attivo · stesso Wi‑Fi / Tailscale · scansiona un QR nuovo da Impostazioni → Associa dispositivi.';
+
+  @override
+  String get pairDontClose => 'Non chiudere l’app durante la connessione.';
+
+  @override
+  String get pairCancel => 'Annulla';
+
+  @override
+  String get pairKeepWaiting => 'Continua ad attendere';
+
+  @override
+  String get pairCancelConfirmTitle => 'Annullare la connessione?';
+
+  @override
+  String get pairCancelConfirmBody =>
+      'Potrai riconnetterti in qualsiasi momento dal banner di connessione.';
+
+  @override
+  String get pairErrorWrongApp =>
+      'Questo QR è per un’altra app Envoy. Scansiona un codice di associazione EnvoyHome.';
+
+  @override
+  String get pairErrorTimeout =>
+      'Connessione scaduta. Verifica che il desktop sia online e riprova.';
+
+  @override
+  String get pairErrorUnreachable =>
+      'Il desktop di casa non è raggiungibile su questa rete.';
+
+  @override
+  String get pairErrorExpired =>
+      'Codice di associazione non valido o scaduto — genera un nuovo QR sul desktop.';
+
+  @override
+  String get pairErrorGeneric =>
+      'Connessione non riuscita. Prova a scansionare di nuovo.';
+
+  @override
   String get pairFooter => 'com.envoymesh.envoyhome · push dopo l’abbinamento';
+
+  @override
+  String get shellPairNewDevice => 'Associa nuovo dispositivo';
+
+  @override
+  String get bannerOfflineSaved => 'Non connesso a casa';
+
+  @override
+  String get bannerOfflineUnpaired =>
+      'Associa questo telefono al desktop di casa';
+
+  @override
+  String get navReminders => 'Promemoria';
+
+  @override
+  String get navMore => 'Altro';
+
+  @override
+  String get moreHubHint =>
+      'Prima i controlli quotidiani. La configurazione avanzata resta sotto Avanzate.';
+
+  @override
+  String get moreSectionDaily => 'Quotidiano';
+
+  @override
+  String get moreSectionAdvanced => 'Avanzate';
+
+  @override
+  String get moreFilesSubtitle => 'File sandbox, esportazioni e conoscenza';
+
+  @override
+  String get moreHomeChatSubtitle =>
+      'Parla con i dispositivi smart home (Home Assistant)';
+
+  @override
+  String get moreAdvancedOwnerOnly =>
+      'LLM, Connessioni, Skill e Workflow richiedono il dispositivo Owner della casa.';
+
+  @override
+  String get remindersAskCta => 'Pianifica con chat';
+
+  @override
+  String get remindersAskTitle => 'Pianifica con la chat';
+
+  @override
+  String get remindersNeedConnect =>
+      'Connettiti a casa per gestire lavori, scene e cronologia delle pianificazioni.';
+
+  @override
+  String needsYouTitle(int count) {
+    return 'Serve la tua azione · $count';
+  }
+
+  @override
+  String get needsYouOpenChat => 'Rivedi';
 
   @override
   String get pairCloseScanner => 'Chiudi scanner';

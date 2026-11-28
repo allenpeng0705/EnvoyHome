@@ -28,7 +28,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get pairLede =>
-      'Join the home desktop over EnvoyMesh — scan a QR, enter host:port, or hop via SSH.';
+      'Scan the pairing QR from desktop Settings → Pair devices — or paste the pairing link.';
 
   @override
   String get pairTabLink => 'Link';
@@ -40,7 +40,162 @@ class AppLocalizationsEn extends AppLocalizations {
   String get pairTabSsh => 'SSH';
 
   @override
+  String get pairPasteInstead => 'Or paste a pairing link';
+
+  @override
+  String get pairAdvanced => 'Advanced';
+
+  @override
+  String get pairAdvancedSubtitle => 'Host:port and SSH hop (power users)';
+
+  @override
+  String get pairConnectHost => 'Connect with host';
+
+  @override
+  String get pairConnectSsh => 'Connect over SSH';
+
+  @override
+  String get pairProgressTitle => 'Connecting to home';
+
+  @override
+  String get pairProgressSubtitle => 'Reaching your EnvoyHome desktop…';
+
+  @override
+  String pairElapsed(String time) {
+    return 'Elapsed $time';
+  }
+
+  @override
+  String get pairStageInitial => 'Starting';
+
+  @override
+  String get pairStageInitialHint =>
+      'Preparing a secure connection to your home computer.';
+
+  @override
+  String get pairStageConnecting => 'Connecting';
+
+  @override
+  String get pairStageConnectingHint =>
+      'Trying the local network first, then mesh paths.';
+
+  @override
+  String get pairStageHandshaking => 'Handshaking';
+
+  @override
+  String get pairStageHandshakingHint =>
+      'Verifying the pairing token with the home daemon.';
+
+  @override
+  String get pairStageVerifying => 'Almost there';
+
+  @override
+  String get pairStageSlowHint =>
+      'Still working — first connections can take a minute.';
+
+  @override
+  String get pairStageVerySlowHint =>
+      'Check that the phone and desktop share a network, or try Advanced host:port.';
+
+  @override
+  String get pairStillWorking =>
+      'Still working — keep this screen open. A first pair can take a minute or two.';
+
+  @override
+  String get pairTroubleHint =>
+      'Tips: desktop EnvoyHome is running · same Wi‑Fi / Tailscale · scan a fresh QR from Settings → Pair devices.';
+
+  @override
+  String get pairDontClose => 'Don’t close the app while connecting.';
+
+  @override
+  String get pairCancel => 'Cancel';
+
+  @override
+  String get pairKeepWaiting => 'Keep waiting';
+
+  @override
+  String get pairCancelConfirmTitle => 'Cancel connecting?';
+
+  @override
+  String get pairCancelConfirmBody =>
+      'You can reconnect anytime from the connection banner.';
+
+  @override
+  String get pairErrorWrongApp =>
+      'That QR is for a different Envoy app. Scan an EnvoyHome pairing code.';
+
+  @override
+  String get pairErrorTimeout =>
+      'Connection timed out. Check the desktop is online and try again.';
+
+  @override
+  String get pairErrorUnreachable =>
+      'Home desktop is unreachable on this network.';
+
+  @override
+  String get pairErrorExpired =>
+      'Pairing code is invalid or expired — mint a fresh QR on the desktop.';
+
+  @override
+  String get pairErrorGeneric => 'Could not connect. Try scanning again.';
+
+  @override
   String get pairFooter => 'com.envoymesh.envoyhome · push after pair';
+
+  @override
+  String get shellPairNewDevice => 'Pair new device';
+
+  @override
+  String get bannerOfflineSaved => 'Not connected to home';
+
+  @override
+  String get bannerOfflineUnpaired => 'Pair this phone with your home desktop';
+
+  @override
+  String get navReminders => 'Reminders';
+
+  @override
+  String get navMore => 'More';
+
+  @override
+  String get moreHubHint =>
+      'Daily controls first. Advanced household setup stays under Advanced.';
+
+  @override
+  String get moreSectionDaily => 'Daily';
+
+  @override
+  String get moreSectionAdvanced => 'Advanced';
+
+  @override
+  String get moreFilesSubtitle => 'Sandbox files, exports, and knowledge';
+
+  @override
+  String get moreHomeChatSubtitle =>
+      'Talk to smart-home devices (Home Assistant)';
+
+  @override
+  String get moreAdvancedOwnerOnly =>
+      'LLM, Connections, Skills, and Workflows need the household Owner device.';
+
+  @override
+  String get remindersAskCta => 'Ask to schedule';
+
+  @override
+  String get remindersAskTitle => 'Schedule with chat';
+
+  @override
+  String get remindersNeedConnect =>
+      'Connect to your home to manage jobs, scenes, and schedule history.';
+
+  @override
+  String needsYouTitle(int count) {
+    return 'Needs you · $count';
+  }
+
+  @override
+  String get needsYouOpenChat => 'Review';
 
   @override
   String get pairCloseScanner => 'Close scanner';

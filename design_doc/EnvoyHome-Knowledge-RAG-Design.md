@@ -3,8 +3,8 @@
 | Field | Value |
 |-------|--------|
 | **Document** | Normative design for **Doc KB (L6)**, **KnowYou episodic (L4′)**, **local hybrid RAG**, and the **Home embed engine** |
-| **Status** | Living draft — Owner direction 2026-10-25 |
-| **Last updated** | 2026-10-27b |
+| **Status** | Living draft — Owner direction 2026-10-25; hybrid Adapt locked 2026-11-27 |
+| **Last updated** | 2026-11-27e (KB-P6 review harden) |
 | **Parent** | [`EnvoyHome-Design.md`](EnvoyHome-Design.md) — product-wide ground truth (§2.4 ports, §8.5 Local, §9 Memory summary) |
 | **Sibling** | [`EnvoyHome-Memory-Design.md`](EnvoyHome-Memory-Design.md) — L0–L7 standing, flush, LearnQueue |
 | **Peer research** | [`analysis/peer-memory-systems.md`](analysis/peer-memory-systems.md); OSS survey notes in §14 |
@@ -20,6 +20,11 @@
 
 | Date | Change |
 |------|--------|
+| 2026-11-27e | **Review harden (KB-P6):** FSRS touch only **after** standing filter (inject / `knowyou_search`); soft-cap never drops keyed prefs; `home.searchKnowYou` result `engine` includes additive `multiarm` (+ optional arm scores). Product **0.4.0**. |
+| 2026-11-27d | **Decision lock:** OpenViking **deferred** — no Home Settings toggle, managed download, or near-term quality work. Aligns Mesh Context Memory (native product path; OV optional / quality out of scope). KB-P6 + standing keepers are the ship path. OV MAY return later only as opt-in L4′/L6 MemoryBackend (loopback; never sole standing). |
+| 2026-11-27c | **Harden (KB-P6):** prune hebbian edges to active IDs + soft-cap 2048; filter dangling edges at rank time; JSON migrate keeps `edges` + FSRS fields; pin (`importance≥1`) survives soft-cap; expanded unit/integration coverage. |
+| 2026-11-27b | **Ship (KB-P6):** Home-owned `knowyou-multiarm` ranker wired into `EpisodicIndex.search` (0.5 lexical + 0.3 FSRS-lite + 0.2 graph); FSRS touch + hebbian `edges` table; FTS/scan fallback; V-KY-8…10 green. Standing keepers unchanged. |
+| 2026-11-27 | **Normative (hybrid KnowYou Adapt):** Simplify L4′ recall/ranking toward EnvoyMesh context-memory / Nebula **patterns** (multi-arm lexical + FSRS-lite + light graph; Home-owned fact bank). **Reject** flat JSONL as **sole** memory. Standing L1–L3 Markdown/JSON, scarce bootstrap, multi-account isolation, LearnQueue, and HA/presence taint remain Normative (Memory Design keepers). §1.4 / §4.7 / §9 P6 / V-KY-8…10. Cite Mesh `docs/context-memory-design.md` (ideas only; no vendor). |
 | 2026-10-27b | **SQLite ship persistence:** Doc KB / KnowYou indexes are `knowledge-index.sqlite` / `episodic-index.sqlite` (`node:sqlite` FTS5 trigram + **sqlite-vec** when loadable; float BLOB + JS cosine fallback). Legacy `index.json` migrates once on open. Hit shape unchanged. |
 | 2026-10-27 | **Ship defaults → `auto`:** `knowledgeInject` / `episodicInject` default **`auto`** after live eval gates (`pnpm agent:eval:kb`, incl. auto-inject + standing-filter cases). Owner may set `tool`/`off` in Settings. |
 | 2026-10-26 | **Ship defaults + hardening:** `knowledgeInject` / `episodicInject` default **`tool`** until eval gates green; KnowYou extract **user-turn only**; standing contradiction widened (allergy / quiet-hours / drink / food) and applied on tool retrieve; Doc KB section soft cap 2000 + KnowYou active soft cap 5000; index writes under account lock + atomic rename; Home embed `prefer=attach` refused at router; embed HTTP retry-once. |
@@ -67,6 +72,9 @@
 | mem0 / Cognee / Neo4j **required** in core | Ops + opacity + Design already rejected |
 | Embed GGUF in the **chat** `:18792` process | Contention; Mesh deliberately splits |
 | Opaque embedding-only standing memory | Violates inspectability (Memory Design §2.2) |
+| **Flat JSONL (or any fact bank) as sole memory** | Loses Markdown standing, scarce bootstrap, LearnQueue, household isolation story — §4.7 |
+| OpenViking / AGPL sidecar as **standing** store | Never sole copy of L1–L3 |
+| OpenViking near-term / Settings / managed download | **Deferred** (`2026-11-27d`) — Mesh native-first; Home ships KB-P6 + standing keepers |
 | Unbounded every-turn deep Tree walk | Latency; Memory Design non-goal |
 | Auto-promote chat → L2/`knowledge/` without gates | Privacy + LearnQueue |
 | Cloud embed by default | Privacy; household-local first |
@@ -304,6 +312,37 @@ Pre-turn hybrid retrieve on user message; skip workflow-only turns. `session_sea
 | L4′ KnowYou | Derived facts/chunks + **auto** related context |
 | Promote | flush / remember / consolidate / PendingLearn only |
 
+### 4.7 Hybrid Simplify Adapt (Normative — `2026-11-27`)
+
+**Owner lock:** Adapt Mesh context-memory / Nebula **ideas** into KnowYou (L4′) only. Do **not** replace standing memory with a flat bank.
+
+**Peer (ideas only, MIT reference / Mesh-owned code — do not vendor Nebula panel):**  
+`../EnvoyMesh/docs/context-memory-design.md` — JSONL multi-arm recall (lexical · FSRS-lite · 2-hop graph), pin/importance, post-turn extract.
+
+#### Keepers (non-negotiable — Memory Design owns write paths)
+
+| Keep | Why |
+|------|-----|
+| Human-editable Markdown/JSON standing | Users/agents edit `MEMORY.md` / `profile.json` / daily in place; Settings + tools |
+| Scarce L1/L2 bootstrap | Always-on capped inject; every turn “knows who I am” without bank inject-all |
+| Multi-account / household | Profile + Owner/Member + LearnQueue seat-scoped; bank rows MUST be `accountId`-scoped |
+| Skill/profile mutation review | LearnQueue remains the consent gate for L1/L2/L7 |
+| HA / presence taint | No auto bank/standing write from `untrusted` / `sensitive` / event-source (§8 rule 7) |
+
+#### Adapt surface (KnowYou / episodic only)
+
+| Change | Shape |
+|--------|--------|
+| Fact bank | Home-owned derived rows (SQLite and/or JSONL under `memory-backend/` — **derived**, rebuildable; never sole truth for standing) |
+| Recall | Multi-arm rank over the bank (lexical + FSRS-lite activation + optional light graph); **budgeted** inject — never dump the bank |
+| Touch | FSRS/hebbian touch **after** standing filter on inject / `knowyou_search` — never reinforce contradicted episodic (`2026-11-27e`) |
+| Soft-cap | Drop oldest **unkeyed** unpinned only; keyed prefs and `importance≥1` pins are never soft-dropped (`2026-11-27e`) |
+| Extract | Post-turn → bank only when **user-turn** + non-tainted; ADD\|SUPERSEDE\|SKIP keys retained |
+| Standing promote | Conflict with L1/L2 → PendingLearn (V-KY-7); never silent overwrite |
+| Doc KB | `knowledge/` + section FTS (+ hybrid embed) unchanged; optional later trim only with Owner Accept |
+
+**Reject:** flat JSONL as the only store; inject-all of an unbounded bank; auto-JSONL writes that recreate HomeClaw “store everything” without LearnQueue/taint.
+
 ---
 
 ## 5. Home embed engine — Normative (Adapt EnvoyMesh Phase 57E)
@@ -450,7 +489,8 @@ embedTexts(texts: string[]): Promise<number[][]>
 | **P3** | Tier C hybrid KB retrieve + optional `knowledgeInject=auto` |
 | **P4** | KnowYou extract ADD\|SUPERSEDE\|SKIP + episodic SQLite + summarize/TTL |
 | **P5** | `episodicInject=auto` + pre-inject contradiction filter vs L1/L2 |
-| **Later** | Optional Cognee/Graphiti MemoryBackend; Graphiti-like validity windows if needed |
+| **P6** | KnowYou multi-arm Adapt (§4.7) — **shipped** fact-bank recall ranking; keepers preserved; **not** flat-JSONL-sole (V-KY-8…10) |
+| **Later** | Optional Cognee/Graphiti MemoryBackend; Graphiti-like validity windows if needed; **OV deferred** until Owner reopens (opt-in L4′/L6 sidecar only — never standing) |
 
 Standing L1–L3 and flush/LearnQueue remain Memory Design ownership throughout.
 
@@ -481,6 +521,9 @@ Standing L1–L3 and flush/LearnQueue remain Memory Design ownership throughout.
 | V-KY-5 | Auto-inject budget enforced; label present |
 | V-KY-6 | `session_search` still works with KnowYou off (V-MEM-9 preserved) |
 | V-KY-7 | PendingLearn path when candidate conflicts with L1/L2 |
+| V-KY-8 | After P6 Adapt: L1/L2 Markdown/JSON standing + scarce bootstrap still inject; LearnQueue still gates skill/profile; tainted turns still skip keyed KnowYou ADD (keepers §4.7) |
+| V-KY-9 | KnowYou retrieve uses multi-arm / budgeted ranking over the fact bank — not inject-all of the bank |
+| V-KY-10 | Flat JSONL (or fact bank alone) is never the sole memory path — StandingStore + LearnQueue remain required; bank is derived under `memory-backend/` |
 
 ### Embed engine — V-EMB-*
 
@@ -527,6 +570,9 @@ Cite Mesh peers when adapting:
 | One SQLite file vs two per account | Two files for blast-radius; or one with prefixed tables |
 | sqlite-vec vs float blob + JS cosine | **Resolved 2026-10-27b** — sqlite-vec preferred (`node:sqlite` loadExtension); BLOB + JS cosine fallback when extension unavailable |
 | Exact default budgets | Tune with agent-eval knowledge + live KnowYou packs |
+| P6 bank on-disk format (SQLite vs JSONL under `memory-backend/`) | Prefer keep episodic SQLite hit shape; JSONL MAY be an internal arm — never sole standing |
+| Whether to port Mesh FSRS/graph code vs reimplement | Prefer Home-owned small Adapt; cite Mesh paths; no `@envoymesh` workspace fork |
+| OpenViking as Home Context Memory / Doc KB backend | **Resolved 2026-11-27d — Deferred.** No near-term work. |
 
 ---
 
@@ -538,6 +584,7 @@ Cite Mesh peers when adapting:
 | [EnvoyHome-Memory-Design.md](EnvoyHome-Memory-Design.md) | L0–L3, flush, LearnQueue, recall FTS |
 | [analysis/peer-memory-systems.md](analysis/peer-memory-systems.md) | Peer fitness |
 | EnvoyMesh `envoy-local-embed-*.ts` | Embed sidecar precedent |
+| EnvoyMesh `docs/context-memory-design.md` | Nebula-inspired multi-arm / FSRS patterns for §4.7 (ideas only) |
 | HomeClaw `docs_design/RAGMemorySummarizationDesign.md` | Summarize+TTL inspiration (not code import) |
 
 ---
@@ -554,5 +601,7 @@ Cite Mesh peers when adapting:
 | ADD/SUPERSEDE/SKIP keys | Graphiti idea + fix mem0/HomeClaw | **Invent** | §4.3 |
 | Summarize + TTL originals | HomeClaw RAG summarize design | **Adapt** | §4.4 |
 | Budgeted auto-inject | HomeClaw outcome | **Adapt** with caps | §3.6, §4.5 |
+| Multi-arm fact bank + FSRS-lite | EnvoyMesh CM / Nebula ideas | **Adapt** L4′ only; keepers intact | §4.7 |
+| Flat JSONL as sole memory | Nebula / aggressive simplify | **Reject** | §1.4, §4.7 |
 | Authority in code | Fix HomeClaw debt | **Invent** | §6 |
 | Cognee/mem0 core | HomeClaw / ecosystem | **Reject** | §1.4 |

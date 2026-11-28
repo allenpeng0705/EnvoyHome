@@ -1,5 +1,6 @@
-// KnowYou L4′ episodic engine — Knowledge-RAG Design §4.
+// KnowYou L4′ episodic engine — Knowledge-RAG Design §4 / §4.7 (KB-P6 multi-arm).
 // ADD | SUPERSEDE | SKIP; summarize + TTL; episodic-index.sqlite (FTS5 + sqlite-vec / BLOB).
+// Ranking: Mesh/Nebula-inspired multi-arm (lexical + FSRS-lite + light graph) — Home-owned.
 
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
@@ -7,6 +8,15 @@ import { mkdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { withAccountLock } from "./writer-lock.js";
+import {
+  KNOWYOU_DEFAULT_IMPORTANCE,
+  KNOWYOU_KEYED_IMPORTANCE,
+  knowYouRetention,
+  nextKnowYouHebbianWeight,
+  nextKnowYouStability,
+  pruneKnowYouHebbianEdges,
+  rankKnowYouFacts,
+} from "./knowyou-multiarm.js";
 import {
   blobToFloat32,
   cosineSimilarity,
@@ -43,15 +53,43 @@ export interface EpisodicRow {
   updatedAt: string;
   embedding?: number[];
   contentHash: string;
+  /** 0..1; ≥1 = pinned (KB-P6 FSRS arm). */
+  importance?: number;
+  /** FSRS-lite stability in days. */
+  stability?: number;
+  /** Last successful recall touch (ISO). */
+  lastAccessAt?: string;
+  accessCount?: number;
 }
+
+export type EpisodicEngine = "fts" | "scan" | "vec" | "hybrid" | "multiarm";
 
 export interface EpisodicHit {
   id: string;
   key: string;
   text: string;
   score: number;
-  engine: "fts" | "scan" | "vec" | "hybrid";
+  engine: EpisodicEngine;
   isSummary?: boolean;
+  lexical?: number;
+  activation?: number;
+  graph?: number;
+}
+
+interface HebEdge {
+  a: string;
+  b: string;
+  w: number;
+}
+
+/** Drop hebbian edges that reference inactive/missing rows; soft-cap size. */
+function pruneFileEdges(data: EpisodicFile): void {
+  const activeIds = new Set(
+    data.rows.filter((r) => r.status === "active").map((r) => r.id),
+  );
+  const pruned = pruneKnowYouHebbianEdges(data.edges, activeIds);
+  if (pruned.length) data.edges = pruned;
+  else delete data.edges;
 }
 
 interface EpisodicMeta {
@@ -68,6 +106,11 @@ interface EpisodicMeta {
 interface EpisodicFile {
   meta: EpisodicMeta;
   rows: EpisodicRow[];
+  edges?: HebEdge[];
+}
+
+function defaultImportance(key: string): number {
+  return key.trim() ? KNOWYOU_KEYED_IMPORTANCE : KNOWYOU_DEFAULT_IMPORTANCE;
 }
 
 export type IngestCandidate = {
@@ -367,6 +410,8 @@ export class EpisodicIndex {
             createdAt: now,
             updatedAt: now,
             contentHash,
+            importance: Math.max(existing.importance ?? defaultImportance(key), defaultImportance(key)),
+            stability: 1,
           };
           if (c.sourceSessionId !== undefined) row.sourceSessionId = c.sourceSessionId;
           data.rows.push(row);
@@ -399,6 +444,8 @@ export class EpisodicIndex {
         createdAt: now,
         updatedAt: now,
         contentHash,
+        importance: defaultImportance(key),
+        stability: 1,
       };
       if (c.sourceSessionId !== undefined) row.sourceSessionId = c.sourceSessionId;
       data.rows.push(row);
@@ -418,11 +465,16 @@ export class EpisodicIndex {
       }
     }
 
-    // Soft cap: drop oldest unkeyed active rows until under cap (keyed SUPERSEDE already net-zero).
+    // Soft cap: drop oldest *unkeyed* unpinned first. Never soft-drop keyed prefs
+    // or pins (importance ≥ 1) — keyed overflow is allowed past the soft cap.
     let active = data.rows.filter((r) => r.status === "active");
     if (active.length > activeCap) {
+      const unkeyedDroppable = (r: EpisodicRow) =>
+        !r.isSummary &&
+        !r.key &&
+        (r.importance ?? defaultImportance(r.key)) < 1;
       const unkeyed = active
-        .filter((r) => !r.key && !r.isSummary)
+        .filter(unkeyedDroppable)
         .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
       let overflow = active.length - activeCap;
       for (const r of unkeyed) {
@@ -430,20 +482,6 @@ export class EpisodicIndex {
         r.status = "superseded";
         r.updatedAt = now;
         overflow--;
-      }
-      active = data.rows.filter((r) => r.status === "active");
-      // Still over: SKIP was preferred for new ADDs — drop oldest remaining non-summary
-      if (active.length > activeCap) {
-        const rest = active
-          .filter((r) => !r.isSummary)
-          .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
-        overflow = active.length - activeCap;
-        for (const r of rest) {
-          if (overflow <= 0) break;
-          r.status = "superseded";
-          r.updatedAt = now;
-          overflow--;
-        }
       }
     }
 
@@ -582,6 +620,11 @@ export class EpisodicIndex {
         createdAt: now,
         updatedAt: now,
         contentHash: hashText(text),
+        importance: Math.max(
+          existing?.importance ?? defaultImportance(key),
+          defaultImportance(key),
+        ),
+        stability: 1,
       });
       idOut = id;
       removed = existing ? 1 : 0;
@@ -595,35 +638,153 @@ export class EpisodicIndex {
   async search(
     accountId: string,
     query: string,
-    opts?: { limit?: number; queryEmbedding?: number[] },
+    opts?: { limit?: number; queryEmbedding?: number[]; touch?: boolean },
   ): Promise<{ hits: EpisodicHit[] }> {
-    const limit = opts?.limit ?? 8;
+    const limit = Math.max(1, Math.min(64, opts?.limit ?? 8));
     const data = await this.load(accountId);
     const active = data.rows.filter((r) => r.status === "active");
-    const recentCut =
-      Date.now() - data.meta.recentPreferDays * 24 * 60 * 60 * 1000;
-    const opened = await this.openDb(accountId);
     const q = query.trim();
-    const ftsHits = q ? this.searchFts(opened.db, q, limit * 2) : [];
+    if (!q) return { hits: [] };
 
-    // V-EMB-6: while embedStale, never fuse old vectors with a new query space.
-    const qv = data.meta.embedStale ? undefined : opts?.queryEmbedding;
-    let hits = ftsHits;
-    if (qv?.length) {
-      const vecHits = this.searchVec(opened, qv, limit * 2);
-      hits = rrfMergeEpisodic(ftsHits, vecHits, limit * 2);
-    }
-
-    hits.sort((a, b) => {
-      const ra = active.find((r) => r.id === a.id);
-      const rb = active.find((r) => r.id === b.id);
-      const aRecent = ra && !ra.isSummary && Date.parse(ra.updatedAt) >= recentCut ? 1 : 0;
-      const bRecent = rb && !rb.isSummary && Date.parse(rb.updatedAt) >= recentCut ? 1 : 0;
-      if (aRecent !== bRecent) return bRecent - aRecent;
-      return b.score - a.score;
+    // KB-P6: multi-arm over the fact bank (lexical + FSRS-lite + light graph).
+    // Never inject-all — always slice to limit (V-KY-9).
+    const ranked = rankKnowYouFacts({
+      query: q,
+      facts: active.map((r) => {
+        const fact: {
+          id: string;
+          text: string;
+          key?: string;
+          replacesId?: string;
+          importance: number;
+          stability?: number;
+          lastAccessAt?: string;
+          createdAt: string;
+          updatedAt: string;
+        } = {
+          id: r.id,
+          text: r.text,
+          importance: r.importance ?? defaultImportance(r.key),
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+        };
+        if (r.key) fact.key = r.key;
+        if (r.replacesId) fact.replacesId = r.replacesId;
+        if (r.stability != null) fact.stability = r.stability;
+        if (r.lastAccessAt) fact.lastAccessAt = r.lastAccessAt;
+        return fact;
+      }),
+      ...(data.edges?.length
+        ? {
+            hebbianEdges: pruneKnowYouHebbianEdges(
+              data.edges,
+              new Set(active.map((r) => r.id)),
+            ),
+          }
+        : {}),
+      limit,
     });
 
-    return { hits: hits.slice(0, limit) };
+    const byId = new Map(active.map((r) => [r.id, r]));
+    let hits: EpisodicHit[] = [];
+    for (const h of ranked) {
+      const row = byId.get(h.id);
+      if (!row) continue; // drop graph ghosts (e.g. superseded replacesId)
+      hits.push({
+        id: h.id,
+        key: row.key,
+        text: row.text,
+        score: h.score,
+        engine: "multiarm",
+        ...(row.isSummary ? { isSummary: true } : {}),
+        lexical: h.lexical,
+        activation: h.activation,
+        graph: h.graph,
+      });
+    }
+
+    // Fallback: FTS/scan (+ optional vec) when multi-arm finds nothing (e.g. short CJK).
+    if (hits.length === 0) {
+      const opened = await this.openDb(accountId);
+      const ftsHits = this.searchFts(opened.db, q, limit * 2);
+      const qv = data.meta.embedStale ? undefined : opts?.queryEmbedding;
+      hits = qv?.length ? rrfMergeEpisodic(ftsHits, this.searchVec(opened, qv, limit * 2), limit) : ftsHits;
+      hits = hits.slice(0, limit);
+    } else if (opts?.queryEmbedding?.length && !data.meta.embedStale) {
+      // Soft-boost multi-arm hits that also rank in vec (still ≤ limit).
+      const opened = await this.openDb(accountId);
+      const vecHits = this.searchVec(opened, opts.queryEmbedding, limit * 2);
+      const vecScore = new Map(vecHits.map((h) => [h.id, h.score]));
+      for (const h of hits) {
+        const vs = vecScore.get(h.id);
+        if (vs !== undefined) h.score = Math.min(1, h.score * 0.85 + vs * 0.15);
+      }
+      hits.sort((a, b) => b.score - a.score);
+    }
+
+    const out = hits.slice(0, limit);
+    if (opts?.touch !== false && out.length > 0) {
+      void this.touchHits(accountId, out.map((h) => h.id)).catch(() => {
+        /* non-fatal */
+      });
+    }
+    return { hits: out };
+  }
+
+  /** FSRS-lite touch + hebbian co-activation after a successful recall (KB-P6). */
+  async touchHits(accountId: string, ids: string[]): Promise<void> {
+    const uniq = [...new Set(ids.filter(Boolean))];
+    if (uniq.length === 0) return;
+    await withAccountLock(accountId, this.accountRoot(accountId), async () => {
+      const data = await this.load(accountId);
+      const now = new Date().toISOString();
+      const nowMs = Date.now();
+      const touched: EpisodicRow[] = [];
+      for (const id of uniq) {
+        const row = data.rows.find((r) => r.id === id && r.status === "active");
+        if (!row) continue;
+        const importance = row.importance ?? defaultImportance(row.key);
+        const R = knowYouRetention({
+          importance,
+          createdAt: row.createdAt,
+          nowMs,
+          ...(row.stability != null ? { stability: row.stability } : {}),
+          ...(row.lastAccessAt ? { lastAccessAt: row.lastAccessAt } : {}),
+        });
+        const firstTouch = !row.lastAccessAt;
+        row.stability = nextKnowYouStability({
+          retention: R,
+          firstTouch,
+          ...(row.stability != null ? { stability: row.stability } : {}),
+        });
+        row.lastAccessAt = now;
+        row.accessCount = (row.accessCount ?? 0) + 1;
+        row.updatedAt = now;
+        touched.push(row);
+      }
+      if (touched.length >= 2) {
+        const edges = [...(data.edges ?? [])];
+        const edgeKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+        const map = new Map(edges.map((e) => [edgeKey(e.a, e.b), e]));
+        for (let i = 0; i < touched.length; i++) {
+          for (let j = i + 1; j < touched.length; j++) {
+            const a = touched[i]!.id;
+            const b = touched[j]!.id;
+            const k = edgeKey(a, b);
+            const prev = map.get(k);
+            const w = nextKnowYouHebbianWeight(prev?.w ?? 0);
+            if (prev) prev.w = w;
+            else {
+              const e = { a, b, w };
+              edges.push(e);
+              map.set(k, e);
+            }
+          }
+        }
+        data.edges = edges;
+      }
+      await this.save(accountId, data);
+    });
   }
 
   /**
@@ -668,6 +829,8 @@ export class EpisodicIndex {
       createdAt: iso,
       updatedAt: iso,
       contentHash: hashText(summaryText),
+      importance: KNOWYOU_DEFAULT_IMPORTANCE,
+      stability: 1,
     });
     data.meta.lastSummarizeAt = iso;
     await this.save(accountId, data);
@@ -772,11 +935,34 @@ export class EpisodicIndex {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         content_hash TEXT NOT NULL,
-        embedding BLOB
+        embedding BLOB,
+        importance REAL,
+        stability REAL,
+        last_access_at TEXT,
+        access_count INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE TABLE IF NOT EXISTS edges (
+        a TEXT NOT NULL,
+        b TEXT NOT NULL,
+        w REAL NOT NULL,
+        PRIMARY KEY (a, b)
       );
       CREATE INDEX IF NOT EXISTS idx_rows_status ON rows(status);
       CREATE INDEX IF NOT EXISTS idx_rows_session ON rows(source_session_id);
     `);
+    // Additive migration for DBs created before KB-P6.
+    for (const sql of [
+      `ALTER TABLE rows ADD COLUMN importance REAL`,
+      `ALTER TABLE rows ADD COLUMN stability REAL`,
+      `ALTER TABLE rows ADD COLUMN last_access_at TEXT`,
+      `ALTER TABLE rows ADD COLUMN access_count INTEGER NOT NULL DEFAULT 0`,
+    ]) {
+      try {
+        db.exec(sql);
+      } catch {
+        /* column exists */
+      }
+    }
     const ftsExists = db
       .prepare(`SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'rows_fts'`)
       .get() as { ok: number } | undefined;
@@ -813,10 +999,18 @@ export class EpisodicIndex {
     try {
       const raw = await readFile(jsonPath, "utf8");
       const parsed = JSON.parse(raw) as EpisodicFile;
+      const rows = Array.isArray(parsed.rows) ? parsed.rows : [];
+      // Backfill FSRS defaults for pre-P6 JSON rows.
+      for (const r of rows) {
+        if (r.importance == null) r.importance = defaultImportance(r.key ?? "");
+        if (r.stability == null) r.stability = 1;
+      }
       const data: EpisodicFile = {
         meta: { ...defaultMeta(), ...parsed.meta },
-        rows: Array.isArray(parsed.rows) ? parsed.rows : [],
+        rows,
+        ...(Array.isArray(parsed.edges) ? { edges: parsed.edges as HebEdge[] } : {}),
       };
+      pruneFileEdges(data);
       this.writeAll(opened, data);
       renameJsonMigrated(jsonPath);
     } catch {
@@ -830,6 +1024,7 @@ export class EpisodicIndex {
   }
 
   private async save(accountId: string, data: EpisodicFile): Promise<void> {
+    pruneFileEdges(data);
     const opened = await this.openDb(accountId);
     this.writeAll(opened, data);
   }
@@ -860,6 +1055,10 @@ export class EpisodicIndex {
       updated_at: string;
       content_hash: string;
       embedding: Buffer | null;
+      importance: number | null;
+      stability: number | null;
+      last_access_at: string | null;
+      access_count: number | null;
     }>;
 
     const rows: EpisodicRow[] = rawRows.map((r) => {
@@ -890,10 +1089,30 @@ export class EpisodicIndex {
       }
       if (r.source_session_id) row.sourceSessionId = r.source_session_id;
       if (r.embedding) row.embedding = blobToFloat32(r.embedding);
+      if (r.importance != null && Number.isFinite(r.importance)) row.importance = Number(r.importance);
+      if (r.stability != null && Number.isFinite(r.stability)) row.stability = Number(r.stability);
+      if (r.last_access_at) row.lastAccessAt = r.last_access_at;
+      if (r.access_count != null && Number.isFinite(r.access_count)) {
+        row.accessCount = Number(r.access_count);
+      }
       return row;
     });
 
-    return { meta, rows };
+    let edges: HebEdge[] = [];
+    try {
+      const rawEdges = db.prepare(`SELECT a, b, w FROM edges`).all() as Array<{
+        a: string;
+        b: string;
+        w: number;
+      }>;
+      edges = rawEdges
+        .filter((e) => e.a && e.b && Number.isFinite(e.w) && e.w > 0)
+        .map((e) => ({ a: e.a, b: e.b, w: Math.min(1, Number(e.w)) }));
+    } catch {
+      /* pre-P6 DB without edges */
+    }
+
+    return { meta, rows, ...(edges.length ? { edges } : {}) };
   }
 
   private writeAll(opened: CachedDb, data: EpisodicFile): void {
@@ -908,6 +1127,11 @@ export class EpisodicIndex {
     db.exec(`DELETE FROM rows`);
     db.exec(`DELETE FROM rows_fts`);
     try {
+      db.exec(`DELETE FROM edges`);
+    } catch {
+      /* optional */
+    }
+    try {
       db.exec(`DELETE FROM rows_vec`);
     } catch {
       /* optional */
@@ -916,8 +1140,9 @@ export class EpisodicIndex {
     const ins = db.prepare(`
       INSERT INTO rows(
         id, key, text, status, replaces_id, is_summary, covers_json,
-        source_turn_ids_json, source_session_id, created_at, updated_at, content_hash, embedding
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        source_turn_ids_json, source_session_id, created_at, updated_at, content_hash, embedding,
+        importance, stability, last_access_at, access_count
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const insFts = db.prepare(`INSERT INTO rows_fts(id, key, body) VALUES (?, ?, ?)`);
 
@@ -940,9 +1165,29 @@ export class EpisodicIndex {
         r.updatedAt,
         r.contentHash,
         blob,
+        r.importance ?? null,
+        r.stability ?? null,
+        r.lastAccessAt ?? null,
+        r.accessCount ?? 0,
       );
       if (r.status === "active") {
         insFts.run(r.id, r.key, r.text);
+      }
+    }
+
+    if (data.edges?.length) {
+      try {
+        const insEdge = db.prepare(`INSERT INTO edges(a, b, w) VALUES (?, ?, ?)`);
+        for (const e of data.edges) {
+          if (!e.a || !e.b || !(e.w > 0)) continue;
+          try {
+            insEdge.run(e.a, e.b, Math.min(1, e.w));
+          } catch {
+            /* skip dup */
+          }
+        }
+      } catch {
+        /* edges table missing */
       }
     }
 

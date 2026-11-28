@@ -144,10 +144,31 @@ export {
   extractStandingPatchValue,
   textContradictsStandingValue,
   type EpisodicHit,
+  type EpisodicEngine,
   type EpisodicRow,
   type IngestCandidate,
   type KnowYouAction,
 } from "./episodic-index.js";
+export {
+  rankKnowYouFacts,
+  knowYouRetention,
+  nextKnowYouStability,
+  nextKnowYouHebbianWeight,
+  pruneKnowYouHebbianEdges,
+  createKnowYouLexicon,
+  tokenizeKnowYou,
+  expandKnowYouTokens,
+  buildStructuralKnowYouEdges,
+  buildSemanticKnowYouAdjacency,
+  diffuseKnowYouGraph,
+  KNOWYOU_DEFAULT_IMPORTANCE,
+  KNOWYOU_KEYED_IMPORTANCE,
+  KNOWYOU_PIN_IMPORTANCE,
+  KNOWYOU_MAX_HEBBIAN_EDGES,
+  type RankableKnowYouFact,
+  type RankedKnowYouHit,
+  type KnowYouHebEdge,
+} from "./knowyou-multiarm.js";
 export { atomicWriteFile } from "./atomic-write.js";
 export {
   KNOWLEDGE_INJECT_LABEL,

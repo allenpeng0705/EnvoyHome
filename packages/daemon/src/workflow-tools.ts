@@ -1245,7 +1245,10 @@ export async function runExtendedWorkflowTool(input: {
       typeof input.args.limit === "number" && input.args.limit > 0
         ? Math.min(50, Math.floor(input.args.limit))
         : 8;
-    let { hits } = await input.knowledge.searchKnowYou(input.accountId, query, { limit });
+    let { hits } = await input.knowledge.searchKnowYou(input.accountId, query, {
+      limit,
+      touch: false,
+    });
     if (input.memory) {
       try {
         const standing = await loadStandingFacts(input.memory, input.accountId);
@@ -1253,6 +1256,13 @@ export async function runExtendedWorkflowTool(input: {
       } catch {
         /* standing optional */
       }
+    }
+    // Touch only post-filter hits so contradicted episodic rows are not reinforced (V-KY-8).
+    if (hits.length > 0) {
+      await input.knowledge.touchKnowYouHits(
+        input.accountId,
+        hits.map((h) => h.id),
+      );
     }
     return JSON.stringify({ hits });
   }

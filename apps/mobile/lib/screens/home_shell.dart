@@ -6,19 +6,19 @@ import '../l10n/app_localizations.dart';
 import '../l10n/locale_controller.dart';
 import '../l10n/theme_controller.dart';
 import '../services/push_service.dart';
+import '../state/needs_you_controller.dart';
 import '../state/session_controller.dart';
+import '../widgets/connection_banner.dart';
+import '../widgets/needs_you_jump_strip.dart';
 import 'chat_tab.dart';
-import 'connections_screen.dart';
-import 'llm_screen.dart';
+import 'more_hub.dart';
 import 'pair_screen.dart';
-import 'profiles_screen.dart';
+import 'pairing/pairing_progress_screen.dart';
 import 'schedules_hub_screen.dart';
-import 'settings_hub.dart';
-import 'skills_screen.dart';
-import 'system_screen.dart';
 
 const _kWideBreakpoint = 840.0;
 
+/// Phone: Chat · Reminders · More. Tablet: same three destinations (no desktop dump).
 class HomeShell extends StatefulWidget {
   const HomeShell({
     super.key,
@@ -36,16 +36,16 @@ class HomeShell extends StatefulWidget {
 }
 
 class _HomeShellState extends State<HomeShell> {
-  /// Phone: Chat / Schedules / Home? / Settings. Tablet: Chat / Schedules / Home? / …
+  /// 0 Chat · 1 Reminders · 2 More
   int _tab = 0;
   bool _haHomeReady = false;
-  bool _wasConnected = false;
-  final _settingsNav = GlobalKey<NavigatorState>();
+  final _moreNav = GlobalKey<NavigatorState>();
+  final _needsYou = NeedsYouController();
+  String? _lastShownError;
 
   @override
   void initState() {
     super.initState();
-    _wasConnected = widget.session.isConnected;
     final bound = _helloAccounts;
     if (bound.length == 1 &&
         (widget.session.accountId == null || widget.session.accountId!.isEmpty)) {
@@ -58,47 +58,22 @@ class _HomeShellState extends State<HomeShell> {
     }
     unawaited(_refreshHaReady());
     widget.session.addListener(_onSession);
+    _needsYou.addListener(_onNeedsYou);
   }
 
-  String? _lastShownError;
+  void _onNeedsYou() {
+    if (mounted) setState(() {});
+  }
+
+  void _openNeedsYou() {
+    setState(() => _tab = 0);
+    _needsYou.requestOpen();
+  }
 
   void _onSession() {
-    final connected = widget.session.isConnected;
-    // Tablet unpaired rail: Chat · Schedules · Settings(2).
-    // Connected rail inserts Profiles/LLM/… — Settings is no longer index 2.
-    if (connected != _wasConnected) {
-      final wide = MediaQuery.sizeOf(context).width >= _kWideBreakpoint;
-      if (wide) {
-        if (!_wasConnected && connected) {
-          // Was on unpaired Settings → jump to System (last connected dest).
-          if (_tab == 2) {
-            final destCount =
-                _tabletDestinations(AppLocalizations.of(context)).length;
-            _tab = destCount > 0 ? destCount - 1 : 0;
-          }
-        } else if (_wasConnected && !connected) {
-          // Drop into unpaired Settings if we were past Schedules.
-          if (_tab > 1) _tab = 2;
-          _haHomeReady = false;
-        }
-      } else if (_wasConnected && !connected) {
-        // Phone collapses to Chat · Schedules · Settings.
-        final hadHome = _haHomeReady;
-        if (hadHome) {
-          if (_tab == 2) {
-            _tab = 0; // was Home
-          } else if (_tab > 2) {
-            _tab = 2; // was Settings → Settings
-          }
-        } else if (_tab > 2) {
-          _tab = 2;
-        }
-        _haHomeReady = false;
-      }
-      _wasConnected = connected;
-    }
     unawaited(_refreshHaReady());
     _maybeShowSessionError();
+    if (!widget.session.isConnected) _needsYou.clear();
     if (mounted) setState(() {});
   }
 
@@ -106,44 +81,48 @@ class _HomeShellState extends State<HomeShell> {
     final err = widget.session.error;
     if (err == null || err.isEmpty || err == _lastShownError) return;
     if (widget.session.isConnected || widget.session.busy) return;
+    // Offline: [ConnectionBanner] / connect guides own the message — no snackbar.
     _lastShownError = err;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final messenger = ScaffoldMessenger.maybeOf(context);
-      messenger?.showSnackBar(
-        SnackBar(
-          content: Text(err),
-          duration: const Duration(seconds: 6),
-        ),
-      );
-    });
   }
 
   Future<void> _openPairing() async {
     await Navigator.of(context).push<void>(
-      MaterialPageRoute(
-        builder: (_) => PairScreen(session: widget.session),
-      ),
+      MaterialPageRoute(builder: (_) => PairScreen(session: widget.session)),
     );
   }
 
-  /// Prefer silent reconnect from saved pairing; open QR only when none saved.
   Future<void> _requestConnect() async {
     _lastShownError = null;
-    // Reload join from prefs when memory is empty (soft-disconnect / cold edge).
+    // No credential on disk → go straight to QR/pair (don't spin a doomed reconnect).
     if (!widget.session.hasSavedPairing) {
-      await widget.session.reconnect();
-      if (widget.session.isConnected) return;
-      if (!widget.session.hasSavedPairing) {
-        await _openPairing();
-        return;
-      }
-      // Prefs had a join; reconnect already ran (and may have failed).
-      if (mounted) _maybeShowSessionError();
+      await _openPairing();
       return;
     }
-    await widget.session.reconnect();
-    if (mounted) _maybeShowSessionError();
+    await _reconnectWithProgress();
+  }
+
+  Future<void> _reconnectWithProgress() async {
+    final result = await Navigator.of(context).push<PairingProgressResult>(
+      MaterialPageRoute(
+        fullscreenDialog: true,
+        builder: (_) => PairingProgressScreen(
+          connect: () async {
+            await widget.session.reconnect();
+            if (!widget.session.isConnected) {
+              throw StateError(widget.session.error ?? 'Reconnect failed');
+            }
+          },
+          onCancelRequested: () => widget.session.disconnect(),
+        ),
+      ),
+    );
+    if (!mounted) return;
+    if (result is PairingProgressResult &&
+        result.error != null &&
+        result.error!.isNotEmpty) {
+      _lastShownError = result.error;
+      setState(() {});
+    }
   }
 
   Future<void> _refreshHaReady() async {
@@ -159,36 +138,9 @@ class _HomeShellState extends State<HomeShell> {
               (st['config'] is Map) &&
               ((st['config'] as Map)['baseUrl']?.toString().isNotEmpty ?? false));
       if (!mounted) return;
-      setState(() {
-        final wasReady = _haHomeReady;
-        _haHomeReady = ready;
-        // Home chat inserts at index 2 (after Chat + Schedules) — remap selection.
-        const homeIdx = 2;
-        if (!wasReady && ready) {
-          if (_tab >= homeIdx) _tab = _tab + 1;
-        } else if (wasReady && !ready) {
-          if (_tab == homeIdx) {
-            _tab = 0;
-          } else if (_tab > homeIdx) {
-            _tab = _tab - 1;
-          }
-        }
-      });
+      setState(() => _haHomeReady = ready);
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          final wasReady = _haHomeReady;
-          _haHomeReady = false;
-          const homeIdx = 2;
-          if (wasReady) {
-            if (_tab == homeIdx) {
-              _tab = 0;
-            } else if (_tab > homeIdx) {
-              _tab = _tab - 1;
-            }
-          }
-        });
-      }
+      if (mounted) setState(() => _haHomeReady = false);
     }
   }
 
@@ -198,14 +150,16 @@ class _HomeShellState extends State<HomeShell> {
     if (account != null && account.isNotEmpty) {
       widget.session.setAccountId(account);
     }
-    // Design `2026-10-22f` tap targets (Chat=0, Schedules=1).
     final tab = pushTapTabIndex(type);
     if (tab != null) setState(() => _tab = tab);
+    if (pushTapOpensNeedsYou(type)) _needsYou.requestOpen();
   }
 
   @override
   void dispose() {
     widget.session.removeListener(_onSession);
+    _needsYou.removeListener(_onNeedsYou);
+    _needsYou.dispose();
     if (PushService.instance.onTap == _onPushTap) {
       PushService.instance.onTap = null;
     }
@@ -249,41 +203,21 @@ class _HomeShellState extends State<HomeShell> {
   Future<void> _onShellMenu(String value) async {
     final session = widget.session;
     if (value.startsWith('profile:')) {
-      final id = value.substring('profile:'.length);
-      session.setAccountId(id);
+      session.setAccountId(value.substring('profile:'.length));
       setState(() {});
       return;
     }
-    if (value.startsWith('locale:')) {
-      await widget.locales.setLocaleId(value.substring('locale:'.length));
-      return;
-    }
     switch (value) {
-      case 'theme:system':
-        await widget.themes.setMode(ThemeMode.system);
-        return;
-      case 'theme:light':
-        await widget.themes.setMode(ThemeMode.light);
-        return;
-      case 'theme:dark':
-        await widget.themes.setMode(ThemeMode.dark);
-        return;
-      case 'conn:reconnect':
-        await _requestConnect();
-        return;
       case 'conn:disconnect':
         await session.disconnect();
         return;
       case 'conn:forget':
         await _confirmForgetPairing();
         return;
-      case 'conn:pair':
-        await _openPairing();
-        return;
     }
   }
 
-  List<Widget> _phoneBodies(SessionController session) {
+  List<Widget> _bodies(SessionController session) {
     final connected = session.isConnected;
     return [
       ChatTab(
@@ -291,20 +225,27 @@ class _HomeShellState extends State<HomeShell> {
         purpose: 'general',
         onRequestConnect: connected ? null : _requestConnect,
         onRequestPairAgain: connected ? null : _openPairing,
+        showHomeModeToggle: connected && _haHomeReady,
+        deferOfflineActions: true,
+        needsYou: _needsYou,
       ),
       SchedulesHubScreen(
         session: session,
         onRequestConnect: connected ? null : _requestConnect,
         onRequestPairAgain: connected ? null : _openPairing,
+        deferOfflineActions: true,
       ),
-      if (connected && _haHomeReady) ChatTab(session: session, purpose: 'home'),
       Navigator(
-        key: _settingsNav,
+        key: _moreNav,
         onGenerateRoute: (settings) => MaterialPageRoute(
-          builder: (_) => SettingsHub(
+          builder: (_) => MoreHub(
             session: session,
+            locales: widget.locales,
+            themes: widget.themes,
             onRequestConnect: connected ? null : _requestConnect,
             onRequestPairAgain: connected ? null : _openPairing,
+            haHomeReady: _haHomeReady,
+            deferOfflineActions: true,
           ),
           settings: settings,
         ),
@@ -312,139 +253,52 @@ class _HomeShellState extends State<HomeShell> {
     ];
   }
 
-  List<NavigationDestination> _phoneDestinations(AppLocalizations l10n) {
-    final connected = widget.session.isConnected;
+  Widget _chatNavIcon({required bool selected}) {
+    final icon = Icon(selected ? Icons.chat_bubble : Icons.chat_bubble_outline);
+    final n = _needsYou.count;
+    if (n <= 0) return icon;
+    return Badge(
+      label: Text(n > 9 ? '9+' : '$n'),
+      child: icon,
+    );
+  }
+
+  List<NavigationDestination> _destinations(AppLocalizations l10n) {
     return [
       NavigationDestination(
-        icon: const Icon(Icons.chat_bubble_outline),
-        selectedIcon: const Icon(Icons.chat_bubble),
+        icon: _chatNavIcon(selected: false),
+        selectedIcon: _chatNavIcon(selected: true),
         label: l10n.navChat,
       ),
       NavigationDestination(
         icon: const Icon(Icons.event_outlined),
         selectedIcon: const Icon(Icons.event),
-        label: l10n.navSchedulesChat,
+        label: l10n.navReminders,
       ),
-      if (connected && _haHomeReady)
-        NavigationDestination(
-          icon: const Icon(Icons.home_outlined),
-          selectedIcon: const Icon(Icons.home),
-          label: l10n.navHomeChat,
-        ),
       NavigationDestination(
-        icon: const Icon(Icons.settings_outlined),
-        selectedIcon: const Icon(Icons.settings),
-        label: l10n.navSettings,
+        icon: const Icon(Icons.more_horiz),
+        selectedIcon: const Icon(Icons.more_horiz),
+        label: l10n.navMore,
       ),
     ];
   }
 
-  /// Tablet bodies follow desktop sidebar order (Settings hub when unpaired).
-  List<Widget> _tabletBodies(SessionController session) {
-    final connected = session.isConnected;
-    if (!connected) {
-      return [
-        ChatTab(
-          session: session,
-          purpose: 'general',
-          onRequestConnect: _requestConnect,
-          onRequestPairAgain: _openPairing,
-        ),
-        SchedulesHubScreen(
-          session: session,
-          onRequestConnect: _requestConnect,
-          onRequestPairAgain: _openPairing,
-        ),
-        _SettingsPane(
-          child: SettingsHub(
-            session: session,
-            onRequestConnect: _requestConnect,
-            onRequestPairAgain: _openPairing,
-          ),
-        ),
-      ];
-    }
-    return [
-      ChatTab(session: session, purpose: 'general'),
-      SchedulesHubScreen(session: session),
-      if (_haHomeReady) ChatTab(session: session, purpose: 'home'),
-      // Nested navigator so each Settings section can push editors.
-      _SettingsPane(child: ProfilesScreen(session: session)),
-      _SettingsPane(child: LlmScreen(session: session)),
-      _SettingsPane(child: ConnectionsScreen(session: session)),
-      _SettingsPane(child: SkillsScreen(session: session)),
-      _SettingsPane(child: WorkflowsScreen(session: session)),
-      _SettingsPane(child: SystemScreen(session: session)),
-    ];
-  }
-
-  List<NavigationRailDestination> _tabletDestinations(AppLocalizations l10n) {
-    final connected = widget.session.isConnected;
-    if (!connected) {
-      return [
-        NavigationRailDestination(
-          icon: const Icon(Icons.chat_bubble_outline),
-          selectedIcon: const Icon(Icons.chat_bubble),
-          label: Text(l10n.navChat),
-        ),
-        NavigationRailDestination(
-          icon: const Icon(Icons.event_outlined),
-          selectedIcon: const Icon(Icons.event),
-          label: Text(l10n.navSchedulesChat),
-        ),
-        NavigationRailDestination(
-          icon: const Icon(Icons.settings_outlined),
-          selectedIcon: const Icon(Icons.settings),
-          label: Text(l10n.navSettings),
-        ),
-      ];
-    }
+  List<NavigationRailDestination> _railDestinations(AppLocalizations l10n) {
     return [
       NavigationRailDestination(
-        icon: const Icon(Icons.chat_bubble_outline),
-        selectedIcon: const Icon(Icons.chat_bubble),
+        icon: _chatNavIcon(selected: false),
+        selectedIcon: _chatNavIcon(selected: true),
         label: Text(l10n.navChat),
       ),
       NavigationRailDestination(
         icon: const Icon(Icons.event_outlined),
         selectedIcon: const Icon(Icons.event),
-        label: Text(l10n.navSchedulesChat),
-      ),
-      if (_haHomeReady)
-        NavigationRailDestination(
-          icon: const Icon(Icons.home_outlined),
-          selectedIcon: const Icon(Icons.home),
-          label: Text(l10n.navHomeChat),
-        ),
-      NavigationRailDestination(
-        icon: const Icon(Icons.people_outline),
-        selectedIcon: const Icon(Icons.people),
-        label: Text(l10n.navProfiles),
+        label: Text(l10n.navReminders),
       ),
       NavigationRailDestination(
-        icon: const Icon(Icons.smart_toy_outlined),
-        selectedIcon: const Icon(Icons.smart_toy),
-        label: Text(l10n.navLlm),
-      ),
-      NavigationRailDestination(
-        icon: const Icon(Icons.link_outlined),
-        selectedIcon: const Icon(Icons.link),
-        label: Text(l10n.navConnections),
-      ),
-      NavigationRailDestination(
-        icon: const Icon(Icons.auto_awesome_outlined),
-        selectedIcon: const Icon(Icons.auto_awesome),
-        label: Text(l10n.navSkills),
-      ),
-      NavigationRailDestination(
-        icon: const Icon(Icons.account_tree_outlined),
-        selectedIcon: const Icon(Icons.account_tree),
-        label: Text(l10n.skillsTabWorkflows),
-      ),
-      NavigationRailDestination(
-        icon: const Icon(Icons.settings_outlined),
-        selectedIcon: const Icon(Icons.settings),
-        label: Text(l10n.navSystem),
+        icon: const Icon(Icons.more_horiz),
+        selectedIcon: const Icon(Icons.more_horiz),
+        label: Text(l10n.navMore),
       ),
     ];
   }
@@ -466,10 +320,6 @@ class _HomeShellState extends State<HomeShell> {
     final statusTip = !connected
         ? l10n.shellOffline
         : (healthOk ? l10n.shellOnline : l10n.shellDegraded);
-
-    final themeMode = widget.themes.mode;
-    final localeId = widget.locales.override?.languageCode ??
-        Localizations.localeOf(context).languageCode;
 
     TextStyle menuStyle({required bool selected}) =>
         theme.textTheme.bodyMedium!.copyWith(
@@ -506,95 +356,87 @@ class _HomeShellState extends State<HomeShell> {
           ),
         ],
       ),
+      // Offline Connect/Reconnect/Pair live on [ConnectionBanner] only.
+      // Overflow: Disconnect (+ profiles) when online; Forget when paired-offline.
       actions: [
-        PopupMenuButton<String>(
-          tooltip: MaterialLocalizations.of(context).moreButtonTooltip,
-          enabled: !session.busy,
-          icon: session.busy
-              ? const SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.more_vert),
-          onSelected: (value) => unawaited(_onShellMenu(value)),
-          itemBuilder: (context) => [
-            if (connected) ...[
-              PopupMenuItem(
-                value: 'conn:disconnect',
-                child: Text(l10n.shellDisconnect, style: menuStyle(selected: false)),
-              ),
-            ] else ...[
-              if (session.hasSavedPairing)
+        if (connected || session.hasSavedPairing)
+          PopupMenuButton<String>(
+            tooltip: MaterialLocalizations.of(context).moreButtonTooltip,
+            enabled: !session.busy,
+            icon: session.busy
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.more_vert),
+            onSelected: (value) => unawaited(_onShellMenu(value)),
+            itemBuilder: (context) {
+              if (!connected) {
+                return [
+                  PopupMenuItem(
+                    value: 'conn:forget',
+                    child: Text(
+                      l10n.shellForgetPairing,
+                      style: menuStyle(selected: false),
+                    ),
+                  ),
+                ];
+              }
+              return [
                 PopupMenuItem(
-                  value: 'conn:reconnect',
-                  child: Text(l10n.shellReconnect, style: menuStyle(selected: false)),
-                ),
-              PopupMenuItem(
-                value: 'conn:pair',
-                child: Text(l10n.shellConnect, style: menuStyle(selected: false)),
-              ),
-              if (session.hasSavedPairing)
-                PopupMenuItem(
-                  value: 'conn:forget',
+                  value: 'conn:disconnect',
                   child: Text(
-                    l10n.shellForgetPairing,
+                    l10n.shellDisconnect,
                     style: menuStyle(selected: false),
                   ),
                 ),
-            ],
-            if (connected && bound.length > 1) ...[
-              const PopupMenuDivider(),
-              for (final id in bound)
-                PopupMenuItem(
-                  value: 'profile:$id',
-                  child: Text(
-                    l10n.shellProfileOne(id),
-                    style: menuStyle(selected: session.accountId == id),
-                  ),
-                ),
-            ],
-            const PopupMenuDivider(),
-            PopupMenuItem(
-              value: 'theme:system',
-              child: Text(
-                '${l10n.appThemePicker}: ${l10n.appThemeSystem}',
-                style: menuStyle(selected: themeMode == ThemeMode.system),
-              ),
-            ),
-            PopupMenuItem(
-              value: 'theme:light',
-              child: Text(
-                '${l10n.appThemePicker}: ${l10n.appThemeLight}',
-                style: menuStyle(selected: themeMode == ThemeMode.light),
-              ),
-            ),
-            PopupMenuItem(
-              value: 'theme:dark',
-              child: Text(
-                '${l10n.appThemePicker}: ${l10n.appThemeDark}',
-                style: menuStyle(selected: themeMode == ThemeMode.dark),
-              ),
-            ),
-            const PopupMenuDivider(),
-            for (final id in supportedLocaleIds)
-              PopupMenuItem(
-                value: 'locale:$id',
-                child: Text(
-                  '${l10n.appLanguage}: ${localeLabels[id] ?? id}',
-                  style: menuStyle(selected: id == localeId),
-                ),
-              ),
-          ],
+                if (bound.length > 1) ...[
+                  const PopupMenuDivider(),
+                  for (final id in bound)
+                    PopupMenuItem(
+                      value: 'profile:$id',
+                      child: Text(
+                        l10n.shellProfileOne(id),
+                        style: menuStyle(selected: session.accountId == id),
+                      ),
+                    ),
+                ],
+              ];
+            },
+          ),
+      ],
+    );
+
+    final bodies = _bodies(session);
+    final selected = _tab.clamp(0, 2);
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+
+    final content = Column(
+      children: [
+        if (!connected)
+          ConnectionBanner(
+            session: session,
+            onReconnect: () => unawaited(_requestConnect()),
+            onPairNew: () => unawaited(_openPairing()),
+            error: _lastShownError ?? session.error,
+          ),
+        // Sticky Needs-you on non-Chat tabs (Chat hosts the actionable strip).
+        if (connected && selected != 0 && _needsYou.hasItems)
+          NeedsYouJumpStrip(
+            count: _needsYou.count,
+            onOpen: _openNeedsYou,
+          ),
+        Expanded(
+          child: IndexedStack(
+            index: selected,
+            children: bodies,
+          ),
         ),
       ],
     );
 
     if (wide) {
-      final destinations = _tabletDestinations(l10n);
-      final bodies = _tabletBodies(session);
-      final maxIdx = destinations.length - 1;
-      final selected = _tab.clamp(0, maxIdx);
       return Scaffold(
         appBar: appBar,
         body: Row(
@@ -603,59 +445,26 @@ class _HomeShellState extends State<HomeShell> {
               selectedIndex: selected,
               onDestinationSelected: (i) => setState(() => _tab = i),
               labelType: NavigationRailLabelType.all,
-              destinations: destinations,
+              destinations: _railDestinations(l10n),
             ),
             const VerticalDivider(width: 1),
-            Expanded(
-              child: IndexedStack(
-                index: selected,
-                children: bodies,
-              ),
-            ),
+            Expanded(child: content),
           ],
         ),
       );
     }
 
-    final bodies = _phoneBodies(session);
-    final dests = _phoneDestinations(l10n);
-    final maxIdx = dests.length - 1;
-    final selected = _tab.clamp(0, maxIdx);
-    // Soft keyboard: hide the bottom nav so chat isn't squeezed above
-    // NavigationBar + keyboard (newest bubbles were ending up under the keys).
-    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
-
     return Scaffold(
       appBar: appBar,
       resizeToAvoidBottomInset: true,
-      body: IndexedStack(
-        index: selected,
-        children: bodies,
-      ),
+      body: content,
       bottomNavigationBar: keyboardOpen
           ? null
           : NavigationBar(
               selectedIndex: selected,
               onDestinationSelected: (i) => setState(() => _tab = i),
-              destinations: dests,
+              destinations: _destinations(l10n),
             ),
-    );
-  }
-}
-
-/// Hosts a Settings section that already has its own AppBar (Llm/Connections/…).
-class _SettingsPane extends StatelessWidget {
-  const _SettingsPane({required this.child});
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    // Screens use Scaffold+AppBar; nest under a navigator so push works.
-    return Navigator(
-      onGenerateRoute: (settings) => MaterialPageRoute(
-        builder: (_) => child,
-        settings: settings,
-      ),
     );
   }
 }

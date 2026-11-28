@@ -39,7 +39,147 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pairTabSsh => 'SSH';
 
   @override
+  String get pairPasteInstead => '或粘贴配对链接';
+
+  @override
+  String get pairAdvanced => '高级';
+
+  @override
+  String get pairAdvancedSubtitle => '主机:端口 与 SSH 跳转（高级用户）';
+
+  @override
+  String get pairConnectHost => '通过主机连接';
+
+  @override
+  String get pairConnectSsh => '通过 SSH 连接';
+
+  @override
+  String get pairProgressTitle => '正在连接家庭主机';
+
+  @override
+  String get pairProgressSubtitle => '正在连接你的 EnvoyHome 桌面…';
+
+  @override
+  String pairElapsed(String time) {
+    return '已用时 $time';
+  }
+
+  @override
+  String get pairStageInitial => '开始中';
+
+  @override
+  String get pairStageInitialHint => '正在准备与家庭电脑的安全连接。';
+
+  @override
+  String get pairStageConnecting => '连接中';
+
+  @override
+  String get pairStageConnectingHint => '先尝试局域网，再尝试 mesh 路径。';
+
+  @override
+  String get pairStageHandshaking => '握手中';
+
+  @override
+  String get pairStageHandshakingHint => '正在与家庭守护进程校验配对令牌。';
+
+  @override
+  String get pairStageVerifying => '即将完成';
+
+  @override
+  String get pairStageSlowHint => '仍在连接 — 首次配对可能需要一分钟。';
+
+  @override
+  String get pairStageVerySlowHint => '请确认手机与桌面在同一网络，或改用高级 主机:端口。';
+
+  @override
+  String get pairStillWorking => '仍在进行 — 请保持此页面打开。首次配对可能需要一两分钟。';
+
+  @override
+  String get pairTroubleHint =>
+      '提示：桌面 EnvoyHome 正在运行 · 同一 Wi‑Fi / Tailscale · 从 设置 → 配对设备 扫描新的二维码。';
+
+  @override
+  String get pairDontClose => '连接期间请勿关闭应用。';
+
+  @override
+  String get pairCancel => '取消';
+
+  @override
+  String get pairKeepWaiting => '继续等待';
+
+  @override
+  String get pairCancelConfirmTitle => '取消连接？';
+
+  @override
+  String get pairCancelConfirmBody => '之后可随时从顶部连接横幅重新连接。';
+
+  @override
+  String get pairErrorWrongApp => '该二维码属于其他 Envoy 应用。请扫描 EnvoyHome 配对码。';
+
+  @override
+  String get pairErrorTimeout => '连接超时。请确认桌面在线后重试。';
+
+  @override
+  String get pairErrorUnreachable => '在此网络上无法访问家庭桌面。';
+
+  @override
+  String get pairErrorExpired => '配对码无效或已过期 — 请在桌面端重新生成二维码。';
+
+  @override
+  String get pairErrorGeneric => '无法连接。请重新扫描。';
+
+  @override
   String get pairFooter => 'com.envoymesh.envoyhome · 配对后可推送';
+
+  @override
+  String get shellPairNewDevice => '配对新设备';
+
+  @override
+  String get bannerOfflineSaved => '未连接到家庭主机';
+
+  @override
+  String get bannerOfflineUnpaired => '将此手机与家庭桌面配对';
+
+  @override
+  String get navReminders => '提醒';
+
+  @override
+  String get navMore => '更多';
+
+  @override
+  String get moreHubHint => '日常功能优先。高级家庭设置收在「高级」里。';
+
+  @override
+  String get moreSectionDaily => '日常';
+
+  @override
+  String get moreSectionAdvanced => '高级';
+
+  @override
+  String get moreFilesSubtitle => '沙箱文件、导出与知识库';
+
+  @override
+  String get moreHomeChatSubtitle => '与智能家居设备对话（Home Assistant）';
+
+  @override
+  String get moreAdvancedOwnerOnly => 'LLM、连接、技能与工作流需使用家庭 Owner 设备。';
+
+  @override
+  String get remindersAskCta => '用对话安排';
+
+  @override
+  String get remindersAskTitle => '用对话安排日程';
+
+  @override
+  String get remindersNeedConnect => '连接家庭主机后即可管理任务、场景与日程历史。';
+
+  @override
+  String needsYouTitle(int count) {
+    return '需要你处理 · $count';
+  }
+
+  @override
+  String get needsYouOpenChat => '查看';
 
   @override
   String get pairCloseScanner => '关闭扫描';
