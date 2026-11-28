@@ -10886,9 +10886,16 @@ async function showView(id) {
         const cards = providers
           .map((p) => {
             const isCloud = String(p.kind || "").startsWith("cloud_");
+            const canEditSecret =
+              isCloud ||
+              String(p.kind || "") === "local_openai_compat" ||
+              p.hasSecret === true;
             const place = p.placement || (isCloud ? "cloud" : "local");
             const props = providerRoutingSummaryText(p);
             const isDefault = isCloud && p.id === defaultId;
+            const secretLabel = p.hasSecret
+              ? t("models.secretOnFile")
+              : t("models.secretMissing");
             return `<div class="card${isDefault ? " prov-card--default" : ""}" data-pid="${escapeHtml(p.id)}">
               <div class="prov-card-head">
                 <strong>${escapeHtml(p.label || p.id)}</strong>
@@ -10896,7 +10903,7 @@ async function showView(id) {
                 ${!isCloud && p.enabled ? `<span class="muted">· ${escapeHtml(t("models.localSingleton"))}</span>` : ""}
                 ${p.enabled ? "" : `<span class="muted">· ${escapeHtml(t("channels.disabled"))}</span>`}
               </div>
-              <div class="muted">${escapeHtml(p.kind)} · ${escapeHtml(place)} · secret=${p.hasSecret ? "yes" : "no"}</div>
+              <div class="muted">${escapeHtml(p.kind)} · ${escapeHtml(place)} · ${escapeHtml(secretLabel)}</div>
               <div class="muted"><code>${escapeHtml(p.baseUrl || "")}</code> · ${escapeHtml(t("channels.model"))} <code>${escapeHtml(p.model || "")}</code></div>
               <div class="muted prov-card-routing-summary"${props ? "" : " hidden"}>${escapeHtml(props)}</div>
               <div class="row">
@@ -10906,11 +10913,31 @@ async function showView(id) {
                     : ""
                 }
                 <button type="button" data-test="${escapeHtml(p.id)}">${escapeHtml(t("app.test"))}</button>
+                ${
+                  canEditSecret
+                    ? `<button type="button" class="secondary" data-edit-secret="${escapeHtml(p.id)}">${escapeHtml(t("models.updateApiKey"))}</button>`
+                    : ""
+                }
                 <button type="button" class="secondary" data-toggle="${escapeHtml(p.id)}" data-en="${p.enabled ? "0" : "1"}">${
                   escapeHtml(p.enabled ? t("app.disable") : t("app.enable"))
                 }</button>
                 <button type="button" class="secondary" data-remove="${escapeHtml(p.id)}">${escapeHtml(t("app.remove"))}</button>
               </div>
+              ${
+                canEditSecret
+                  ? `<form class="prov-secret-form" data-secret-id="${escapeHtml(p.id)}" hidden>
+                <label>${escapeHtml(t("models.apiKey"))}${
+                      p.hasSecret ? ` (${escapeHtml(t("models.secretOnFile"))})` : ""
+                    }
+                  <input type="password" name="apiKey" autocomplete="off" placeholder="${escapeHtml(t("models.updateApiKeyPlaceholder"))}" />
+                </label>
+                <div class="row">
+                  <button type="submit">${escapeHtml(t("models.saveApiKey"))}</button>
+                  <button type="button" class="secondary" data-secret-cancel="${escapeHtml(p.id)}">${escapeHtml(t("models.cancel"))}</button>
+                </div>
+              </form>`
+                  : ""
+              }
               <form class="prov-props-form" data-props-id="${escapeHtml(p.id)}">
                 ${providerRoutingFieldsHtml({
                   paramCountB: p.paramCountB,
@@ -11248,6 +11275,58 @@ async function showView(id) {
               }
             });
           });
+
+          el.querySelectorAll("[data-edit-secret]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const pid = btn.getAttribute("data-edit-secret");
+              const form = el.querySelector(`form.prov-secret-form[data-secret-id="${CSS.escape(pid || "")}"]`);
+              if (!(form instanceof HTMLFormElement)) return;
+              form.hidden = false;
+              const input = form.querySelector('input[name="apiKey"]');
+              if (input instanceof HTMLInputElement) {
+                input.value = "";
+                input.focus();
+              }
+            });
+          });
+          el.querySelectorAll("[data-secret-cancel]").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              const pid = btn.getAttribute("data-secret-cancel");
+              const form = el.querySelector(`form.prov-secret-form[data-secret-id="${CSS.escape(pid || "")}"]`);
+              if (!(form instanceof HTMLFormElement)) return;
+              form.hidden = true;
+              const input = form.querySelector('input[name="apiKey"]');
+              if (input instanceof HTMLInputElement) input.value = "";
+            });
+          });
+          el.querySelectorAll("form.prov-secret-form").forEach((form) => {
+            form.addEventListener("submit", async (ev) => {
+              ev.preventDefault();
+              const pid = form.getAttribute("data-secret-id");
+              const box = document.getElementById("prov-msg");
+              if (!pid) return;
+              const fd = new FormData(form);
+              const apiKey = String(fd.get("apiKey") || "").trim();
+              if (!apiKey) {
+                if (box) {
+                  box.innerHTML = `<p class="le-error">${escapeHtml(t("models.apiKeyRequired"))}</p>`;
+                }
+                return;
+              }
+              const ans = await rpc("home.setProviderSecret", {
+                id: pid,
+                field: "apiKey",
+                value: apiKey,
+              });
+              if (box) {
+                box.innerHTML = ans.error
+                  ? `<p class="le-error">${escapeHtml(errMsg(ans))}</p>`
+                  : `<p class="muted">${escapeHtml(t("models.apiKeyUpdated", { id: pid }))}</p>`;
+              }
+              if (!ans.error) await showView("models");
+            });
+          });
+
           el.querySelectorAll("[data-toggle]").forEach((btn) => {
             btn.addEventListener("click", async () => {
               const pid = btn.getAttribute("data-toggle");
